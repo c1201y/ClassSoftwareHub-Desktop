@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="ClassSoftwareHub.Desktop.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--
+              ⚠️ 卡片外面那圈矩形框 = GridViewItem 自带的「焦点框 / 悬停底色」。
+              卡片是自己画的 Border（带外边距），容器再画一层就套不上 → 这里把容器整套 chrome 关掉，
+              悬停反馈改由卡片自己的 PointerEntered/PointerExited 做（和首页卡片一致）。
+            -->
+            <Style x:Key="CshCardItemStyle" TargetType="GridViewItem">
+                <Setter Property="Margin" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="VerticalContentAlignment" Value="Top" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="UseSystemFocusVisuals" Value="False" />
+                <Setter Property="FocusVisualPrimaryThickness" Value="0" />
+                <Setter Property="FocusVisualSecondaryThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+
+            <SolidColorBrush x:Key="GridViewItemBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundSelected" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBorderBrushPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBorderBrushPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBorderBrushSelected" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBorderBrushSelectedPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="GridViewItemBorderBrushSelectedPressed" Color="Transparent" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

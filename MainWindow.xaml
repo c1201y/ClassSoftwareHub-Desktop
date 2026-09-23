@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:pages="using:ClassSoftwareHub.Desktop.Pages"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid" Background="{x:Null}">
+
+        <!-- ============ 原生界面（WinUI3 自绘；只有「提交软件」页会用到网页） ============ -->
+        <pages:ShellPage x:Name="NativeShell" />
+
+        <!-- ============ 网页内容（只有提交软件页用；默认隐藏） ============ -->
+        <Grid x:Name="MainTabContent" Background="{x:Null}" Visibility="Collapsed">
+            <WebView2 x:Name="Web" Opacity="0" />
+
+            <!-- 启动 / 加载过渡 -->
+            <Grid x:Name="LoadingPanel" Background="{x:Null}">
+                <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image x:Name="LoadingIcon" Width="64" Height="64" Opacity="0.9" />
+                    <ProgressRing x:Name="LoadingRing" IsActive="True" Width="28" Height="28" />
+                    <TextBlock x:Name="LoadingText" Text="正在加载…" FontSize="12" Opacity="0.65"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 网络错误（不加载任何本地页面） -->
+            <Grid x:Name="ErrorPanel"
+                  Visibility="Collapsed"
+                  Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+                <StackPanel MaxWidth="420" Spacing="14"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xEB5E;" FontSize="34" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="ErrorTitle"
+                               Text="网络出现错误，请稍后重试"
+                               Style="{StaticResource SubtitleTextBlockStyle}"
+                               TextAlignment="Center" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ErrorTip"
+                               FontSize="12" Opacity="0.6"
+                               TextAlignment="Center" TextWrapping="Wrap" />
+                    <Button x:Name="RetryButton"
+                            Content="重试"
+                            Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Center"
+                            Click="RetryButton_Click" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- ============ 缺少 WebView2 运行时（全局最上层） ============ -->
+        <Grid x:Name="RuntimePanel"
+              Visibility="Collapsed"
+              Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+            <StackPanel MaxWidth="480" Spacing="14"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE7BA;" FontSize="34" HorizontalAlignment="Center"
+                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                <TextBlock Text="缺少 Microsoft Edge WebView2 运行时"
+                           Style="{StaticResource SubtitleTextBlockStyle}"
+                           TextAlignment="Center" TextWrapping="Wrap" />
+                <TextBlock FontSize="13" Opacity="0.75" TextAlignment="Center" TextWrapping="Wrap"
+                           Text="ClassSoftwareHub 需要系统安装 WebView2 运行时才能显示网页内容。安装后重新打开本应用即可。" />
+                <CheckBox x:Name="NoPromptCheck" Content="不再提示（记住我的选择）" />
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                    <Button Content="立即安装" Style="{StaticResource AccentButtonStyle}" Click="InstallRuntime_Click" />
+                    <Button Content="在浏览器中打开" Click="OpenInBrowser_Click" />
+                    <Button Content="退出" Click="ExitApp_Click" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+        <!-- ============ 应用内网页浮层（官网 / 网页版；由下往上淡入的「窗中窗」） ============ -->
+        <Grid x:Name="WebSheet" Visibility="Collapsed">
+            <Rectangle Fill="#66000000" Tapped="WebSheetScrim_Tapped" />
+
+            <Border x:Name="WebSheetCard" Opacity="0"
+                    Margin="28,52,28,28"
+                    CornerRadius="12"
+                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="WebSheetShift" Y="150" />
+                </Border.RenderTransform>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 小标题栏 -->
+                    <Grid Grid.Row="0" Padding="16,10,10,10" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon Grid.Column="0" Glyph="&#xE774;" FontSize="14" Opacity="0.7"
+                                  VerticalAlignment="Center" />
+                        <TextBlock x:Name="WebSheetTitle" Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   FontWeight="SemiBold" />
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                    VerticalAlignment="Center">
+                            <ProgressRing x:Name="WebSheetRing" Width="16" Height="16" IsActive="False" />
+                            <Button Content="在浏览器打开" Click="WebSheetExternal_Click" />
+                            <Button Click="WebSheetClose_Click" Padding="9,5">
+                                <FontIcon Glyph="&#xE711;" FontSize="12" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <WebView2 x:Name="SheetWeb" Grid.Row="1" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

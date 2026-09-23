@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.Tools.ClockToolPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Padding="24,14,24,20" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
+                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+            </Button>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="全屏时钟" FontSize="24" FontWeight="Bold" />
+                <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                           Text="把屏幕变成一面大钟 —— 考试、自习时抬头就能看时间。默认跟随主题的纯黑白；可以放张背景图，再叠一层蒙版或亚克力、云母材质。" />
+            </StackPanel>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ═══ 预览 ═══ -->
+                <Border CornerRadius="10" Padding="16" BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="预览" FontSize="13" FontWeight="Bold" />
+
+                        <Border x:Name="StageHost" Height="248" CornerRadius="8" BorderThickness="1"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                AllowDrop="True" DragOver="Stage_DragOver" DragLeave="Stage_DragLeave"
+                                Drop="Stage_Drop">
+                            <Grid x:Name="Stage">
+                                <Border x:Name="VeilHost" />
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                        <TextBlock x:Name="TimeText" Text="00:00" FontSize="64" FontWeight="Bold"
+                                                   FontFamily="Bahnschrift" />
+                                        <TextBlock x:Name="SecText" Text=":00" FontSize="30" FontWeight="SemiBold"
+                                                   Opacity="0.85" VerticalAlignment="Bottom" Margin="0,0,0,10" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="DateText" FontSize="14" Opacity="0.85"
+                                               HorizontalAlignment="Center" />
+                                </StackPanel>
+                                <Border x:Name="DropHint" Visibility="Collapsed"
+                                        Background="#33000000" BorderThickness="2" BorderBrush="#0078D4"
+                                        CornerRadius="8" Margin="4">
+                                    <TextBlock Text="松开鼠标，设为背景图" FontSize="14" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Text="把图片直接拖进上面的框就能当背景，也可以点下面的「选择图片」。" />
+
+                        <Button x:Name="FullscreenButton" Content="全屏显示" Click="Fullscreen_Click"
+                                Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" />
+                        <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Text="全屏后双击屏幕（或按 Esc）退出。" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="校准系统时间" Click="TimeSync_Click" />
+                            <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       Text="时钟读的是本机系统时间，显示不准就去 time.is 对一下时。" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══ 外观设置 ═══ -->
+                <Border Grid.Column="1" CornerRadius="10" Padding="16" BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="外观设置" FontSize="13" FontWeight="Bold" />
+
+                        <TextBlock Text="背景图片" FontSize="12.5" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="选择图片" Click="PickBg_Click" />
+                            <Button x:Name="ClearBgButton" Content="移除图片" Click="ClearBg_Click" IsEnabled="False" />
+                        </StackPanel>
+                        <TextBlock x:Name="BgName" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Text="当前未设置背景图（上面拖一张进来即可）" />
+
+                        <ComboBox x:Name="VeilBox" Header="蒙版 / 材质" HorizontalAlignment="Stretch" />
+                        <StackPanel x:Name="VeilStrengthPanel" Spacing="6">
+                            <TextBlock x:Name="VeilStrengthLabel" FontSize="12.5" />
+                            <Slider x:Name="VeilSlider" Minimum="0" Maximum="100" StepFrequency="1" />
+                        </StackPanel>
+
+                        <ComboBox x:Name="ToneBox" Header="背景底色" HorizontalAlignment="Stretch" />
+                        <ComboBox x:Name="InkBox" Header="文字颜色" HorizontalAlignment="Stretch" />
+                        <ComboBox x:Name="FontBox" Header="时间字体" HorizontalAlignment="Stretch" />
+
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="ScaleLabel" FontSize="12.5" />
+                            <Slider x:Name="ScaleSlider" Minimum="0.6" Maximum="1.3" StepFrequency="0.05" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="18">
+                            <CheckBox x:Name="ShowSecondsBox" Content="显示秒" IsChecked="True" />
+                            <CheckBox x:Name="ShowDateBox" Content="显示日期 / 星期" IsChecked="True" />
+                            <CheckBox x:Name="Hour12Box" Content="12 小时制" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <TextBlock x:Name="Toast" Grid.Row="2" FontSize="12" Opacity="0.75" />
+    </Grid>
+</Page>

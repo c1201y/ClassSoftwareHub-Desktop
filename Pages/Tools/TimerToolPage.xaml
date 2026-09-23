@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.Tools.TimerToolPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Padding="24,14,24,20" RowSpacing="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
+                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+            </Button>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="课堂计时器" FontSize="24" FontWeight="Bold" />
+                <TextBlock Text="倒计时 / 秒表，大字号方便投影，到点响铃。" FontSize="12.5" Opacity="0.6" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="1" CornerRadius="10" Padding="24" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="20" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                    <Button x:Name="BtnCountdown" Content="倒计时" Click="Mode_Countdown_Click"
+                            Style="{StaticResource AccentButtonStyle}" />
+                    <Button x:Name="BtnStopwatch" Content="秒表" Click="Mode_Stopwatch_Click" />
+                </StackPanel>
+
+                <TextBlock x:Name="Display" Text="05:00" FontSize="96" FontWeight="Bold"
+                           FontFamily="Consolas" HorizontalAlignment="Center" />
+
+                <Border Width="520" Height="6" CornerRadius="3"
+                        Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                    <Border x:Name="ProgressFill" Width="520" Height="6" CornerRadius="3"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                    <Button x:Name="StartButton" Content="开始" Click="StartPause_Click" MinWidth="120" Height="40"
+                            FontSize="15" Style="{StaticResource AccentButtonStyle}" />
+                    <Button Content="重置" Click="Reset_Click" MinWidth="120" Height="40" FontSize="15" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- 倒计时设定 -->
+        <Border x:Name="SetupPanel" Grid.Row="2" CornerRadius="10" Padding="16" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
+                <TextBlock Text="设定时长" FontWeight="Bold" />
+                <StackPanel x:Name="SetRow" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <NumberBox x:Name="MinBox" Value="5" Minimum="0" Maximum="999" SpinButtonPlacementMode="Compact"
+                               Width="120" IsEnabled="True" />
+                    <TextBlock Text="分" VerticalAlignment="Center" />
+                    <NumberBox x:Name="SecBox" Value="0" Minimum="0" Maximum="59" SpinButtonPlacementMode="Compact"
+                               Width="120" />
+                    <TextBlock Text="秒" VerticalAlignment="Center" />
+                    <Button Content="1 分钟" Click="Preset_Click" Tag="1" Margin="16,0,0,0" />
+                    <Button Content="3 分钟" Click="Preset_Click" Tag="3" />
+                    <Button Content="5 分钟" Click="Preset_Click" Tag="5" />
+                    <Button Content="10 分钟" Click="Preset_Click" Tag="10" />
+                    <Button Content="15 分钟" Click="Preset_Click" Tag="15" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Page>

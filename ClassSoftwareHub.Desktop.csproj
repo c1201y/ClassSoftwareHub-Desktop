@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>ClassSoftwareHub.Desktop</RootNamespace>
+    <AssemblyName>ClassSoftwareHub</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- ⚠️ 必须开：不开的话 $(AssemblyName).pri（XAML 资源清单）不会进 publish 输出，
+         装完启动会 "Cannot locate resource from 'ms-appx:///MainWindow.xaml'" 直接闪退（无窗口） -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Version>1.2.0-insider1.2</Version>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <FileVersion>1.2.0.0</FileVersion>
+    <InformationalVersion>1.2.0-insider1.2</InformationalVersion>
+    <Product>ClassSoftwareHub</Product>
+    <AssemblyTitle>ClassSoftwareHub</AssemblyTitle>
+    <Company>ClassSoftwareHub</Company>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <!-- 内嵌资源：单文件发布时不需要额外散落文件 -->
+  <ItemGroup>
+    <EmbeddedResource Include="Web\shell-shim.js" />
+    <EmbeddedResource Include="Assets\AppIcon-512.png" />
+    <EmbeddedResource Include="Assets\AppIcon.ico" />
+    <EmbeddedResource Include="Assets\dv1.0.png" />
+  </ItemGroup>
+
+</Project>

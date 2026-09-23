@@ -1,0 +1,22 @@
+## .NET / VS
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+## 发布产物
+dist/
+publish/
+artifacts/
+*.pdb
+*.nupkg
+
+## 本地设置 / 日志
+settings.json
+crash.log
+
+## 其它
+Thumbs.db
+desktop.ini
+.DS_Store

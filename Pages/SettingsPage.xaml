@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer Padding="24,36,24,44" VerticalScrollBarVisibility="Auto">
+        <!-- 和首页同一套版式：三列 Grid 把内容钉在中间 960 宽，导航展开/收起都不动 -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="998*" MaxWidth="960" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="1" Spacing="14">
+
+                <TextBlock Text="设置" FontSize="30" FontWeight="Bold" />
+
+                <!-- ===== 关于（最上，不要卡片底，自成一块区域） ===== -->
+                <StackPanel Spacing="4" Margin="0,10,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <Image x:Name="AboutIcon" Width="44" Height="44" VerticalAlignment="Center" />
+                        <TextBlock x:Name="AboutApp" Text="ClassSoftwareHub" FontSize="26" FontWeight="Bold"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock x:Name="AboutVersion" FontSize="32" FontWeight="Bold" Margin="0,6,0,0"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock x:Name="AboutSiteVersion" FontSize="13" Opacity="0.75" />
+                </StackPanel>
+
+                <!-- 相关链接（在版本号下面，跟首页那行同款） -->
+                <GridView x:Name="SettingsQuickGrid" Margin="0,6,0,0" Padding="0" SelectionMode="None"
+                          IsItemClickEnabled="True" ItemClick="Quick_ItemClick"
+                          ScrollViewer.HorizontalScrollMode="Disabled"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <GridView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" ItemWidth="192" ItemHeight="88" />
+                        </ItemsPanelTemplate>
+                    </GridView.ItemsPanel>
+                    <GridView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
+                                          Opacity="0.85" />
+                                <TextBlock Text="{Binding Name}" FontSize="13" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+
+                <!-- ===== 外观 ===== -->
+                <TextBlock Text="外观" FontSize="20" FontWeight="Bold" Margin="0,12,0,0" />
+                <Border CornerRadius="8" Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="18">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="颜色模式" />
+                                <TextBlock Text="跟随系统 / 浅色 / 深色" FontSize="12" Opacity="0.6"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox x:Name="ThemeCombo" Grid.Column="1" MinWidth="170"
+                                      SelectionChanged="ThemeChoice_SelectionChanged">
+                                <ComboBoxItem Content="跟随系统" Tag="system" />
+                                <ComboBoxItem Content="浅色" Tag="light" />
+                                <ComboBoxItem Content="深色" Tag="dark" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="窗口背景效果" />
+                                <TextBlock Text="远程桌面 / 老机器建议选纯色" FontSize="12" Opacity="0.6"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox x:Name="BackdropCombo" Grid.Column="1" MinWidth="170"
+                                      SelectionChanged="BackdropChoice_SelectionChanged">
+                                <ComboBoxItem Content="亚克力（半透明）" Tag="acrylic" />
+                                <ComboBoxItem Content="云母（更接近系统窗口）" Tag="mica" />
+                                <ComboBoxItem Content="纯色（最省性能）" Tag="solid" />
+                            </ComboBox>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 窗口 ===== -->
+                <TextBlock Text="窗口" FontSize="20" FontWeight="Bold" Margin="0,12,0,0" />
+                <Border CornerRadius="8" Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="16">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="窗口始终置于最前" VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="TopMostSwitch" Grid.Column="1" OnContent="开" OffContent="关"
+                                          Toggled="TopMostSwitch_Toggled" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="开机自动启动" VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="AutoStartSwitch" Grid.Column="1" OnContent="开" OffContent="关"
+                                          Toggled="AutoStartSwitch_Toggled" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="开机时最小化启动" />
+                                <TextBlock x:Name="MinimizeHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="MinimizeSwitch" Grid.Column="1" OnContent="开" OffContent="关"
+                                          Toggled="MinimizeSwitch_Toggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 软件内容 ===== -->
+                <TextBlock Text="软件内容" FontSize="20" FontWeight="Bold" Margin="0,12,0,0" />
+                <Border CornerRadius="8" Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Name="ContentSummary" FontWeight="Bold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ContentSource" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ContentIssues" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="重新读取内容" Click="ReloadContent_Click" />
+                            <Button Content="同步内容包" Click="SyncContent_Click" />
+                            <Button Content="打开内容目录" Click="OpenContentDir_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 更新 ===== -->
+                <TextBlock Text="更新" FontSize="20" FontWeight="Bold" Margin="0,12,0,0" />
+                <Border CornerRadius="8" Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="14">
+                        <TextBlock x:Name="UpdateCurrent" FontWeight="Bold" TextWrapping="Wrap" />
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="更新通道" />
+                                <TextBlock Text="稳定通道更稳，Insider 通道能更早拿到新功能" FontSize="12" Opacity="0.6"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox x:Name="ChannelCombo" Grid.Column="1" MinWidth="170"
+                                      SelectionChanged="ChannelChoice_SelectionChanged">
+                                <ComboBoxItem Content="稳定通道" Tag="stable" />
+                                <ComboBoxItem Content="Insider 通道" Tag="insider" />
+                            </ComboBox>
+                        </Grid>
+
+                        <ToggleSwitch x:Name="AutoCheckSwitch" Header="启动时自动检查更新"
+                                      OnContent="开" OffContent="关" Toggled="AutoCheckSwitch_Toggled" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="CheckButton" Content="检查更新" Click="CheckUpdate_Click"
+                                    Style="{ThemeResource AccentButtonStyle}" />
+                        </StackPanel>
+
+                        <ProgressBar x:Name="UpdateProgress" Visibility="Collapsed" />
+                        <TextBlock x:Name="UpdateStatus" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+                        <TextBlock x:Name="UpdateNotes" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   MaxLines="8" Visibility="Collapsed" />
+
+                        <!-- 版本记录（本机） + 仓库里可回滚的版本 -->
+                        <Expander x:Name="HistoryExpander" Header="版本记录（这台电脑装过的版本）"
+                                  Margin="0,4,0,0" HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch" Expanding="History_Expanding">
+                            <StackPanel Spacing="10">
+                                <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                           Text="下面按时间倒序列出这台电脑上运行过的版本（应用每次启动自动记录，时间是本机时间）。" />
+                                <StackPanel x:Name="LocalHistoryList" Spacing="6" />
+
+                                <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="想装回以前某个版本？下面是更新仓库里发过的版本（正式版 + Insider 版）。装回去会覆盖当前程序，你的设置和软件内容不会丢。" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="LoadHistoryButton" Content="从仓库加载可回滚的版本"
+                                            Click="LoadHistory_Click" />
+                                    <ProgressRing x:Name="HistoryRing" Width="20" Height="20"
+                                                  IsActive="False" Visibility="Collapsed" />
+                                </StackPanel>
+                                <StackPanel x:Name="HistoryList" Spacing="6" />
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

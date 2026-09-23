@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.SubmitPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Padding="24,14,24,20" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
+                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+            </Button>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="提交软件" FontSize="24" FontWeight="Bold" />
+                <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                           Text="提交会先作为草稿进仓库（submissions/），管理员审核通过后才会上架。带 * 的是必填项。" />
+            </StackPanel>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="998*" MaxWidth="960" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="1" Spacing="14" Margin="0,4,0,0">
+
+                    <!-- ═══ 从 GitHub 一键读取 ═══ -->
+                    <Border CornerRadius="8" Padding="20" BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="从 GitHub 一键读取" FontSize="18" FontWeight="Bold" />
+                            <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
+                                       Text="填一个 GitHub 仓库地址，自动读取简介、版本号和各个安装包的直链，省得手抄。读取用的是公开接口，不会改动任何东西。" />
+
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="RepoBox" PlaceholderText="github.com/owner/repo 或 owner/repo" />
+                                <Button x:Name="ImportButton" Grid.Column="1" Content="读取" MinWidth="100"
+                                        Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom"
+                                        Click="Import_Click" />
+                            </Grid>
+
+                            <CheckBox x:Name="OverwriteBox" Content="覆盖我手写的内容" />
+                            <TextBlock FontSize="12" Opacity="0.6" Margin="28,0,0,0" TextWrapping="Wrap"
+                                       Text="默认只填空着的字段；勾上后连你已经填过的也会被覆盖。" />
+                            <CheckBox x:Name="PrereleaseBox" Content="优先取最新预发布版（Beta / Alpha）" />
+
+                            <InfoBar x:Name="ImportErrorBar" IsOpen="False" IsClosable="False" Severity="Error"
+                                     Title="读取失败" />
+                            <InfoBar x:Name="ImportOkBar" IsOpen="False" IsClosable="False" Severity="Success"
+                                     Title="读取完成" />
+                            <Border x:Name="ImportReport" Visibility="Collapsed" CornerRadius="8" Padding="12"
+                                    BorderThickness="1"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                <StackPanel x:Name="ImportReportHost" Spacing="6" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ 基本信息 ═══ -->
+                    <Border CornerRadius="8" Padding="20" BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="基本信息" FontSize="18" FontWeight="Bold" />
+
+                            <TextBox x:Name="IdBox" PlaceholderText="小写字母 / 数字 / 短横线，如 7-zip"
+                                     Description="详情页网址就是 #/download/&lt;id&gt;，不能带 ? &amp; = 等符号">
+                                <TextBox.Header>
+                                    <TextBlock><Run Text="软件 ID" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                </TextBox.Header>
+                            </TextBox>
+
+                            <TextBox x:Name="NameBox" PlaceholderText="如 7-Zip">
+                                <TextBox.Header>
+                                    <TextBlock><Run Text="软件名称" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                </TextBox.Header>
+                            </TextBox>
+
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="IconBox" Header="图标链接（选填，256×256 方图最佳）"
+                                         PlaceholderText="https://…/icon.png" />
+                                <ComboBox x:Name="CategoryCombo" Grid.Column="1" Header="分类 *"
+                                          HorizontalAlignment="Stretch" PlaceholderText="选一个分类" />
+                            </Grid>
+
+                            <TextBox x:Name="TaglineBox" PlaceholderText="一句话简介，显示在首页卡片上">
+                                <TextBox.Header>
+                                    <TextBlock><Run Text="一句话简介" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                </TextBox.Header>
+                            </TextBox>
+
+                            <TextBox x:Name="DescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="120"
+                                     PlaceholderText="详细介绍：这软件是干嘛的、有什么要注意的（可换行）">
+                                <TextBox.Header>
+                                    <TextBlock><Run Text="详细介绍" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                </TextBox.Header>
+                            </TextBox>
+
+                            <TextBox x:Name="ContactBox" PlaceholderText="如 QQ / 邮箱 / 站内留言方式"
+                                     Description="只写进审核工单给管理员看，不会出现在网站上">
+                                <TextBox.Header>
+                                    <TextBlock><Run Text="联系方式" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                </TextBox.Header>
+                            </TextBox>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ 补充信息 ═══ -->
+                    <Border CornerRadius="8" Padding="20" BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="补充信息" FontSize="18" FontWeight="Bold" />
+
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="VersionBox" Header="版本号" PlaceholderText="如 24.09" />
+                                <TextBox x:Name="SizeBox" Grid.Column="1" Header="体积" PlaceholderText="如 1.6 MB" />
+                            </Grid>
+
+                            <TextBox x:Name="SystemBox" PlaceholderText="如 Windows 10/11（x86 / x64 / ARM64）">
+                                <TextBox.Header>
+                                    <TextBlock><Run Text="系统限制" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                </TextBox.Header>
+                            </TextBox>
+
+                            <TextBox x:Name="WebsiteBox" Header="官网地址（选填）" PlaceholderText="https://…" />
+                            <TextBox x:Name="GithubBox" Header="GitHub 仓库（选填）" PlaceholderText="https://github.com/…" />
+                            <TextBox x:Name="NoticeBox" Header="提示条（选填）"
+                                     PlaceholderText="显示在下载区上方的蓝色提示，适合「更新频繁、直链易失效」的软件" />
+                            <TextBox x:Name="StoreBox" Header="应用商店地址（选填）"
+                                     PlaceholderText="填了会多一张「商店下载」卡片" />
+                            <TextBox x:Name="SortBox" Header="排序值（选填）" PlaceholderText="数字越小越靠前，留空排最后"
+                                     InputScope="Number" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ 下载项 ═══ -->
+                    <TextBlock Text="下载项" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
+                    <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="直链要填文件本身（.exe / .zip / .msi…），点了直接开始下载；不要填官网下载页。" />
+                    <StackPanel x:Name="DownloadsHost" Spacing="12" />
+                    <Button Content="+ 添加下载项" Click="AddDownload_Click" HorizontalAlignment="Left" />
+
+                    <!-- ═══ 提交 ═══ -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,6,0,0">
+                        <Button x:Name="RestoreDraftButton" Content="恢复上次未提交的内容"
+                                Click="RestoreDraft_Click" Visibility="Collapsed" />
+                        <Button x:Name="SubmitButton" Content="提交" MinWidth="130"
+                                Style="{StaticResource AccentButtonStyle}" Click="Submit_Click" />
+                    </StackPanel>
+
+                    <InfoBar x:Name="ResultBar" IsOpen="False" IsClosable="False" />
+
+                    <!-- 连不上提交服务时的兜底 -->
+                    <StackPanel x:Name="FallbackPanel" Spacing="10" Visibility="Collapsed">
+                        <InfoBar x:Name="FallbackBar" IsOpen="True" IsClosable="False" Severity="Warning"
+                                 Title="提交服务连不上"
+                                 Message="内容已经存在本机，不会丢。可以稍后重试、把提交文件下载下来手动放进仓库，或直接去 GitHub 提一个 Pull Request。" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="FallbackRetryButton" Content="重试" Click="Submit_Click"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            <Button Content="下载提交文件" Click="DownloadSubmission_Click" />
+                            <Button Content="复制 JSON" Click="CopySubmission_Click" />
+                            <Button Content="去 GitHub 提交" Click="OpenGithubSubmit_Click" />
+                        </StackPanel>
+                        <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Text="去 GitHub 提交：会打开「新建文件」页面并带上文件名，把内容粘进去保存即可（没有写权限时 GitHub 会引导你 fork + 提 PR），合并后同样会生成审核工单。" />
+                    </StackPanel>
+
+                    <TextBlock x:Name="Toast" FontSize="12" Opacity="0.75" Margin="0,4,0,10" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Page>
