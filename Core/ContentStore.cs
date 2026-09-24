@@ -46,6 +46,7 @@ public sealed class ContentStore
     {
         "cache" => "本地缓存（远端内容包）",
         "dev" => "开发目录（远端内容包还没发布，先用本机的）",
+        "bundled" => "安装包自带的内容（离线也有清单，联网后自动更新）",
         _ => "（没有数据源）",
     };
 
@@ -151,15 +152,25 @@ public sealed class ContentStore
     /// <summary>
     /// 按优先级找一个可用的内容目录。
     /// ⚠️ **正式版优先本地缓存**（%LOCALAPPDATA%\ClassSoftwareHub\content，由 ContentUpdater 同步）；
-    /// 开发目录只是**兜底**（远端内容包还没发布时先用本机的，别让界面空着）。
-    /// DEBUG 构建反过来：开发目录优先，方便改站点工程立刻看效果。
+    /// 其次是**安装目录里自带的那份内容包**（{app}\content，装机就有，离线也有软件清单）；
+    /// 开发目录只是最后兜底。DEBUG 构建把开发目录放最前面，方便改站点工程立刻看效果。
     /// </summary>
     private static string? ResolveContentRoot(out string kind)
     {
 #if DEBUG
-        var order = new[] { (ShellConfig.DevContentDir, "dev"), (ShellConfig.CachedContentDir, "cache") };
+        var order = new[]
+        {
+            (ShellConfig.DevContentDir, "dev"),
+            (ShellConfig.CachedContentDir, "cache"),
+            (ShellConfig.BundledContentDir, "bundled"),
+        };
 #else
-        var order = new[] { (ShellConfig.CachedContentDir, "cache"), (ShellConfig.DevContentDir, "dev") };
+        var order = new[]
+        {
+            (ShellConfig.CachedContentDir, "cache"),
+            (ShellConfig.BundledContentDir, "bundled"),
+            (ShellConfig.DevContentDir, "dev"),
+        };
 #endif
         foreach (var (dir, k) in order)
         {

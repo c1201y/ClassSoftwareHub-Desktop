@@ -12,8 +12,8 @@ public static class ShellConfig
     public const string AppName = "ClassSoftwareHub";
     public const string WindowTitle = "ClassSoftwareHub";
 
-    /// <summary>原生外壳版本（跟站点版本无关）。⚠️ Nick 指定：1.0.0-insider1.0，别乱改。</summary>
-    public const string ShellVersion = "1.2.0-insider1.2";
+    /// <summary>原生外壳版本（跟站点版本无关）。⚠️ 规则（Nick 指定）：基数固定 1.0.0 不动，只递增 insider 号。</summary>
+    public const string ShellVersion = "1.0.0-insider1.3";
 
     /// <summary>桌面版的版本号前缀（Nick 指定：dv）。</summary>
     public const string VersionPrefix = "dv";
@@ -24,7 +24,7 @@ public static class ShellConfig
     //   · 预览版（insider）→ 预发布 Release ＋ 非预发布（预览用户也能跟上正式版）
     //
     // 发版时按这套约定起名，才能被自动识别（别乱起）：
-    //   tag  ：正式版 `dv1.2.0`      预发布 `dv1.2.0-insider1.2`（发布时勾 Pre-release）
+    //   tag  ：正式版 `dv1.0.0`      预发布 `dv1.0.0-insider1.3`（发布时勾 Pre-release）
     //   资产 ：`ClassSoftwareHub-Setup-<tag>.exe`（名字带 setup 才认）＋ 同名 `.md5`
     //   正文 ：会原样显示在更新对话框里 → 写本次更新内容
     // ════════════════════════════════════════════════════════════════
@@ -66,6 +66,17 @@ public static class ShellConfig
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
+    /// **首选来源**：软件数据直接在站点仓库里，从 GitHub 读就是最新最全的（仓库是公开的，不用令牌）。
+    /// 站点的 content/manifest.json 一直没发布，所以这里才是主力，manifest / 自带内容包是备用。
+    /// </summary>
+    public const string SiteRepoOwner = "c1201y";
+    public const string SiteRepoName = "ClassSoftwareHub";
+    public const string SiteRepoBranch = "main";
+
+    /// <summary>仓库里软件数据所在目录（子目录 apps/ 一个软件一个 json，根上还有 categories.json）。</summary>
+    public const string SiteRepoDataDir = "软件数据";
+
+    /// <summary>
     /// 正式来源：站点上的内容清单（route 2 的产物，跟站点一起发布）。
     /// 桌面版只轮询这一个文件，按 sha256 增量拉变化的文件。
     /// </summary>
@@ -76,6 +87,12 @@ public static class ShellConfig
 
     /// <summary>增量同步下来的内容缓存目录。</summary>
     public static string CachedContentDir => System.IO.Path.Combine(AppPaths.DataDir, "content");
+
+    /// <summary>
+    /// 安装包里自带的内容（安装目录\content，打包装机时塞进去的那份）。
+    /// 装机就有软件清单，离线也不空；联网后 ContentUpdater 拉到新版会覆盖优先级更高的缓存。
+    /// </summary>
+    public static string BundledContentDir => System.IO.Path.Combine(AppContext.BaseDirectory, "content");
 
     /// <summary>
     /// 开发用：直接读站点工程的内容包（跑过 scripts/build-content.mjs 就有）。

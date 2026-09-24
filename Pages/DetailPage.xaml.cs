@@ -27,6 +27,8 @@ public sealed partial class DetailPage : Page
     public DetailPage()
     {
         InitializeComponent();
+        // 离开页面把「已复制」提示定时器停掉
+        Unloaded += (_, _) => _copyTimer?.Stop();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)

@@ -139,6 +139,9 @@ public sealed class SoftwareApp : System.ComponentModel.INotifyPropertyChanged
                     else
                     {
                         var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri);
+                        // 卡片上图标最大也就 72px（详情页），按原图解码（动不动 256/512）纯属浪费：
+                        // 教学机 8G 内存，一页 50 多个图标就是几十 MB。这里限宽解码（等比，高度自动）。
+                        bmp.DecodePixelWidth = 128;
                         bmp.ImageOpened += (_, _) => { _iconLoaded = true; Raise(nameof(IconPlaceholder)); };
                         bmp.ImageFailed += (_, _) => { _iconLoaded = false; Raise(nameof(IconPlaceholder)); };
                         _icon = bmp;

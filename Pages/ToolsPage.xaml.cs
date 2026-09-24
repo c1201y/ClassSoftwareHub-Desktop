@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ClassSoftwareHub.Desktop.Data;
 using ClassSoftwareHub.Desktop.Pages.Tools;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Pages;
@@ -53,6 +54,22 @@ public sealed partial class ToolsPage : Page
     {
         InitializeComponent();
         ToolGrid.ItemsSource = All;
+
+        // 这里的开关（「点关闭时收进托盘」和设置页里是同一个值）；侧边栏/置顶那些挪到「设置 → 常用工具」了
+        _loading = true;
+        TraySwitch.IsOn = App.Settings.Current.CloseToTray;
+        _loading = false;
+    }
+
+    private bool _loading;
+
+    private void OpenPalette_Click(object sender, RoutedEventArgs e)
+        => Views.ToolPaletteWindow.ShowTool();
+
+    private void TraySwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.MainWindow?.SetCloseToTray(TraySwitch.IsOn);
     }
 
     private void ToolGrid_ItemClick(object sender, ItemClickEventArgs e)

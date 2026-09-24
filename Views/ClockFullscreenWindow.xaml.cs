@@ -50,6 +50,15 @@ public sealed partial class ClockFullscreenWindow : Window
                 presenter.IsResizable = false;
             }
             _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+
+            // 铺满整个物理屏幕（用屏幕外框而不是工作区，差几个像素就会看起来"没盖住"）
+            var area = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
+            if (area is not null) _appWindow.MoveAndResize(area.OuterBounds);
+
+            // ⚠️ Win11 上全屏窗口默认还带圆角 + 一圈细边框 → 屏幕四角/边上会露出底下的桌面，
+            // 看着像"屏幕外面套了一圈"。这里把圆角关掉、边框设成无色。
+            // （Win10 不认识这两个属性，调用失败无所谓。）
+            WindowChrome.RemoveBorder(hwnd, rounded: false, dark: _dark);
         }
         catch { /* 全屏失败也能当普通窗口用 */ }
 

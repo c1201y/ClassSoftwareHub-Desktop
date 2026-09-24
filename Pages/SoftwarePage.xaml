@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="ClassSoftwareHub.Desktop.Pages.SoftwarePage"
+    NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
@@ -146,10 +147,20 @@
                     </GridView.ItemTemplate>
                 </GridView>
 
-                <!-- 没有内容时的提示 -->
-                <TextBlock x:Name="EmptyText" Visibility="Collapsed"
-                           Text="没有匹配的软件" Opacity="0.5" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" />
+                <!-- 空状态：把「为什么没有」和「怎么办」说清楚（内容包没同步 / 搜索没命中） -->
+                <StackPanel x:Name="EmptyPanel" Visibility="Collapsed" Spacing="10" MaxWidth="520"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE946;" FontSize="30" Opacity="0.45" />
+                    <TextBlock x:Name="EmptyTitle" Text="软件清单还是空的" FontSize="17" FontWeight="Bold"
+                               HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptyText" FontSize="12.5" Opacity="0.75" TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Text="清单来自「内容包」：安装包里自带一份，联网后会自动从站点更新。" />
+                    <TextBlock x:Name="EmptyDetail" FontSize="11.5" Opacity="0.55" TextWrapping="Wrap"
+                               TextAlignment="Center" />
+                    <Button x:Name="EmptyRetry" Content="重新同步内容包" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Center" Click="EmptyRetry_Click" />
+                </StackPanel>
             </Grid>
         </Grid>
     </Grid>

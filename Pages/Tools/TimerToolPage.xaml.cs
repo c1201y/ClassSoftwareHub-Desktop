@@ -45,6 +45,14 @@ public sealed partial class TimerToolPage : Page
         _blink.IsRepeating = true;
         _blink.Tick += (_, _) => Display.Opacity = Display.Opacity < 0.9 ? 1 : 0.35;
 
+        // 离开页面就停表（定时器的委托会把页面钉在内存里）
+        Unloaded += (_, _) =>
+        {
+            _timer.Stop();
+            _blink.Stop();
+            Display.Opacity = 1;
+        };
+
         ApplyTime();
         UpdateDisplay();
     }
@@ -60,6 +68,10 @@ public sealed partial class TimerToolPage : Page
         if (Frame.CanGoBack) Frame.GoBack();
         else Frame.Navigate(typeof(ToolsPage));
     }
+
+    /// <summary>把计时器丢到工具浮窗里跑。</summary>
+    private void OpenPalette_Click(object sender, RoutedEventArgs e)
+        => Views.ToolPaletteWindow.ShowTool("timer");
 
     private void Mode_Countdown_Click(object sender, RoutedEventArgs e) => SetMode(Mode.Countdown);
 

@@ -2,12 +2,12 @@
 //
 // 用法（在工程根目录）：
 //   set GITHUB_TOKEN=ghp_xxx            # 只在当前终端，别写进任何文件
-//   node tools/publish-release.mjs --tag dv1.2.0-insider1.2 --channel insider ^
-//        --installer "dist\installer\ClassSoftwareHub-Setup-dv1.2.0-insider1.2-insider.exe" ^
+//   node tools/publish-release.mjs --tag dv1.0.0-insider1.3 --channel insider ^
+//        --installer "dist\installer\ClassSoftwareHub-Setup-dv1.0.0-insider1.3.exe" ^
 //        --notes notes.md
 //
 // 参数：
-//   --tag        必填。正式版 dv1.2.0 / 预发布 dv1.2.0-insider1.2（跟 ShellConfig.ShellVersion 对齐）
+//   --tag        必填。正式版 dv1.0.0 / 预发布 dv1.0.0-insider1.3（跟 ShellConfig.ShellVersion 对齐）
 //   --channel    stable | insider（insider 会自动勾 Pre-release）
 //   --installer  必填。安装包路径；同名 .md5 会自动生成并一起上传
 //   --notes      可选。更新说明文件（md/txt，会原样显示在更新对话框里）

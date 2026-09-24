@@ -17,21 +17,23 @@ public sealed record ContentSyncResult(
     int Downloaded,
     int Total,
     string? Error,
-    string BaseUrl)
+    string BaseUrl,
+    string? Note = null)
 {
-    public string Message => Error is not null
-        ? Error
-        : Updated
+    public string Message => Error
+        ?? Note
+        ?? (Updated
             ? $"内容已更新（{Downloaded}/{Total} 个文件）"
-            : $"内容已是最新（{Total} 个文件）";
+            : $"内容已是最新（{Total} 个文件）");
 }
 
 /// <summary>
-/// 内容包增量同步（软件数据的「云端下发」）：
-///   1) 拉站点 content/manifest.json（列了每个文件的 path + sha256）
-///   2) 逐个比对本地 %LOCALAPPDATA%\ClassSoftwareHub\content 里的文件
-///   3) 只下载 sha256 不一致的（先落 .part，校验通过再改名）
-/// 站点还没发布 content/ 时（404）就安静地什么都不做 —— ContentStore 会继续用开发目录兜底。
+/// 软件数据的同步入口：
+///   ① 首选 **GitHub 仓库直读**（见 GithubContentSync：软件数据就在公开仓库里）
+///   ② 备胎：站点 content/manifest.json（列了每个文件的 path + sha256），逐个比对本地
+///      %LOCALAPPDATA%\ClassSoftwareHub\content 里的文件，只下载 sha256 不一致的
+///      （先落 .part，校验通过再改名）
+/// 两条都拿不到就安静地什么都不做 —— ContentStore 会用安装包自带的内容 / 开发目录兜底。
 /// </summary>
 public static class ContentUpdater
 {
@@ -48,10 +50,30 @@ public static class ContentUpdater
         return client;
     }
 
-    /// <summary>同步内容包。失败不抛异常，返回带 Error 的结果（界面自己决定要不要提示）。</summary>
+    /// <summary>
+    /// 同步软件数据。失败不抛异常，返回带 Error 的结果（界面自己决定要不要提示）。
+    ///
+    /// 顺序：
+    ///   ① **GitHub 仓库直读**（首选 —— 软件数据就在公开仓库里，永远最新，不依赖站点有没有发布清单）
+    ///   ② 站点 content/manifest.json（等站点以后发布了就走这条；GitHub 被墙时也是它的备胎）
+    /// </summary>
     public static async Task<ContentSyncResult> SyncAsync(
         IProgress<string>? progress = null,
         CancellationToken ct = default)
+    {
+        // ① GitHub 仓库（一次 ref 请求就知道有没有变，没变一个文件都不下）
+        var repo = await GithubContentSync.SyncAsync(progress, ct).ConfigureAwait(false);
+        if (repo.Ok)
+            return new ContentSyncResult(repo.Updated, 0, repo.Files, null, GithubContentSync.RepoUrl, repo.Message);
+
+        // ② 站点清单（增量 sha256）
+        return await SyncFromManifestAsync(progress, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>老路子：按站点 content/manifest.json 的文件 sha256 增量拉。</summary>
+    private static async Task<ContentSyncResult> SyncFromManifestAsync(
+        IProgress<string>? progress,
+        CancellationToken ct)
     {
         Manifest? manifest = null;
         string manifestUrl = "";

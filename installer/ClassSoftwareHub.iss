@@ -15,7 +15,7 @@
 ; ══════════════════════════════════════════════════════════════════════
 
 #ifndef AppVersion
-  #define AppVersion "1.2.0"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef Channel
   #define Channel "stable"
@@ -72,7 +72,9 @@ Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; 装完自动拉起应用（交互安装、以及应用内更新的静默安装都算）。
+; 之前是 postinstall + skipifsilent -> 静默升级装完什么都不发生，用户以为应用崩了。
+Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait
 
 ; ══════════════════════════════════════════════════════════════════════
 ;  兜底逻辑（[Code]）

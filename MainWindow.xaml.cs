@@ -37,6 +37,11 @@ public sealed partial class MainWindow : Window
     private bool _themeFromWeb;
     private bool _firstActivated;
     private readonly bool _startMinimized;
+    private readonly bool _startPalette;
+
+    private TrayIcon? _tray;
+    private TrayIcon? _trayTools;      // 第二个托盘图标：常用工具（左键直接开工具窗口）
+    private bool _exitRequested;
 
     /// <summary>网页上报的「可拖动矩形」（物理像素），仅在开启原生 caption 区域时使用。</summary>
     private readonly List<RectInt32> _webCaptionRects = new();
@@ -62,6 +67,9 @@ public sealed partial class MainWindow : Window
 
         Closed += OnWindowClosed;
 
+        // 托盘图标：关窗口收托盘、开机最小化收托盘、托盘菜单（工具浮窗 / 退出）都靠它
+        InitTray();
+
         // ===== 原生界面 =====
         // 软件内容来自内容包（开发时读站点工程 dist/content，正式版走远端 manifest）
         App.Content.Load();
@@ -75,6 +83,9 @@ public sealed partial class MainWindow : Window
         // 开机自启 + 「开机最小化」：注册表里会带 --minimized，启动时收进任务栏
         _startMinimized = Environment.GetCommandLineArgs()
             .Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+        // 直接开工具浮窗（可以拿它建个桌面快捷方式：ClassSoftwareHub.exe --palette）
+        _startPalette = Environment.GetCommandLineArgs()
+            .Any(a => a.Equals("--palette", StringComparison.OrdinalIgnoreCase));
         Activated += OnFirstActivated;
 
         _ = BootAsync();
@@ -85,10 +96,19 @@ public sealed partial class MainWindow : Window
         if (_firstActivated) return;
         _firstActivated = true;
         Activated -= OnFirstActivated;
-        if (_startMinimized && _appWindow?.Presenter is OverlappedPresenter p)
-            p.Minimize();
+        if (_startPalette)
+        {
+            // --palette：主窗口不露脸，托盘 + 工具浮窗直接摆出来
+            HideToTray();
+            Views.ToolPaletteWindow.ShowTool();
+        }
+        else if (_startMinimized)
+        {
+            // 「开机最小化启动」= 直接收进托盘（不占任务栏），想用的时候从托盘图标点出来
+            HideToTray();
+        }
 
-        // 启动时静默查一次更新：有新版就**强制更新**（没有"稍后"）
+        // 启动时查一次更新：**不强制**，有新版就问用户（主窗口没露脸时发系统通知）
         _ = CheckUpdateOnStartupAsync();
     }
 
@@ -104,14 +124,35 @@ public sealed partial class MainWindow : Window
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
             if (result is not { HasUpdate: true, Release: { } release }) return;
 
+            // 这种启动方式主窗口是藏着的（--minimized / --palette / 直接收进托盘）
+            // → 弹对话框没人看，改发一条系统通知，点通知再把界面叫出来
+            if (!IsWindowVisible(WindowNative.GetWindowHandle(this)))
+            {
+                NotifyUpdateAvailable(release);
+                return;
+            }
+
             var root = (Content as FrameworkElement)?.XamlRoot;
             if (root is null) return;
+
+            // 让用户自己决定；选「稍后」就安静放过，下次启动还会再问一次
+            if (!await Services.Updating.UpdateFlow.AskAsync(root, release)) return;
             await Services.Updating.UpdateFlow.RunAsync(root, service, release);
         }
         catch
         {
             // 启动时查更新失败就安静放过，别影响正常使用
         }
+    }
+
+    /// <summary>主窗口没露脸时，用系统通知提醒"有新版本"（点通知 = 打开主界面并重新走一次检查）。</summary>
+    private void NotifyUpdateAvailable(Services.Updating.UpdateRelease release)
+    {
+        try
+        {
+            _tray?.ShowBalloon($"发现新版本 {release.Tag}", "当前不是最新版，点这里看看要不要更新。");
+        }
+        catch { }
     }
 
     /// <summary>
@@ -198,6 +239,14 @@ public sealed partial class MainWindow : Window
         return Environment.ProcessPath ?? "";
     }
 
+    /// <summary>「常用工具」托盘图标用的图标：扳手那个（跟主界面图标区分开）。</summary>
+    private static string ToolIconPath()
+    {
+        var ico = EmbeddedAssets.ExtractToCache("ToolIcon.ico", "ToolIcon.ico");
+        if (!string.IsNullOrEmpty(ico) && System.IO.File.Exists(ico)) return ico;
+        return IconPath();
+    }
+
     /// <summary>
     /// 打窗口图标。除了 AppWindow.SetIcon 之外再补一发老式的 WM_SETICON ——
     /// 有的环境下 SetIcon 不生效，任务栏 / Alt-Tab / Win+Tab 就一直是系统默认图标。
@@ -281,6 +330,14 @@ public sealed partial class MainWindow : Window
         catch { }
 
         _appWindow.Closing += (_, _) => SaveWindowState();
+
+        // 点右上角 × 默认收进托盘（可在设置 / 内置工具页关掉）；托盘挂不上就直接退，别把用户困在后台
+        _appWindow.Closing += (_, args) =>
+        {
+            if (_exitRequested || !_settings.Current.CloseToTray || _tray?.IsReady != true) return;
+            args.Cancel = true;
+            HideToTray();
+        };
         _appWindow.Changed += (_, args) =>
         {
             if (args.DidSizeChange || args.DidPresenterChange)
@@ -484,8 +541,13 @@ public sealed partial class MainWindow : Window
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         _loadTimer.Stop();
+        _exitRequested = true;
         try { _settings.Save(); } catch { }
         try { Web.Close(); } catch { }
+        try { _tray?.Dispose(); } catch { }
+        _tray = null;
+        try { _trayTools?.Dispose(); } catch { }
+        _trayTools = null;
     }
 
     private void LoadLoadingIcon()
@@ -993,6 +1055,194 @@ public sealed partial class MainWindow : Window
         _bridge.Send("shell.state", BuildStatePayload());
     }
 
+    /// <summary>点关闭时收进托盘（true）/ 直接退出（false）。</summary>
+    public void SetCloseToTray(bool value)
+    {
+        _settings.Current.CloseToTray = value;
+        _settings.Save();
+    }
+
+    /// <summary>工具浮窗是否始终置顶。</summary>
+    public void SetPaletteOnTop(bool value)
+    {
+        _settings.Current.PaletteOnTop = value;
+        _settings.Save();
+        Views.ToolPaletteWindow.ApplyOnTopSetting();
+    }
+
+    // ============================================================
+    // 托盘图标：主窗口藏起来、工具浮窗、退出都从这儿走
+    // ============================================================
+
+    private void InitTray()
+    {
+        try
+        {
+            // 托盘图标一：主界面（左键 = 主窗口显示/收起）
+            _tray = new TrayIcon(IconPath());
+            _tray.LeftClick += ToggleMainWindow;
+            _tray.CommandInvoked += OnTrayCommand;
+            _tray.BalloonClicked += () => { ShowFromTray(); _ = CheckUpdateManualAsync(); };
+            _tray.MenuItems.Add(new TrayMenuItem { Text = "打开主界面", Command = "show", IsDefault = true });
+            _tray.MenuItems.Add(new TrayMenuItem { Text = "常用工具", Command = "palette" });
+            _tray.MenuItems.Add(new TrayMenuItem { Text = "工具侧边栏", Command = "sidebar" });
+            _tray.MenuItems.Add(new TrayMenuItem { Separator = true });
+            _tray.MenuItems.Add(new TrayMenuItem { Text = "检查更新", Command = "update" });
+            _tray.MenuItems.Add(new TrayMenuItem { Separator = true });
+            _tray.MenuItems.Add(new TrayMenuItem { Text = "退出", Command = "exit" });
+
+            if (!_tray.Setup(ShellConfig.WindowTitle))
+                Debug.WriteLine("[tray] 托盘图标没挂上（挂不上时关闭窗口仍然直接退出）");
+
+            // 托盘图标二：常用工具（左键 = 直接开工具窗口，不用先进主界面）—— 学校电脑是触屏，少点几下
+            _trayTools = new TrayIcon(ToolIconPath());
+            _trayTools.LeftClick += () => Views.ToolPaletteWindow.TogglePalette();
+            _trayTools.CommandInvoked += OnTrayCommand;
+            _trayTools.MenuItems.Add(new TrayMenuItem { Text = "打开常用工具", Command = "palette", IsDefault = true });
+            _trayTools.MenuItems.Add(new TrayMenuItem { Text = "打开主界面", Command = "show" });
+            _trayTools.MenuItems.Add(new TrayMenuItem { Separator = true });
+            _trayTools.MenuItems.Add(new TrayMenuItem { Text = "退出", Command = "exit" });
+
+            if (!_trayTools.Setup("常用工具"))
+                Debug.WriteLine("[tray] 第二个托盘图标没挂上");
+
+            // 屏幕右边那条工具侧边栏（全屏放 PPT 时也够得着工具）
+            Views.ToolSidebarWindow.ApplySetting();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[tray] 初始化失败: " + ex.Message);
+        }
+    }
+
+    private void OnTrayCommand(string command)
+    {
+        switch (command)
+        {
+            case "show":
+                ShowFromTray();
+                break;
+            case "palette":
+                Views.ToolPaletteWindow.ShowTool();
+                break;
+            case "sidebar":
+                Views.ToolSidebarWindow.ShowSidebar();
+                break;
+            case "update":
+                ShowFromTray();
+                _ = CheckUpdateManualAsync();
+                break;
+            case "exit":
+                ExitApp();
+                break;
+        }
+    }
+
+    /// <summary>左键点托盘图标：主窗口显示/收起来回切。</summary>
+    public void ToggleMainWindow()
+    {
+        try
+        {
+            if (IsWindowVisible(WindowNative.GetWindowHandle(this))) HideToTray();
+            else ShowFromTray();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[tray] 切换窗口失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>主窗口藏进托盘（任务栏上不留最小化按钮）。</summary>
+    public void HideToTray()
+    {
+        try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); } catch { }
+        // 藏起来没人看的时候把内存还给系统（教学机 8G，不能白白占着）
+        Services.MemoryTrimmer.TrimLater(1200);
+    }
+
+    /// <summary>从托盘把主窗口叫回来。</summary>
+    public void ShowFromTray()
+    {
+        try
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            ShowWindow(hwnd, SW_SHOW);
+            if (_appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Minimized)
+                p.Restore();
+            Activate();
+            SetForegroundWindow(hwnd);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[tray] 显示窗口失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 工具浮窗里的「详细设置」：把主界面叫出来，并直接跳到对应的工具页
+    /// （浮窗太小，放不下那些自定义项 —— 但用户想细调时得有条路进去）。
+    /// </summary>
+    public void OpenToolSettings(Type pageType)
+    {
+        try
+        {
+            ShowFromTray();
+            Shell.NavigateToTool(pageType);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[palette] 打开工具设置失败: " + ex.Message);
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private const int SW_HIDE = 0;
+    private const int SW_SHOW = 5;
+
+    /// <summary>托盘菜单「检查更新」：查到新版就走更新流程，没有就明确说一声。</summary>
+    private async Task CheckUpdateManualAsync()
+    {
+        try
+        {
+            var service = Services.Updating.UpdateService.CreateDefault();
+            if (!service.Source.IsConfigured) return;
+
+            var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
+            var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
+            var root = (Content as FrameworkElement)?.XamlRoot;
+            if (root is null) return;
+
+            if (result is { HasUpdate: true, Release: { } release })
+            {
+                // 一样先问，绝不替用户做主
+                if (!await Services.Updating.UpdateFlow.AskAsync(root, release)) return;
+                await Services.Updating.UpdateFlow.RunAsync(root, service, release);
+                return;
+            }
+
+            var dialog = new ContentDialog
+            {
+                XamlRoot = root,
+                Title = "已经是最新版本",
+                Content = $"当前：dv{ShellConfig.ShellVersion}\n通道：{Services.Updating.UpdateChannels.ToDisplay(channel)}",
+                CloseButtonText = "好",
+            };
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[update] 检查更新失败: " + ex.Message);
+        }
+    }
+
     /// <summary>把自启项写进注册表 Run；开着「开机最小化」时附带 --minimized 参数。</summary>
     private void ApplyAutoStart()
     {
@@ -1392,7 +1642,12 @@ public sealed partial class MainWindow : Window
 
     private void ExitApp()
     {
+        _exitRequested = true;
         try { _settings.Save(); } catch { }
+        try { _tray?.Dispose(); } catch { }
+        _tray = null;
+        try { _trayTools?.Dispose(); } catch { }
+        _trayTools = null;
         try { Application.Current.Exit(); }
         catch { Environment.Exit(0); }
     }

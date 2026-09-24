@@ -13,6 +13,35 @@ public sealed class AppSettings
     public bool MinimizeOnStart { get; set; }
     public bool TelemetryEnabled { get; set; }                 // 默认关闭
     public bool TelemetryAsked { get; set; }
+
+    /// <summary>点关闭 = 收进托盘（不退出程序），默认开；关了就是以前那样直接退出。</summary>
+    public bool CloseToTray { get; set; } = true;
+
+    /// <summary>工具浮窗是否始终置顶，默认开。</summary>
+    public bool PaletteOnTop { get; set; } = true;
+
+    /// <summary>工具浮窗上次的位置（物理像素）；-99999 = 还没存过（那就默认右下角）。</summary>
+    public int PaletteX { get; set; } = -99999;
+    public int PaletteY { get; set; } = -99999;
+
+    /// <summary>
+    /// 位置记忆的版本：老版本（没有这个字段 = 0）存在右下角的旧坐标会被忽略一次，
+    /// 让浮窗按新默认值（屏幕正中间）摆一次。用户拖过之后就一直是他的位置了。
+    /// </summary>
+    public int PalettePosVersion { get; set; }
+
+    /// <summary>工具浮窗上次停在哪个工具：pick-number | timer | clock</summary>
+    public string PaletteTool { get; set; } = "pick-number";
+
+    /// <summary>屏幕右边那条工具侧边栏要不要显示（默认开：全屏播放时也能点到工具）。</summary>
+    public bool SidebarEnabled { get; set; } = true;
+
+    /// <summary>侧边栏贴哪条边：left | right | top | bottom（默认右边；拖一下也能换，换完记这儿）。</summary>
+    public string SidebarEdge { get; set; } = "right";
+
+    /// <summary>侧边栏沿边位置（0~1）；-1 = 居中（默认）。拖动收起状态的抓手时记下来。</summary>
+    public double SidebarPosRatio { get; set; } = -1;
+
     public string WebView2MissingChoice { get; set; } = "";    // "" | install | browser
 
     /// <summary>更新通道：stable（正式版）| insider（预览版）。默认值跟着构建走（见 ShellConfig.DefaultUpdateChannel）。</summary>

@@ -20,6 +20,25 @@ public sealed partial class ShellPage : UserControl
     {
         InitializeComponent();
         ActualThemeChanged += (_, _) => UpdateThemeButton();
+
+        // 每次切页停稳之后收一次内存（页面本身不缓存，这里再把工作集还给系统）
+        ContentFrame.Navigated += (_, _) =>
+        {
+            Services.MemoryTrimmer.TrimLater(3000);
+            UpdateBackButton();
+        };
+    }
+
+    /// <summary>NavigationView 自带的返回按钮：能退就亮，退到头就灰（原生尺寸和动画）。</summary>
+    private void UpdateBackButton()
+    {
+        Nav.IsBackEnabled = ContentFrame.CanGoBack;
+    }
+
+    private void Nav_BackRequested(NavigationView sender, NavigationViewBackRequestedEventArgs args)
+    {
+        if (ContentFrame.CanGoBack) ContentFrame.GoBack();
+        UpdateBackButton();
     }
 
     /// <summary>标题栏那个太阳/月亮按钮：图标显示"点了会切到的那一边"。</summary>
@@ -58,9 +77,20 @@ public sealed partial class ShellPage : UserControl
         NavigateTag(tag);
     }
 
-    /// <summary>只切页面，不动导航高亮（软件下载页内部按分类切换时用）。</summary>
-    public void NavigateTag(string tag)
+    /// <summary>
+    /// 跳到「内置工具」里的某个工具页（浮窗里的「详细设置」用）。
+    /// 先把工具列表页铺一层，这样工具页左上角的返回按钮能正常退回列表。
+    /// </summary>
+    public void NavigateToTool(Type pageType)
     {
+        SelectTag("tools");
+        if (ContentFrame.CurrentSourcePageType != typeof(ToolsPage))
+            ContentFrame.Navigate(typeof(ToolsPage));
+        ContentFrame.Navigate(pageType);
+    }
+
+    /// <summary>只切页面，不动导航高亮（软件下载页内部按分类切换时用）。</summary>
+    public void NavigateTag(string tag)    {
         switch (tag)
         {
             case "submit":

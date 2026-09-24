@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClassSoftwareHub.Desktop.Views.Palette.MiniPickNumber"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:palette="using:ClassSoftwareHub.Desktop.Views.Palette">
+
+    <!--
+      浮窗版随机抽号：范围 + 个数 + 是否重复 + 大号结果 + 抽号/重置。
+      数据和「内置工具 → 随机抽号」共用同一个存档（%LOCALAPPDATA%\ClassSoftwareHub\pick-number.json）。
+      数字输入用的是自己写的 NumberStepper（大按钮、可长按连发、触屏不会弹复制粘贴）。
+    -->
+    <Grid RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 范围 -->
+        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+            <palette:NumberStepper x:Name="FromStepper" Label="范围" Minimum="0" Maximum="9999" Step="1" />
+            <TextBlock Text="~" FontSize="12.5" Opacity="0.7" VerticalAlignment="Center" />
+            <palette:NumberStepper x:Name="ToStepper" Minimum="0" Maximum="9999" Step="1" />
+        </StackPanel>
+
+        <!-- 抽几个 + 能不能重复（跟完整版页面对应，写回同一个存档） -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <palette:NumberStepper x:Name="CountStepper" Label="个数" Minimum="1" Maximum="50" Step="1" />
+            <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0" Padding="6,0,0,0"
+                      VerticalAlignment="Center" />
+            <TextBlock x:Name="UsedText" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- 大号结果（抽多个时自动缩小字号、换行） -->
+        <Grid Grid.Row="2">
+            <TextBlock x:Name="ResultText" Text="—" FontSize="64" FontWeight="SemiBold"
+                       FontFamily="Bahnschrift" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" />
+        </Grid>
+
+        <TextBlock x:Name="HintText" Grid.Row="3" FontSize="12" Opacity="0.6"
+                   TextAlignment="Center" TextWrapping="Wrap" />
+
+        <!-- 按钮 -->
+        <Grid Grid.Row="4" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="DrawButton" Content="抽一个" Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch" Click="Draw_Click" />
+            <Button Grid.Row="0" Grid.Column="1" Content="重置" Click="Reset_Click" />
+        </Grid>
+    </Grid>
+</UserControl>

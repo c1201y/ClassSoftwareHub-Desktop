@@ -37,6 +37,18 @@ public sealed partial class SettingsPage : Page
         TopMostSwitch.IsOn = s.AlwaysOnTop;
         AutoStartSwitch.IsOn = s.AutoStart;
         MinimizeSwitch.IsOn = s.MinimizeOnStart;
+        TraySwitch.IsOn = s.CloseToTray;
+
+        // 常用工具窗口 / 侧边栏
+        PaletteTopSwitch.IsOn = s.PaletteOnTop;
+        SidebarSwitch.IsOn = s.SidebarEnabled;
+        EdgeLeft.IsChecked = s.SidebarEdge == "left";
+        EdgeRight.IsChecked = s.SidebarEdge == "right";
+        EdgeTop.IsChecked = s.SidebarEdge == "top";
+        EdgeBottom.IsChecked = s.SidebarEdge == "bottom";
+        if (EdgeLeft.IsChecked != true && EdgeRight.IsChecked != true
+            && EdgeTop.IsChecked != true && EdgeBottom.IsChecked != true)
+            EdgeRight.IsChecked = true;
         ThemeCombo.SelectedIndex = s.Theme switch
         {
             "light" => 1,
@@ -84,7 +96,7 @@ public sealed partial class SettingsPage : Page
         MinimizeSwitch.IsEnabled = on;
         MinimizeHint.Opacity = on ? 0.55 : 0.4;
         MinimizeHint.Text = on
-            ? "开机启动时直接把窗口收进任务栏，不弹出来。"
+            ? "开机启动时直接收进托盘（任务栏上不留按钮），想用的时候点托盘图标。"
             : "只有打开「开机自动启动」时，这个选项才有用。";
     }
 
@@ -128,6 +140,35 @@ public sealed partial class SettingsPage : Page
         App.Settings.Current.MinimizeOnStart = MinimizeSwitch.IsOn;
         App.Settings.Save();
         App.MainWindow?.SetMinimizeOnStart(MinimizeSwitch.IsOn);
+    }
+
+    private void TraySwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.MainWindow?.SetCloseToTray(TraySwitch.IsOn);
+    }
+
+    private void PaletteTopSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.MainWindow?.SetPaletteOnTop(PaletteTopSwitch.IsOn);
+    }
+
+    private void SidebarSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.Settings.Current.SidebarEnabled = SidebarSwitch.IsOn;
+        App.Settings.Save();
+        Views.ToolSidebarWindow.ApplySetting();
+    }
+
+    private void Edge_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        if (sender is not RadioButton rb || rb.Tag is not string edge) return;
+        App.Settings.Current.SidebarEdge = edge;
+        App.Settings.Save();
+        if (App.Settings.Current.SidebarEnabled) Views.ToolSidebarWindow.ApplySetting();
     }
 
     private void ReloadContent_Click(object sender, RoutedEventArgs e)
@@ -202,7 +243,7 @@ public sealed partial class SettingsPage : Page
         App.Settings.Save();
     }
 
-    /// <summary>检查更新：只要有新版，就直接进强制更新流程（没有「稍后」这个选项）。</summary>
+    /// <summary>检查更新：查到新版先弹窗问用户要不要装（不强制）。</summary>
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
     {
         if (_updateBusy) return;
@@ -226,7 +267,10 @@ public sealed partial class SettingsPage : Page
                 var notes = Snip(release.Notes, 400);
                 UpdateNotes.Text = notes;
                 UpdateNotes.Visibility = notes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-                UpdateStatus.Text = $"发现新版本 {release.Tag}，开始强制更新…";
+                UpdateStatus.Text = $"发现新版本 {release.Tag}，等你决定要不要装。";
+
+                // 先问；选「稍后」就什么都不做
+                if (!await UpdateFlow.AskAsync(XamlRoot, release)) return;
 
                 if (!await UpdateFlow.RunAsync(XamlRoot, _updater, release))
                     UpdateStatus.Text = "更新失败：稍后可重试，或去发布页手动下载新版。";

@@ -63,6 +63,9 @@ public sealed partial class ClockToolPage : Page
         _timer.IsRepeating = true;
         _timer.Tick += (_, _) => Tick();
 
+        // 离开页面就停表（定时器的委托会把整个页面钉在内存里）
+        Unloaded += (_, _) => _timer.Stop();
+
         _ready = true;
         Apply();
         Tick();
@@ -75,6 +78,10 @@ public sealed partial class ClockToolPage : Page
         if (Frame.CanGoBack) Frame.GoBack();
         else Frame.Navigate(typeof(ToolsPage));
     }
+
+    /// <summary>把时钟丢到工具浮窗里跑。</summary>
+    private void OpenPalette_Click(object sender, RoutedEventArgs e)
+        => Views.ToolPaletteWindow.ShowTool("clock");
 
     private bool Dark => ActualTheme == ElementTheme.Dark;
     private bool HasPhoto => !string.IsNullOrWhiteSpace(_settings.BackgroundImagePath);

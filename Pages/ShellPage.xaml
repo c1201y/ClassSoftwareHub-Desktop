@@ -28,8 +28,10 @@
         </Grid>
 
         <NavigationView x:Name="Nav" Grid.Row="1" Background="{x:Null}"
-                        IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
-                        PaneDisplayMode="Left" OpenPaneLength="252"
+                        IsBackButtonVisible="Visible" IsSettingsVisible="False"
+                        PaneDisplayMode="Auto" OpenPaneLength="252"
+                        CompactModeThresholdWidth="820" ExpandedModeThresholdWidth="1180"
+                        BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">
             <!-- 上半区：首页 / 软件下载 / 内置工具 -->
             <NavigationView.MenuItems>
@@ -64,7 +66,8 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <Frame x:Name="ContentFrame" />
+            <!-- CacheSize=0：页面不留在内存里（教学机内存小，切页就回收，别一路涨上去） -->
+            <Frame x:Name="ContentFrame" CacheSize="0" />
         </NavigationView>
     </Grid>
 </UserControl>

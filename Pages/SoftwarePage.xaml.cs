@@ -107,7 +107,84 @@ public sealed partial class SoftwarePage : Page
         TitleText.Text = _category.Length == 0
             ? (_keyword.Length == 0 ? "软件下载" : $"搜索：{_keyword}")
             : App.Content.CategoryName(_category);
-        EmptyText.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        UpdateEmptyState(list.Count);
+    }
+
+    /// <summary>
+    /// 空清单时别只写一句"没有匹配的软件"——要分清两种情况：
+    /// ① 搜索/分类筛掉了 ② 整体就没内容（内容包没同步下来，教学机断网最容易踩）
+    /// </summary>
+    private void UpdateEmptyState(int shown)
+    {
+        if (shown > 0)
+        {
+            EmptyPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        EmptyPanel.Visibility = Visibility.Visible;
+
+        var hasFilter = _keyword.Length > 0 || _category.Length > 0;
+        if (hasFilter)
+        {
+            EmptyTitle.Text = "没找到匹配的软件";
+            EmptyText.Text = "换个关键词或点「全部」试试。";
+            EmptyText.Visibility = Visibility.Visible;
+            EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}（共 {App.Content.Apps.Count} 个软件）";
+            EmptyRetry.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        EmptyTitle.Text = "软件清单还是空的";
+        EmptyText.Text = "清单来自「内容包」：安装包里自带一份，联网后会自动从站点更新。" +
+                         "如果这里一直是空的，多半是内容包没同步下来（没网 / 站点还没发布内容包）。";
+        EmptyText.Visibility = Visibility.Visible;
+        EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}" +
+                           (App.Content.Issues.Count > 0 ? $"\n读取问题：{App.Content.Issues[0].Message}" : "");
+        EmptyRetry.Visibility = Visibility.Visible;
+        EmptyRetry.IsEnabled = true;
+        EmptyRetry.Content = "重新同步内容包";
+    }
+
+    /// <summary>空状态里的「重新同步内容包」：拉一次远端内容包再重读（失败就照实说）。</summary>
+    private async void EmptyRetry_Click(object sender, RoutedEventArgs e)
+    {
+        EmptyRetry.IsEnabled = false;
+        EmptyRetry.Content = "正在同步…";
+        EmptyTitle.Text = "正在同步内容包";
+        EmptyText.Text = "从站点拉最新清单，稍等一下。";
+        EmptyDetail.Text = "";
+
+        try
+        {
+            var result = await Services.ContentUpdater.SyncAsync(
+                new Progress<string>(text => EmptyDetail.Text = text));
+
+            if (result.Updated) App.Content.Load();
+
+            BuildChips();
+            Apply();
+
+            if (App.Content.Apps.Count == 0)
+            {
+                EmptyTitle.Text = "还是没拉到内容";
+                EmptyText.Text = "站点那边可能没有网络 / 内容包还没发布。装好的这份里自带的内容会在没网时兜底；" +
+                                 "实在不行把这一页截图给维护的同学。";
+                EmptyDetail.Text = result.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            EmptyTitle.Text = "同步失败了";
+            EmptyText.Text = "网络不通或者站点暂时不可用，等会儿再试。";
+            EmptyDetail.Text = ex.Message;
+        }
+        finally
+        {
+            EmptyRetry.IsEnabled = true;
+            EmptyRetry.Content = "重新同步内容包";
+        }
     }
 
     private void AppGrid_ItemClick(object sender, ItemClickEventArgs e)

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClassSoftwareHub.Desktop.Views.Palette.MiniStopwatch"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 浮窗版秒表：正计时 + 计次（只管用，不落盘） -->
+    <Grid RowSpacing="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="2">
+                <TextBlock x:Name="TimeText" Text="00:00" FontSize="54" FontWeight="SemiBold"
+                           FontFamily="Bahnschrift" />
+                <TextBlock x:Name="CsText" Text=".00" FontSize="24" FontWeight="SemiBold" Opacity="0.8"
+                           FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,8" />
+            </StackPanel>
+            <TextBlock x:Name="LapText" FontSize="11.5" Opacity="0.65" TextAlignment="Center"
+                       TextWrapping="Wrap" Margin="0,2,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="StartButton" Content="开始" Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch" Click="StartPause_Click" />
+            <Button x:Name="LapButton" Grid.Column="1" Content="计次" Click="Lap_Click" />
+            <Button Grid.Column="2" Content="重置" Click="Reset_Click" />
+        </Grid>
+    </Grid>
+</UserControl>

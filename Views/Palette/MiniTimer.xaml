@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClassSoftwareHub.Desktop.Views.Palette.MiniTimer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:palette="using:ClassSoftwareHub.Desktop.Views.Palette">
+
+    <!--
+      浮窗版课堂计时器（简版）：常用分钟预设 + 自定义分/秒 + 大号倒计时 + 开始/暂停/重置。
+      自定义时间用 NumberStepper（大按钮，能长按连发），改一下立刻生效，不用再点"应用"。
+    -->
+    <Grid RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="Display" Text="05:00" FontSize="56" FontWeight="SemiBold"
+                   FontFamily="Bahnschrift" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+        <ProgressBar x:Name="Bar" Grid.Row="1" Minimum="0" Maximum="100" Value="0" Height="4"
+                     CornerRadius="2" />
+
+        <!-- 自定义时间：改了立刻生效 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+            <palette:NumberStepper x:Name="MinuteStepper" Label="分" Minimum="0" Maximum="180" Step="1" />
+            <palette:NumberStepper x:Name="SecondStepper" Label="秒" Minimum="0" Maximum="59" Step="1" />
+        </StackPanel>
+
+        <!-- 常用预设 -->
+        <StackPanel x:Name="PresetRow" Grid.Row="3" Orientation="Horizontal" Spacing="6"
+                    HorizontalAlignment="Center">
+            <Button Content="1 分" Tag="1" Padding="10,5" MinWidth="0" Click="Preset_Click" />
+            <Button Content="3 分" Tag="3" Padding="10,5" MinWidth="0" Click="Preset_Click" />
+            <Button Content="5 分" Tag="5" Padding="10,5" MinWidth="0" Click="Preset_Click" />
+            <Button Content="10 分" Tag="10" Padding="10,5" MinWidth="0" Click="Preset_Click" />
+            <Button Content="20 分" Tag="20" Padding="10,5" MinWidth="0" Click="Preset_Click" />
+        </StackPanel>
+
+        <Grid Grid.Row="4" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="StartButton" Content="开始" Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch" Click="StartPause_Click" />
+            <Button Grid.Column="1" Content="重置" Click="Reset_Click" />
+        </Grid>
+    </Grid>
+</UserControl>

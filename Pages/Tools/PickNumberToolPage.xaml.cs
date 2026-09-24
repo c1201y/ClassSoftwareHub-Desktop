@@ -44,6 +44,9 @@ public sealed partial class PickNumberToolPage : Page
         _rollTimer.IsRepeating = true;
         _rollTimer.Tick += (_, _) => RollTick();
 
+        // 离开页面把抽号滚动停掉
+        Unloaded += (_, _) => _rollTimer.Stop();
+
         foreach (var item in GroupModeItems) GroupModeBox.Items.Add(item);
         GroupModeBox.SelectedIndex = 0;
 
@@ -64,6 +67,10 @@ public sealed partial class PickNumberToolPage : Page
         if (Frame.CanGoBack) Frame.GoBack();
         else Frame.Navigate(typeof(ToolsPage));
     }
+
+    /// <summary>把这个工具丢到工具浮窗里跑（浮窗和这一页共用同一个抽号存档）。</summary>
+    private void OpenPalette_Click(object sender, RoutedEventArgs e)
+        => Views.ToolPaletteWindow.ShowTool("pick-number");
 
     // ══════════ 设置 ══════════
     private int From => double.IsNaN(FromBox.Value) ? 0 : (int)Math.Floor(FromBox.Value);

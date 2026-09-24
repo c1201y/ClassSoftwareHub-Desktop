@@ -155,8 +155,9 @@ public sealed partial class WelcomePage : Page
         switch (tag)
         {
             case "web":
-                // 「体验网页版」→ 应用内浮层（由下往上淡入），别再甩到浏览器
-                App.MainWindow?.ShowWebSheet(ShellConfig.SiteUrl, "网页版 · ClassSoftwareHub");
+                // 「体验网页版」→ 交给系统默认浏览器打开整站
+                // （应用内的 WebSheet 浮层留给软件详情页那种"顺手看一眼"的场景）
+                App.MainWindow?.OpenExternal(ShellConfig.SiteUrl);
                 break;
             case "apps":
                 App.MainWindow?.Shell.NavigateTo("apps");

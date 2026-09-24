@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClassSoftwareHub.Desktop.Views.Palette.MiniClock"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 浮窗版时钟（简版）：大号时间 + 日期 + 一键进全屏时钟 -->
+    <Grid RowSpacing="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="2">
+            <TextBlock x:Name="TimeText" Text="00:00" FontSize="58" FontWeight="SemiBold"
+                       FontFamily="Bahnschrift" />
+            <TextBlock x:Name="SecText" Text=":00" FontSize="24" FontWeight="SemiBold" Opacity="0.8"
+                       FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,8" />
+        </StackPanel>
+
+        <TextBlock x:Name="DateText" Grid.Row="1" Text="" FontSize="12.5" Opacity="0.65"
+                   HorizontalAlignment="Center" />
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <Button Content="全屏时钟" Style="{StaticResource AccentButtonStyle}" Click="Fullscreen_Click" />
+            <Button Content="详细设置" Click="Details_Click"
+                    ToolTipService.ToolTip="打开应用里的「时钟」工具页，能改字体/底色/遮罩这些" />
+        </StackPanel>
+    </Grid>
+</UserControl>
