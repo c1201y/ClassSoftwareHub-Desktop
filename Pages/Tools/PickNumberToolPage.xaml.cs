@@ -376,13 +376,9 @@ public sealed partial class PickNumberToolPage : Page
         catch { /* 存不上不影响使用 */ }
     }
 
-    private static Brush Res(string key, Color? fallback = null)
-    {
-        try { return (Brush)Application.Current.Resources[key]; }
-        catch { return new SolidColorBrush(fallback ?? Color.FromArgb(255, 0, 103, 192)); }
-    }
+    private Brush Res(string key, Color? fallback = null) => Services.ThemeBrush.Get(this, key);
 
-    private static Brush AccentBrush() => Res("AccentFillColorDefaultBrush");
+    private Brush AccentBrush() => Services.ThemeBrush.Get(this, "AccentFillColorDefaultBrush");
 
     private void ShowError(string message)
     {

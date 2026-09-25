@@ -96,7 +96,14 @@ public sealed partial class ToolPaletteWindow : Window
 
             UseToolWindowExStyle(hwnd);                     // 不进任务栏（靠 WS_EX_TOOLWINDOW）
             ConfigureTitleBar();
-            Root.ActualThemeChanged += (_, _) => UpdateCaptionButtonColors();   // 换主题时系统按钮颜色跟着变
+
+            // 系统背景：浮窗**优先亚克力**（小浮窗用云母会把字糊在壁纸上，读不清），用户选"纯色"就纯色
+            var want = App.Settings.Current.Backdrop;
+            BackdropHost.Apply(this, Root,
+                string.Equals(want, "mica", StringComparison.OrdinalIgnoreCase) ? "acrylic" : want);
+
+            Root.ActualThemeChanged += (_, _) => { UpdateCaptionButtonColors(); ApplySelection(); };   // 换主题时系统按钮颜色跟着变
+            ThemeHost.Apply(Root);                          // 跟「设置」里的深浅色走
             ResizeClientDip(PaletteWidthDip, PaletteHeightDip);
         }
         catch (Exception ex)
@@ -368,9 +375,8 @@ public sealed partial class ToolPaletteWindow : Window
 
     private void ApplySelection()
     {
-        var accent = Res("AccentFillColorDefaultBrush");
-        var textOnAccent = Res("TextOnAccentFillColorPrimaryBrush");
-        var idle = Res("ControlStrokeColorDefaultBrush");
+        var accent = Services.ThemeBrush.Get(Root, "AccentFillColorDefaultBrush");
+        var textOnAccent = Services.ThemeBrush.Get(Root, "TextOnAccentFillColorPrimaryBrush");
 
         foreach (var (chip, tag) in new[]
                  {
@@ -381,17 +387,22 @@ public sealed partial class ToolPaletteWindow : Window
                  })
         {
             var on = tag == _tool;
-            chip.Background = on ? accent : new SolidColorBrush(Colors.Transparent);
-            chip.Foreground = on ? textOnAccent : Res("TextFillColorPrimaryBrush");
             chip.BorderThickness = new Thickness(1);
-            chip.BorderBrush = on ? accent : idle;
-        }
-    }
 
-    private static Brush Res(string key)
-    {
-        try { return (Brush)Application.Current.Resources[key]; }
-        catch { return new SolidColorBrush(Colors.Transparent); }
+            if (on)
+            {
+                chip.Background = accent;
+                chip.Foreground = textOnAccent;
+                chip.BorderBrush = accent;
+            }
+            else
+            {
+                // ⚠️ 没选中的交给 XAML 里那套 {ThemeResource ...}：主题一变它自己就跟着变，最稳
+                chip.ClearValue(Control.BackgroundProperty);
+                chip.ClearValue(Control.ForegroundProperty);
+                chip.ClearValue(Control.BorderBrushProperty);
+            }
+        }
     }
 
     private void Chip_Click(object sender, RoutedEventArgs e)

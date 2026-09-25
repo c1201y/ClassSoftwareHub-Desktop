@@ -30,9 +30,15 @@ public static class EmbeddedAssets
 
             Directory.CreateDirectory(SettingsStore.Dir);
             var outPath = Path.Combine(SettingsStore.Dir, outFileName);
-            if (!File.Exists(outPath))
+
+            // 缓存里的跟内嵌的对不上（换了图）就重写一份 —— 不然换了 banner 还显示旧图
+            using var stream = asm.GetManifestResourceStream(name)!;
+            var stale = true;
+            try { stale = !File.Exists(outPath) || new FileInfo(outPath).Length != stream.Length; }
+            catch { stale = true; }
+
+            if (stale)
             {
-                using var stream = asm.GetManifestResourceStream(name)!;
                 using var file = File.Create(outPath);
                 stream.CopyTo(file);
             }

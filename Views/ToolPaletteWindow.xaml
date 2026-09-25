@@ -36,13 +36,13 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="ChipPick" Content="随机抽号" Tag="pick-number" HorizontalAlignment="Stretch"
+            <Button x:Name="ChipPick" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Content="随机抽号" Tag="pick-number" HorizontalAlignment="Stretch"
                     Padding="0,6" MinWidth="0" Click="Chip_Click" />
-            <Button x:Name="ChipTimer" Grid.Column="1" Content="课堂计时" Tag="timer" MinWidth="0"
+            <Button x:Name="ChipTimer" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Grid.Column="1" Content="课堂计时" Tag="timer" MinWidth="0"
                     HorizontalAlignment="Stretch" Padding="0,6" Click="Chip_Click" />
-            <Button x:Name="ChipStopwatch" Grid.Column="2" Content="秒表计时" Tag="stopwatch" MinWidth="0"
+            <Button x:Name="ChipStopwatch" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Grid.Column="2" Content="秒表计时" Tag="stopwatch" MinWidth="0"
                     HorizontalAlignment="Stretch" Padding="0,6" Click="Chip_Click" />
-            <Button x:Name="ChipClock" Grid.Column="3" Content="全屏时钟" Tag="clock" MinWidth="0"
+            <Button x:Name="ChipClock" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Grid.Column="3" Content="全屏时钟" Tag="clock" MinWidth="0"
                     HorizontalAlignment="Stretch" Padding="0,6" Click="Chip_Click" />
         </Grid>
 

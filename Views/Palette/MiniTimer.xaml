@@ -18,7 +18,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock x:Name="Display" Text="05:00" FontSize="56" FontWeight="SemiBold"
+        <TextBlock x:Name="Display" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="05:00" FontSize="56" FontWeight="SemiBold"
                    FontFamily="Bahnschrift" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
         <ProgressBar x:Name="Bar" Grid.Row="1" Minimum="0" Maximum="100" Value="0" Height="4"

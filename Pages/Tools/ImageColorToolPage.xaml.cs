@@ -250,7 +250,9 @@ public sealed partial class ImageColorToolPage : Page
             Height = 60,
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x14, 0, 0, 0)),
+            BorderBrush = new SolidColorBrush(ActualTheme == ElementTheme.Dark                        // 浅色底上用黑边、深色底上用白边
+                ? Color.FromArgb(0x1F, 255, 255, 255)
+                : Color.FromArgb(0x14, 0, 0, 0)),
             Background = new SolidColorBrush(variant.Color),
         };
 

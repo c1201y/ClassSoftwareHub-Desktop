@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.SidebarLayoutPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid x:Name="WorkspaceRoot" Padding="24,36,24,44">
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="960" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- 整页可滚：内容长得超过窗口时靠它，别再用小滚动区裁掉东西（拖动时会误会"模块消失"）
+             右边留 18 的空：不然页面滚动条会压在预览条上，很难看 -->
+        <ScrollViewer x:Name="PageScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                      VerticalScrollMode="Auto">
+            <Grid RowSpacing="14" Margin="0,0,18,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Spacing="5">
+                    <TextBlock Text="侧边布局" FontSize="30" FontWeight="Bold" />
+                    <TextBlock FontSize="13" Opacity="0.7" TextWrapping="Wrap"
+                               Text="左边挑模块，拖到右边那条侧边栏里（点一下也行）；右边拖着重排，拖出去就移除。右边就是侧边栏的真模样。" />
+                </StackPanel>
+
+                <Grid Grid.Row="1" ColumnSpacing="22">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 左：模块库 -->
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="模块库" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="拖进右边，或直接点卡片" FontSize="12" Opacity="0.6"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="LibraryPanel" Grid.Row="1" Spacing="10" Margin="0,2,0,0" />
+                    </Grid>
+
+                    <!-- 右：侧边栏预览（宽度照真实侧边栏来，所见即所得） -->
+                    <StackPanel Grid.Column="1" Spacing="8">
+                        <TextBlock Text="侧边栏预览" FontSize="16" FontWeight="Bold" />
+
+                        <Border x:Name="PreviewStrip" Width="240" CornerRadius="10" Padding="4"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <!-- 模块那一摞（拖动时整行让位）。
+                                     侧边栏自带的那三个键（收起/位置复原/隐藏）这里不画 —— 它们本来就不能拼、不能删，
+                                     摆在这儿只会挤位置、也是多余的。 -->
+                                <StackPanel x:Name="PreviewPanel" Spacing="3" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock FontSize="11.5" Opacity="0.6" Width="240" TextWrapping="Wrap"
+                                   Text="右边三个键：上移 / 下移 / 移除（把模块拖出去松手也能删）。" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="2" ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Text="一个模块都不放也行，那样边条上只剩侧边栏自带的几个按钮。侧边栏本身的开关在「设置 → 常用工具」。" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="SidebarButton" Content="隐藏侧边栏" Click="ToggleSidebar_Click" />
+                        <Button Content="恢复默认" Click="ResetDefault_Click"
+                                ToolTipService.ToolTip="回到「抽号 / 计时 / 秒表 / 时钟」这四块" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- 把预览里的模块拖到空白处时浮出来的提示 -->
+        <Border x:Name="RemoveHint" Visibility="Collapsed" Grid.ColumnSpan="3"
+                CornerRadius="8" Padding="16,10"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon Glyph="&#xE74D;" FontSize="14"
+                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <TextBlock FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                           Text="松手就从侧边栏移除" />
+            </StackPanel>
+        </Border>
+
+        <!-- 拖着走的那张卡就放在这层上面（不吃点击） -->
+        <Canvas x:Name="DragLayer" Grid.ColumnSpan="3" IsHitTestVisible="False" />
+    </Grid>
+</Page>

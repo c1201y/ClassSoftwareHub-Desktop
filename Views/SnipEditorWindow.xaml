@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.SnipEditorWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      截图编辑窗：截完一块就弹这个。
+        · 外观跟应用里别的窗口一样走 **WinUI3 原生**：自绘标题栏（ExtendsContentIntoTitleBar）+
+          ApplicationPageBackgroundThemeBrush 底 + 图片区用 SolidBackgroundFillColorSecondary 那种"工作台"色。
+          ⚠️ 根元素**必须**给不透明底色：WinUI3 的窗口内容岛不铺满就露**黑底**（之前就是一团黑的）。
+        · 上面一条工具栏：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克 + 颜色 + 粗细 + 撤销/重做/清除
+        · 下面就是图片本身，按**原始像素 1:1** 显示（大图就在里面滚动，不缩放），居中摆在工作台色底上
+        · 工具栏最右三个动作：复制到剪贴板 / 保存到本地 / 钉图
+      注意：ThemeResource 的 key 都在 generic.xaml 里核过（缺 key 会抛 XamlParseException 把窗口搞没）。
+    -->
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 自绘标题栏（SetTitleBar 就是这一块；外观我们自己的，拖动/阴影/圆角还是系统的） -->
+        <Grid x:Name="AppTitleBar" Height="32" Padding="12,0,0,0" ColumnSpacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE722;" FontSize="13" Opacity="0.85" />
+                <TextBlock x:Name="TitleText" Text="截图编辑" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 工具栏（窄了就横向滚，别把右边的动作按钮截断） -->
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                      HorizontalScrollMode="Auto" VerticalScrollMode="Disabled">
+        <StackPanel Orientation="Horizontal" Spacing="2" Padding="8,6">
+            <Button x:Name="BtPen" Click="Tool_Click" Padding="9,7" Tag="pen"
+                    ToolTipService.ToolTip="画笔">
+                <FontIcon Glyph="&#xED63;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtMarker" Click="Tool_Click" Padding="9,7" Tag="marker"
+                    ToolTipService.ToolTip="荧光笔">
+                <FontIcon Glyph="&#xED64;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtArrow" Click="Tool_Click" Padding="9,7" Tag="arrow"
+                    ToolTipService.ToolTip="箭头">
+                <FontIcon Glyph="&#xE72A;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtRect" Click="Tool_Click" Padding="9,7" Tag="rect"
+                    ToolTipService.ToolTip="矩形">
+                <FontIcon Glyph="&#xE739;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtEllipse" Click="Tool_Click" Padding="9,7" Tag="ellipse"
+                    ToolTipService.ToolTip="椭圆">
+                <FontIcon Glyph="&#xEA3A;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtText" Click="Tool_Click" Padding="9,7" Tag="text"
+                    ToolTipService.ToolTip="文字">
+                <FontIcon Glyph="&#xE8D2;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtMosaic" Click="Tool_Click" Padding="9,7" Tag="mosaic"
+                    ToolTipService.ToolTip="马赛克">
+                <FontIcon Glyph="&#xECA5;" FontSize="15" />
+            </Button>
+
+            <Rectangle Width="1" Margin="6,6" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <StackPanel x:Name="ColorStrip" Orientation="Horizontal" Spacing="4"
+                        VerticalAlignment="Center" Margin="2,0" />
+
+            <Button x:Name="BtThickness" Click="Thickness_Click" Padding="9,7"
+                    ToolTipService.ToolTip="线条粗细（点一次换一档）">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <FontIcon Glyph="&#xEDA8;" FontSize="15" />
+                    <TextBlock x:Name="ThicknessText" Text="中" FontSize="12.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+
+            <Rectangle Width="1" Margin="6,6" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <Button x:Name="BtUndo" Click="Undo_Click" Padding="9,7" ToolTipService.ToolTip="撤销">
+                <FontIcon Glyph="&#xE7A7;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtRedo" Click="Redo_Click" Padding="9,7" ToolTipService.ToolTip="重做">
+                <FontIcon Glyph="&#xE7A6;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtClear" Click="Clear_Click" Padding="9,7" ToolTipService.ToolTip="清除所有标注">
+                <FontIcon Glyph="&#xE894;" FontSize="15" />
+            </Button>
+
+            <Rectangle Width="1" Margin="6,6" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <Button x:Name="BtCopy" Click="Copy_Click" Padding="9,7" ToolTipService.ToolTip="复制到剪贴板">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <FontIcon Glyph="&#xE8C8;" FontSize="15" />
+                    <TextBlock Text="复制" FontSize="12.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtSave" Click="Save_Click" Padding="9,7" ToolTipService.ToolTip="保存到本地">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <FontIcon Glyph="&#xE74E;" FontSize="15" />
+                    <TextBlock Text="保存" FontSize="12.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtPin" Click="Pin_Click" Padding="9,7" ToolTipService.ToolTip="钉在屏幕上（1:1，可拖边框缩放）">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <FontIcon Glyph="&#xE718;" FontSize="15" />
+                    <TextBlock Text="钉图" FontSize="12.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+
+            <TextBlock x:Name="StatusText" FontSize="12.5" Opacity="0.75"
+                       VerticalAlignment="Center" Margin="14,0,6,0" />
+        </StackPanel>
+        </ScrollViewer>
+
+        <!-- 图片：1:1 显示，大了就在里面滚；小了就居中摆在"工作台"色底上 -->
+        <ScrollViewer Grid.Row="2" x:Name="Scroller"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Auto" VerticalScrollMode="Auto"
+                      Background="{ThemeResource FlyoutPresenterBackground}">
+            <Grid x:Name="CanvasHost" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Image x:Name="BaseImage" Stretch="Fill" />
+                <Canvas x:Name="InkLayer" Background="Transparent" />
+                <Border x:Name="GhostBorder" BorderThickness="1" BorderBrush="#804CC2FF"
+                        IsHitTestVisible="False" Visibility="Collapsed" />
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Window>

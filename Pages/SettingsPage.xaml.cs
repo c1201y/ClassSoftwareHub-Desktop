@@ -49,12 +49,26 @@ public sealed partial class SettingsPage : Page
         if (EdgeLeft.IsChecked != true && EdgeRight.IsChecked != true
             && EdgeTop.IsChecked != true && EdgeBottom.IsChecked != true)
             EdgeRight.IsChecked = true;
+
+        // 截图自动保存
+        ShotAutoSaveSwitch.IsOn = s.ShotAutoSave;
+        RefreshShotDir();
         ThemeCombo.SelectedIndex = s.Theme switch
         {
             "light" => 1,
             "dark" => 2,
             _ => 0
         };
+
+        // 外部组件（分体）外观
+        SplitThemeSwitch.IsOn = s.SplitTheme;
+        ExtThemeCombo.SelectedIndex = s.ExternalTheme switch
+        {
+            "light" => 1,
+            "dark" => 2,
+            _ => 0
+        };
+        UpdateExtThemeAvailability();
         UpdateMinimizeAvailability();
 
         ChannelCombo.SelectedIndex = UpdateChannels.Parse(s.UpdateChannel) == UpdateChannel.Insider ? 1 : 0;
@@ -104,8 +118,36 @@ public sealed partial class SettingsPage : Page
     {
         if (_loading) return;
         if (ThemeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string theme) return;
-        App.MainWindow?.SetTheme(theme);       // 里面会 Save + 重算背景
+        App.MainWindow?.SetTheme(theme);       // 里面会 Save + 重算背景 + 通知外部组件
         App.MainWindow?.Shell.UpdateThemeButton();
+    }
+
+    // ── 外部组件（分体）外观 ─────────────────────────────────
+
+    private void SplitTheme_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.Settings.Current.SplitTheme = SplitThemeSwitch.IsOn;
+        App.Settings.Save();
+        UpdateExtThemeAvailability();
+        Services.ThemeHost.Notify();           // 外部组件（侧边栏/浮窗/截图窗）立刻换过来
+    }
+
+    private void ExtTheme_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (ExtThemeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string theme) return;
+        App.Settings.Current.ExternalTheme = theme;
+        App.Settings.Save();
+        Services.ThemeHost.Notify();
+    }
+
+    private void UpdateExtThemeAvailability()
+    {
+        ExtThemeCombo.IsEnabled = SplitThemeSwitch.IsOn;
+        ExtThemeHint.Text = SplitThemeSwitch.IsOn
+            ? "侧边栏 / 常用工具浮窗 / 截图编辑窗都跟着这个走"
+            : "现在是关的：外部组件跟主界面的颜色模式保持一致";
     }
 
     private void BackdropChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -169,6 +211,71 @@ public sealed partial class SettingsPage : Page
         App.Settings.Current.SidebarEdge = edge;
         App.Settings.Save();
         if (App.Settings.Current.SidebarEnabled) Views.ToolSidebarWindow.ApplySetting();
+    }
+
+    // ── 截图自动保存 ──────────────────────────────────────────
+
+    private void ShotAutoSave_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.Settings.Current.ShotAutoSave = ShotAutoSaveSwitch.IsOn;
+        App.Settings.Save();
+        RefreshShotDir();
+    }
+
+    /// <summary>把当前保存位置显示出来（没设 = 桌面）。</summary>
+    private void RefreshShotDir()
+    {
+        var dir = Services.ShotSaver.DirSetting();
+        var custom = !string.IsNullOrWhiteSpace(App.Settings.Current.ShotSaveDir);
+        ShotDirText.Text = custom ? dir : $"{dir}（默认：桌面，没改过）";
+        ShotDirText.Opacity = ShotAutoSaveSwitch.IsOn ? 0.7 : 0.4;
+    }
+
+    private async void ShotDir_Change_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop,
+            };
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(
+                picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow!));
+
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+
+            App.Settings.Current.ShotSaveDir = folder.Path;
+            App.Settings.Save();
+            RefreshShotDir();
+        }
+        catch (Exception ex)
+        {
+            Services.ScreenCapture.Log("选截图目录失败: " + ex.Message);
+        }
+    }
+
+    private void ShotDir_Open_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dir = Services.ShotSaver.Dir();
+            Directory.CreateDirectory(dir);
+            Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Services.ScreenCapture.Log("打开截图目录失败: " + ex.Message);
+        }
+    }
+
+    private void ShotDir_Reset_Click(object sender, RoutedEventArgs e)
+    {
+        App.Settings.Current.ShotSaveDir = "";                // 空 = 桌面
+        App.Settings.Save();
+        RefreshShotDir();
     }
 
     private void ReloadContent_Click(object sender, RoutedEventArgs e)

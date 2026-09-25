@@ -7,6 +7,11 @@ public sealed class AppSettings
 {
     public string Backdrop { get; set; } = "acrylic";          // acrylic | mica | solid
     public string Theme { get; set; } = "system";              // system | light | dark
+    /// <summary>分体：外部组件（侧边栏 / 常用工具浮窗 / 截图编辑窗）用**单独**的外观设置。</summary>
+    public bool SplitTheme { get; set; }
+    /// <summary>外部组件的外观（system | light | dark）；只有 <see cref="SplitTheme"/> 打开时才起作用。</summary>
+    public string ExternalTheme { get; set; } = "system";
+
     public bool AlwaysOnTop { get; set; }
     public bool AutoStart { get; set; }
     /// <summary>开机启动时直接最小化（只有 AutoStart = true 时才有意义）。</summary>
@@ -42,7 +47,25 @@ public sealed class AppSettings
     /// <summary>侧边栏沿边位置（0~1）；-1 = 居中（默认）。拖动收起状态的抓手时记下来。</summary>
     public double SidebarPosRatio { get; set; } = -1;
 
+    /// <summary>
+    /// 常驻：展开之后**不自动收起**（鼠标移开不收、切窗口不收、也不会因为 10 秒没动就收）。
+    /// 手动点「收起」照样能收。
+    /// </summary>
+    public bool SidebarPinned { get; set; }
+
+    /// <summary>
+    /// 侧边栏里显示哪些模块（顺序 = 显示顺序），见 Data/SidebarModules.All —— 在「侧边布局」页里勾选/排序。
+    /// 空数组 = 只留底下那排自己的按钮（收起 / 位置复原 / 隐藏）。
+    /// </summary>
+    public string[] SidebarModuleIds { get; set; } = { "pick-number", "timer", "stopwatch", "clock" };
+
     public string WebView2MissingChoice { get; set; } = "";    // "" | install | browser
+
+    /// <summary>截图后自动存一份原图（默认开）。目录见 ShotSaveDir，空 = 桌面。</summary>
+    public bool ShotAutoSave { get; set; } = true;
+
+    /// <summary>截图自动保存目录；空 = 系统桌面。</summary>
+    public string ShotSaveDir { get; set; } = "";
 
     /// <summary>更新通道：stable（正式版）| insider（预览版）。默认值跟着构建走（见 ShellConfig.DefaultUpdateChannel）。</summary>
     public string UpdateChannel { get; set; } = Core.ShellConfig.DefaultUpdateChannel;

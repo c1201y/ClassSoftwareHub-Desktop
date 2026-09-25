@@ -8,6 +8,9 @@ public sealed class QuickLink
     public string Name { get; set; } = "";
     public string Glyph { get; set; } = "";
     public string Url { get; set; } = "";
+
+    /// <summary>要突出的那颗（「赞助作者」）：模板换成"主题色底 + 反白字"那套。</summary>
+    public bool Accent { get; set; }
 }
 
 /// <summary>快捷入口清单（两处页面共用，改一处两边都变）。</summary>
@@ -30,7 +33,7 @@ public static class QuickLinks
             },
             new()
             {
-                Name = "赞助作者", Glyph = "\uEB51",
+                Name = "赞助作者", Glyph = "\uEB51", Accent = true,
                 Url = ui.T("about.reward-url", "https://ifdian.net/a/TinyNickCSHub"),
             },
             new()

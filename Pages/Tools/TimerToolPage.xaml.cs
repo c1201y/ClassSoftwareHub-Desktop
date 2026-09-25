@@ -32,6 +32,7 @@ public sealed partial class TimerToolPage : Page
     public TimerToolPage()
     {
         InitializeComponent();
+        ActualThemeChanged += (_, _) => SyncInputs();   // 主题换了重刷大号数字颜色
         MinBox.ValueChanged += Time_ValueChanged;
         SecBox.ValueChanged += Time_ValueChanged;
         _timer = DispatcherQueue.CreateTimer();
@@ -57,11 +58,7 @@ public sealed partial class TimerToolPage : Page
         UpdateDisplay();
     }
 
-    private static Microsoft.UI.Xaml.Media.Brush Res(string key, Windows.UI.Color fallback)
-    {
-        try { return (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key]; }
-        catch { return new Microsoft.UI.Xaml.Media.SolidColorBrush(fallback); }
-    }
+    private Microsoft.UI.Xaml.Media.Brush Res(string key, Windows.UI.Color fallback) => Services.ThemeBrush.Get(this, key);
 
     private void Back_Click(object sender, RoutedEventArgs e)
     {
@@ -206,9 +203,8 @@ public sealed partial class TimerToolPage : Page
             if (child is Button b) b.IsEnabled = !_running;
 
         Display.Opacity = 1;
-        Display.Foreground = _finished
-            ? Res("AccentTextFillColorPrimaryBrush", Windows.UI.Color.FromArgb(255, 0, 103, 192))
-            : Res("TextFillColorPrimaryBrush", Windows.UI.Color.FromArgb(255, 0, 0, 0));
+        if (_finished) Display.Foreground = Services.ThemeBrush.AccentText(this);
+        else Display.ClearValue(TextBlock.ForegroundProperty);
     }
 
     private void UpdateDisplay()

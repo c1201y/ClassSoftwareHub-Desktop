@@ -33,7 +33,7 @@
                         CompactModeThresholdWidth="820" ExpandedModeThresholdWidth="1180"
                         BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">
-            <!-- 上半区：首页 / 软件下载 / 内置工具 -->
+            <!-- 上半区：首页 / 软件下载 / 内置工具 / 侧边布局 -->
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="首页" Tag="home">
                     <NavigationViewItem.Icon>
@@ -48,6 +48,11 @@
                 <NavigationViewItem Content="内置工具" Tag="tools">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="侧边布局" Tag="sidebar">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A0;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

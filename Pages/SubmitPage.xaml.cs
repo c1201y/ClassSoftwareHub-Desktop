@@ -152,11 +152,7 @@ public sealed partial class SubmitPage : Page
         return box;
     }
 
-    private static Brush Res(string key)
-    {
-        try { return (Brush)Application.Current.Resources[key]; }
-        catch { return new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)); }
-    }
+    private Brush Res(string key) => Services.ThemeBrush.Get(this, key);
 
     // ══════════ 从 GitHub 一键读取 ══════════
     private readonly Dictionary<string, string> _lastFilled = new();

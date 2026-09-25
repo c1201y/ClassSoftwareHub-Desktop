@@ -96,7 +96,7 @@
                                     Click="Store_Click"
                                     Background="Transparent"
                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                    BorderBrush="#4DFFFFFF"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1" />
                         </Grid>
                     </Border>

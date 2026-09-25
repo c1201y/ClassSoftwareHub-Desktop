@@ -39,7 +39,7 @@
                     <Button x:Name="BtnStopwatch" Content="秒表" Click="Mode_Stopwatch_Click" />
                 </StackPanel>
 
-                <TextBlock x:Name="Display" Text="05:00" FontSize="96" FontWeight="Bold"
+                <TextBlock x:Name="Display" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="05:00" FontSize="96" FontWeight="Bold"
                            FontFamily="Consolas" HorizontalAlignment="Center" />
 
                 <Border Width="520" Height="6" CornerRadius="3"

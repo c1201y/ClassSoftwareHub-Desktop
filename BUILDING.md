@@ -23,7 +23,7 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 
 # 2. 用 Inno Setup 6 编译脚本（ISCC 装在 %LOCALAPPDATA%\Programs\Inno Setup 6\）
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss `
-  /DAppVersion=1.0.0 /DChannel=insider1.3
+  /DAppVersion=1.0.0 /DChannel=stable
 ```
 
 产物在 `dist\installer\`。`.iss` 里的 `AppId` 是升级和回滚认亲用的，不要改。
@@ -33,9 +33,9 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 ```powershell
 $env:GITHUB_TOKEN = "..."   # 需要仓库写权限，别写进任何文件
 node --use-system-ca tools\publish-release.mjs `
-  --tag dv1.0.0-insider1.3 --channel insider `
-  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.0.0-insider1.3.exe" `
-  --name "ClassSoftwareHub dv1.0.0-insider1.3" --notes notes.md
+  --tag dv1.0.0 --channel stable `
+  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.0.0-stable.exe" `
+  --name "ClassSoftwareHub dv1.0.0" --notes notes.md
 ```
 
 脚本会算 MD5/SHA256、生成同名 `.md5`、建 Release 并把安装包传上去。tag 里带 `insider` 就自动标预发布（只有 Insider 通道的客户端会收到），正式版用 `dv1.0.0` 这种。
@@ -80,7 +80,7 @@ tools/       发版脚本
 ```powershell
 dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -p:PublishTrimmed=false -o dist\app
 node tools\sync-content.mjs      # 把站点 dist/content 拷进 dist\app\content（80 个文件 / 约 450KB）
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss /DAppVersion=1.x.x /DChannel=insider
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss /DAppVersion=1.x.x /DChannel=stable
 ```
 
 `installer\ClassSoftwareHub.iss` 的 `[Files]` 是 `Source: "..\dist\app\*"` 整目录，所以 `dist\app\content`

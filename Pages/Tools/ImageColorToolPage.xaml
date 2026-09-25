@@ -85,7 +85,7 @@
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="14">
                         <Border x:Name="SeedChip" Width="36" Height="36" CornerRadius="6" BorderThickness="1"
-                                BorderBrush="#26000000" />
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" />
                         <StackPanel Spacing="2" VerticalAlignment="Center">
                             <TextBlock Text="提取到的种子色" FontSize="12" Opacity="0.6" />
                             <TextBlock x:Name="SeedText" FontSize="14" FontFamily="Consolas" />

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using ClassSoftwareHub.Desktop.Core;
 using Microsoft.UI.Xaml;
@@ -90,7 +91,26 @@ public sealed partial class ShellPage : UserControl
     }
 
     /// <summary>只切页面，不动导航高亮（软件下载页内部按分类切换时用）。</summary>
-    public void NavigateTag(string tag)    {
+    public void NavigateTag(string tag)
+    {
+        try
+        {
+            NavigateTagCore(tag);
+        }
+        catch (Exception ex)
+        {
+            // 某个页面自己加载失败（比如 XAML 里引了不存在的资源键）不该把整个应用带走 ——
+            // 之前踩过：应用会记住上次停留的页，页面一坏就变成「一启动就崩」，用户连设置都进不去。
+            LogNavFailure(tag, ex);
+            if (tag != "home")
+            {
+                try { NavigateTagCore("home"); } catch { }
+            }
+        }
+    }
+
+    private void NavigateTagCore(string tag)
+    {
         switch (tag)
         {
             case "submit":
@@ -98,6 +118,9 @@ public sealed partial class ShellPage : UserControl
                 return;
             case "settings":
                 ContentFrame.Navigate(typeof(SettingsPage));
+                return;
+            case "sidebar":
+                ContentFrame.Navigate(typeof(SidebarLayoutPage));
                 return;
             case "tools":
                 ContentFrame.Navigate(typeof(ToolsPage));
@@ -112,6 +135,23 @@ public sealed partial class ShellPage : UserControl
                 else
                     ContentFrame.Navigate(typeof(WelcomePage));
                 return;
+        }
+    }
+
+    /// <summary>页面加载失败的兜底日志（和 App 的崩溃日志写同一个文件，事后好查）。</summary>
+    private static void LogNavFailure(string tag, Exception ex)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassSoftwareHub");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(Path.Combine(dir, "crash.log"),
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 导航到「{tag}」失败: {ex}{Environment.NewLine}");
+        }
+        catch
+        {
+            // 日志写不进去就算了，别在这里再抛
         }
     }
 

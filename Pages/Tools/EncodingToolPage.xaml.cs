@@ -95,11 +95,7 @@ public sealed partial class EncodingToolPage : Page
         }
     }
 
-    private static Microsoft.UI.Xaml.Media.Brush Res(string key)
-    {
-        try { return (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key]; }
-        catch { return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(20, 0, 0, 0)); }
-    }
+    private Microsoft.UI.Xaml.Media.Brush Res(string key) => Services.ThemeBrush.Get(this, key);
 
     // ══════════ 模式 ══════════
     private bool _fileMode;

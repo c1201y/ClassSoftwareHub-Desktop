@@ -80,13 +80,13 @@
                             <TextBox x:Name="IdBox" PlaceholderText="小写字母 / 数字 / 短横线，如 7-zip"
                                      Description="详情页网址就是 #/download/&lt;id&gt;，不能带 ? &amp; = 等符号">
                                 <TextBox.Header>
-                                    <TextBlock><Run Text="软件 ID" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                    <TextBlock><Run Text="软件 ID" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
                             </TextBox>
 
                             <TextBox x:Name="NameBox" PlaceholderText="如 7-Zip">
                                 <TextBox.Header>
-                                    <TextBlock><Run Text="软件名称" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                    <TextBlock><Run Text="软件名称" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
                             </TextBox>
 
@@ -103,21 +103,21 @@
 
                             <TextBox x:Name="TaglineBox" PlaceholderText="一句话简介，显示在首页卡片上">
                                 <TextBox.Header>
-                                    <TextBlock><Run Text="一句话简介" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                    <TextBlock><Run Text="一句话简介" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
                             </TextBox>
 
                             <TextBox x:Name="DescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="120"
                                      PlaceholderText="详细介绍：这软件是干嘛的、有什么要注意的（可换行）">
                                 <TextBox.Header>
-                                    <TextBlock><Run Text="详细介绍" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                    <TextBlock><Run Text="详细介绍" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
                             </TextBox>
 
                             <TextBox x:Name="ContactBox" PlaceholderText="如 QQ / 邮箱 / 站内留言方式"
                                      Description="只写进审核工单给管理员看，不会出现在网站上">
                                 <TextBox.Header>
-                                    <TextBlock><Run Text="联系方式" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                    <TextBlock><Run Text="联系方式" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
                             </TextBox>
                         </StackPanel>
@@ -141,7 +141,7 @@
 
                             <TextBox x:Name="SystemBox" PlaceholderText="如 Windows 10/11（x86 / x64 / ARM64）">
                                 <TextBox.Header>
-                                    <TextBlock><Run Text="系统限制" /><Run Text=" *" Foreground="#C42B1C" /></TextBlock>
+                                    <TextBlock><Run Text="系统限制" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
                             </TextBox>
 

@@ -39,95 +39,40 @@
                             <TextBlock Text="常用工具" FontSize="11" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel x:Name="ToolStack" Orientation="Vertical" Spacing="3">
-                            <Button x:Name="SidePick" Tag="pick-number" Click="Tool_Click" MinWidth="0"
-                                    MinHeight="52" Padding="0,8" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="随机抽号">
-                                <StackPanel Spacing="3">
-                                    <FontIcon Glyph="&#xE716;" FontSize="20" HorizontalAlignment="Center" />
-                                    <TextBlock Text="抽号" FontSize="11" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="SideTimer" Tag="timer" Click="Tool_Click" MinWidth="0"
-                                    MinHeight="52" Padding="0,8" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="课堂计时">
-                                <StackPanel Spacing="3">
-                                    <FontIcon Glyph="&#xE81C;" FontSize="20" HorizontalAlignment="Center" />
-                                    <TextBlock Text="计时" FontSize="11" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="SideStopwatch" Tag="stopwatch" Click="Tool_Click" MinWidth="0"
-                                    MinHeight="52" Padding="0,8" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="秒表计时">
-                                <StackPanel Spacing="3">
-                                    <FontIcon Glyph="&#xE916;" FontSize="20" HorizontalAlignment="Center" />
-                                    <TextBlock Text="秒表" FontSize="11" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="SideClock" Tag="clock" Click="Tool_Click" MinWidth="0"
-                                    MinHeight="52" Padding="0,8" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="全屏时钟">
-                                <StackPanel Spacing="3">
-                                    <FontIcon Glyph="&#xE740;" FontSize="20" HorizontalAlignment="Center" />
-                                    <TextBlock Text="时钟" FontSize="11" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
+                        <!--
+                          工具按钮由代码按「侧边布局」里的模块清单生成（见 BuildToolButtons）。
+                          模块多了就在这块里**滚动**（面板本身不会无限往长里长）。
+                        -->
+                        <ScrollViewer x:Name="ToolsScroll"
+                                      VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="ToolStack" Orientation="Vertical" Spacing="3" />
+                        </ScrollViewer>
 
                         <Border x:Name="Sep" Height="1" Margin="2,3" Opacity="0.2"
                                 Background="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                        <!-- 底下三个按钮：图标固定一列（文字起点对齐，不会被截断） -->
+                        <!--
+                          底下这几个按钮。内容由代码按贴的边决定（ApplyFooterContent）：
+                          贴左右（竖条）= 图标在上、文字在下；贴上/下（横条）= 左图标、右文字（横条矮，竖排会被裁）。
+                        -->
                         <StackPanel x:Name="FooterStack" Orientation="Vertical" Spacing="2">
                             <Button x:Name="FoldButton" Click="Collapse_Click" MinWidth="0" MinHeight="44"
-                                    Padding="8,4" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                    ToolTipService.ToolTip="收起来（还能再展开）">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="18" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon x:Name="FoldIcon" Glyph="&#xE76C;" FontSize="13"
-                                              HorizontalAlignment="Left" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="收起" FontSize="12"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </Button>
+                                    Padding="0,6" Background="Transparent" BorderThickness="0"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    ToolTipService.ToolTip="收起来（还能再展开）" />
+                            <Button x:Name="PinButton" Click="Pin_Click" MinWidth="0" MinHeight="44"
+                                    Padding="0,6" Background="Transparent" BorderThickness="0"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    ToolTipService.ToolTip="常驻：展开后不自动收起（手动点「收起」还是能收）" />
                             <Button x:Name="ResetButton" Click="Reset_Click" MinWidth="0" MinHeight="44"
-                                    Padding="8,4" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                    ToolTipService.ToolTip="回到右边的居中位置">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="18" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="&#xE777;" FontSize="13"
-                                              HorizontalAlignment="Left" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="位置复原" FontSize="12"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </Button>
+                                    Padding="0,6" Background="Transparent" BorderThickness="0"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    ToolTipService.ToolTip="回到右边的居中位置" />
                             <Button x:Name="HideButton" Click="Hide_Click" MinWidth="0" MinHeight="44"
-                                    Padding="8,4" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                    ToolTipService.ToolTip="隐藏（以后不显示，想找回来去「内置工具」页或系统托盘图标菜单）">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="18" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="&#xE8BB;" FontSize="13"
-                                              HorizontalAlignment="Left" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="隐藏" FontSize="12"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </Button>
+                                    Padding="0,6" Background="Transparent" BorderThickness="0"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    ToolTipService.ToolTip="隐藏（以后不显示，想找回来去「内置工具」页或系统托盘图标菜单）" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.SnipOverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      框选层，照抄 Windows 自带「截图工具」的套路：
+        * 先冻屏（背景就是刚抓的那张全屏图，看着跟没动一样）+ 压暗；
+        * **顶上弹一条工具栏**：矩形 / 窗口 / 全屏 三种方式 + 取消；
+        * 选完矩形/窗口就裁那一块 → 剪贴板 + 贴图。
+    -->
+    <Grid x:Name="Root" Background="Black">
+
+        <!-- 冻屏背景（整屏截图，1:1 铺满） -->
+        <Image x:Name="Frozen" Stretch="Fill" />
+
+        <Canvas x:Name="Layer">
+            <!-- 暗化层：Fill 用"整屏空 + 选中区"的奇偶填充挖出洞 -->
+            <Path x:Name="Dim" Fill="#A6000000" />
+
+            <!-- 选中框 -->
+            <Rectangle x:Name="SelBorder" Stroke="#FF4CC2FF" StrokeThickness="2"
+                       Visibility="Collapsed" />
+
+            <!-- 尺寸小标 -->
+            <Border x:Name="SizeBadge" Background="#E6101010" CornerRadius="4" Padding="8,3"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="SizeText" Foreground="White" FontSize="12" />
+            </Border>
+        </Canvas>
+
+        <!-- 工具栏（放**下面**：教学大屏很高，顶上够不着；放底部谁都点得到） -->
+        <Border x:Name="Toolbar" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,20" Padding="6"
+                Background="{ThemeResource FlyoutPresenterBackground}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1" CornerRadius="8">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button x:Name="ModeRect" Tag="rect" Click="Mode_Click" Padding="10,7"
+                        Background="Transparent" BorderThickness="0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE7A8;" FontSize="15" />
+                        <TextBlock Text="矩形" FontSize="13.5" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="ModeWindow" Tag="window" Click="Mode_Click" Padding="10,7"
+                        Background="Transparent" BorderThickness="0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE7F4;" FontSize="15" />
+                        <TextBlock Text="窗口" FontSize="13.5" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="ModeFull" Tag="full" Click="Mode_Click" Padding="10,7"
+                        Background="Transparent" BorderThickness="0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE740;" FontSize="15" />
+                        <TextBlock Text="全屏" FontSize="13.5" />
+                    </StackPanel>
+                </Button>
+
+                <Rectangle Width="1" Margin="4,7" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+                <Button x:Name="ModeCancel" Click="Cancel_Click" Padding="10,7"
+                        Background="Transparent" BorderThickness="0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE711;" FontSize="15" />
+                        <TextBlock Text="取消" FontSize="13.5" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- 提示（跟着工具栏挪到底部，排在它上面一行） -->
+        <Border Background="#E6101010" CornerRadius="6" Padding="16,9"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,80">
+            <TextBlock x:Name="HintText" Foreground="White" FontSize="13.5" />
+        </Border>
+
+        <!-- 隐形按钮：只为了让键盘事件有地方落（Esc 取消） -->
+        <Button x:Name="KeyCatcher" Width="0" Height="0" Opacity="0" IsTabStop="True" />
+    </Grid>
+</Window>

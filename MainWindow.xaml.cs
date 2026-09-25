@@ -692,6 +692,7 @@ public sealed partial class MainWindow : Window
             _ => ElementTheme.Default
         };
         _settings.Current.Theme = theme;
+        Services.ThemeHost.Notify();                     // 侧边栏 / 浮窗 / 截图窗也跟着换（它们各自登记过）
 
         if (_settings.Current.Backdrop == "solid")
             RootGrid.Background = new SolidColorBrush(FallbackSolidColor());
@@ -699,6 +700,7 @@ public sealed partial class MainWindow : Window
             ApplyBackdrop(_settings.Current.Backdrop);   // 主题变了 → tint 颜色跟着重算
 
         UpdateCaptionButtonColors();
+        Services.ThemeBrush.Probe(RootGrid, "MainWindow.ApplyTheme(" + theme + ")");
         _bridge.Send("shell.themeChanged", new { value = theme, actual = RootGrid.ActualTheme.ToString() });
 
         if (notifyWeb)
@@ -1108,6 +1110,9 @@ public sealed partial class MainWindow : Window
 
             // 屏幕右边那条工具侧边栏（全屏放 PPT 时也够得着工具）
             Views.ToolSidebarWindow.ApplySetting();
+
+            // 记着"上一次在用的窗口"（点了侧边栏之后前台就变成我们自己了，"关前台应用"得知道原本是谁）
+            Services.TeachingActions.StartFocusWatcher();
         }
         catch (Exception ex)
         {

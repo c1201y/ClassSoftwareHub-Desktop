@@ -12,8 +12,11 @@ public static class ShellConfig
     public const string AppName = "ClassSoftwareHub";
     public const string WindowTitle = "ClassSoftwareHub";
 
-    /// <summary>原生外壳版本（跟站点版本无关）。⚠️ 规则（Nick 指定）：基数固定 1.0.0 不动，只递增 insider 号。</summary>
-    public const string ShellVersion = "1.0.0-insider1.3";
+    /// <summary>
+    /// 原生外壳版本（跟站点版本无关）。当前 **正式版 1.0.0**。
+    /// ⚠️ 规则（Nick 指定）：基数不随便抬（否则旧包会被强制顶掉）。以后要出 beta 就在后面接 `-insiderN`（如 `1.0.1-insider1`）。
+    /// </summary>
+    public const string ShellVersion = "1.0.0";
 
     /// <summary>桌面版的版本号前缀（Nick 指定：dv）。</summary>
     public const string VersionPrefix = "dv";
@@ -24,7 +27,7 @@ public static class ShellConfig
     //   · 预览版（insider）→ 预发布 Release ＋ 非预发布（预览用户也能跟上正式版）
     //
     // 发版时按这套约定起名，才能被自动识别（别乱起）：
-    //   tag  ：正式版 `dv1.0.0`      预发布 `dv1.0.0-insider1.3`（发布时勾 Pre-release）
+    //   tag  ：正式版 `dv1.0.0`      预发布 `dv1.0.0-insider1.4`（发布时勾 Pre-release）
     //   资产 ：`ClassSoftwareHub-Setup-<tag>.exe`（名字带 setup 才认）＋ 同名 `.md5`
     //   正文 ：会原样显示在更新对话框里 → 写本次更新内容
     // ════════════════════════════════════════════════════════════════
@@ -45,8 +48,8 @@ public static class ShellConfig
     public static string DefaultUpdateChannel =>
         ShellVersion.Contains("insider", System.StringComparison.OrdinalIgnoreCase) ? "insider" : "stable";
 
-    /// <summary>与站点 v2.3.2 对齐的适配版本号（内容包里读不到 app.version 时的兜底）。</summary>
-    public const string SiteVersionTarget = "v2.3.2";
+    /// <summary>与站点 v2.3.3 对齐的适配版本号（内容包里读不到 app.version 时的兜底）。</summary>
+    public const string SiteVersionTarget = "v2.3.3";
 
     public const string WebView2DownloadUrl = "https://developer.microsoft.com/microsoft-edge/webview2/";
 

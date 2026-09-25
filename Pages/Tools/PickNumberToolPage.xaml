@@ -77,7 +77,7 @@
                             </Grid>
                         </Border>
 
-                        <TextBlock x:Name="ErrorText" FontSize="12.5" Foreground="#C42B1C" TextWrapping="Wrap"
+                        <TextBlock x:Name="ErrorText" FontSize="12.5" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
                                    Visibility="Collapsed" />
 
                         <Grid x:Name="UsedRow" ColumnSpacing="10" Visibility="Collapsed">

@@ -31,6 +31,9 @@ public sealed partial class MiniTimer : UserControl
     {
         InitializeComponent();
 
+        // 主题换了要重刷大号数字的颜色（代码里设的颜色不会自己跟着变）
+        ActualThemeChanged += (_, _) => UpdateDisplay();
+
         _tick = DispatcherQueue.CreateTimer();
         _tick.Interval = TimeSpan.FromMilliseconds(100);
         _tick.IsRepeating = true;
@@ -93,11 +96,7 @@ public sealed partial class MiniTimer : UserControl
         SyncInputs();
     }
 
-    private static Brush Res(string key, Windows.UI.Color fallback)
-    {
-        try { return (Brush)Application.Current.Resources[key]; }
-        catch { return new SolidColorBrush(fallback); }
-    }
+    private Brush Res(string key, Windows.UI.Color fallback) => Services.ThemeBrush.Get(this, key);
 
     /// <summary>浮窗收起：停掉刷新（计时状态和剩余时间都留着，再打开接着走）。</summary>
     public void Pause()
@@ -215,9 +214,8 @@ public sealed partial class MiniTimer : UserControl
         StartButton.IsEnabled = _totalMs > 0 || _running;
 
         Display.Opacity = 1;
-        Display.Foreground = _finished
-            ? Res("AccentTextFillColorPrimaryBrush", Windows.UI.Color.FromArgb(255, 0, 103, 192))
-            : Res("TextFillColorPrimaryBrush", Windows.UI.Color.FromArgb(255, 0, 0, 0));
+        if (_finished) Display.Foreground = Services.ThemeBrush.AccentText(this);   // 计到点了：主题色
+        else Display.ClearValue(TextBlock.ForegroundProperty);                      // 平常：交回 XAML 里的 {ThemeResource ...}
     }
 
     private void UpdateDisplay()
