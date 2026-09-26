@@ -123,7 +123,7 @@ public static class ShellConfig
     public const string DevContentDir =
         @"C:\Users\Programmer_Nick\OneDrive\文档\Visual Studio 18 项目文件\ClassSoftwareHub\dist\content";
 
-    /// <summary>提交软件页 —— 全站唯一走网页（WebView2）的页面。</summary>
+    /// <summary>应用内网页浮层（WebSheet，比如详情页里「顺手看一眼官网」）—— 全程序唯一还会用到 WebView2 的地方。⚠️「提交软件」早已是原生页（Pages/SubmitPage.xaml），别再看这条注释。</summary>
     public const string SubmitPageUrl = "https://classsoftwarehub.us.ci/#/submit";
 }
 

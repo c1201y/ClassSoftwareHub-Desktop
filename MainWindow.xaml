@@ -11,7 +11,7 @@
 
     <Grid x:Name="RootGrid" Background="{x:Null}">
 
-        <!-- ============ 原生界面（WinUI3 自绘；只有「提交软件」页会用到网页） ============ -->
+        <!-- ============ 原生界面（全部页面 WinUI3 自绘；只有应用内网页浮层 WebSheet 会用到 WebView2） ============ -->
         <pages:ShellPage x:Name="NativeShell" />
 
         <!-- ============ 网页内容（只有提交软件页用；默认隐藏） ============ -->

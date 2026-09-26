@@ -9,7 +9,7 @@ using Windows.Graphics;
 namespace ClassSoftwareHub.Desktop.Views;
 
 /// <summary>
-/// 「提交软件」小窗口 —— 全站唯一用网页版的地方。
+/// ⚠️ 遗留：网页版「提交软件」小窗口。提交页早已原生化（Pages/SubmitPage），这里现在没有入口调用，只作兜底。
 /// 用系统标题栏（不搞自绘），打开就是站点 #/submit，填完直接提交。
 /// </summary>
 public sealed partial class SubmitWindow : Window

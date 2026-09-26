@@ -229,7 +229,10 @@ public sealed partial class MainWindow : Window
     /// <summary>原生外壳（首页卡片等要从这里跳导航）。</summary>
     public Pages.ShellPage Shell => NativeShell;
 
-    /// <summary>打开「提交软件」小窗口（全站唯一用网页版的地方）。缺 WebView2 时给替代方案。</summary>
+    /// <summary>
+    /// ⚠️ 遗留路径：「提交软件」的网页版小窗口（Views/SubmitWindow）。提交页早已原生化（Pages/SubmitPage），
+    /// 现在没有入口调用这里（OpenSubmitWindow 无人调用），留着当兜底；缺 WebView2 时给替代方案。
+    /// </summary>
     public async void OpenSubmitWindow()
     {
         if (_submitWindow is not null)
@@ -774,7 +777,7 @@ public sealed partial class MainWindow : Window
     private Task BootAsync()
     {
         // 原生界面完全不依赖 WebView2 —— 所以缺了也照常进主界面。
-        // 只有「提交软件」那个小窗口需要它，那边 OpenSubmitWindow() 会给「去安装 / 用浏览器打开」的兜底。
+        // 只有应用内网页浮层（WebSheet）需要它，那边会给「去安装 / 用浏览器打开」的兜底。
         _runtime.Probe();
         RuntimePanel.Visibility = Visibility.Collapsed;
 
@@ -782,7 +785,7 @@ public sealed partial class MainWindow : Window
         Services.VersionHistory.Record();
 
         // 原生界面优先：启动时不加载任何网页，所以这里不再初始化 WebView2。
-        // 需要网页的地方只有「提交软件」小窗口（Windows\SubmitWindow.xaml.cs），
+        // 需要网页的地方只有应用内网页浮层（MainWindow 的 WebSheet），
         // 它自己按需创建 WebView2 —— 启动更快，也少两个浏览器进程。
         return Task.CompletedTask;
     }
@@ -886,7 +889,7 @@ public sealed partial class MainWindow : Window
 
     private void NavigateToSite() => NavigateTo(ShellConfig.SiteUrl);
 
-    /// <summary>打开指定网页（原生界面下只有「提交软件」页会用到）。</summary>
+    /// <summary>打开指定网页（现在只有应用内网页浮层 WebSheet 会用到）。</summary>
     private void NavigateTo(string url)
     {
         if (!_webReady || Web.CoreWebView2 is null) return;
@@ -1432,7 +1435,7 @@ public sealed partial class MainWindow : Window
 
     // ============================================================
     // 应用内网页浮层（官网 / 网页版）：由下往上淡入的「窗中窗」
-    // 提交软件仍然走独立小窗口（Views\SubmitWindow），不受这里影响
+    // （「提交软件」是原生页 Pages/SubmitPage；遗留的网页版小窗口 Views/SubmitWindow 没人调用）
     // ============================================================
 
     private bool _sheetReady;

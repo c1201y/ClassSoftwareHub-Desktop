@@ -13,7 +13,7 @@ namespace ClassSoftwareHub.Desktop.Pages;
 /// 导航：上半区「首页 / 软件下载 / 内置工具 / 侧边布局 / 实验性功能」，
 /// 下半区「任务进行 / 提交软件 / 反馈中心 / 更新日志 / 设置」。
 /// ⚠️「实验性功能」是分组父项，点它=进总览页，子项「本机核实」可直达（见 ShellPage.xaml 的注释）。
-/// ⚠️ 只有「提交软件」页会请求打开网页（WebView2 小窗口），其余页面全部 WinUI3 自绘。
+/// ⚠️ 所有页面（含「提交软件」）都是 WinUI3 自绘；只有详情页那种「在应用内看一眼网页」的浮层（MainWindow.WebSheet）会用到 WebView2。
 /// </summary>
 public sealed partial class ShellPage : UserControl
 {
