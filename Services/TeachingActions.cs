@@ -20,9 +20,8 @@ public static class TeachingActions
     /// <summary>记着"上一次不在我们自己家里"的前台窗口（见 StartFocusWatcher）。</summary>
     private static IntPtr _lastForeign = IntPtr.Zero;
 
-    /// <summary>「关全部」的待确认清单（第一下攒着，第二下才真关）。</summary>
+    /// <summary>「关全部」的待确认清单：点一下先攒好，用户在确认面板上按了红键才真关。</summary>
     private static readonly List<IntPtr> _pendingCloseAll = new();
-    private static DateTime _pendingCloseAllAt = DateTime.MinValue;
 
     private static Microsoft.UI.Dispatching.DispatcherQueueTimer? _focusWatcher;
 
@@ -59,14 +58,32 @@ public static class TeachingActions
         // 现阶段没有"按住型"动作（放大镜改成调系统那个了），留着这个入口给以后的动作。
     }
 
-    /// <summary>一次性动作：先把"用户正在用的那个窗口"记下来，做完再把焦点还回去。</summary>
+    /// <summary>
+    /// 一次性动作：先把"用户正在用的那个窗口"记下来，做完再把焦点还回去（别打断讲课）。
+    ///
+    /// ⚠️ 例外：「要先问一句」的动作（见 `AsksFirst`）**先不还焦点** —— 侧边栏一旦失活，
+    /// 刚弹出来的确认面板会被系统按"点了别处"关掉。用户看到的就是
+    /// "前台有窗口时这按钮点了没反应，得先把窗口全最小化才能用"（2026-09-26 修）。
+    /// 这类动作由调用方在面板关掉后自己还焦点，见 `ToolSidebarWindow.Tool_Click`。
+    /// </summary>
     public static string? Run(string id)
     {
         var previous = TargetForeground();
         var hint = Begin(id);
-        ReturnFocus(previous);
+
+        if (!AsksFirst(id)) ReturnFocus(previous);
+
         return hint;
     }
+
+    /// <summary>
+    /// 哪些动作"按下去要先问用户一句"（`Begin` 会返回非空提示，由调用方弹确认面板）。
+    ///
+    /// ⚠️ 判据不能写成"Begin 返回了非空提示"：出错时也会返回提示
+    /// （比如截屏启动失败 `return "截屏启动失败，看日志"`），那种没什么可确认的。
+    /// 以后再加"要先问一句"的动作，记得往这里补 id。
+    /// </summary>
+    public static bool AsksFirst(string id) => id == "closeall";
 
     /// <summary>
     /// 焦点观察器（保留）：只在"确实是个能用的应用窗口"时才记一下。
@@ -248,7 +265,6 @@ public static class TeachingActions
         }
 
         _pendingCloseAll.AddRange(found);
-        _pendingCloseAllAt = DateTime.Now;
 
         var titles = found.Select(TitleOf).Where(t => t.Length > 0).ToList();
         var sample = string.Join("、", titles.Take(3));

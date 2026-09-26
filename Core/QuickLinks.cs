@@ -7,7 +7,16 @@ public sealed class QuickLink
 {
     public string Name { get; set; } = "";
     public string Glyph { get; set; } = "";
+
+    /// <summary>点了用系统浏览器打开的外部链接。空 = 不是外链（看 <see cref="Tag"/>）。</summary>
     public string Url { get; set; } = "";
+
+    /// <summary>
+    /// 点了在**应用内**跳转的导航 tag（如 <c>changelog</c>）。
+    /// ⚠️ 只要这个非空就走应用内导航，<see cref="Url"/> 会被忽略 —— 别再写成"顺手也留个网址"，
+    ///    那会让"更新日志"又跳回网站（Nick 2026-09-26 明确要求改成应用内）。
+    /// </summary>
+    public string Tag { get; set; } = "";
 
     /// <summary>要突出的那颗（「赞助作者」）：模板换成"主题色底 + 反白字"那套。</summary>
     public bool Accent { get; set; }
@@ -41,7 +50,9 @@ public static class QuickLinks
                 Name = "加入Q群", Glyph = "\uE8BD",
                 Url = ui.T("about.qq-group-url", "https://qm.qq.com/q/wByO7XG8Wk"),
             },
-            new() { Name = "更新日志", Glyph = "\uE72C", Url = repoUrl + "/releases" },
+            // ⚠️ 更新日志走**应用内**页面（tag changelog），不是仓库的 releases 网页 ——
+            //    Nick 2026-09-26 明确要求"不在导航到网站"。所以这里只给 Tag、不给 Url。
+            new() { Name = "更新日志", Glyph = "\uE72C", Tag = "changelog" },
         };
     }
 }

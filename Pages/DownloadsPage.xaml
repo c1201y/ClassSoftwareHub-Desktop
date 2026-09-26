@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.DownloadsPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:ClassSoftwareHub.Desktop.Services">
+
+    <!-- 和首页 / 内置工具 / 软件下载同一套版式：内容钉在中间 960 宽 -->
+    <Grid Padding="24,36,24,44">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="960" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" RowSpacing="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="任务进行" FontSize="30" FontWeight="Bold" />
+                <TextBlock x:Name="SummaryText" FontSize="12.5" Opacity="0.65" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- 任务列表：不用 ListView —— 这里不需要选中，用 ItemsControl 省掉一整套容器 chrome -->
+            <ScrollViewer Grid.Row="1" Padding="0,2,0,0" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="TaskList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="svc:DownloadTask">
+                            <Border CornerRadius="8" Padding="20,16" Margin="0,0,0,12"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <Grid ColumnSpacing="16" RowSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <FontIcon Grid.Row="0" Grid.Column="0" Glyph="&#xE896;" FontSize="20"
+                                              VerticalAlignment="Center" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Title}"
+                                               FontSize="15" FontWeight="Bold" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                                                VerticalAlignment="Center">
+                                        <Button Content="取消" Tag="{x:Bind}" Click="Cancel_Click"
+                                                Visibility="{x:Bind RunningVisibility, Mode=OneWay}" />
+                                        <Button Content="重试" Tag="{x:Bind}" Click="Retry_Click"
+                                                Visibility="{x:Bind RetryVisibility, Mode=OneWay}" />
+                                        <Button Content="打开" Tag="{x:Bind}" Click="Open_Click"
+                                                Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
+                                        <Button Content="打开文件夹" Tag="{x:Bind}" Click="Reveal_Click"
+                                                Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
+                                        <Button Tag="{x:Bind}" Click="Remove_Click" Padding="9,5"
+                                                ToolTipService.ToolTip="从列表移除（不会删掉已下载的文件）"
+                                                Visibility="{x:Bind RetryVisibility, Mode=OneWay}">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                                        </Button>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Spacing="6">
+                                        <ProgressBar Minimum="0" Maximum="100"
+                                                     Value="{x:Bind BarValue, Mode=OneWay}"
+                                                     IsIndeterminate="{x:Bind BarIndeterminate, Mode=OneWay}"
+                                                     Visibility="{x:Bind BarVisibility, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" FontSize="12" Opacity="0.7"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- 空状态：一条任务都没有的时候 -->
+            <StackPanel x:Name="EmptyPanel" Grid.Row="1" Spacing="12" Visibility="Collapsed"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE896;" FontSize="34" Opacity="0.45" HorizontalAlignment="Center" />
+                <TextBlock Text="当前没有下载任务" FontSize="15" FontWeight="SemiBold" Opacity="0.75"
+                           HorizontalAlignment="Center" />
+                <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12.5" Opacity="0.6"
+                           Text="在「软件下载」中打开任意软件并点击「下载」，任务会显示在这里。下载期间可继续使用其他功能，左侧入口会显示进行中的任务数。" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                <Button Content="打开下载文件夹" Click="OpenFolder_Click" />
+                <Button x:Name="ClearButton" Content="清除已完成" Click="ClearFinished_Click" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

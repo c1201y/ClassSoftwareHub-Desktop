@@ -14,23 +14,8 @@
             <ColumnDefinition Width="1*" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="10">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <!-- 返回条（和内容左缘对齐） -->
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Click="Back_Click" Padding="8,4">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE72B;" FontSize="12" />
-                        <TextBlock Text="返回" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <Grid Grid.Column="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="14">
 
                     <!-- ===== 头部：图标 + 名称 + 标语 + 分类徽标 ===== -->

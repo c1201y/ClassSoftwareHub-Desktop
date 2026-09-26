@@ -374,13 +374,13 @@ public sealed partial class SettingsPage : Page
                 var notes = Snip(release.Notes, 400);
                 UpdateNotes.Text = notes;
                 UpdateNotes.Visibility = notes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-                UpdateStatus.Text = $"发现新版本 {release.Tag}，等你决定要不要装。";
+                UpdateStatus.Text = $"发现新版本 {release.Tag}，可自行选择是否安装。";
 
                 // 先问；选「稍后」就什么都不做
                 if (!await UpdateFlow.AskAsync(XamlRoot, release)) return;
 
                 if (!await UpdateFlow.RunAsync(XamlRoot, _updater, release))
-                    UpdateStatus.Text = "更新失败：稍后可重试，或去发布页手动下载新版。";
+                    UpdateStatus.Text = "更新失败：可稍后重试，或前往发布页手动下载新版本。";
             }
         }
         catch (Exception ex)
@@ -408,7 +408,16 @@ public sealed partial class SettingsPage : Page
 
     private void Quick_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is Core.QuickLink link && link.Url.Length > 0)
+        if (e.ClickedItem is not Core.QuickLink link) return;
+
+        // 跟首页那一行同一个口径：带 Tag 的走应用内导航（「更新日志」），其余才丢给系统浏览器
+        if (link.Tag.Length > 0)
+        {
+            App.MainWindow?.Shell.NavigateTo(link.Tag);
+            return;
+        }
+
+        if (link.Url.Length > 0)
             App.MainWindow?.OpenExternal(link.Url);
     }
 

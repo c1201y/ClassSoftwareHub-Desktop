@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.VolumeWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      单滑块浮窗：点侧边栏「音量」/「屏幕亮度」模块弹出，**挨着边条**长出来一栏（边条不收）。
+      同一个窗口伺候两个模块（类名历史上叫 VolumeWindow，别被名字骗了）：
+         · 音量模式：数值在上、竖滑块居中、静音 + 展开合成器在下
+         · 亮度模式：数值在上、竖滑块居中、下面那颗换成「自动亮度」（**没有二级浮窗**）
+         · 贴左/右 → 竖版（默认，就是这里的排法）；贴上/下 → 横版一排（ApplyOrientation 里换）
+      材质 = 侧边栏同款（亚克力 + 一层纯色薄纱，见 FlyoutChrome.ApplyMaterial）；
+      按钮 = 侧边栏同款（透明底、无边框、**撑满整宽**）。
+
+      ⚠️ 面板尺寸不写死：内容多宽就多宽（尺寸是 Measure 出来的，见 SizeDip）。
+         宽一点就会在滑块两侧留出能开两家蜜雪冰城的空地（2026-09-26）。
+    -->
+    <Grid x:Name="Root" Background="Transparent">
+        <Border x:Name="Panel" CornerRadius="8" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+
+            <StackPanel x:Name="ContentHost" Padding="8,12,8,8" Spacing="10">
+
+                <!-- 数值（音量百分比 / 亮度百分比） -->
+                <StackPanel x:Name="NumberBlock" Spacing="0"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                    <TextBlock x:Name="MasterPercentText" Text="—" FontSize="22" FontWeight="SemiBold"
+                               LineHeight="28" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="MasterCaptionText" Text="主音量" FontSize="10" Opacity="0.55"
+                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <!-- 滑动模块（方向、尺寸都在 ApplyOrientation 里设；按下/松手判定也在代码里挂） -->
+                <Slider x:Name="MasterSlider"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Minimum="0" Maximum="100"
+                        StepFrequency="1" SmallChange="1" LargeChange="10"
+                        TickPlacement="None" IsThumbToolTipEnabled="True"
+                        ValueChanged="MasterSlider_ValueChanged" />
+
+                <!-- 第一颗键：音量模式 = 静音；亮度模式 = 自动亮度（同一个控件，含义按 _target 换 -->
+                <StackPanel x:Name="ButtonHost" Spacing="4"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                    <ToggleButton x:Name="ActionToggle" Click="Action_Click"
+                                  MinWidth="0" MinHeight="36" Padding="0" CornerRadius="4"
+                                  Background="Transparent" BorderThickness="0"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                  ToolTipService.ToolTip="静音 / 取消静音">
+                        <FontIcon Glyph="&#xE74F;" FontSize="16" />
+                    </ToggleButton>
+
+                    <!-- 第二颗键：只有音量模式用（展开合成器），亮度模式整个藏起来 -->
+                    <ToggleButton x:Name="ExpandToggle" Click="Expand_Click"
+                                  MinWidth="0" MinHeight="36" Padding="0" CornerRadius="4"
+                                  Background="Transparent" BorderThickness="0"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                  ToolTipService.ToolTip="展开音量合成器">
+                        <FontIcon Glyph="&#xE92D;" FontSize="15" />
+                    </ToggleButton>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -13,10 +13,30 @@ public static class ShellConfig
     public const string WindowTitle = "ClassSoftwareHub";
 
     /// <summary>
-    /// 原生外壳版本（跟站点版本无关）。当前 **正式版 1.0.0**。
-    /// ⚠️ 规则（Nick 指定）：基数不随便抬（否则旧包会被强制顶掉）。以后要出 beta 就在后面接 `-insiderN`（如 `1.0.1-insider1`）。
+    /// 原生外壳版本（跟站点版本无关）。
+    ///
+    /// 命名规则（Nick 指定）：<c>dv</c> + <c>主.功能.补丁</c> + <c>-insider架构.迭代</c>
+    /// <list type="bullet">
+    ///   <item>第一位「架构」——只有整个应用的架构/技术路线发生重大变动才会动；</item>
+    ///   <item>第二位「功能」——每叠加一块新功能涨一次（1.1.0 就是「下载后台化」这一块）；</item>
+    ///   <item>第三位「补丁」——小功能推送 / 小更新 / 小 bug 修复；</item>
+    ///   <item><c>insider</c> 第一位——预览线自己的架构/思路基线，性质同主版本第一位；</item>
+    ///   <item><c>insider</c> 第二位——这条预览线上的具体更改次数。</item>
+    /// </list>
+    /// 注：<c>dv</c> 前缀由 <see cref="VersionPrefix"/> 单独拼，**不要**写进这个字符串里。
+    ///
+    /// 递增流程：
+    /// 做出一个能用的版本 → 发 <c>1.1.0-insider1.0</c>
+    /// → 用户反馈还有问题 → 继续改成 <c>1.1.0-insider1.1</c>
+    /// → 一直改到没问题 → **整个 <c>-insider</c> 后缀删掉** → 上线正式版 <c>1.1.0</c>。
+    ///
+    /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.0.0";
+    public const string ShellVersion = "1.1.0-insider1.0";
+
+    /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
+    public static bool IsInsider =>
+        ShellVersion.Contains("insider", System.StringComparison.OrdinalIgnoreCase);
 
     /// <summary>桌面版的版本号前缀（Nick 指定：dv）。</summary>
     public const string VersionPrefix = "dv";
@@ -45,8 +65,7 @@ public static class ShellConfig
     /// 本版本默认走哪条通道：版本号里带 insider 的内部构建默认预览版，否则正式版。
     /// 用户可在设置页改；改过之后按 settings.json 里存的值来。
     /// </summary>
-    public static string DefaultUpdateChannel =>
-        ShellVersion.Contains("insider", System.StringComparison.OrdinalIgnoreCase) ? "insider" : "stable";
+    public static string DefaultUpdateChannel => IsInsider ? "insider" : "stable";
 
     /// <summary>与站点 v2.3.3 对齐的适配版本号（内容包里读不到 app.version 时的兜底）。</summary>
     public const string SiteVersionTarget = "v2.3.3";

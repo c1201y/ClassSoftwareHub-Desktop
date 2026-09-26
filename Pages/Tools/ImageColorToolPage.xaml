@@ -14,15 +14,10 @@
         </Grid.RowDefinitions>
 
         <!-- ═══ 标题 ═══ -->
-        <StackPanel Orientation="Horizontal" Spacing="12">
-            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
-                <FontIcon Glyph="&#xE72B;" FontSize="14" />
-            </Button>
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="图片取色" FontSize="24" FontWeight="Bold" />
-                <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="上传一张图片，自动提取一组柔和的配色（类似 Win11 壁纸主题色的取法）。点击色块复制 hex。图片只在本机处理，不会上传。" />
-            </StackPanel>
+        <StackPanel Spacing="2">
+            <TextBlock Text="图片取色" FontSize="24" FontWeight="Bold" />
+            <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                       Text="上传一张图片，自动提取一组柔和的配色（类似 Win11 壁纸主题色的取法）。点击色块复制 hex。图片只在本机处理，不会上传。" />
         </StackPanel>
 
         <!-- ═══ 内容 ═══ -->

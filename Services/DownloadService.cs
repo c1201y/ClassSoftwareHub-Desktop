@@ -86,6 +86,24 @@ public static class DownloadService
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
     }
 
+    /// <summary>在资源管理器里打开「下载」文件夹（任务列表底部的按钮用；打不开就安静算了）。</summary>
+    public static void OpenDownloadsFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(DefaultDir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = DefaultDir,
+                UseShellExecute = true,      // 交给 shell，才能让已有的资源管理器窗口接管
+            });
+        }
+        catch
+        {
+            // 打不开文件夹不值得打扰用户
+        }
+    }
+
     private static readonly HttpClient Http = CreateClient();
 
     private static HttpClient CreateClient()

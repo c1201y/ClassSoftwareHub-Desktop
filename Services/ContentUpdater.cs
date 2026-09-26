@@ -95,12 +95,12 @@ public static class ContentUpdater
             }
             catch (Exception ex)
             {
-                progress?.Report("内容清单取不到：" + ex.Message);
+                progress?.Report("无法获取内容清单：" + ex.Message);
             }
         }
 
         if (manifest is null || manifestUrl.Length == 0)
-            return new ContentSyncResult(false, 0, 0, "远端还没发布内容包（content/manifest.json 取不到），先用本机数据。", "");
+            return new ContentSyncResult(false, 0, 0, "远端尚未发布内容包（无法获取 content/manifest.json），已回退到本机数据。", "");
 
         var baseUrl = manifestUrl[..(manifestUrl.LastIndexOf('/') + 1)];
         Directory.CreateDirectory(Dir);

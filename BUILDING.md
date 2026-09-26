@@ -22,23 +22,50 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
   --self-contained true -p:PublishTrimmed=false -o dist\app
 
 # 2. 用 Inno Setup 6 编译脚本（ISCC 装在 %LOCALAPPDATA%\Programs\Inno Setup 6\）
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss `
-  /DAppVersion=1.0.0 /DChannel=stable
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
 
-产物在 `dist\installer\`。`.iss` 里的 `AppId` 是升级和回滚认亲用的，不要改。
+版本号默认取 `.iss` 里的 `DesktopVersion`，不用在命令行传。临时想改就加 `/DDesktopVersion=1.1.0-insider1.1`。
+
+产物在 `dist\installer\ClassSoftwareHub-Setup-dv<DesktopVersion>.exe`。`.iss` 里的 `AppId` 是升级和回滚认亲用的，不要改。
+
+> ⚠️ `.iss` 的 `DesktopVersion` 必须和 `Core/ShellConfig.cs` 的 `ShellVersion` 一字不差、
+> 也必须和发布时打的 git tag 一字不差（tag 带 `dv` 前缀，`.iss` 里不带）。三处不一致 → 更新器认不出新版本。
+
+## 版本号规则
+
+格式：**`dv` + `主.功能.补丁` + `-insider架构.迭代`**
+
+| 段 | 含义 |
+| --- | --- |
+| `主` | 架构代次。只有整个应用的架构/技术路线发生重大变动才动 |
+| `功能` | 每叠加一块新功能涨一次 |
+| `补丁` | 小功能推送 / 小更新 / 小 bug 修复 |
+| `insider架构` | 预览线自己的架构/思路基线，性质同主版本第一位 |
+| `insider迭代` | 这条预览线上的具体更改次数 |
+
+递增流程：做出一个能用的版本 → 发 `1.1.0-insider1.0` → 用户反馈还有问题 → 继续改成 `1.1.0-insider1.1`
+→ 一直改到没问题 → **整个 `-insider` 后缀删掉** → 上线正式版 `1.1.0`。
+
+要改版本时，**四处一起改**，缺一处就会出现"装上去还是旧版本号"：
+
+1. `Core/ShellConfig.cs` → `ShellVersion`
+2. `ClassSoftwareHub.Desktop.csproj` → `Version`、`InformationalVersion`
+   （`AssemblyVersion` / `FileVersion` 只接受四段纯数字，塞不进 `-insider`，固定 `1.1.0.0` 即可）
+3. `installer/ClassSoftwareHub.iss` → `DesktopVersion`
+4. 发版时的 git tag
 
 ## 发版
 
 ```powershell
 $env:GITHUB_TOKEN = "..."   # 需要仓库写权限，别写进任何文件
 node --use-system-ca tools\publish-release.mjs `
-  --tag dv1.0.0 --channel stable `
-  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.0.0-stable.exe" `
-  --name "ClassSoftwareHub dv1.0.0" --notes notes.md
+  --tag dv1.1.0-insider1.0 --channel insider `
+  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.0.exe" `
+  --name "ClassSoftwareHub dv1.1.0-insider1.0" --notes notes.md
 ```
 
-脚本会算 MD5/SHA256、生成同名 `.md5`、建 Release 并把安装包传上去。tag 里带 `insider` 就自动标预发布（只有 Insider 通道的客户端会收到），正式版用 `dv1.0.0` 这种。
+脚本会算 MD5/SHA256、生成同名 `.md5`、建 Release 并把安装包传上去。tag 里带 `insider` 就自动标预发布（只有 Insider 通道的客户端会收到），正式版用 `dv1.1.0` 这种。
 
 ## 目录
 
@@ -80,7 +107,7 @@ tools/       发版脚本
 ```powershell
 dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -p:PublishTrimmed=false -o dist\app
 node tools\sync-content.mjs      # 把站点 dist/content 拷进 dist\app\content（80 个文件 / 约 450KB）
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss /DAppVersion=1.x.x /DChannel=stable
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
 
 `installer\ClassSoftwareHub.iss` 的 `[Files]` 是 `Source: "..\dist\app\*"` 整目录，所以 `dist\app\content`

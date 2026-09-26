@@ -50,6 +50,42 @@ public static class ScreenCapture
     /// <summary>解码中的图片流要有人"扶着"，不然 GC 可能把流收走、图变空白。</summary>
     private static readonly List<InMemoryRandomAccessStream> KeepAlive = new();
 
+    /// <summary>
+    /// 这些流最多共占多少字节。
+    ///
+    /// ⚠️ 原来按**张数**封顶（24 张）。但抓的是整个虚拟桌面：4K 单屏一张约 33MB，
+    /// 双 4K 约 66MB —— 24 张就是 0.8～1.6GB 常驻，教学机 8G 内存直接顶不住。
+    /// 改成按总字节数封顶，跟屏幕多大无关。
+    /// </summary>
+    private const long KeepAliveBudgetBytes = 256L * 1024 * 1024;
+
+    /// <summary>
+    /// 扶住一个刚解码好的流，并把超预算的老流**释放掉**。
+    /// 只从列表里移除是不够的：流的位图要等 GC 才回收，而几十 MB 的大对象 GC 并不积极。
+    /// 最保守也留最新的一张（正在显示的那张绝不能被释放）。
+    /// </summary>
+    private static void Keep(InMemoryRandomAccessStream stream)
+    {
+        KeepAlive.Add(stream);
+
+        while (KeepAlive.Count > 1 && TotalKeptBytes() > KeepAliveBudgetBytes)
+        {
+            var oldest = KeepAlive[0];
+            KeepAlive.RemoveAt(0);
+            try { oldest.Dispose(); } catch { /* 释放失败也不能影响截屏 */ }
+        }
+    }
+
+    private static long TotalKeptBytes()
+    {
+        long total = 0;
+        foreach (var s in KeepAlive)
+        {
+            try { total += (long)s.Size; } catch { /* 流已失效就按 0 算 */ }
+        }
+        return total;
+    }
+
     /// <summary>整个虚拟桌面（多屏也覆盖）的物理像素范围。</summary>
     public static (int X, int Y, int W, int H) VirtualScreen() => (
         GetSystemMetrics(SmXVirtualScreen),
@@ -180,8 +216,7 @@ public static class ScreenCapture
             var img = new BitmapImage();
             await img.SetSourceAsync(ras);
 
-            KeepAlive.Add(ras);
-            while (KeepAlive.Count > 24) KeepAlive.RemoveAt(0);
+            Keep(ras);
             return img;
         }
         catch

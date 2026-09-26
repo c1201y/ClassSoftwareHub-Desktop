@@ -33,7 +33,10 @@
                         CompactModeThresholdWidth="820" ExpandedModeThresholdWidth="1180"
                         BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">
-            <!-- 上半区：首页 / 软件下载 / 内置工具 / 侧边布局 -->
+            <!-- 上半区：首页 / 软件下载 / 内置工具 / 侧边布局 / 实验性功能（实验性功能永远排最后）
+                 ⚠️ 图标别撞脸：E719（购物袋）＝软件商店，E896（下载箭头）留给「任务进行」，
+                    E7F4（显示器）＝本机核实，EA80（灯泡）＝实验性功能。
+                    改图标前先把码位渲染成图看一眼有没有字形（曾经差点用到不存在的码位）。 -->
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="首页" Tag="home">
                     <NavigationViewItem.Icon>
@@ -42,7 +45,7 @@
                 </NavigationViewItem>
                 <NavigationViewItem Content="软件下载" Tag="apps">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE896;" />
+                        <FontIcon Glyph="&#xE719;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="内置工具" Tag="tools">
@@ -55,13 +58,65 @@
                         <FontIcon Glyph="&#xE8A0;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <!--
+                  实验性功能：稳定性和准确度都还没到能上主界面的小玩意挂这儿。
+                  ⚠️ **永远排在导航上半区最后一位** —— 这是「还没成熟」的位置含义，
+                     以后往里加新功能也照此放，别插到前面去。
+                  ⚠️ 父项**自己就是总览入口**：点它 = 打开总览页 + 展开/收起分组。
+                     走的就是普通 ItemInvoked（实测：有子项的项被点击时 ItemInvoked 照样触发，
+                     只是 InvokedItemContainer 的 Tag 为空 —— 所以给它设上 Tag 即可）。
+                  ⚠️ 父项**不要进 NavigationView 的选中体系**：把 SelectedItem 指到 group header 上，
+                     它偶尔会顺着分组去 Invoke 第一个子项（实测：点实验性功能却跳到本机核实）。
+                     所以 SelectTag 对 experimental 是特判——手动点亮父项，不碰 SelectedItem（见 ShellPage.xaml.cs）。
+                  ⚠️ 因此**不要**为了"能高亮"再往里加一个「总览」子项：总览没有独立内容，
+                     它就是这一组本身，导航里凭空多一项反而像是个单独的功能。
+                -->
+                <NavigationViewItem x:Name="ExperimentalNav" Content="实验性功能" Tag="experimental">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEA80;" />
+                    </NavigationViewItem.Icon>
+                    <NavigationViewItem.MenuItems>
+                        <!--
+                          本机核实：拿本机已装软件跟清单对一遍。
+                          ⚠️ 为啥塞进实验性：结果**明显不准**（只读「程序和功能」注册表，
+                             匹配靠名称模糊比对，Store 版/免安装版/改了名的全认不出来）。
+                             放一级导航容易被当成装机验收依据，所以降级成"供你自己玩"。
+                        -->
+                        <NavigationViewItem Content="本机核实" Tag="machinecheck">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE7F4;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
-            <!-- 下半区：提交软件 / 设置 -->
+            <!-- 下半区：任务进行 / 提交软件 / 反馈中心 / 更新日志 / 设置 -->
             <NavigationView.FooterMenuItems>
+                <!-- 下载不再占着界面：进度在这里看得到；徽标上是「正在下载几个」（0 个就把徽标摘掉） -->
+                <NavigationViewItem x:Name="DownloadsNav" Content="任务进行" Tag="downloads">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE896;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="提交软件" Tag="submit">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE898;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <!--
+                  反馈中心：和「提交软件」是一对（都是"往维护者那边送东西"），所以紧挨着放。
+                  E939 是「人 + 对话泡」，微软反馈中心用的就是这个字形（已用字形渲染法确认存在）。
+                -->
+                <NavigationViewItem Content="反馈中心" Tag="feedback">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE939;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <!-- 更新日志：E81C 是时钟/历史，跟「设置」的齿轮分得开 -->
+                <NavigationViewItem Content="更新日志" Tag="changelog">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="设置" Tag="settings">

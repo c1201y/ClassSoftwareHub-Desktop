@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using ClassSoftwareHub.Desktop.Core;
@@ -43,6 +44,13 @@ public sealed partial class MainWindow : Window
     private TrayIcon? _trayTools;      // 第二个托盘图标：常用工具（左键直接开工具窗口）
     private bool _exitRequested;
 
+    /// <summary>托盘气泡被点的时候要干什么（不同的通知点进去该去不同的地方）。</summary>
+    private Action? _balloonAction;
+
+    /// <summary>当前正开着的下载进度弹窗 + 它盯着的那条任务（同时只有一个弹窗）。</summary>
+    private ContentDialog? _downloadDialog;
+    private string? _downloadDialogTaskId;
+
     /// <summary>网页上报的「可拖动矩形」（物理像素），仅在开启原生 caption 区域时使用。</summary>
     private readonly List<RectInt32> _webCaptionRects = new();
 
@@ -69,6 +77,9 @@ public sealed partial class MainWindow : Window
 
         // 托盘图标：关窗口收托盘、开机最小化收托盘、托盘菜单（工具浮窗 / 退出）都靠它
         InitTray();
+
+        // 下载跑完（成功 / 失败）→ 弹系统通知。谁在盯着弹窗的那条不弹，交给弹窗自己收尾。
+        DownloadManager.Current.Finished += OnDownloadFinished;
 
         // ===== 原生界面 =====
         // 软件内容来自内容包（开发时读站点工程 dist/content，正式版走远端 manifest）
@@ -148,10 +159,37 @@ public sealed partial class MainWindow : Window
     /// <summary>主窗口没露脸时，用系统通知提醒"有新版本"（点通知 = 打开主界面并重新走一次检查）。</summary>
     private void NotifyUpdateAvailable(Services.Updating.UpdateRelease release)
     {
-        try
+        ShowBalloon($"发现新版本 {release.Tag}", "当前不是最新版，点这里看看要不要更新。",
+            () => { ShowFromTray(); _ = CheckUpdateManualAsync(); });
+    }
+
+    /// <summary>下载跑完的提示：完成报一声「好了」，失败也报一声（别让人以为还在下）。</summary>
+    private void OnDownloadFinished(DownloadTask task)
+    {
+        // 进度弹窗正开着它 → 弹窗自己会弹「下载完成 / 下载失败」，别再叠一条系统通知
+        if (task.Id == _downloadDialogTaskId) return;
+
+        if (task.State == DownloadState.Completed)
         {
-            _tray?.ShowBalloon($"发现新版本 {release.Tag}", "当前不是最新版，点这里看看要不要更新。");
+            ShowBalloon("下载完成", $"{task.FileName}\n已保存到：{DownloadService.DefaultDir}",
+                () => { ShowFromTray(); Shell.NavigateTo("downloads"); });
         }
+        else if (task.State == DownloadState.Failed)
+        {
+            ShowBalloon("下载失败", $"{task.Title} 没能下载完：{task.Error}",
+                () => { ShowFromTray(); Shell.NavigateTo("downloads"); });
+        }
+    }
+
+    /// <summary>
+    /// 弹一条系统通知（托盘气泡），并记住"点它该干什么"。
+    /// 不用 Windows 的 AppNotification 是因为免安装（unpackaged）下它要额外注册一套 AUMID/COM
+    /// 激活器，而托盘气泡本来就在用（发现新版本那条），零依赖、装了就能用。
+    /// </summary>
+    private void ShowBalloon(string title, string text, Action? onClick)
+    {
+        _balloonAction = onClick;
+        try { _tray?.ShowBalloon(title, text); }
         catch { }
     }
 
@@ -542,6 +580,7 @@ public sealed partial class MainWindow : Window
     {
         _loadTimer.Stop();
         _exitRequested = true;
+        DownloadManager.Current.Finished -= OnDownloadFinished;
         try { _settings.Save(); } catch { }
         try { Web.Close(); } catch { }
         try { _tray?.Dispose(); } catch { }
@@ -1084,7 +1123,7 @@ public sealed partial class MainWindow : Window
             _tray = new TrayIcon(IconPath());
             _tray.LeftClick += ToggleMainWindow;
             _tray.CommandInvoked += OnTrayCommand;
-            _tray.BalloonClicked += () => { ShowFromTray(); _ = CheckUpdateManualAsync(); };
+            _tray.BalloonClicked += OnBalloonClicked;
             _tray.MenuItems.Add(new TrayMenuItem { Text = "打开主界面", Command = "show", IsDefault = true });
             _tray.MenuItems.Add(new TrayMenuItem { Text = "常用工具", Command = "palette" });
             _tray.MenuItems.Add(new TrayMenuItem { Text = "工具侧边栏", Command = "sidebar" });
@@ -1118,6 +1157,23 @@ public sealed partial class MainWindow : Window
         {
             Debug.WriteLine("[tray] 初始化失败: " + ex.Message);
         }
+    }
+
+    /// <summary>通知被点开：按"这条通知是关于什么的"分流（更新 / 下载完成 / 下载失败）。</summary>
+    private void OnBalloonClicked()
+    {
+        var action = _balloonAction;
+        _balloonAction = null;
+
+        if (action is not null)
+        {
+            try { action(); } catch { }
+            return;
+        }
+
+        // 没登记动作的（老路子）：把界面叫出来 + 顺手查一次更新
+        ShowFromTray();
+        _ = CheckUpdateManualAsync();
     }
 
     private void OnTrayCommand(string command)
@@ -1276,11 +1332,25 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>把链接交给系统浏览器处理（只有「必须用外部程序」的场景才该走这里）。</summary>
+    /// <summary>
+    /// 把链接交给系统浏览器处理（只有「必须用外部程序」的场景才该走这里）。
+    ///
+    /// ⚠️ 必须限协议。这里最终是 `Process.Start(UseShellExecute = true)`，等于把 URL 直接交给
+    /// shell 解析 —— 放行任意协议的话，一个 `file:///C:/Windows/...` 或者攻击者自定义注册的协议
+    /// 就能拉起本机程序。而 URL 的来源（软件条目的 website、网页浮层里的链接）并不都是我们自己写的，
+    /// 所以这里只留真正需要的三个，其余一律拒绝并记日志。
+    /// </summary>
     public void OpenExternal(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+
+        if (!AllowedExternalSchemes.Contains(uri.Scheme))
+        {
+            Debug.WriteLine($"[shell] 拒绝打开非白名单协议的外部链接: {uri.Scheme}");
+            return;
+        }
+
         try
         {
             Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
@@ -1290,6 +1360,14 @@ public sealed partial class MainWindow : Window
             Debug.WriteLine("[shell] 打开外部链接失败: " + ex.Message);
         }
     }
+
+    /// <summary>允许交给系统的协议：网页、微软商店。其余（file / 自定义协议等）不放行。</summary>
+    private static readonly HashSet<string> AllowedExternalSchemes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "http",
+        "https",
+        "ms-windows-store",
+    };
 
     /// <summary>
     /// 打开 Microsoft Store 链接：先转成商店协议拉起身上的「微软商店」应用；
@@ -1492,27 +1570,40 @@ public sealed partial class MainWindow : Window
     // ============================================================
 
     /// <summary>
-    /// 原生下载一个文件：进度对话框 → 完成后可「立即打开 / 打开所在文件夹」。
-    /// 下载中允许取消（下载是可以取消的，强制只用在更新上）。
+    /// 原生下载一个文件。
+    ///
+    /// ⚠️ 下载本身跑在 <see cref="DownloadManager"/> 里，**跟这个弹窗解绑**：
+    ///   · 点「看看别的」把弹窗收掉，下载在后台接着跑（以前收掉就等于取消，半个 G 的包只能干等）；
+    ///   · 想反悔就按「取消下载」，或者去左侧「任务进行」页取消；
+    ///   · 下完/失败会弹系统通知，通知点开直接跳到「任务进行」。
+    /// 弹窗还开着的时候跑完了，更省事：直接在这儿弹「下载完成」。
     /// </summary>
     public async void DownloadFile(string? url, string? suggestedName = null)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
 
+        var task = DownloadManager.Current.Start(url, suggestedName, suggestedName);
+        _downloadDialogTaskId = task.Id;   // 这条由本方法负责收尾，别让系统通知重复报一次
+
         var root = (Content as FrameworkElement)?.XamlRoot;
         if (root is null)
         {
-            OpenExternal(url);   // 没有 XamlRoot 就没法弹框，退回老办法
+            _downloadDialogTaskId = null;   // 弹不了框：任务照跑，收尾交给系统通知
             return;
         }
 
-        var fileName = DownloadService.ResolveFileName(url, suggestedName);
+        // 同一时刻只允许一个 ContentDialog：上一条下载的弹窗先收掉（它自己的下载转后台继续）
+        if (_downloadDialog is { } previous)
+        {
+            try { previous.Hide(); } catch { }
+            await Task.Yield();
+        }
 
         var bar = new ProgressBar { Minimum = 0, Maximum = 100, IsIndeterminate = true };
         var status = new TextBlock { Text = "正在连接…", FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
         var hint = new TextBlock
         {
-            Text = $"保存到：{DownloadService.DefaultDir}",
+            Text = $"保存到：{DownloadService.DefaultDir}\n急着用别的就先点「看看别的」，下载会转到后台继续。",
             FontSize = 11.5,
             Opacity = 0.6,
             TextWrapping = TextWrapping.Wrap,
@@ -1522,63 +1613,76 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(status);
         panel.Children.Add(hint);
 
-        using var cts = new CancellationTokenSource();
         var dialog = new ContentDialog
         {
             XamlRoot = root,
-            Title = "下载 " + fileName,
+            Title = "下载 " + task.Title,
             Content = panel,
-            CloseButtonText = "取消",
+            PrimaryButtonText = "看看别的",     // 只是把弹窗收掉，下载继续
+            CloseButtonText = "取消下载",
+            DefaultButton = ContentDialogButton.Primary,
         };
-        dialog.CloseButtonClick += (_, _) => cts.Cancel();
-        _ = dialog.ShowAsync();     // 不 await：我们自己控制什么时候收掉
+        dialog.CloseButtonClick += (_, _) => DownloadManager.Current.Cancel(task.Id);
 
-        var progress = new Progress<DownloadProgress>(p =>
+        void Sync()
         {
-            bar.IsIndeterminate = p.Indeterminate;
-            if (p.Indeterminate)
+            bar.IsIndeterminate = task.BarIndeterminate;
+            bar.Value = task.BarValue;
+            status.Text = task.StatusText;
+        }
+
+        void OnTaskChanged(object? _, PropertyChangedEventArgs __)
+        {
+            Sync();
+            // 跑完了（成功/失败/取消）→ 把进度框收掉，下面接着弹结果
+            if (task.IsFinished)
             {
-                status.Text = "已接收 " + p.SizeText + (p.SpeedText.Length > 0 ? "  ·  " + p.SpeedText : "");
+                try { dialog.Hide(); } catch { }
             }
-            else
+        }
+
+        task.PropertyChanged += OnTaskChanged;
+        Sync();
+
+        if (task.IsRunning)
+        {
+            _downloadDialog = dialog;
+            try { await dialog.ShowAsync(); }
+            catch { }
+            finally
             {
-                bar.Value = p.Percent;
-                status.Text = $"{p.Percent:0}%   {p.SizeText}" + (p.SpeedText.Length > 0 ? "  ·  " + p.SpeedText : "");
+                task.PropertyChanged -= OnTaskChanged;
+                if (ReferenceEquals(_downloadDialog, dialog)) _downloadDialog = null;
             }
-        });
-
-        DownloadedFile? file = null;
-        string? error = null;
-        try
-        {
-            file = await DownloadService.DownloadAsync(url, suggestedName, null, progress, cts.Token);
         }
-        catch (OperationCanceledException)
+        else
         {
-            // 用户自己取消的，不用报错
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-        }
-        finally
-        {
-            try { dialog.Hide(); } catch { }
+            // 极端情况：还没来得及弹就被下完了（只在"上一张弹窗还停着"那种空档里可能发生）
+            task.PropertyChanged -= OnTaskChanged;
         }
 
-        if (error is not null)
+        // 从这儿往后是**收尾**：完成 / 失败由下面自己弹，不再叠一条系统通知
+        _downloadDialogTaskId = null;
+
+        // 「看看别的」→ 任务还在跑：放手让它下，收尾交给系统通知
+        if (task.IsRunning) return;
+        if (task.State == DownloadState.Canceled) return;    // 自己取消的，不用报错
+
+        if (task.State == DownloadState.Failed)
         {
             await new ContentDialog
             {
                 XamlRoot = root,
                 Title = "下载失败",
-                Content = new TextBlock { Text = error, TextWrapping = TextWrapping.Wrap },
+                Content = new TextBlock
+                {
+                    Text = $"{task.Title}\n\n{task.Error}\n\n可以在左侧「任务进行」里点「重试」。",
+                    TextWrapping = TextWrapping.Wrap,
+                },
                 CloseButtonText = "知道了",
             }.ShowAsync();
             return;
         }
-
-        if (file is null) return;   // 取消了
 
         var done = new ContentDialog
         {
@@ -1586,7 +1690,7 @@ public sealed partial class MainWindow : Window
             Title = "下载完成",
             Content = new TextBlock
             {
-                Text = $"{file.FileName}\n{file.SizeText}\n\n{file.Path}",
+                Text = $"{task.FileName}\n{DownloadProgress.Size(task.Bytes)}\n\n{task.Path}",
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = "立即打开",
@@ -1598,10 +1702,10 @@ public sealed partial class MainWindow : Window
         switch (await done.ShowAsync())
         {
             case ContentDialogResult.Primary:
-                OpenFile(file.Path);
+                OpenFile(task.Path);
                 break;
             case ContentDialogResult.Secondary:
-                RevealFile(file.Path);
+                RevealFile(task.Path);
                 break;
         }
     }

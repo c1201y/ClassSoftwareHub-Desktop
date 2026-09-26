@@ -14,19 +14,15 @@
 
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
-                <FontIcon Glyph="&#xE72B;" FontSize="14" />
-            </Button>
-            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+            <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="全屏时钟" FontSize="24" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="把屏幕变成一面大钟 —— 考试、自习时抬头就能看时间。默认跟随主题的纯黑白；可以放张背景图，再叠一层蒙版或亚克力、云母材质。" />
+                           Text="将屏幕变为大型时钟，考试、自习时抬头即可查看时间。默认使用跟随主题的黑白配色，也可设置背景图片并叠加蒙版、亚克力或云母材质。" />
             </StackPanel>
-            <Button Grid.Column="2" Content="在工具窗口打开" VerticalAlignment="Center"
+            <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
                     Click="OpenPalette_Click" ToolTipService.ToolTip="开一个小置顶窗，随手看时间" />
         </Grid>
 
@@ -70,7 +66,7 @@
                         </Border>
 
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="把图片直接拖进上面的框就能当背景，也可以点下面的「选择图片」。" />
+                                   Text="可将图片直接拖入上方区域作为背景，也可点击下方「选择图片」。" />
 
                         <Button x:Name="FullscreenButton" Content="全屏显示" Click="Fullscreen_Click"
                                 Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" />
@@ -80,7 +76,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Content="校准系统时间" Click="TimeSync_Click" />
                             <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap" VerticalAlignment="Center"
-                                       Text="时钟读的是本机系统时间，显示不准就去 time.is 对一下时。" />
+                                       Text="时钟使用本机系统时间，如显示不准可访问 time.is 校准。" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

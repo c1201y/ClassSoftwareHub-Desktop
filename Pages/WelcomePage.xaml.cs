@@ -28,9 +28,9 @@ public sealed partial class WelcomePage : Page
 
         var title = ui.AppTitle.Length > 0 ? ui.AppTitle : "电教委员常用软件下载站";
         HomeTitleText.Text = title + " • 桌面版";
-        SiteVersionText.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
-        ToolTipService.SetToolTip(SiteVersionText, "网站版本：" + ui.ShortVersion);
-        AppVersionText.Text = "网站版本：" + ui.ShortVersion;
+        // 只显示软件自己的版本（前缀 VersionPrefix + ShellVersion，如 dv1.1.0-insider1.0 或正式版 dv1.1.0）。
+        // ⚠️ 别再往这里挂"网站版本"——软件是独立发布物，不摆成网站版本的附属品（2026-09-26 删）。
+        ShellVersionText.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
 
         LoadBanner();
         BuildQuickInfo();
@@ -42,7 +42,16 @@ public sealed partial class WelcomePage : Page
 
     private void Quick_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is QuickLink link && link.Url.Length > 0)
+        if (e.ClickedItem is not QuickLink link) return;
+
+        // 带 Tag 的是**应用内页面**（目前只有「更新日志」）：走导航栏那套，左侧高亮也会跟过去
+        if (link.Tag.Length > 0)
+        {
+            App.MainWindow?.Shell.NavigateTo(link.Tag);
+            return;
+        }
+
+        if (link.Url.Length > 0)
             App.MainWindow?.OpenExternal(link.Url);
     }
 
@@ -164,6 +173,22 @@ public sealed partial class WelcomePage : Page
                 break;
             case "tools":
                 App.MainWindow?.Shell.NavigateTo("tools");
+                break;
+            case "sidebar":
+                App.MainWindow?.Shell.NavigateTo("sidebar");
+                break;
+            case "experimental":
+                // 走专用入口：除了切到总览页，还要把导航里的分组展开（从外面跳进来时看不出里面有子项）
+                App.MainWindow?.Shell.NavigateToExperimental();
+                break;
+            case "submit":
+                App.MainWindow?.Shell.NavigateTo("submit");
+                break;
+            case "feedback":
+                App.MainWindow?.Shell.NavigateTo("feedback");
+                break;
+            case "settings":
+                App.MainWindow?.Shell.NavigateTo("settings");
                 break;
         }
     }

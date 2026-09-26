@@ -59,6 +59,15 @@ public sealed class AppSettings
     /// </summary>
     public string[] SidebarModuleIds { get; set; } = { "pick-number", "timer", "stopwatch", "clock" };
 
+    /// <summary>
+    /// 侧边栏「新模块补入」的批次号。
+    /// 设置里存的是一份**用户自己勾选好的**模块清单，光在代码里加新模块它不会自己冒出来，
+    /// 于是升级后用户会发现"我要的东西没在侧边栏上"。靠这个标记做**一次性**补入
+    /// （见 <see cref="SettingsStore.EnsureNewSidebarModules"/>）。
+    /// ⚠️ 有它才能保证「用户主动删掉的模块不会被下次启动又塞回来」。
+    /// </summary>
+    public int SidebarModulesRevision { get; set; }
+
     public string WebView2MissingChoice { get; set; } = "";    // "" | install | browser
 
     /// <summary>截图后自动存一份原图（默认开）。目录见 ShotSaveDir，空 = 桌面。</summary>
@@ -112,37 +121,201 @@ public sealed class SettingsStore
 
     public AppSettings Current { get; private set; } = new();
 
+    /// <summary>
+    /// 上次 Load 是不是因为「非 JSON 问题」失败了（多半是文件被临时占用 / 权限）。
+    ///
+    /// 为什么要记这一笔：Load 失败时内存里是默认值，若放任下一次 Save() 写盘，
+    /// 就会把用户**完好的**旧设置永久覆盖掉 —— 而且用户只是想切个主题而已。
+    /// 所以失败之后，Save() 会先尝试把文件读回来，读得到才允许写。
+    /// </summary>
+    private bool _loadFailed;
+
     public void Load()
     {
         try
         {
-            if (File.Exists(FilePath))
-            {
-                var json = File.ReadAllText(FilePath);
+            var json = ReadTolerant();
+            if (json is not null)
                 Current = JsonSerializer.Deserialize<AppSettings>(json, JsonOpts) ?? new AppSettings();
-            }
+            _loadFailed = false;
         }
-        catch
+        catch (JsonException)
         {
+            // 只有「内容真的坏了」才退回默认值。坏文件先留一份 .bad ——
+            // 用户可能想找回里面的设置，直接覆盖就再也拿不回来了。
+            KeepCorruptCopy();
             Current = new AppSettings();
+            _loadFailed = false;
+        }
+        catch (Exception ex)
+        {
+            // IO / 权限类异常：**不动**内存里的值，也标记住不让后面盲目写盘
+            _loadFailed = true;
+            Log($"读取设置失败，本次不覆盖原文件: {ex.Message}");
         }
 
         // 用户没自己挑过通道时，通道跟着「这个安装包是哪条线」走
         // （预览版安装包默认收预发布，正式版安装包默认收 Latest；老 settings.json 从这里也能纠正过来）
         if (!Current.UpdateChannelSetByUser)
             Current.UpdateChannel = Core.ShellConfig.DefaultUpdateChannel;
+
+        // 读盘失败时内存里是默认值，这时候别去动用户文件（Save 自己也会拦一道）
+        if (!_loadFailed) EnsureNewSidebarModules();
+    }
+
+    /// <summary>
+    /// 把「后来才加进侧边栏的模块」补给老用户，每批只补一次（用 <see cref="AppSettings.SidebarModulesRevision"/> 记账）。
+    ///   · revision 1（音量调节）：插在讲台动作类前面（工具 → 音量 → 动作），不打断用户已经排好的顺序；
+    ///   · revision 2（屏幕亮度，2026-09-26）：紧挨着音量后面放（这俩是一对儿），
+    ///     用户如果自己把音量删了，就还是插在动作类前面。
+    /// </summary>
+    private void EnsureNewSidebarModules()
+    {
+        var changed = false;
+
+        if (Current.SidebarModulesRevision < 1)
+        {
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+
+                if (!list.Contains("volume"))
+                {
+                    var at = list.FindIndex(id => Data.SidebarModules.Find(id)?.Kind == Data.SidebarModuleKinds.Action);
+                    if (at < 0) list.Add("volume");
+                    else list.Insert(at, "volume");
+                    Current.SidebarModuleIds = list.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 1;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 2)
+        {
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+
+                if (!list.Contains("brightness"))
+                {
+                    var at = list.IndexOf("volume");                       // 有音量就跟它并排
+                    if (at >= 0) list.Insert(at + 1, "brightness");
+                    else
+                    {
+                        at = list.FindIndex(id => Data.SidebarModules.Find(id)?.Kind == Data.SidebarModuleKinds.Action);
+                        if (at < 0) list.Add("brightness");
+                        else list.Insert(at, "brightness");
+                    }
+                    Current.SidebarModuleIds = list.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 2;
+            changed = true;
+        }
+
+        // 标记必须落盘，否则下次启动又会"补"一遍，用户删了也白删
+        if (changed) Save();
+    }
+
+    /// <summary>
+    /// 宽容读取：用 FileShare.ReadWrite 打开。
+    /// 默认的 File.ReadAllText 只给 FileShare.Read，安全软件正在扫这个文件时会直接抛异常，
+    /// 然后就被当成"设置坏了"退回默认值 —— 这个失败太容易发生了。
+    /// </summary>
+    private string? ReadTolerant()
+    {
+        if (!File.Exists(FilePath)) return null;
+
+        using var fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(fs);
+        return reader.ReadToEnd();
     }
 
     public void Save()
     {
         try
         {
+            // 上次没读成功：写盘前再试一次。读得到说明文件其实是好的，先用它覆盖内存，
+            // 免得把用户的旧设置冲掉；还是读不到就这轮先不写。
+            if (_loadFailed)
+            {
+                try
+                {
+                    var existing = ReadTolerant();
+                    if (existing is not null)
+                    {
+                        Current = JsonSerializer.Deserialize<AppSettings>(existing, JsonOpts) ?? Current;
+                        _loadFailed = false;
+                    }
+                }
+                catch
+                {
+                    Log("设置文件仍然读不到，跳过本次保存");
+                    return;
+                }
+            }
+
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(Current, JsonOpts));
+
+            // 原子替换：先写临时文件，再整体换过去。
+            // 直接 File.WriteAllText 会**先截断原文件**，写到一半断电 / 崩溃就留下半截 JSON，
+            // 下次启动直接解析失败、设置全丢 —— 这个窗口必须堵掉。
+            var json = JsonSerializer.Serialize(Current, JsonOpts);
+            var tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, json);
+
+            if (File.Exists(FilePath))
+            {
+                // File.Replace 是原子的，并且会顺手留一份 .bak（出事了还能人工找回）
+                File.Replace(tmp, FilePath, FilePath + ".bak", ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(tmp, FilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            // 设置写失败不影响主流程
+            Log("保存设置失败: " + ex.Message);
+        }
+    }
+
+    private void KeepCorruptCopy()
+    {
+        try
+        {
+            if (File.Exists(FilePath))
+                File.Copy(FilePath, FilePath + ".bad", overwrite: true);
         }
         catch
         {
-            // 设置写失败不影响主流程
+            // 留不下副本也不能影响启动
+        }
+    }
+
+    private static void Log(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            File.AppendAllText(Path.Combine(Dir, "settings.log"),
+                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+        }
+        catch
+        {
+            // 日志写不进去就算了
         }
     }
 }

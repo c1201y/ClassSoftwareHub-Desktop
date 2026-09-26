@@ -24,7 +24,7 @@ namespace ClassSoftwareHub.Desktop.Views;
 /// 屏幕边缘侧边栏：贴在屏幕的某一条边上（上下左右都能放）。
 /// 全屏放 PPT / 视频时够不到任务栏，从边上点一下就能用工具。
 ///   · 收起 = 一小截圆角抓手（亚克力底）：点一下展开；**按住可以拖**着挪位置、或拖到别的边
-///   · 展开 = 四个工具 + 「收起 / 位置复原 / 隐藏」（展开状态下不能拖，免得跟点按钮打架）
+///   · 展开 = 工具 + 「收起 / 常驻 / 位置复原 / 隐藏 / 打开应用」（展开状态下不能拖，免得跟点按钮打架）
 /// 位置（贴哪条边 + 沿边位置）会记在设置里；「位置复原」= 回到右边的居中位置。
 /// 置顶、不进任务栏、无标题栏、不能缩放/最大化/最小化。
 ///
@@ -43,7 +43,8 @@ public sealed partial class ToolSidebarWindow : Window
 
     private AppWindow? _appWindow;
     private bool _expanded;
-    private int _collapseEpoch;                            // 收起淡出的批次号：展开/再次收起都能把它作废
+
+    private int _collapseEpoch;                            // 收起滑出/抓手淡入的批次号：展开、再次收起都能把它作废
     private bool _shownOnce;
     private bool _visible;
 
@@ -51,9 +52,6 @@ public sealed partial class ToolSidebarWindow : Window
 
     /// <summary>展开滑动用的按帧计时器（滑完置空）。</summary>
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _slideTimer;
-
-    /// <summary>窗口滑动动画正在跑（这期间别开始拖拽，不然 _dragOrigin 会算出乱位置）。</summary>
-    private bool _sliding;
 
     /// <summary>
     /// 滑动动画的"代次"。每次状态变化（收起/展开/拖动/隐藏）都 +1，让**还在跑的那一波动画立刻作废**。
@@ -159,6 +157,26 @@ public sealed partial class ToolSidebarWindow : Window
     }
 
     public static void HideSidebar() => _instance?.HideSelf();
+
+    /// <summary>
+    /// 音量浮窗（主音量 + 合成器）**全部收干净了**叫一声：边条这时候也该跟着收回去。
+    ///
+    /// 为什么必须有它：点「音量」时我们压住了自动收起（不然浮窗一抢焦点边条就缩），
+    /// 那份压制一旦放开，边条自己的"失焦收起"**早就在被压制时错过了**，
+    /// 结果就是"浮窗收了两键也缩了、边条却赖着不动"。所以在这儿显式叫它收。
+    /// 钉了常驻（SidebarPinned）的不收 —— 用户明确要它留着。
+    /// </summary>
+    public static void CollapseAfterVolumeFlyoutsClosed()
+    {
+        try
+        {
+            var inst = _instance;
+            if (inst is null || !inst._visible || !inst._expanded) return;
+            if (App.Settings.Current.SidebarPinned) return;
+            inst.Collapse();
+        }
+        catch { }
+    }
 
     /// <summary>
     /// 「截屏」专用的收起：把边条收成那条细把手（**不是隐藏**），免得它被照进截图里。
@@ -306,6 +324,10 @@ public sealed partial class ToolSidebarWindow : Window
         if (!_visible) return;
         StopSlide();
         _visible = false;
+
+        // 音量浮窗（主音量 + 合成器）跟着一起收
+        VolumeFlyoutGroup.CloseAll();
+
         try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); } catch { }
     }
 
@@ -323,14 +345,18 @@ public sealed partial class ToolSidebarWindow : Window
     private void Expand()
     {
         StopSlide();                                      // 掐掉上一次没跑完的（防连点/竞态）
-        _collapseEpoch++;                                 // 取消可能还在跑的"收起淡出"
+        _collapseEpoch++;                                 // 取消可能还在跑的"收起滑出/抓手淡入"
         _expanded = true;
         ResetPanelOpacity();
         CollapsedView.Visibility = Visibility.Collapsed;
         ExpandedView.Visibility = Visibility.Visible;
-        ApplySize();
-        MoveToEdge();
-        SlideInFromEdge();                                // 整个窗口从贴的那条边滑进来（见下面说明）
+        ApplyScrollLimit();                               // 先把滚动范围算好；尺寸交给滑入动画一帧设到位
+
+        // ⚠️ 这里**不要**再单独 ApplySize() + MoveToEdge()：
+        //    那会让窗口先出现在"终点位置"并画出一帧展开态，紧接着又被滑入动画挪到起点 ——
+        //    肉眼就是"闪一下，然后再滑"。滑入动画自己会用**一次** MoveAndResize
+        //    把"起点位置 + 展开尺寸"同时设下去（2026-09-26 优化）。
+        SlideInFromEdge();
         Touch();
     }
 
@@ -347,34 +373,88 @@ public sealed partial class ToolSidebarWindow : Window
             return;
         }
 
-        _expanded = false;                                // 先立旗：淡出期间自动收起那条路别再来一遍
+        _expanded = false;                                // 先立旗：滑出期间自动收起那条路别再来一遍
         var epoch = ++_collapseEpoch;
-        if (SlideOutToEdge(() => { if (epoch == _collapseEpoch) FinishCollapse(); })) return;
-        FinishCollapse();
+        // 滑完才真收，而且要让抓手**淡入**：滑出终点在屏幕外，小条直接"啪"一下冒出来太生硬
+        if (SlideOutToEdge(() => { if (epoch == _collapseEpoch) FinishCollapse(fadeIn: true); })) return;
+        FinishCollapse();                                 // 没有窗口可滑（极少数）：当帧收干净，不做动画
     }
 
 
-    /// <summary>真收：换回抓手 + 挪窗口。中途用户又展开了就别收（_expanded 已被置回 true）。</summary>
-    private void FinishCollapse()
+    /// <summary>
+    /// 真收：换回抓手 + 落位。中途用户又展开了就别收（_expanded 已被置回 true）。
+    /// </summary>
+    /// <param name="fadeIn">
+    /// true = 抓手淡入（**走滑动动画那条路用它**：面板刚滑出屏幕，小条淡入比"啪一下出现"自然）。
+    /// false = 当帧就位（截图前、窗口刚出现时那种要立刻收干净的场合，不能有任何可见动画）。
+    /// </param>
+    private void FinishCollapse(bool fadeIn = false)
     {
         if (_expanded) return;
+
+        // 先按住透明度，等落位之后再放出来 —— 顺序反了会先闪一帧不透明的小条
+        if (fadeIn) SetPanelOpacity(0f);
+
         ExpandedView.Visibility = Visibility.Collapsed;
         CollapsedView.Visibility = Visibility.Visible;
-        ResetPanelOpacity();
-        ApplySize();
-        MoveToEdge();
+
+        // 一次到位：收起尺寸 + 贴边位置。
+        // 滑出动画已经把**整个窗口**推出屏幕外了，所以这一步的"变身"（尺寸 92×450 → 20×110、
+        // 内容换视图）用户在屏幕上看不到 —— 不会再出现"没滑出去就突然缩一下"（2026-09-26 修）。
+        try
+        {
+            if (_appWindow is not null)
+            {
+                var size = CollapsedSize();
+                var pos = EdgePosition(size.Width, size.Height);
+                _appWindow.MoveAndResize(new RectInt32(pos.X, pos.Y, size.Width, size.Height));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log("收尾落位失败: " + ex.Message);
+        }
+
+        if (fadeIn) FadePanelToOpaque(150);
+        else ResetPanelOpacity();
+
         ReassertCollapsed();
     }
 
-    private void ResetPanelOpacity()
+    private void ResetPanelOpacity() => SetPanelOpacity(1f);
+
+    /// <summary>把整块面板的透明度按住（不走动画）。收起后要给抓手"淡入"，就先用它把面板压到 0。</summary>
+    private void SetPanelOpacity(float value)
     {
         try
         {
             var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(Panel);
             visual.StopAnimation("Opacity");
-            visual.Opacity = 1f;
+            visual.Opacity = value;
         }
         catch { }
+    }
+
+    /// <summary>面板从当前透明度淡到不透明（收起后让小条"浮现"而不是"闪现"）。</summary>
+    private void FadePanelToOpaque(double ms)
+    {
+        try
+        {
+            var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(Panel);
+            var compositor = visual.Compositor;
+            visual.StopAnimation("Opacity");
+
+            var fade = compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1f, 1f, compositor.CreateCubicBezierEasingFunction(
+                new Vector2(0.2f, 0f), new Vector2(0f, 1f)));      // 缓出：一开始就明显起来，尾巴柔和
+            fade.Duration = TimeSpan.FromMilliseconds(ms);
+            visual.StartAnimation("Opacity", fade);
+        }
+        catch (Exception ex)
+        {
+            Log("抓手淡入失败: " + ex.Message);
+            ResetPanelOpacity();                            // 出问题就退回"直接可见"，别留个透明的边条
+        }
     }
 
     /// <summary>
@@ -389,8 +469,18 @@ public sealed partial class ToolSidebarWindow : Window
             try
             {
                 if (_expanded || _appWindow is null) return;
-                ApplySize();
-                MoveToEdge();
+
+                // ⚠️ 已经落对了就**什么都别做**。多挪一次窗口就多一帧重绘 ——
+                //    动画刚结束那一下最容易看出抖，这里不能无脑再摆一次（2026-09-26 优化）。
+                var size = CollapsedSize();
+                var pos = EdgePosition(size.Width, size.Height);
+                var now = _appWindow.Size;
+                var at = _appWindow.Position;
+                if (now.Width == size.Width && now.Height == size.Height
+                    && Math.Abs(at.X - pos.X) <= 2 && Math.Abs(at.Y - pos.Y) <= 2) return;
+
+                Log("兜底落位：尺寸/位置没对上，纠一次");
+                _appWindow.MoveAndResize(new RectInt32(pos.X, pos.Y, size.Width, size.Height));
             }
             catch (Exception ex)
             {
@@ -468,6 +558,22 @@ public sealed partial class ToolSidebarWindow : Window
         App.Settings.Current.SidebarEnabled = false;
         App.Settings.Save();
         HideSelf();
+    }
+
+    /// <summary>
+    /// 打开应用：把**主窗口**叫出来（可能收在托盘里、也可能只是最小化了）。
+    /// 侧边栏是独立小窗，经常是屏幕上唯一露着的东西 —— 给老师留一条回主界面的近路。
+    /// </summary>
+    private void OpenApp_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            App.MainWindow?.ShowFromTray();
+        }
+        catch (Exception ex)
+        {
+            Log("打开主界面失败: " + ex.Message);
+        }
     }
 
     /// <summary>设置里的模块清单变了（侧边布局页改完调它）：重建按钮 + 重新量尺寸贴边。</summary>
@@ -584,10 +690,14 @@ public sealed partial class ToolSidebarWindow : Window
             // 讲台动作：按一下就干活（放大镜是"按住"型，走的是按下/松手那条路，不走这里）
             if (m.Kind == SidebarModuleKinds.Action)
             {
+                // ⚠️ 「要先问一句」的动作（关全部）不能按老办法在 Run 之后就还焦点：
+                //    侧边栏一失活，刚弹出来的确认面板就会被系统按"点了别处"关掉。
+                //    Run 里已经按 AsksFirst 区分过了，这里只管把面板弹出来。
+                var asks = TeachingActions.AsksFirst(m.Id);
                 var hint = TeachingActions.Run(m.Id);
+
                 if (hint is { Length: > 0 })
                 {
-                    // 这个动作要先问一句（比如「关全部」）：
                     // ① 边条**不许收**（失焦/空闲两条自动收起路都要压住，否则他还得重新点开）；
                     // ② 用**原生 Flyout** 弹确认（框架自带的描边/圆角/投影 + 点别处自动收）。
                     SuppressAutoCollapse = true;
@@ -595,20 +705,42 @@ public sealed partial class ToolSidebarWindow : Window
                     var title = lines.Length > 0 ? lines[0].Trim() : hint;
                     var body = lines.Length > 1 ? lines[1].Trim() : null;
 
-                    ShowConfirmFlyout(b, title, body, "确定关闭", () =>
+                    var confirmed = false;
+
+                    // ⚠️ 不只是"待确认"能走到这儿：出错时也会有提示（例如"截屏启动失败，看日志"）。
+                    //    那种没什么可确认的，给个「知道了」就行 —— 别摆红色危险键、也别去执行什么。
+                    ShowConfirmFlyout(b, title, body, asks ? "确定关闭" : "知道了", () =>
                     {
+                        if (!asks) return;                 // 纯提示：按掉就完事
+                        confirmed = true;
                         SuppressAutoCollapse = false;
                         TeachingActions.ConfirmPending(m.Id);
                         Touch();
-                    });
+                    },
+                    onClosed: () =>
+                    {
+                        // 面板没了：只有"没真执行"（取消 / 超时 / 点别处）才把焦点还给用户原来的窗口，
+                        // 别打断讲课。真执行了就不还 —— 那些窗口刚被关掉，还给谁都不对。
+                        if (!confirmed) TeachingActions.RefocusPrevious();
+                    },
+                    dangerStyle: asks);
 
-                    TeachingActions.RefocusPrevious();     // Flyout 显示时可能把焦点拽走，还回去
+                    // ⚠️ 这里**绝不能**再调 RefocusPrevious()：那会立刻把侧边栏踢下台，
+                    //    刚弹出的面板当场被关掉 —— 这正是"前台有窗口时按了没反应"的直接原因。
                 }
                 else
                 {
                     HideConfirmFlyout();
                     Collapse();
                 }
+                return;
+            }
+
+            // 贴边展开的常驻面板（音量 / 屏幕亮度）：挨着边条长一栏，不跳窗口、不开新窗
+            if (m.Kind == SidebarModuleKinds.Panel)
+            {
+                if (m.Id == "brightness") ToggleBrightness();
+                else ToggleVolume();
                 return;
             }
 
@@ -624,6 +756,29 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
+
+    // ── 贴边面板（音量 / 屏幕亮度）──────────────────────────────────────────
+
+    /// <summary>
+    /// 「音量」模块的入口：**边条不收**（浮窗是挨着边条长出来的一栏，边条留着才像一个整体），
+    /// 直接把主音量浮窗开在边条内侧；浮窗里再点「展开」看合成器。
+    /// ⚠️ 必须先把自动收起压住：浮窗一显形就抢焦点，边条会以为自己"失焦"当场缩回去。
+    /// </summary>
+    private void ToggleVolume()
+    {
+        SuppressAutoCollapse = true;
+        VolumeWindow.Toggle(VolumeWindow.Target.Volume);
+    }
+
+    /// <summary>
+    /// 「屏幕亮度」模块：跟音量**同一个浮窗**（换成亮度那一栏：下面那颗键是自动亮度，没有二级浮窗）。
+    /// 其余（挨着边条、边条不收）完全一样。
+    /// </summary>
+    private void ToggleBrightness()
+    {
+        SuppressAutoCollapse = true;
+        VolumeWindow.Toggle(VolumeWindow.Target.Brightness);
+    }
 
     private void EndHold(string id)
     {
@@ -641,8 +796,12 @@ public sealed partial class ToolSidebarWindow : Window
     //    默认是 true → Flyout 会被限制在**自己窗口**的边界内，而边条只有 92dip 宽，
     //    弹出来会被剪成一条没法用。框架自己在 ComboBox/Flyout 里也是设 false 的。
 
-    /// <summary>在边条旁边弹一个原生确认 Flyout（红底确定键）。</summary>
-    private void ShowConfirmFlyout(Button? anchor, string title, string? body, string okText, Action onConfirm)
+    /// <summary>
+    /// 在边条旁边弹一个原生确认 Flyout（红底确定键）。
+    /// `onClosed`：面板消失后调（不管用户是按了红键、按取消、点别处还是超时自动收）。
+    /// </summary>
+    private void ShowConfirmFlyout(Button? anchor, string title, string? body, string okText, Action onConfirm,
+                                   Action? onClosed = null, bool dangerStyle = true)
     {
         try
         {
@@ -680,27 +839,34 @@ public sealed partial class ToolSidebarWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Right,
             };
 
-            var cancel = new Button { Content = "取消", FontSize = 13, MinWidth = 76, Padding = new Thickness(0, 6, 0, 6) };
-            cancel.Click += (_, _) => HideConfirmFlyout();
-            buttons.Children.Add(cancel);
+            // 纯提示（非危险动作）不给「取消」——那会和「知道了」语义重复
+            if (dangerStyle)
+            {
+                var cancel = new Button { Content = "取消", FontSize = 13, MinWidth = 76, Padding = new Thickness(0, 6, 0, 6) };
+                cancel.Click += (_, _) => HideConfirmFlyout();
+                buttons.Children.Add(cancel);
+            }
 
             var danger = new Button { Content = okText, FontSize = 13, MinWidth = 88, Padding = new Thickness(0, 6, 0, 6) };
-            // 红底危险键：这条资源链上按钮的刷子全改红，否则一 hover/按下就变回主题灰
-            var red = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xC4, 0x2B, 0x1C));
-            var redHover = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xD1, 0x43, 0x35));
-            var redPressed = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xA8, 0x22, 0x16));
-            var white = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0xFF, 0xFF));
-            var clear = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-            danger.Resources["ButtonBackground"] = red;
-            danger.Resources["ButtonBackgroundPointerOver"] = redHover;
-            danger.Resources["ButtonBackgroundPressed"] = redPressed;
-            danger.Resources["ButtonBackgroundDisabled"] = redPressed;
-            danger.Resources["ButtonForeground"] = white;
-            danger.Resources["ButtonForegroundPointerOver"] = white;
-            danger.Resources["ButtonForegroundPressed"] = white;
-            danger.Resources["ButtonBorderBrush"] = clear;
-            danger.Resources["ButtonBorderBrushPointerOver"] = clear;
-            danger.Resources["ButtonBorderBrushPressed"] = clear;
+            if (dangerStyle)
+            {
+                // 红底危险键：这条资源链上按钮的刷子全改红，否则一 hover/按下就变回主题灰
+                var red = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xC4, 0x2B, 0x1C));
+                var redHover = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xD1, 0x43, 0x35));
+                var redPressed = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xA8, 0x22, 0x16));
+                var white = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0xFF, 0xFF));
+                var clear = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+                danger.Resources["ButtonBackground"] = red;
+                danger.Resources["ButtonBackgroundPointerOver"] = redHover;
+                danger.Resources["ButtonBackgroundPressed"] = redPressed;
+                danger.Resources["ButtonBackgroundDisabled"] = redPressed;
+                danger.Resources["ButtonForeground"] = white;
+                danger.Resources["ButtonForegroundPointerOver"] = white;
+                danger.Resources["ButtonForegroundPressed"] = white;
+                danger.Resources["ButtonBorderBrush"] = clear;
+                danger.Resources["ButtonBorderBrushPointerOver"] = clear;
+                danger.Resources["ButtonBorderBrushPressed"] = clear;
+            }
             buttons.Children.Add(danger);
 
             Grid.SetRow(buttons, 1);
@@ -716,11 +882,14 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 if (ReferenceEquals(_confirmFlyout, flyout)) _confirmFlyout = null;
                 SuppressAutoCollapse = false;            // 面板没了 → 恢复自动收起
+                try { onClosed?.Invoke(); } catch (Exception ex) { Log("确认面板收尾失败: " + ex.Message); }
             };
             danger.Click += (_, _) =>
             {
-                flyout.Hide();
+                // ⚠️ 顺序要紧：先把"确认"做完（onConfirm 会把 confirmed 立起来），再收面板。
+                //    反过来的话，Closed 里的收尾会误当成"用户取消了"而去抢焦点。
                 try { onConfirm(); } catch (Exception ex) { Log("确认动作失败: " + ex.Message); }
+                flyout.Hide();
             };
 
             _confirmFlyout = flyout;
@@ -746,6 +915,7 @@ public sealed partial class ToolSidebarWindow : Window
         catch (Exception ex)
         {
             Log("确认面板弹出失败: " + ex.Message);
+            SuppressAutoCollapse = false;            // 面板没弹出来 → 别把"禁止收起"这个旗一直立着
         }
     }
 
@@ -1090,18 +1260,18 @@ public sealed partial class ToolSidebarWindow : Window
         if (_appWindow is null) return;
         StopSlide();                                     // 上一次没滑完就再展开：作废重来
 
-        var finalPos = _appWindow.Position;
-        var half = (IsFlat ? _appWindow.Size.Height : _appWindow.Size.Width) / 2.0;
+        var size = PlannedSize();                        // 展开尺寸（此处 _expanded 已经置为 true）
+        var finalPos = EdgePosition(size.Width, size.Height);
 
-        var start = Edge switch
-        {
-            "left" => new PointInt32(finalPos.X - (int)half, finalPos.Y),
-            "top" => new PointInt32(finalPos.X, finalPos.Y - (int)half),
-            "bottom" => new PointInt32(finalPos.X, finalPos.Y + (int)half),
-            _ => new PointInt32(finalPos.X + (int)half, finalPos.Y)
-        };
+        // 起步只推"半块"：保证窗口还有一半留在屏幕里。整块挪到屏幕外的窗口
+        // DWM 常常不给它刷帧，那滑进来的第一帧会发虚（见方法注释）。
+        var start = OutwardOffset(finalPos, (int)((IsFlat ? size.Height : size.Width) / 2.0));
 
-        _appWindow.Move(start);
+        // 一次把"起点位置 + 展开尺寸"设下去。分成 Resize + Move 两次的话，
+        // 中间那一帧会被系统画出来 —— 那就是"闪一下再滑"的来源（2026-09-26 优化）。
+        try { _appWindow.MoveAndResize(new RectInt32(start.X, start.Y, size.Width, size.Height)); }
+        catch (Exception ex) { Log("滑入落位失败: " + ex.Message); }
+
         TweenWindow(start, finalPos, 220);
     }
 
@@ -1137,7 +1307,6 @@ public sealed partial class ToolSidebarWindow : Window
         };
 
         _slideTimer = timer;
-        _sliding = true;
         timer.Start();
     }
 
@@ -1146,16 +1315,18 @@ public sealed partial class ToolSidebarWindow : Window
     {
         if (_appWindow is null) return false;
         StopSlide();
+
         var from = _appWindow.Position;
-        var half = (IsFlat ? _appWindow.Size.Height : _appWindow.Size.Width) / 2.0;
-        var to = Edge switch
-        {
-            "left" => new PointInt32(from.X - (int)half, from.Y),
-            "top" => new PointInt32(from.X, from.Y - (int)half),
-            "bottom" => new PointInt32(from.X, from.Y + (int)half),
-            _ => new PointInt32(from.X + (int)half, from.Y)
-        };
-        TweenWindow(from, to, 200, done);
+        var size = _appWindow.Size;
+
+        // ⚠️ 必须滑到**整个窗口都在屏幕外**（推的距离 = 当前厚度 + 2px 余量）。
+        //    以前只推"展开尺寸 − 收起尺寸"（92−20=72），滑完还剩 20dip 的展开态残片贴在屏幕边上，
+        //    紧接着又被 Resize 成抓手 —— 肉眼看就是"没滑出去就突然变身"，很出戏（2026-09-26 修）。
+        //    现在滑到底时屏幕边缘是干净的，"变身"那一下（92×450 → 20×110）用户在屏幕外看不到，
+        //    抓手再淡入接上，就顺了。
+        var thickness = IsFlat ? size.Height : size.Width;
+        var to = OutwardOffset(from, thickness + 2);
+        TweenWindow(from, to, 240, done);
         return true;
     }
 
@@ -1164,7 +1335,6 @@ public sealed partial class ToolSidebarWindow : Window
         _slideEpoch++;                                    // 让在跑的那一波作废（关键：竞态的根治）
         _slideTimer?.Stop();
         _slideTimer = null;
-        _sliding = false;
     }
 
     /// <summary>旧的内容滑入（只动 Panel 里的东西，窗口先铺开）——现在不用了，留着备用。</summary>
@@ -1270,9 +1440,10 @@ public sealed partial class ToolSidebarWindow : Window
     }
 
     /// <summary>
-    /// 底下三个按钮（收起 / 位置复原 / 隐藏）的内容：
+    /// 底下**五个**按钮（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用）的内容：
     /// 贴左右边是**竖条** → 图标在上、文字在下（跟工具块一个样式）；
     /// 贴上/下边是**横条**（面板只有 112 高）→ 左图标、右文字，竖排会被裁掉。
+    /// ⚠️ 「打开应用」那颗是**图片图标**（软件自己的图标），走 SetFooterImageButton，别跟字形混。
     /// </summary>
     private void ApplyFooterContent(bool flat)
     {
@@ -1280,7 +1451,69 @@ public sealed partial class ToolSidebarWindow : Window
         SetFooterButton(PinButton, "\uE718", "常驻", flat, out _pinIcon);
         SetFooterButton(ResetButton, "\uE777", "位置复原", flat, out _);
         SetFooterButton(HideButton, "\uED1A", "隐藏", flat, out _);
+        SetFooterImageButton(OpenAppButton, "打开应用", flat);
         UpdatePinVisual();
+    }
+
+    /// <summary>
+    /// 底排那颗「打开应用」：版式跟 SetFooterButton 一模一样，只是把字形换成**软件自己的图标**
+    /// （Assets\AppIcon-512.png，内嵌资源；Nick 2026-09-26 要求：这颗不要用别的图标）。
+    /// </summary>
+    private static void SetFooterImageButton(Button b, string label, bool flat)
+    {
+        var text = new TextBlock
+        {
+            Text = label,
+            FontSize = flat ? 11 : 10.5,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var img = new Image
+        {
+            Source = AppIconImage(),
+            Width = flat ? 14 : 17,
+            Height = flat ? 14 : 17,
+            Stretch = Stretch.Uniform,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        if (flat)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+            row.Children.Add(img);
+            row.Children.Add(text);
+            b.Content = row;
+        }
+        else
+        {
+            text.HorizontalAlignment = HorizontalAlignment.Center;
+            var col = new StackPanel { Spacing = 2 };
+            col.Children.Add(img);
+            col.Children.Add(text);
+            b.Content = col;
+        }
+    }
+
+    private static ImageSource? _appIconImage;
+
+    /// <summary>软件自己的图标（内嵌 AppIcon-512.png，只解一次、缓存住）。解不开就返回 null（那颗按钮只剩文字，不会崩）。</summary>
+    private static ImageSource? AppIconImage()
+    {
+        if (_appIconImage is not null) return _appIconImage;
+        try
+        {
+            var path = EmbeddedAssets.ExtractToCache("AppIcon-512.png", "AppIcon-512.png");
+            if (string.IsNullOrEmpty(path)) return null;
+            var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+            bmp.DecodePixelWidth = 64;          // 底排就 17px 大，解 64 足够，省内存
+            bmp.UriSource = new Uri(path);
+            _appIconImage = bmp;
+        }
+        catch (Exception ex)
+        {
+            Log("解应用图标失败: " + ex.Message);
+        }
+        return _appIconImage;
     }
 
     private static void SetFooterButton(Button b, string glyph, string label, bool flat, out FontIcon icon)
@@ -1317,7 +1550,7 @@ public sealed partial class ToolSidebarWindow : Window
     }
 
     private Button[] FooterButtons() =>
-        new Button[] { FoldButton, PinButton, ResetButton, HideButton };
+        new Button[] { FoldButton, PinButton, ResetButton, HideButton, OpenAppButton };
     private double Scale()
     {
         try
@@ -1347,14 +1580,13 @@ public sealed partial class ToolSidebarWindow : Window
             else
             {
                 dipW = PanelThicknessDip;
-                // 底下那排按钮现在有四个（收起/常驻/位置复原/隐藏），比原来多一格，高度基数 +48
-                dipH = (int)Math.Min(Math.Max(PanelLengthDip, 200 + 55 * count) + 48, lim.H);
+                // 底下那排按钮现在有**五个**（收起/常驻/位置复原/隐藏/打开应用），比原来多两格，高度基数 +94
+                dipH = (int)Math.Min(Math.Max(PanelLengthDip, 200 + 55 * count) + 94, lim.H);
             }
         }
         else
         {
-            dipW = IsFlat ? CollapsedLengthDip : CollapsedThicknessDip;
-            dipH = IsFlat ? CollapsedThicknessDip : CollapsedLengthDip;
+            return CollapsedSize();
         }
 
         return new SizeInt32((int)Math.Round(dipW * scale), (int)Math.Round(dipH * scale));
@@ -1373,7 +1605,7 @@ public sealed partial class ToolSidebarWindow : Window
         if (IsFlat)
             return (Math.Min(workW, Math.Max(PanelLengthFlatDip, workW * 0.92)), PanelThicknessFlatDip);
 
-        return (PanelThicknessDip, Math.Min(workH, Math.Max(PanelLengthDip + 48, workH * 0.85)));
+        return (PanelThicknessDip, Math.Min(workH, Math.Max(PanelLengthDip + 94, workH * 0.85)));
     }
 
     /// <summary>工具区最多能占多高/多宽（面板高度 - 标题/分隔线/底排按钮）。</summary>
@@ -1394,7 +1626,7 @@ public sealed partial class ToolSidebarWindow : Window
             else
             {
                 var title = TitleRow.Visibility == Visibility.Visible ? 26 : 0;
-                var footer = 4 * 44 + 3 * 2;                             // 底排四个按钮 + 间距
+                var footer = 5 * 44 + 4 * 2;                             // 底排五个按钮 + 间距
                 var chrome = title + 7 + footer + 17 + 9;                // + 分隔线 + 面板 padding + 几个间距
                 ToolsScroll.MaxHeight = Math.Max(120, ExpandedLimits().H - chrome);
                 ToolsScroll.MaxWidth = double.PositiveInfinity;
@@ -1421,44 +1653,75 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
+    /// <summary>收起态的窗口尺寸（跟 PlannedSize 的收起分支同一套算法，抽出来给动画算落位用）。</summary>
+    private SizeInt32 CollapsedSize()
+    {
+        var scale = Scale();
+        var dipW = IsFlat ? CollapsedLengthDip : CollapsedThicknessDip;
+        var dipH = IsFlat ? CollapsedThicknessDip : CollapsedLengthDip;
+        return new SizeInt32((int)Math.Round(dipW * scale), (int)Math.Round(dipH * scale));
+    }
+
+    /// <summary>按当前贴的边算"贴边位置"（**纯计算，不动窗口**）。参数是窗口按哪套尺寸算。</summary>
+    private PointInt32 EdgePosition(int width, int height)
+    {
+        var work = DisplayArea.Primary.WorkArea;
+        var edge = Edge;
+        var flat = edge is "top" or "bottom";
+
+        var alongLen = flat ? work.Width : work.Height;
+        var myLen = flat ? width : height;
+        var free = Math.Max(0, alongLen - myLen);
+
+        var ratio = App.Settings.Current.SidebarPosRatio;
+        var offset = ratio < 0 ? free / 2.0 : Math.Clamp(ratio * free, 0, free);
+
+        return edge switch
+        {
+            "left" => new PointInt32(work.X, (int)Math.Round(work.Y + offset)),
+            "top" => new PointInt32((int)Math.Round(work.X + offset), work.Y),
+            "bottom" => new PointInt32((int)Math.Round(work.X + offset), work.Y + work.Height - height),
+            _ => new PointInt32(work.X + work.Width - width, (int)Math.Round(work.Y + offset))
+        };
+    }
+
+    /// <summary>
+    /// 把位置往"屏幕外"方向推开 dist 像素（贴右往右推、贴左往左推，上/下同理）。
+    /// 纯计算，不动窗口；距离由调用方按用途给（滑入起步用半块、滑出收尾用整个厚度）。
+    /// </summary>
+    private PointInt32 OutwardOffset(PointInt32 p, int dist)
+    {
+        if (dist < 1) dist = 1;
+
+        return Edge switch
+        {
+            "left" => new PointInt32(p.X - dist, p.Y),
+            "top" => new PointInt32(p.X, p.Y - dist),
+            "bottom" => new PointInt32(p.X, p.Y + dist),
+            _ => new PointInt32(p.X + dist, p.Y)
+        };
+    }
+
     /// <summary>贴到设置里那条边；沿边的位置按 SidebarPosRatio（&lt;0 = 居中）。</summary>
-    private void MoveToEdge()
+    /// <param name="verify">
+    /// false = 只挪一次，**不读回位置做纠偏**。纠偏最多会连挪 4 次窗口，放在动画前会把头几帧挤掉，
+    /// 所以动画路径上用它（落位精度由动画自己的最后一帧保证）。
+    /// </param>
+    private void MoveToEdge(bool verify = true)
     {
         if (_appWindow is null) return;
         try
         {
-            var work = DisplayArea.Primary.WorkArea;
             // ⚠️ 用自己的目标尺寸算，别读 _appWindow.Size —— Resize 刚调完它还没更新，会按老尺寸贴边
             var size = PlannedSize();
-            var edge = Edge;
-            var flat = edge is "top" or "bottom";
+            var pos = EdgePosition(size.Width, size.Height);
+            var x = pos.X;
+            var y = pos.Y;
 
-            var alongLen = flat ? work.Width : work.Height;
-            var myLen = flat ? size.Width : size.Height;
-            var free = Math.Max(0, alongLen - myLen);
-
-            var ratio = App.Settings.Current.SidebarPosRatio;
-            var offset = ratio < 0 ? free / 2.0 : Math.Clamp(ratio * free, 0, free);
-
-            int x, y;
-            switch (edge)
+            if (!verify)
             {
-                case "left":
-                    x = work.X;
-                    y = (int)Math.Round(work.Y + offset);
-                    break;
-                case "top":
-                    x = (int)Math.Round(work.X + offset);
-                    y = work.Y;
-                    break;
-                case "bottom":
-                    x = (int)Math.Round(work.X + offset);
-                    y = work.Y + work.Height - size.Height;
-                    break;
-                default:
-                    x = work.X + work.Width - size.Width;
-                    y = (int)Math.Round(work.Y + offset);
-                    break;
+                _appWindow.Move(pos);
+                return;
             }
 
             // 移动有时不精确，量一下再纠偏几次

@@ -151,11 +151,11 @@
                 <StackPanel x:Name="EmptyPanel" Visibility="Collapsed" Spacing="10" MaxWidth="520"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE946;" FontSize="30" Opacity="0.45" />
-                    <TextBlock x:Name="EmptyTitle" Text="软件清单还是空的" FontSize="17" FontWeight="Bold"
+                    <TextBlock x:Name="EmptyTitle" Text="软件清单为空" FontSize="17" FontWeight="Bold"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="EmptyText" FontSize="12.5" Opacity="0.75" TextWrapping="Wrap"
                                TextAlignment="Center"
-                               Text="清单来自「内容包」：安装包里自带一份，联网后会自动从站点更新。" />
+                               Text="清单位于「内容包」中：安装包内置一份，联网后会自动从站点更新。" />
                     <TextBlock x:Name="EmptyDetail" FontSize="11.5" Opacity="0.55" TextWrapping="Wrap"
                                TextAlignment="Center" />
                     <Button x:Name="EmptyRetry" Content="重新同步内容包" Style="{StaticResource AccentButtonStyle}"

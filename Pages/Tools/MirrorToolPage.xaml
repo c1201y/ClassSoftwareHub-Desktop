@@ -12,14 +12,9 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal" Spacing="12">
-            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
-                <FontIcon Glyph="&#xE72B;" FontSize="14" />
-            </Button>
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock x:Name="TitleText" Text="系统镜像下载" FontSize="24" FontWeight="Bold" />
-                <TextBlock x:Name="SubtitleText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
-            </StackPanel>
+        <StackPanel Spacing="2">
+            <TextBlock x:Name="TitleText" Text="系统镜像下载" FontSize="24" FontWeight="Bold" />
+            <TextBlock x:Name="SubtitleText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">

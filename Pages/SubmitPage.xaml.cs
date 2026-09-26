@@ -66,12 +66,6 @@ public sealed partial class SubmitPage : Page
         RefreshDraftButton();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(WelcomePage));
-    }
-
     // ══════════ 下载项 ══════════
     private void AddDownload_Click(object sender, RoutedEventArgs e) => AddDownload();
 
@@ -169,7 +163,7 @@ public sealed partial class SubmitPage : Page
 
         if (RepoBox.Text.Trim().Length == 0)
         {
-            ImportErrorBar.Message = "先填一个仓库地址，例如 github.com/owner/repo。";
+            ImportErrorBar.Message = "请先填写仓库地址，例如 github.com/owner/repo。";
             ImportErrorBar.IsOpen = true;
             return;
         }
@@ -187,9 +181,9 @@ public sealed partial class SubmitPage : Page
         {
             ImportErrorBar.Message = exception.Kind switch
             {
-                Services.GithubImportErrorKind.Invalid => "仓库地址看不懂，写成 github.com/owner/repo 这样就行。",
-                Services.GithubImportErrorKind.NotFound => "没找到这个仓库（可能是私有仓库或名字写错了）。",
-                Services.GithubImportErrorKind.RateLimit => "GitHub 接口的调用次数用完了（每小时 60 次，整个网络共用），过一会儿再试。",
+                Services.GithubImportErrorKind.Invalid => "无法识别该仓库地址，请使用 github.com/owner/repo 形式。",
+                Services.GithubImportErrorKind.NotFound => "未找到该仓库（可能为私有仓库或地址有误）。",
+                Services.GithubImportErrorKind.RateLimit => "GitHub 接口调用次数已达上限（未登录时每小时 60 次，按网络出口共享），请稍后重试。",
                 _ => "读取失败：" + exception.Message,
             };
             ImportErrorBar.IsOpen = true;
@@ -300,7 +294,7 @@ public sealed partial class SubmitPage : Page
             if (downloadsEditedByUser && !overwrite)
             {
                 kept.Add("下载项");
-                warnings.Add("下载项看起来是你自己填的，已保留原样；想用读取到的链接，勾上「覆盖我手写的内容」再读一次。");
+                warnings.Add("下载项检测为手动填写，已保留原内容；如需使用读取到的链接，请勾选「覆盖我手写的内容」后重新读取。");
             }
             else
             {
@@ -332,14 +326,14 @@ public sealed partial class SubmitPage : Page
         }
 
         // ── 需注意的地方 ──
-        if (result.Facts.ReleaseFailed) warnings.Add("这个仓库的版本信息读不到（接口被限流或网络不通），只填了仓库信息，版本号和安装包请自己补。");
-        if (result.Facts.NoRelease) warnings.Add("这个仓库一个 Release 都没发过，版本号和安装包得自己填。");
-        if (result.Facts.NoAsset) warnings.Add("这个 Release 里没有可下载的安装包（可能只有源码包），请自己补直链。");
-        if (result.Facts.AssetSkipped > 0) warnings.Add($"自动跳过了 {result.Facts.AssetSkipped} 个不像安装包的文件（校验值 / 调试符号 / 源码包之类）。");
-        if (result.Facts.Truncated) warnings.Add($"安装包太多，只填了前 {result.Downloads.Count} 个。");
-        if (result.Facts.UsedPrerelease && release is not null) warnings.Add($"用的是预发布版本 {release.TagName}。");
-        if (result.Facts.NewerPrereleaseTag.Length > 0) warnings.Add($"其实还有更新的预发布版 {result.Facts.NewerPrereleaseTag}，需要的话勾上「优先取最新预发布版」再读一次。");
-        if (repo.Archived) warnings.Add("这个仓库已经归档（不再维护），建议确认一下要不要收录。");
+        if (result.Facts.ReleaseFailed) warnings.Add("无法读取该仓库的版本信息（接口限流或网络异常），已填入仓库信息，版本号与安装包请手动补充。");
+        if (result.Facts.NoRelease) warnings.Add("该仓库尚未发布任何 Release，版本号与安装包请手动填写。");
+        if (result.Facts.NoAsset) warnings.Add("该 Release 中没有可下载的安装包（可能仅含源码包），请手动填写下载直链。");
+        if (result.Facts.AssetSkipped > 0) warnings.Add($"已自动跳过 {result.Facts.AssetSkipped} 个非安装包文件（校验文件、调试符号、源码包等）。");
+        if (result.Facts.Truncated) warnings.Add($"安装包数量较多，仅填入前 {result.Downloads.Count} 个。");
+        if (result.Facts.UsedPrerelease && release is not null) warnings.Add($"当前使用预发布版本 {release.TagName}。");
+        if (result.Facts.NewerPrereleaseTag.Length > 0) warnings.Add($"存在更新的预发布版 {result.Facts.NewerPrereleaseTag}。如需获取，请勾选「优先取最新预发布版」后重新读取。");
+        if (repo.Archived) warnings.Add("该仓库已归档（不再维护），建议确认是否仍要收录。");
 
         // 地址栏统一成规范写法，方便核对
         RepoBox.Text = repo.HtmlUrl;

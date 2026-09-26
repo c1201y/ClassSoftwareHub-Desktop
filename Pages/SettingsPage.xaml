@@ -266,7 +266,7 @@
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="截图后自动保存一份原图" />
                                 <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                           Text="存到下面那个目录，文件名 截图_年月日_时分秒.png（撞名自动加序号）" />
+                                           Text="保存至下方目录，文件名格式为 截图_年月日_时分秒.png（重名时自动追加序号）" />
                             </StackPanel>
                             <ToggleSwitch x:Name="ShotAutoSaveSwitch" Grid.Column="1" OnContent="开" OffContent="关" MinWidth="0"
                                           Toggled="ShotAutoSave_Toggled" />

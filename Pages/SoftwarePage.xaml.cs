@@ -128,17 +128,17 @@ public sealed partial class SoftwarePage : Page
         var hasFilter = _keyword.Length > 0 || _category.Length > 0;
         if (hasFilter)
         {
-            EmptyTitle.Text = "没找到匹配的软件";
-            EmptyText.Text = "换个关键词或点「全部」试试。";
+            EmptyTitle.Text = "没有找到匹配的软件";
+            EmptyText.Text = "请更换关键词，或点击「全部」查看所有软件。";
             EmptyText.Visibility = Visibility.Visible;
             EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}（共 {App.Content.Apps.Count} 个软件）";
             EmptyRetry.Visibility = Visibility.Collapsed;
             return;
         }
 
-        EmptyTitle.Text = "软件清单还是空的";
-        EmptyText.Text = "清单来自「内容包」：安装包里自带一份，联网后会自动从站点更新。" +
-                         "如果这里一直是空的，多半是内容包没同步下来（没网 / 站点还没发布内容包）。";
+        EmptyTitle.Text = "软件清单为空";
+        EmptyText.Text = "清单位于「内容包」中：安装包内置一份，联网后会自动从站点更新。" +
+                         "若始终为空，通常是内容包未同步成功（网络不可用或站点尚未发布）。";
         EmptyText.Visibility = Visibility.Visible;
         EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}" +
                            (App.Content.Issues.Count > 0 ? $"\n读取问题：{App.Content.Issues[0].Message}" : "");
@@ -153,7 +153,7 @@ public sealed partial class SoftwarePage : Page
         EmptyRetry.IsEnabled = false;
         EmptyRetry.Content = "正在同步…";
         EmptyTitle.Text = "正在同步内容包";
-        EmptyText.Text = "从站点拉最新清单，稍等一下。";
+        EmptyText.Text = "正在从站点获取最新清单……";
         EmptyDetail.Text = "";
 
         try
@@ -168,16 +168,16 @@ public sealed partial class SoftwarePage : Page
 
             if (App.Content.Apps.Count == 0)
             {
-                EmptyTitle.Text = "还是没拉到内容";
-                EmptyText.Text = "站点那边可能没有网络 / 内容包还没发布。装好的这份里自带的内容会在没网时兜底；" +
-                                 "实在不行把这一页截图给维护的同学。";
+                EmptyTitle.Text = "仍未获取到内容";
+                EmptyText.Text = "站点无法访问，或内容包尚未发布。已安装版本内置的清单可在离线时使用；" +
+                                 "如问题持续，请将本页截图提供给维护人员。";
                 EmptyDetail.Text = result.Message;
             }
         }
         catch (Exception ex)
         {
-            EmptyTitle.Text = "同步失败了";
-            EmptyText.Text = "网络不通或者站点暂时不可用，等会儿再试。";
+            EmptyTitle.Text = "同步失败";
+            EmptyText.Text = "网络不可用或站点暂时无法访问，请稍后重试。";
             EmptyDetail.Text = ex.Message;
         }
         finally

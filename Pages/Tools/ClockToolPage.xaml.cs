@@ -72,13 +72,6 @@ public sealed partial class ClockToolPage : Page
         _timer.Start();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        _timer.Stop();
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(ToolsPage));
-    }
-
     /// <summary>把时钟丢到工具浮窗里跑。</summary>
     private void OpenPalette_Click(object sender, RoutedEventArgs e)
         => Views.ToolPaletteWindow.ShowTool("clock");

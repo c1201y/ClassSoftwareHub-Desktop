@@ -62,12 +62,6 @@ public sealed partial class PickNumberToolPage : Page
         RefreshHints();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(ToolsPage));
-    }
-
     /// <summary>把这个工具丢到工具浮窗里跑（浮窗和这一页共用同一个抽号存档）。</summary>
     private void OpenPalette_Click(object sender, RoutedEventArgs e)
         => Views.ToolPaletteWindow.ShowTool("pick-number");
@@ -77,7 +71,52 @@ public sealed partial class PickNumberToolPage : Page
     private int To => double.IsNaN(ToBox.Value) ? 0 : (int)Math.Floor(ToBox.Value);
     private int Lo => Math.Min(From, To);
     private int Hi => Math.Max(From, To);
-    private int PoolSize => Hi - Lo + 1;
+    /// <summary>号码范围上限（跟浮窗版一致）。一万个号足够任何班级场景，再大就是误输入了。</summary>
+    private const int MaxRange = 9999;
+
+    /// <summary>
+    /// 池子大小 —— **已经夹到合法区间**，所以任何调用点都拿不到一个荒谬的数。
+    ///
+    /// ⚠️ 为什么必须夹：原来这里直接写 `Hi - Lo + 1`。
+    ///   · 极端输入下（如 To = 2000000000）这个减法会在 int 上溢出变负；
+    ///   · 老师在数字框里粘一个 100000000，`Enumerable.Range(Lo, size).ToList()` 会立刻申请
+    ///     数亿个 int（几 GB）→ 先是界面冻死，再大一点直接 OutOfMemoryException。
+    /// 这里用 long 算再夹到 MaxRange，从根上保证"绝不分配巨型列表"。
+    /// 至于"要告诉老师范围填太大了"，由 <see cref="TryUseRange"/> 负责，不靠这里静默夹取。
+    /// </summary>
+    private int PoolSize
+    {
+        get
+        {
+            var raw = (long)Hi - Lo + 1;
+            if (raw <= 0) return 0;
+            return (int)Math.Min(raw, MaxRange);
+        }
+    }
+
+    /// <summary>范围是否合法可用；不合法时给出能直接显示给老师的原因。</summary>
+    private bool TryUseRange(out int size, out string error)
+    {
+        var raw = (long)Hi - Lo + 1;
+        if (raw <= 1)
+        {
+            size = 0;
+            error = "请填写有效的号码范围（如 1 ~ 50）";
+            return false;
+        }
+
+        if (raw > MaxRange)
+        {
+            size = 0;
+            error = $"号码范围过大（{raw:N0} 个），本工具上限为 {MaxRange}。请检查起止数字是否输入有误。";
+            return false;
+        }
+
+        size = (int)raw;
+        error = "";
+        return true;
+    }
+
     private int WantCount => double.IsNaN(CountBox.Value) ? 1 : Math.Max(1, (int)Math.Floor(CountBox.Value));
     private bool NoRepeat => NoRepeatBox.IsChecked == true;
 
@@ -144,8 +183,7 @@ public sealed partial class PickNumberToolPage : Page
     {
         HideError();
         var k = WantCount;
-        var size = PoolSize;
-        if (size <= 1) { ShowError("请填写有效的号码范围（如 1 ~ 50）"); return; }
+        if (!TryUseRange(out var size, out var rangeError)) { ShowError(rangeError); return; }
         if (k > size) { ShowError($"一次最多抽 {size} 个号"); return; }
         if (NoRepeat && UsedInRange + k > size)
         {
@@ -266,15 +304,14 @@ public sealed partial class PickNumberToolPage : Page
         var normal = chi < 27.9;
         FairNote.Text = $"实抽 {FairTotal:N0} 次，分成 {buckets} 格，每格理论约 {Math.Round(expect)} 次；" +
                         $"实际 {counts.Min()} ~ {counts.Max()} 次（卡方 {chi:0.0}，" +
-                        (normal ? "分布正常" : "这次偏了一点，再点一次看看") + "）";
+                        (normal ? "分布正常" : "本次分布略有偏差，可再抽一次") + "）";
         FairPanel.Visibility = Visibility.Visible;
     }
 
     // ══════════ 分组 ══════════
     private void Group_Click(object sender, RoutedEventArgs e)
     {
-        var size = PoolSize;
-        if (size <= 1) { Toast.Text = "请填写有效的号码范围"; return; }
+        if (!TryUseRange(out var size, out var rangeError)) { Toast.Text = rangeError; return; }
 
         var value = double.IsNaN(GroupValueBox.Value) ? 1 : Math.Max(1, (int)Math.Floor(GroupValueBox.Value));
         var nums = Enumerable.Range(Lo, size).ToList();

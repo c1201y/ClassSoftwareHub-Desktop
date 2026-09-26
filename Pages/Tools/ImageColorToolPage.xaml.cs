@@ -55,12 +55,6 @@ public sealed partial class ImageColorToolPage : Page
 
     // ══════════════════════════ 打开 / 拖入图片 ══════════════════════════
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(ToolsPage));
-    }
-
     private void Replace_Click(object sender, RoutedEventArgs e) => _ = PickAsync();
 
     private void Clear_Click(object sender, RoutedEventArgs e) => ResetAll();

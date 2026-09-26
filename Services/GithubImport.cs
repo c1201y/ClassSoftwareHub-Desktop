@@ -314,7 +314,7 @@ public static class GithubImport
         ForgetBase();
         if (rateLimited)
             throw new GithubImportException(GithubImportErrorKind.RateLimit, lastError?.Message ?? "rate limited", 403);
-        throw lastError ?? new GithubImportException(GithubImportErrorKind.Network, "所有入口都没连上");
+        throw lastError ?? new GithubImportException(GithubImportErrorKind.Network, "所有镜像入口均连接失败");
     }
 
     private static string Str(JsonElement element, string key)

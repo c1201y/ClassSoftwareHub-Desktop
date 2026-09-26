@@ -2,9 +2,16 @@
 ;  ClassSoftwareHub 桌面版 — Inno Setup 6 安装脚本
 ;
 ;  编译（在工程根目录）：
-;    & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss /DAppVersion=1.0.0 /DChannel=stable
+;    & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
+;    （版本号默认取下面的 DesktopVersion；临时覆盖就加 /DDesktopVersion=1.1.0-insider1.1）
 ;
-;  产物：dist\installer\ClassSoftwareHub-Setup-dv<AppVersion>-<Channel>.exe
+;  产物：dist\installer\ClassSoftwareHub-Setup-dv<DesktopVersion>.exe
+;        内测例：ClassSoftwareHub-Setup-dv1.1.0-insider1.0.exe
+;        正式例：ClassSoftwareHub-Setup-dv1.1.0.exe
+;
+;  版本号规则见 Core/ShellConfig.cs 里 ShellVersion 的注释（dv + 主.功能.补丁 + -insider架构.迭代）。
+;  ⚠️ 更新器是按「文件名里含 setup」+ GitHub Release 的 tag 来认包的，
+;     所以：① 文件名必须含 Setup；② 这里的 DesktopVersion 必须和发布时打的 tag 一字不差（tag 要带 dv 前缀）。
 ;
 ;  设计要点：
 ;   · 默认装到 %LOCALAPPDATA%\Programs\ClassSoftwareHub（免管理员），但**允许用户改路径**
@@ -14,11 +21,9 @@
 ;     卸载程序不会碰它
 ; ══════════════════════════════════════════════════════════════════════
 
-#ifndef AppVersion
-  #define AppVersion "1.0.0"
-#endif
-#ifndef Channel
-  #define Channel "stable"
+; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
+#ifndef DesktopVersion
+  #define DesktopVersion "1.1.0-insider1.0"
 #endif
 
 #define AppName "ClassSoftwareHub"
@@ -29,8 +34,8 @@
 ; ⚠️ 这个 GUID 是「同一款软件」的标识：升级/回滚靠它认亲，**永远不要改**
 AppId={{7A2C4D18-9F31-4C6B-8E5A-2D0B7F4A1C93}
 AppName={#AppName}
-AppVersion={#AppVersion}
-AppVerName={#AppName} dv{#AppVersion}
+AppVersion={#DesktopVersion}
+AppVerName={#AppName} dv{#DesktopVersion}
 AppPublisher={#AppName}
 AppPublisherURL={#AppSite}
 AppSupportURL={#AppSite}
@@ -41,13 +46,13 @@ DisableDirPage=no
 AllowNoIcons=yes
 PrivilegesRequired=lowest
 OutputDir=..\dist\installer
-OutputBaseFilename=ClassSoftwareHub-Setup-dv{#AppVersion}-{#Channel}
+OutputBaseFilename=ClassSoftwareHub-Setup-dv{#DesktopVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=..\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
-UninstallDisplayName={#AppName} dv{#AppVersion}
+UninstallDisplayName={#AppName} dv{#DesktopVersion}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 AppMutex={#AppName}.Desktop.SingleInstance

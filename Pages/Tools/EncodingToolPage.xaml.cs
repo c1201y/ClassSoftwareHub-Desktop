@@ -38,13 +38,11 @@ public sealed partial class EncodingToolPage : Page
         SwitchMode(fileMode: false);
 
         RefreshTextHashes();
-    }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        _fileCts?.Cancel();
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(ToolsPage));
+        // 离开页面时取消可能还在跑的哈希计算。
+        // ⚠️ 这行原本只写在页内「返回」按钮的点击处理里 —— 统一改用导航栏返回后那个按钮就点不到了，
+        //    所以挪到 Unloaded：导航离开同样会触发，还能覆盖「非导航地被移除」的情况。
+        Unloaded += (_, _) => _fileCts?.Cancel();
     }
 
     private void BuildHashRows()
@@ -225,7 +223,7 @@ public sealed partial class EncodingToolPage : Page
         HashProgress.Visibility = Visibility.Visible;
         SetRowsEmpty("计算中…");
         SourceText.Text = $"来源：{System.IO.Path.GetFileName(path)} · 计算中…";
-        DropHintText.Text = "已收到文件，换个文件可以再拖一个进来";
+        DropHintText.Text = "已接收文件，可再拖入新文件重新计算";
 
         _fileCts?.Cancel();
         var cts = new CancellationTokenSource();
@@ -260,7 +258,7 @@ public sealed partial class EncodingToolPage : Page
 
     private void ShowFileHashes(string path, Dictionary<string, string> hashes)
     {
-        if (hashes.Count == 0) { SetRowsEmpty("—"); SourceText.Text = "来源：还没算完（换个模式再回来）"; return; }
+        if (hashes.Count == 0) { SetRowsEmpty("—"); SourceText.Text = "来源：计算尚未完成，请稍后重试"; return; }
         ApplyHashes(hashes);
         try
         {
@@ -344,7 +342,7 @@ public sealed partial class EncodingToolPage : Page
         {
             MatchText.Text = _fileMode && _fileHashes.Count == 0
                 ? "先选一个文件（或换回文本模式）"
-                : "✗ 与当前显示的 4 种哈希都不一致（注意：算出来的哈希要空格、大小写都算一致）";
+                : "✗ 与当前显示的 4 种哈希值均不一致（比对时忽略空格与大小写差异）";
             MatchText.Foreground = Res("SystemFillColorCriticalBrush");
         }
     }

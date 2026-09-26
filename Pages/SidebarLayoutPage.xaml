@@ -27,7 +27,7 @@
                 <StackPanel Spacing="5">
                     <TextBlock Text="侧边布局" FontSize="30" FontWeight="Bold" />
                     <TextBlock FontSize="13" Opacity="0.7" TextWrapping="Wrap"
-                               Text="左边挑模块，拖到右边那条侧边栏里（点一下也行）；右边拖着重排，拖出去就移除。右边就是侧边栏的真模样。" />
+                               Text="从左侧模块库选取模块，拖入右侧侧边栏预览（也可直接点击添加）；在预览区拖动可调整顺序，拖出即移除。右侧即为侧边栏的实际效果。" />
                 </StackPanel>
 
                 <Grid Grid.Row="1" ColumnSpacing="22">
@@ -79,7 +79,7 @@
                     </Grid.ColumnDefinitions>
 
                     <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" VerticalAlignment="Center"
-                               Text="一个模块都不放也行，那样边条上只剩侧边栏自带的几个按钮。侧边栏本身的开关在「设置 → 常用工具」。" />
+                               Text="可以不放置任何模块，此时侧边栏仅保留自带的几个按钮。侧边栏开关位于「设置 → 常用工具」。" />
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                         <Button x:Name="SidebarButton" Content="隐藏侧边栏" Click="ToggleSidebar_Click" />

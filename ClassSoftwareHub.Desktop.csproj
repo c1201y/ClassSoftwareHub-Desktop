@@ -19,10 +19,17 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0</InformationalVersion>
+    <!-- 版本号规则见 Core/ShellConfig.cs 里 ShellVersion 的注释
+         （dv + 主.功能.补丁 + -insider架构.迭代），改版本时这里和 ShellConfig 一起改。
+         ⚠️ AssemblyVersion / FileVersion 只接受「四段纯数字」，塞不进 -insider 后缀，故固定 1.1.0.0；
+         界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
+    <Version>1.1.0-insider1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0-insider1.0</InformationalVersion>
+    <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
+         否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>ClassSoftwareHub</Product>
     <AssemblyTitle>ClassSoftwareHub</AssemblyTitle>
     <Company>ClassSoftwareHub</Company>
@@ -32,6 +39,8 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <!-- 屏幕亮度：笔记本内屏的亮度只能走 WMI（WmiMonitorBrightnessMethods），Windows 自己的亮度滑块也是。dxva2 那套只对外接显示器（DDC/CI）有效。（2026-09-26） -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
   <!-- 内嵌资源：单文件发布时不需要额外散落文件 -->
@@ -41,6 +50,9 @@
     <EmbeddedResource Include="Assets\AppIcon.ico" />
     <EmbeddedResource Include="Assets\ToolIcon.ico" />
     <EmbeddedResource Include="Assets\dv1.0.png" />
+    <!-- 反馈中心两张卡片的图：跟网页版 src/assets/feedback 是同一套文件（2026-09-26） -->
+    <EmbeddedResource Include="Assets\feedback\report.png" />
+    <EmbeddedResource Include="Assets\feedback\suggest.png" />
   </ItemGroup>
 
 </Project>

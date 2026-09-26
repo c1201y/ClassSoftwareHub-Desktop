@@ -56,7 +56,14 @@ public partial class App : Application
         }
         catch { /* 记录失败也不影响 */ }
 
-        // 开发期不要静默退出，方便定位；发布后可改为 e.Handled = true 做兜底
+        // 开发期不静默退出，异常直接炸出来方便定位（VS 里能断到现场）。
+        // 发布版必须兜底：老师正在上课，任何一个页面级异常（比如某个 {ThemeResource} 解析失败）
+        // 都不该让整个应用消失、界面状态全丢 —— 那比"这个功能坏了"严重得多。
+        // 上面已经写进 crash.log 了，事后能查；这里只负责"别死"。
+#if DEBUG
         e.Handled = false;
+#else
+        e.Handled = true;
+#endif
     }
 }

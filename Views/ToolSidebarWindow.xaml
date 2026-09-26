@@ -8,75 +8,87 @@
       屏幕边缘侧边栏：贴在屏幕的某一条边上（上下左右都能放）。
       用处：老师前台全屏放 PPT / 视频时够不到任务栏，直接从边上点工具。
         · 收起 = 一小截圆角抓手（亚克力底）：点一下展开、按住可以拖
-        · 展开 = 四个工具（图标 + 名字）+ 底下「收起 / 位置复原 / 隐藏」
+        · 展开 = 工具（图标 + 名字）+ 底下「收起 / 常驻 / 位置复原 / 隐藏 / 打开应用」
+        · 「音量」模块 = 弹一个竖长的主音量浮窗（VolumeWindow），浮窗里再点「展开」看合成器
       按钮都去掉自带边框（免得像一个个小方框），点击有大触屏尺寸 + 回弹动画。
     -->
     <Grid x:Name="Root" Background="Transparent">
         <Border x:Name="Panel" CornerRadius="8" BorderThickness="1"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-            <Grid>
-                <!-- 收起状态：短短一截抓手（整条窗口都是点击区，也是拖拽区） -->
-                <Grid x:Name="CollapsedView" Background="Transparent"
-                      ToolTipService.ToolTip="点一下展开；按住可以拖到别处/别的边"
-                      PointerPressed="Strip_PointerPressed"
-                      PointerMoved="Strip_PointerMoved"
-                      PointerReleased="Strip_PointerReleased"
-                      PointerCaptureLost="Strip_PointerReleased">
-                    <StackPanel x:Name="GripStack" Orientation="Vertical" Spacing="6"
-                                HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border x:Name="Grip" Width="5" Height="48" CornerRadius="3" Opacity="0.6"
-                                Background="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                </Grid>
-
-                <!-- 展开状态 -->
-                <Grid x:Name="ExpandedView" Visibility="Collapsed" Padding="5,5,5,6">
-                    <StackPanel x:Name="ExpandedStack" Orientation="Vertical" Spacing="3">
-
-                        <StackPanel x:Name="TitleRow" Orientation="Horizontal" Spacing="5"
-                                    HorizontalAlignment="Center" Opacity="0.7" Margin="0,2,0,2">
-                            <FontIcon Glyph="&#xE71D;" FontSize="11" VerticalAlignment="Center" />
-                            <TextBlock Text="常用工具" FontSize="11" VerticalAlignment="Center" />
+            <Grid x:Name="BarHost">
+                    <!-- 收起状态：短短一截抓手（整条窗口都是点击区，也是拖拽区） -->
+                    <Grid x:Name="CollapsedView" Background="Transparent"
+                          ToolTipService.ToolTip="点一下展开；按住可以拖到别处/别的边"
+                          PointerPressed="Strip_PointerPressed"
+                          PointerMoved="Strip_PointerMoved"
+                          PointerReleased="Strip_PointerReleased"
+                          PointerCaptureLost="Strip_PointerReleased">
+                        <StackPanel x:Name="GripStack" Orientation="Vertical" Spacing="6"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Border x:Name="Grip" Width="5" Height="48" CornerRadius="3" Opacity="0.6"
+                                    Background="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
+                    </Grid>
 
-                        <!--
-                          工具按钮由代码按「侧边布局」里的模块清单生成（见 BuildToolButtons）。
-                          模块多了就在这块里**滚动**（面板本身不会无限往长里长）。
-                        -->
-                        <ScrollViewer x:Name="ToolsScroll"
-                                      VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel x:Name="ToolStack" Orientation="Vertical" Spacing="3" />
-                        </ScrollViewer>
+                    <!-- 展开状态 -->
+                    <Grid x:Name="ExpandedView" Visibility="Collapsed" Padding="5,5,5,6">
+                        <StackPanel x:Name="ExpandedStack" Orientation="Vertical" Spacing="3">
 
-                        <Border x:Name="Sep" Height="1" Margin="2,3" Opacity="0.2"
-                                Background="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <StackPanel x:Name="TitleRow" Orientation="Horizontal" Spacing="5"
+                                        HorizontalAlignment="Center" Opacity="0.7" Margin="0,2,0,2">
+                                <FontIcon Glyph="&#xE71D;" FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="常用工具" FontSize="11" VerticalAlignment="Center" />
+                            </StackPanel>
 
-                        <!--
-                          底下这几个按钮。内容由代码按贴的边决定（ApplyFooterContent）：
-                          贴左右（竖条）= 图标在上、文字在下；贴上/下（横条）= 左图标、右文字（横条矮，竖排会被裁）。
-                        -->
-                        <StackPanel x:Name="FooterStack" Orientation="Vertical" Spacing="2">
-                            <Button x:Name="FoldButton" Click="Collapse_Click" MinWidth="0" MinHeight="44"
-                                    Padding="0,6" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="收起来（还能再展开）" />
-                            <Button x:Name="PinButton" Click="Pin_Click" MinWidth="0" MinHeight="44"
-                                    Padding="0,6" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="常驻：展开后不自动收起（手动点「收起」还是能收）" />
-                            <Button x:Name="ResetButton" Click="Reset_Click" MinWidth="0" MinHeight="44"
-                                    Padding="0,6" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="回到右边的居中位置" />
-                            <Button x:Name="HideButton" Click="Hide_Click" MinWidth="0" MinHeight="44"
-                                    Padding="0,6" Background="Transparent" BorderThickness="0"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    ToolTipService.ToolTip="隐藏（以后不显示，想找回来去「内置工具」页或系统托盘图标菜单）" />
+                            <!--
+                              工具按钮由代码按「侧边布局」里的模块清单生成（见 BuildToolButtons）。
+                              模块多了就在这块里**滚动**（面板本身不会无限往长里长）。
+                            -->
+                            <ScrollViewer x:Name="ToolsScroll"
+                                          VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="ToolStack" Orientation="Vertical" Spacing="3" />
+                            </ScrollViewer>
+
+                            <Border x:Name="Sep" Height="1" Margin="2,3" Opacity="0.2"
+                                    Background="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <!--
+                              底下这几个按钮。内容由代码按贴的边决定（ApplyFooterContent）：
+                              贴左右（竖条）= 图标在上、文字在下；贴上/下（横条）= 左图标、右文字（横条矮，竖排会被裁）。
+                            -->
+                            <StackPanel x:Name="FooterStack" Orientation="Vertical" Spacing="2">
+                                <Button x:Name="FoldButton" Click="Collapse_Click" MinWidth="0" MinHeight="44"
+                                        Padding="0,6" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTipService.ToolTip="收起来（还能再展开）" />
+                                <Button x:Name="PinButton" Click="Pin_Click" MinWidth="0" MinHeight="44"
+                                        Padding="0,6" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTipService.ToolTip="常驻：展开后不自动收起（手动点「收起」还是能收）" />
+                                <Button x:Name="ResetButton" Click="Reset_Click" MinWidth="0" MinHeight="44"
+                                        Padding="0,6" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTipService.ToolTip="回到右边的居中位置" />
+                                <Button x:Name="HideButton" Click="Hide_Click" MinWidth="0" MinHeight="44"
+                                        Padding="0,6" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTipService.ToolTip="隐藏（以后不显示，想找回来去「内置工具」页或系统托盘图标菜单）" />
+
+                                <!--
+                                  第五个（加在最下面）：快速打开应用主界面。
+                                  ⚠️ 这颗**不用字形图标**，用**软件自己的图标**（AppIcon-512.png）—— 一眼就是"回本程序"。
+                                  主窗口收在托盘里 / 最小化了的时候，侧边栏常常是屏幕上唯一露着的东西，
+                                  这颗键就是回主界面的近路。
+                                -->
+                                <Button x:Name="OpenAppButton" Click="OpenApp_Click" MinWidth="0" MinHeight="44"
+                                        Padding="0,6" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTipService.ToolTip="打开应用主界面（主窗口在托盘里或最小化时，点它叫出来）" />
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
+                    </Grid>
                 </Grid>
-            </Grid>
         </Border>
     </Grid>
 </Window>

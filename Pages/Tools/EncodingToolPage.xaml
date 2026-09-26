@@ -12,15 +12,10 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal" Spacing="12">
-            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
-                <FontIcon Glyph="&#xE72B;" FontSize="14" />
-            </Button>
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="编码 / 哈希工具" FontSize="24" FontWeight="Bold" />
-                <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="Base64、URL 编解码 + MD5 / SHA-1 / SHA-256 / SHA-512 哈希；桌面端还能直接丢个文件进来算哈希、粘贴官方值一键核对。全部本地计算。" />
-            </StackPanel>
+        <StackPanel Spacing="2">
+            <TextBlock Text="编码 / 哈希工具" FontSize="24" FontWeight="Bold" />
+            <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                       Text="Base64、URL 编解码与 MD5 / SHA-1 / SHA-256 / SHA-512 哈希计算；桌面端支持拖入文件计算哈希，并可粘贴官方哈希值一键核对。全部在本机完成。" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -118,7 +113,7 @@
 
                         <!-- 核对 -->
                         <StackPanel Spacing="6">
-                            <TextBlock Text="核对：把官方给的哈希值粘进来（支持带空格 / 大写 / 带冒号）"
+                            <TextBlock Text="校验：粘贴官方提供的哈希值（支持空格、大写、冒号）"
                                        FontSize="12.5" FontWeight="SemiBold" />
                             <TextBox x:Name="ExpectedBox" PlaceholderText="粘贴 MD5 / SHA-1 / SHA-256 / SHA-512 值"
                                      FontFamily="Consolas" FontSize="12.5" TextChanged="Expected_TextChanged" />

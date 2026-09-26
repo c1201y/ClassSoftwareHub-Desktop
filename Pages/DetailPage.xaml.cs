@@ -27,8 +27,36 @@ public sealed partial class DetailPage : Page
     public DetailPage()
     {
         InitializeComponent();
-        // 离开页面把「已复制」提示定时器停掉
-        Unloaded += (_, _) => _copyTimer?.Stop();
+        Unloaded += (_, _) =>
+        {
+            // 离开页面把「已复制」提示定时器停掉
+            _copyTimer?.Stop();
+            DetachApp();
+        };
+    }
+
+    /// <summary>
+    /// 退订图标状态通知。
+    ///
+    /// ⚠️ 必须在**离开页面时**退订。`_app` 来自 App.Content.Apps —— 那是进程级静态单例，
+    /// 委托是"单例持有页面"，页面不持有单例；而 ContentFrame.CacheSize = 0、页面根本不缓存。
+    /// 所以只靠 OnNavigatedTo 里"退订上一个"救不了：**每进一次详情页就永久泄漏一个 Page**，
+    /// 翻得越多漏得越多（教学机内存小，必须堵）。
+    ///
+    /// OnNavigatedFrom 与 Unloaded 都挂一道：前者是导航时必定触发，后者兜住非导航的移除，
+    /// 重复调用无害（`_app` 已置空就直接返回）。
+    /// </summary>
+    private void DetachApp()
+    {
+        if (_app is null) return;
+        _app.PropertyChanged -= App_PropertyChanged;
+        _app = null;
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        DetachApp();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -118,7 +146,7 @@ public sealed partial class DetailPage : Page
         var isStoreItself = Services.StoreRepair.IsStoreItself(app.Id, _storeUrl);
         if (isStoreItself && _storeUrl.Length > 0)
         {
-            StoreOnlyHint.Text = "这台电脑要是没装微软商店，「打开」不会有反应 —— 点它会给你「一键装回来」的选择。";
+            StoreOnlyHint.Text = "本机未安装 Microsoft Store 时，「打开」将无响应，此时可选择「一键恢复商店」。";
             StoreOnlyHint.Visibility = Visibility.Visible;
         }
 
@@ -223,13 +251,13 @@ public sealed partial class DetailPage : Page
             Title = "Microsoft Store（微软商店）",
             Content = new TextBlock
             {
-                Text = "这台电脑要是没有微软商店，商店链接点开是不会有任何反应的 —— 因为安装要找商店自己。\n\n" +
-                       "· 打开微软商店：跳到「微软商店」应用\n" +
-                       "· 没装 / 装坏了：用系统自带的修复方式把商店装回来（大概 1～2 分钟，期间可能弹一个黑色窗口，别关它）",
+                Text = "若本机未安装 Microsoft Store，商店链接将无法打开 —— 安装过程依赖商店自身。\n\n" +
+                       "· 打开微软商店：跳转到「Microsoft Store」应用\n" +
+                       "· 未安装或已损坏：调用系统自带方式重新安装（约 1～2 分钟，期间可能出现命令行窗口，请勿关闭）",
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = "打开微软商店",
-            SecondaryButtonText = "没装？一键装回来",
+            SecondaryButtonText = "未安装？一键恢复",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary,
         };
@@ -249,8 +277,8 @@ public sealed partial class DetailPage : Page
                         Title = "已开始安装微软商店",
                         Content = new TextBlock
                         {
-                            Text = "如果弹出了黑色窗口，等它自己关掉就行（1～2 分钟）。\n" +
-                                   "装好后「微软商店」会出现在开始菜单里，再回来点一次「打开微软商店」即可。",
+                            Text = "如出现命令行窗口，请等待其自动关闭（约 1～2 分钟）。\n" +
+                                   "安装完成后，Microsoft Store 会出现在开始菜单中，返回此处再次点击「打开微软商店」即可。",
                             TextWrapping = TextWrapping.Wrap,
                         },
                         CloseButtonText = "知道了",
@@ -261,11 +289,11 @@ public sealed partial class DetailPage : Page
                     await new ContentDialog
                     {
                         XamlRoot = XamlRoot,
-                        Title = "没能启动安装",
+                        Title = "无法启动安装",
                         Content = new TextBlock
                         {
-                            Text = "可以在开始菜单搜一下 Microsoft Store，或用浏览器打开 " +
-                                   "https://apps.microsoft.com/detail/9wzdncrfjbmp 试试。",
+                            Text = "可在开始菜单中搜索 Microsoft Store，或用浏览器访问 " +
+                                   "https://apps.microsoft.com/detail/9wzdncrfjbmp 手动安装。",
                             TextWrapping = TextWrapping.Wrap,
                         },
                         CloseButtonText = "知道了",
@@ -385,12 +413,6 @@ public sealed partial class DetailPage : Page
         }
 
         try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(url)); } catch { /* 打不开就算了 */ }
-    }
-
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(SoftwarePage));
     }
 
     // 图标加载状态变了（成功 → 收掉占位字形；失败 → 继续顶着）

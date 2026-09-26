@@ -60,12 +60,6 @@ public sealed partial class TimerToolPage : Page
 
     private Microsoft.UI.Xaml.Media.Brush Res(string key, Windows.UI.Color fallback) => Services.ThemeBrush.Get(this, key);
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(ToolsPage));
-    }
-
     /// <summary>把计时器丢到工具浮窗里跑。</summary>
     private void OpenPalette_Click(object sender, RoutedEventArgs e)
         => Views.ToolPaletteWindow.ShowTool("timer");

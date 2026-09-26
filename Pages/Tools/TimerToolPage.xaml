@@ -14,18 +14,14 @@
 
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button Click="Back_Click" Padding="8,4" VerticalAlignment="Top" ToolTipService.ToolTip="返回">
-                <FontIcon Glyph="&#xE72B;" FontSize="14" />
-            </Button>
-            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+            <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="课堂计时器" FontSize="24" FontWeight="Bold" />
                 <TextBlock Text="倒计时 / 秒表，大字号方便投影，到点响铃。" FontSize="12.5" Opacity="0.6" />
             </StackPanel>
-            <Button Grid.Column="2" Content="在工具窗口打开" VerticalAlignment="Center"
+            <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
                     Click="OpenPalette_Click" ToolTipService.ToolTip="开一个小置顶窗，随手计时" />
         </Grid>
 

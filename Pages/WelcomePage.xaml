@@ -76,8 +76,10 @@
                 </Border>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="2" HorizontalAlignment="Left">
-                    <TextBlock x:Name="SiteVersionText" FontSize="28" FontWeight="Bold" />
-                    <TextBlock x:Name="AppVersionText" FontSize="12.5" Opacity="0.65" />
+                    <!-- 只显示**软件自己**的版本。以前这行下面还挂着"网站版本：xxx"小字，
+                         把软件版本陪衬成网站版本的附属品 —— 软件已经是独立发布的东西了，
+                         没必要再摆出依附的样子，那一行已删（2026-09-26）。 -->
+                    <TextBlock x:Name="ShellVersionText" FontSize="28" FontWeight="Bold" />
                 </StackPanel>
 
                 <!-- 应用代号：贴右（跟顶上那串版本号岔开，不打架） -->
@@ -140,6 +142,88 @@
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <!-- 第二行快速入口：侧边布局 / 实验性功能（跟上面一排同样的两张等大卡片、同样的图标口径） -->
+            <Grid ColumnSpacing="16" Height="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Tag="sidebar" CornerRadius="8" Padding="20,0"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE8A0;" FontSize="20" />
+                        <TextBlock Text="侧边布局" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!--
+                  实验性功能：**故意不列它下面有什么**（Nick 2026-09-26）——
+                  首页卡片只说"这里有一组还没成熟的功能"，具体内容进去看。
+                -->
+                <Border Grid.Column="1" Tag="experimental" CornerRadius="8" Padding="20,0"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xEA80;" FontSize="20" />
+                        <TextBlock Text="实验性功能" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!--
+              第三行：提交软件 / 反馈中心 —— 这两个是一对（都是"往维护者那边送东西"），所以并排。
+              ⚠️ **设置永远排在最后一张**（Nick 2026-09-26 定），加新卡片就往它前面插。
+              ⚠️ 约定：导航栏上半区有什么，首页就得有对应的卡片（除非特别说明）；
+                 所以挨着「侧边布局」后面补的「实验性功能」，以及下半区的「提交软件」「反馈中心」。
+            -->
+            <Grid ColumnSpacing="16" Height="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Tag="submit" CornerRadius="8" Padding="20,0"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE898;" FontSize="20" />
+                        <TextBlock Text="提交软件" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 反馈中心：图标口径跟导航栏那条一致（E939 = 人 + 对话泡） -->
+                <Border Grid.Column="1" Tag="feedback" CornerRadius="8" Padding="20,0"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE939;" FontSize="20" />
+                        <TextBlock Text="反馈中心" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 设置：必须永远在最后一张，反馈中心进来后这一行放不下第三个，所以它单独占一行 -->
+            <Border Tag="settings" Height="60" CornerRadius="8" Padding="20,0"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                    PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                    Tapped="Card_Tapped">
+                <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE713;" FontSize="20" />
+                    <TextBlock Text="设置" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
 
             <!-- ===== 一行快捷入口：图标在上、文字在下（不用卡片、不加标题） ===== -->
             <GridView x:Name="QuickGrid" Margin="0,14,0,0" Padding="0" SelectionMode="None"

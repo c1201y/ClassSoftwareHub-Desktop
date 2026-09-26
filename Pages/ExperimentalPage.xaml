@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.ExperimentalPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:data="using:ClassSoftwareHub.Desktop.Data">
+
+    <!-- 和内置工具页同一套版式：内容钉在中间 960 宽（Nick 2026-09-26 要求"页面布局类似于内置工具页面"） -->
+    <Grid Padding="24,36,24,44">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="960" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" RowSpacing="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="实验性功能" FontSize="30" FontWeight="Bold" />
+                <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
+                           Text="稳定性和准确度都还没到能上主界面的小玩意，先放在这里。能用，但结果不一定可靠，界面之后也可能再改。" />
+            </StackPanel>
+
+            <!-- 卡片 462 + 间距 16 = 478，960 里正好两列（跟内置工具页同一个尺寸口径） -->
+            <GridView x:Name="FeatureGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
+                      ItemClick="FeatureGrid_ItemClick" Padding="0,2,0,0"
+                      ItemContainerStyle="{StaticResource CshCardItemStyle}">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="data:ExperimentalFeature">
+                        <Border Width="462" Height="76" CornerRadius="8" Padding="20,0" Margin="0,0,16,14"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="20" VerticalAlignment="Center" />
+                                <!-- 名字 + 一句话说明：说明只占一行，长了就省略号，卡片高度才稳 -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="Bold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Desc}" FontSize="12" Opacity="0.65"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="13" Opacity="0.5"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+
+            <!-- 页脚：把「实验性」这个标签的含义和检测范围讲清楚（先说清边界，别让用户自己猜） -->
+            <Border Grid.Row="2" CornerRadius="8" Padding="20,16" Margin="0,4,0,0"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                <Grid ColumnSpacing="16" RowSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <FontIcon Glyph="&#xEA80;" FontSize="20" VerticalAlignment="Top" />
+                    <TextBlock Grid.Column="1" Text="「实验性」的含义" FontSize="15" FontWeight="Bold" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="1" FontSize="12.5" Opacity="0.7"
+                               TextWrapping="Wrap"
+                               Text="这些功能还在成型期，所以入口留在这里而不是主界面：成熟一个，挪一个。放上来是为了先让愿意尝鲜的同学试，不代表已经达到正式功能的可靠程度。" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" FontSize="12" Opacity="0.6"
+                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="试下来觉得能用、或者发现它判断错了，都在「提交软件」里反馈一句 —— 这类功能的去留就看实际用的反馈。" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

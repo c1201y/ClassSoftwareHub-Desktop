@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.VolumeMixerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      音量合成器浮窗：在主音量浮窗上点「展开」弹出，**贴着主音量浮窗往屏幕里侧排**。
+         · 贴左/右 → 竖版：每个应用**一行**（图标 + 名称 + 横滑块），上下排
+         · 贴上/下 → 横版：每个应用**一列**（图标 / 名称 / 竖滑块），左右排（ApplyOrientation 里换）
+      材质 = 侧边栏同款（见 FlyoutChrome.ApplyMaterial）；
+      行/列是代码里按 pid 增量复用建的（VolumeMixerWindow.xaml.cs），拖动中不重建。
+    -->
+    <Grid x:Name="Root" Background="Transparent">
+        <Border x:Name="Panel" CornerRadius="8" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+
+            <Grid x:Name="ContentHost" Padding="16,14,16,14" RowSpacing="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 标题行 -->
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <FontIcon Glyph="&#xE767;" FontSize="13" Opacity="0.55" VerticalAlignment="Center" />
+                    <TextBlock Text="音量合成器" FontSize="12.5" FontWeight="SemiBold" Opacity="0.85"
+                               VerticalAlignment="Center" />
+                    <TextBlock x:Name="SessionCountText" FontSize="11.5" Opacity="0.5"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- 每个正在发声的应用（最多 6 个，多了滚动） -->
+                <ScrollViewer x:Name="SessionScroll" Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto" VerticalScrollMode="Auto"
+                              HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="SessionStack" Spacing="6" />
+                </ScrollViewer>
+
+                <TextBlock x:Name="SessionEmptyText" Grid.Row="1" Visibility="Collapsed"
+                           Text="当前没有正在发声的应用。" FontSize="12" Opacity="0.6"
+                           TextWrapping="Wrap" VerticalAlignment="Top" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
@@ -102,18 +103,46 @@ public static class UpdateFlow
         panel.Children.Add(status);
         panel.Children.Add(note);
 
-        var allowClose = false;
+        var allowClose = false;          // 收尾阶段（正在安装）才允许关窗
+        var userCancelled = false;       // 用户主动点了「取消下载」
+        var closedByUser = false;        // 弹窗已经被用户关掉了，后面别再 Hide
+
+        // ⚠️ 这个 token 就是"卡死时的出口"。原来它根本没接线：
+        // UpdateService 里的 HttpClient 是 Timeout.InfiniteTimeSpan（注释写着"靠 CancellationToken 控制"），
+        // 但 DownloadAndVerifyAsync 调用时没传 ct —— 于是连接建立后传输停滞（半开连接、镜像挂起）时
+        // ReadAsync 会永久阻塞，弹窗又关不掉，用户只能杀进程。
+        using var cts = new CancellationTokenSource();
+
         var dialog = new ContentDialog
         {
             XamlRoot = xamlRoot,
             Title = title,
             Content = panel,
             PrimaryButtonText = "立即更新",
+            CloseButtonText = "取消下载",
             DefaultButton = ContentDialogButton.Primary,
         };
-        dialog.Closing += (_, args) => { if (!allowClose) args.Cancel = true; };
+
+        // 主按钮只是"更新进行中"的指示，点了不该关窗
         dialog.PrimaryButtonClick += (_, args) => args.Cancel = true;
+
+        dialog.Closing += (_, args) =>
+        {
+            if (allowClose) return;
+
+            // 点「取消下载」/ Esc / 点窗外 —— 一律：允许马上关掉，并且真的把下载停掉。
+            // 绝不 Cancel 关窗：宁可下载被取消，也不能把用户困在一个关不掉的弹窗里。
+            closedByUser = true;
+            userCancelled = true;
+            try { cts.Cancel(); } catch { /* 已经取消过了 */ }
+        };
+
         _ = dialog.ShowAsync();
+
+        // 空闲超时（不是总时长）：连续这么久没有任何进度就认定卡死。
+        // 慢速下载不会被误杀 —— 每来一次进度就续期一次。
+        const int IdleSeconds = 45;
+        cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds));
 
         try
         {
@@ -121,11 +150,13 @@ public static class UpdateFlow
             {
                 bar.Value = p * 100;
                 status.Text = $"正在下载 {release.Tag}… {p:P0}";
+                try { cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds)); } catch { /* 已取消/已释放 */ }
             });
 
             var destination = Path.Combine(UpdateService.UpdatesDir, package.Name);
-            var downloaded = await service.DownloadAndVerifyAsync(package, destination, progress);
+            var downloaded = await service.DownloadAndVerifyAsync(package, destination, progress, cts.Token);
 
+            cts.CancelAfter(Timeout.Infinite);   // 下载完了，别再触发超时打断安装
             bar.Value = 100;
             status.Text = $"下载完成（{downloaded.VerifyNote}），正在安装…装好后应用会自动重新打开。";
 
@@ -136,13 +167,32 @@ public static class UpdateFlow
             Application.Current.Exit();
             return true;
         }
+        catch (OperationCanceledException)
+        {
+            allowClose = true;
+
+            // 用户自己取消的：他已经知道了，不用再解释
+            if (userCancelled) return false;
+
+            status.Text = $"下载卡住了（连续 {IdleSeconds} 秒没有任何进度），已经取消。\n" +
+                          "多半是网络问题或者下载源没响应 —— 稍后再试一次。";
+            await Task.Delay(2500);
+            TryHide(dialog, closedByUser);
+            return false;
+        }
         catch (Exception ex)
         {
             allowClose = true;
             status.Text = "❌ 更新失败：" + ex.Message;
             await Task.Delay(2500);
-            dialog.Hide();
+            TryHide(dialog, closedByUser);
             return false;
         }
+    }
+
+    private static void TryHide(ContentDialog dialog, bool alreadyClosed)
+    {
+        if (alreadyClosed) return;   // 用户已经关掉了，再 Hide 会抛
+        try { dialog.Hide(); } catch { /* 已经关了就算了 */ }
     }
 }

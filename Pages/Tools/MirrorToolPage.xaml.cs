@@ -14,12 +14,6 @@ public sealed partial class MirrorToolPage : Page
         Loaded += (_, _) => Populate();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-    {
-        if (Frame.CanGoBack) Frame.GoBack();
-        else Frame.Navigate(typeof(ToolsPage));
-    }
-
     private void Populate()
     {
         var mirror = App.Content.Mirror;

@@ -52,7 +52,7 @@ public sealed class UpdateService
     public async Task<UpdateCheckResult> CheckAsync(UpdateChannel channel, string currentVersion, CancellationToken ct = default)
     {
         if (!Source.IsConfigured)
-            return UpdateCheckResult.None("还没配置更新仓库地址，等新仓库建好接上就行。");
+            return UpdateCheckResult.None("尚未配置更新源，暂时无法检查更新。");
 
         var releases = await Source.GetReleasesAsync(channel, 10, ct);
         if (releases.Count == 0)
