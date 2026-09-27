@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data;
@@ -343,6 +344,28 @@ public sealed partial class DetailPage : Page
         _copyTimer.Tick -= CopyTimer_Tick;
         _copyTimer.Tick += CopyTimer_Tick;
         _copyTimer.Start();
+    }
+
+    /// <summary>
+    /// 「校验」：带着这个校验值跳到「编码 / 哈希工具」的**文件模式**，用户把刚下好的安装包
+    /// 拖进去就自动比对 —— 省掉"自己打开工具 → 找到哈希 → 复制 → 粘贴 → 再选文件"那一串。
+    /// 走 <c>viaList: false</c>：不铺工具列表，看完返回一次就回到这张详情页。
+    /// </summary>
+    private void HashCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button b || b.Tag is not string hash || hash.Length == 0) return;
+
+        try
+        {
+            App.MainWindow?.Shell.NavigateToTool(
+                typeof(Tools.EncodingToolPage),
+                new Tools.HashCheckRequest(hash, _app?.Name ?? ""),
+                viaList: false);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[detail] 跳哈希校验失败: " + ex.Message);
+        }
     }
 
     private void CopyTimer_Tick(DispatcherQueueTimer sender, object args)

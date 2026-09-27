@@ -8,11 +8,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
+
+/// <summary>
+/// 软件详情页点「校验」时带过来的请求：官方校验值 + 软件名（只用于提示文案）。
+/// </summary>
+public sealed record HashCheckRequest(string Hash, string AppName);
 
 /// <summary>
 /// 编码 / 哈希工具：Base64、URL 编解码 + MD5 / SHA-1 / SHA-256 / SHA-512。
@@ -43,6 +49,28 @@ public sealed partial class EncodingToolPage : Page
         // ⚠️ 这行原本只写在页内「返回」按钮的点击处理里 —— 统一改用导航栏返回后那个按钮就点不到了，
         //    所以挪到 Unloaded：导航离开同样会触发，还能覆盖「非导航地被移除」的情况。
         Unloaded += (_, _) => _fileCts?.Cancel();
+    }
+
+    /// <summary>
+    /// 从软件详情页的「校验」键跳进来时，参数里带着那个软件的官方校验值：
+    /// 直接切到**对文件**模式并预填校验值 —— 用户只要把刚下好的安装包拖进来就出结论，
+    /// 省掉"自己打开工具 → 找到哈希 → 复制 → 粘贴 → 再选文件"这一串。
+    /// 普通从工具列表点进来时参数是 null，一切照旧。
+    /// </summary>
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        if (e.Parameter is not HashCheckRequest req || string.IsNullOrWhiteSpace(req.Hash)) return;
+
+        FileModeRadio.IsChecked = true;                 // 触发 SwitchMode(fileMode: true)，顺带把输入框切走
+        ExpectedBox.Text = req.Hash;
+        // ⚠️ 必须自己再刷一次核对行：程序设 Text 时 TextChanged 不一定回来（实测没回来），
+        //    不刷的话下面是空的，用户看不到"先选一个文件"那句引导。
+        RefreshMatch();
+
+        var who = string.IsNullOrWhiteSpace(req.AppName) ? "这个软件" : "「" + req.AppName + "」";
+        FromAppHint.Text = $"已带入{who}的官方校验值，把下载好的安装包拖进来就会自动核对。";
+        FromAppHint.Visibility = Visibility.Visible;
     }
 
     private void BuildHashRows()
@@ -338,11 +366,15 @@ public sealed partial class EncodingToolPage : Page
             MatchText.Text = $"✓ 与 {hit} 一致";
             MatchText.Foreground = Res("SystemFillColorSuccessBrush");
         }
+        else if (_fileMode && _fileHashes.Count == 0)
+        {
+            // "还没选文件"是指引不是错误 —— 用次要色，别拿红字吓人
+            MatchText.Text = "先选一个文件（或换回文本模式）";
+            MatchText.Foreground = Res("TextFillColorSecondaryBrush");
+        }
         else
         {
-            MatchText.Text = _fileMode && _fileHashes.Count == 0
-                ? "先选一个文件（或换回文本模式）"
-                : "✗ 与当前显示的 4 种哈希值均不一致（比对时忽略空格与大小写差异）";
+            MatchText.Text = "✗ 与当前显示的 4 种哈希值均不一致（比对时忽略空格与大小写差异）";
             MatchText.Foreground = Res("SystemFillColorCriticalBrush");
         }
     }

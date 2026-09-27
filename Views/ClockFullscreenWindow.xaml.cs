@@ -13,13 +13,63 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>全屏时钟窗口：铺满屏幕，按 Esc 或双击退出；外观完全跟随页面里的设置。</summary>
+/// <summary>
+/// 全屏时钟窗口：铺满屏幕，按 Esc / 双击屏幕 / 右上角那颗按钮退出；外观完全跟随页面里的设置。
+///
+/// ⚠️ **同一时刻只允许存在一个**（2026-09-27 改）。
+///    以前每次点「全屏时钟」都 new 一个，触屏上连点几下就叠出十几二十个全屏窗口 ——
+///    它们长得一模一样、又都盖满屏幕，看起来就是「点了一下，然后卡死了 / 关不掉了」。
+///    现场反馈原话：「为什么能开一堆全屏时钟」。
+///    现在统一走 <see cref="Show"/>：已经开着就**就地更新设置并拉到前台**，不再叠新的。
+/// </summary>
 public sealed partial class ClockFullscreenWindow : Window
 {
-    private readonly ClockSettings _settings;
-    private readonly bool _dark;
+    /// <summary>当前开着的这一个（没有则为 null）。整个进程唯一的全屏时钟。</summary>
+    private static ClockFullscreenWindow? _current;
+
+    private ClockSettings _settings;
+    private bool _dark;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
+
+    /// <summary>退出入口的淡出倒计时（毫秒）。到 0 就藏起来，别一直压着时钟。</summary>
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _exitTimer;
+    private int _exitRemainMs;
+
+    /// <summary>退出按钮可见时给多久（毫秒）；末段用来做淡出。</summary>
+    private const int ExitHoldMs = 4500;
+    private const int ExitFadeMs = 900;
+
     private AppWindow? _appWindow;
+
+    /// <summary>
+    /// 唯一入口：开一个全屏时钟。已经开着就复用（拉到最前），**不会**再多出一个窗口。
+    ///
+    /// <paramref name="settings"/> 传 null = 「只把已经开着的那个调到前面来，别动它的外观」。
+    /// 侧边栏那个小浮窗的「全屏时钟」按钮就是这样调的：它手上只有一套默认设置，
+    /// 要是拿它去覆盖用户刚在工具页里调好的底色/字体，就变成「点一下外观被打回原形」了。
+    /// </summary>
+    public static void Show(ClockSettings? settings, bool darkTheme)
+    {
+        if (_current is not null)
+        {
+            try
+            {
+                if (settings is not null) _current.UpdateSettings(settings, darkTheme);
+                _current.Activate();
+                _current.RevealExit();
+                return;
+            }
+            catch
+            {
+                // 极端情况下（窗口已销毁但字段没清）兜一下：丢掉引用重新开
+                _current = null;
+            }
+        }
+
+        var window = new ClockFullscreenWindow(settings ?? new ClockSettings(), darkTheme);
+        _current = window;
+        window.Start();
+    }
 
     public ClockFullscreenWindow(ClockSettings settings, bool darkTheme)
     {
@@ -32,6 +82,12 @@ public sealed partial class ClockFullscreenWindow : Window
         _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.IsRepeating = true;
         _timer.Tick += (_, _) => Tick();
+
+        _exitTimer = DispatcherQueue.CreateTimer();
+        _exitTimer.Interval = TimeSpan.FromMilliseconds(60);
+        _exitTimer.IsRepeating = true;
+        _exitTimer.Tick += (_, _) => FadeExit();
+
         Closed += OnClosed;
     }
 
@@ -66,7 +122,20 @@ public sealed partial class ClockFullscreenWindow : Window
 
         Tick();
         _timer.Start();
+
+        // 第一次进来自动把「怎么退出」亮几秒 —— 触屏用户没有 Esc 键，得让他看见
+        RevealExit();
+
         Root.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>就地换一套外观设置（已经在全屏了就改这一份，不新开窗口）。</summary>
+    private void UpdateSettings(ClockSettings settings, bool darkTheme)
+    {
+        _settings = settings;
+        _dark = darkTheme;
+        Apply();
+        Tick();
     }
 
     private bool HasPhoto => !string.IsNullOrWhiteSpace(_settings.BackgroundImagePath)
@@ -136,6 +205,42 @@ public sealed partial class ClockFullscreenWindow : Window
         DateText.FontSize = Math.Max(16, Math.Min(w * 0.024, h * 0.04) * _settings.Scale);
     }
 
+    // ══════════ 退出入口 ══════════
+
+    /// <summary>把「怎么退出」那块亮出来，并重新开始倒计时。</summary>
+    private void RevealExit()
+    {
+        _exitRemainMs = ExitHoldMs;
+        ExitBar.Opacity = 1;
+        ExitBar.IsHitTestVisible = true;
+        if (!_exitTimer.IsRunning) _exitTimer.Start();
+    }
+
+    /// <summary>倒计时收尾：最后一段淡出，到点就彻底藏掉（并交出命中测试，别挡住双击退出）。</summary>
+    private void FadeExit()
+    {
+        _exitRemainMs -= 60;
+        if (_exitRemainMs > 0)
+        {
+            ExitBar.Opacity = _exitRemainMs >= ExitFadeMs ? 1 : _exitRemainMs / (double)ExitFadeMs;
+            return;
+        }
+
+        _exitTimer.Stop();
+        ExitBar.Opacity = 0;
+        ExitBar.IsHitTestVisible = false;
+    }
+
+    private void Root_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        // 鼠标划过 / 手指按一下都算「他在找退出」，重新亮出来
+        if (_exitRemainMs < ExitHoldMs - 300 || ExitBar.Opacity <= 0) RevealExit();
+    }
+
+    private void Root_Tapped(object sender, TappedRoutedEventArgs e) => RevealExit();
+
+    private void Exit_Click(object sender, RoutedEventArgs e) => Close();
+
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key == VirtualKey.Escape) Close();
@@ -143,5 +248,10 @@ public sealed partial class ClockFullscreenWindow : Window
 
     private void Root_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => Close();
 
-    private void OnClosed(object sender, WindowEventArgs args) => _timer.Stop();
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        _timer.Stop();
+        _exitTimer.Stop();
+        if (ReferenceEquals(_current, this)) _current = null;
+    }
 }

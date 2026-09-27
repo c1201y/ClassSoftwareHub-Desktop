@@ -27,7 +27,7 @@
                 <StackPanel Spacing="5">
                     <TextBlock Text="侧边布局" FontSize="30" FontWeight="Bold" />
                     <TextBlock FontSize="13" Opacity="0.7" TextWrapping="Wrap"
-                               Text="从左侧模块库选取模块，拖入右侧侧边栏预览（也可直接点击添加）；在预览区拖动可调整顺序，拖出即移除。右侧即为侧边栏的实际效果。" />
+                               Text="从左侧模块库选取模块，拖入右侧侧边栏预览（也可直接点击添加）；在预览区拖动可调整顺序，拖出即移除。右侧即为侧边栏的实际效果。触摸屏上：按住卡片约半秒、期间手指别移动，就可以拖了；直接滑动则是滚动整页。" />
                 </StackPanel>
 
                 <Grid Grid.Row="1" ColumnSpacing="22">

@@ -80,8 +80,9 @@ public sealed partial class VolumeMixerWindow : Window
             if (_instance._visible) _instance.HideSelf();
             else _instance.ShowSelf();
         }
-        catch
+        catch (Exception ex)
         {
+            ScreenCapture.Log("音量合成器开关失败: " + ex.Message);
         }
     }
 

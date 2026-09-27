@@ -108,11 +108,23 @@
                                                        TextWrapping="Wrap" />
                                             <TextBlock Text="{x:Bind Size}" FontSize="12" Opacity="0.7"
                                                        TextWrapping="Wrap" />
-                                            <Button Content="{x:Bind HashChipText}" Tag="{x:Bind Hash}"
-                                                    Visibility="{x:Bind HashVisibility}"
-                                                    Click="CopyHash_Click" HorizontalAlignment="Left"
-                                                    Padding="8,3" FontSize="11.5" Opacity="0.9"
-                                                    ToolTipService.ToolTip="{x:Bind Hash}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                                        HorizontalAlignment="Left">
+                                                <Button Content="{x:Bind HashChipText}" Tag="{x:Bind Hash}"
+                                                        Visibility="{x:Bind HashVisibility}"
+                                                        Click="CopyHash_Click"
+                                                        Padding="8,3" FontSize="11.5" Opacity="0.9"
+                                                        ToolTipService.ToolTip="{x:Bind Hash}" />
+                                                <Button Tag="{x:Bind Hash}" Visibility="{x:Bind HashVisibility}"
+                                                        Click="HashCheck_Click"
+                                                        Padding="8,3" FontSize="11.5" Opacity="0.9"
+                                                        ToolTipService.ToolTip="到「编码 / 哈希工具」里核对这个校验值：选好下载的安装包就会自动比对">
+                                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                                        <FontIcon Glyph="&#xE73E;" FontSize="11" />
+                                                        <TextBlock Text="校验" FontSize="11.5" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                                                     VerticalAlignment="Center">

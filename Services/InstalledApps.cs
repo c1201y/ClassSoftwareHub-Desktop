@@ -12,15 +12,19 @@ public sealed record InstalledApp(string Name, string Version, string Publisher,
 /// <summary>
 /// 枚举本机已安装的桌面软件。
 ///
+/// 两个来源：
+///   ①「程序和功能」的安装记录（注册表 Uninstall 键）—— 传统安装包的软件都在这里
+///   ② Microsoft Store / MSIX 应用（按用户的包仓库）—— **不写** Uninstall 键，只在 ① 里找就是"没装"
+///
 /// 只读注册表，不需要管理员，不联网，不落盘。
-/// 覆盖三个位置（少一个就会漏一半软件）：
+/// ① 覆盖三个位置（少一个就会漏一半软件）：
 ///   · HKLM 64 位视图  —— 绝大多数 64 位程序
 ///   · HKLM 32 位视图  —— 32 位程序（在 64 位系统上被重定向到 WOW6432Node）
 ///   · HKCU            —— 只给当前用户装的程序（很多国产软件走这条路）
 ///
 /// ⚠️ 已知边界（界面上要如实说明，别让用户以为这里是权威清单）：
-///   · Microsoft Store / MSIX 应用**不写**这些键 —— 这里查不到，不是没装
-///   · 免安装（绿色版）软件也不写 —— 同样查不到
+///   · 免安装（绿色版）软件不写任何注册表 —— 查不到，不是没装
+///   · MSIX 只覆盖**当前用户**注册的包；别的账户装的店铺版应用读不到
 /// </summary>
 public static class InstalledApps
 {
@@ -46,6 +50,96 @@ public static class InstalledApps
             .Select(g => g.First())
             .OrderBy(a => a.Name, StringComparer.CurrentCulture)
             .ToList();
+    }
+
+    /// <summary>
+    /// 抓一份当前用户注册的 Microsoft Store / MSIX 应用列表。
+    ///
+    /// 为什么要单独来这一趟：商店版应用**不写** Uninstall 键，只在 ① 里查就是"没装"。
+    /// 现场反馈就是这么来的 ——「我装了 UU 远程，却显示未安装」。
+    /// 清单里好几个软件官方就推 Store 版（PowerToys、VLC、GeoGebra、UU 远程、图吧工具箱），
+    /// 漏了这一趟，这一整类都会误报。
+    ///
+    /// 读的是「按用户」的包仓库（HKCU 下的 Classes\Local Settings），所以：
+    ///   · 不需要管理员 —— 读的是本账户的注册
+    ///   · 也只覆盖本账户 —— 别的用户装的应用读不到（这属于系统隔离，没法绕）
+    /// 跳过框架包（Runtime、运行时库）和资源包 —— 那些不是"软件"，列出来只会淹掉真东西。
+    /// </summary>
+    public static List<InstalledApp> EnumerateStorePackages()
+    {
+        var found = new List<InstalledApp>();
+
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            try
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view);
+                using var repo = baseKey.OpenSubKey(
+                    @"SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages");
+                if (repo is null) continue;
+
+                foreach (var fullName in repo.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using var sub = repo.OpenSubKey(fullName);
+                        var app = ReadPackage(sub, fullName);
+                        if (app is not null) found.Add(app);
+                    }
+                    catch
+                    {
+                        // 单个包读不动不该拖垮整轮
+                    }
+                }
+            }
+            catch
+            {
+                // 整个视图读不到就算了
+            }
+        }
+
+        // 同一个应用可能按架构/语言拆成多个包（甚至两个视图各来一份）→ 按名称去重
+        return found
+            .GroupBy(a => Normalize(a.Name))
+            .Where(g => g.Key.Length > 0)
+            .Select(g => g.First())
+            .OrderBy(a => a.Name, StringComparer.CurrentCulture)
+            .ToList();
+    }
+
+    private static InstalledApp? ReadPackage(RegistryKey? k, string fullName)
+    {
+        if (k is null) return null;
+
+        // Framework=1 = 运行时/框架包（VCLibs、WindowsAppRuntime…），不是用户装的"软件"
+        if (k.GetValue("Framework") is int fw && fw == 1) return null;
+
+        var name = (k.GetValue("DisplayName") as string)?.Trim() ?? "";
+
+        // 很多包的 DisplayName 是个资源引用（"ms-resource:AppDisplayName"），
+        // 展开它要 SHLoadIndirectString + 拼包资源路径，代价不值当。
+        // 退化成「包名的最后一段」（28AE62C8.FurryXiyi.DismGUI → DismGUI），够模糊匹配用了。
+        if (name.Length == 0 || name.StartsWith("ms-resource:", StringComparison.OrdinalIgnoreCase))
+            name = LastNameSegment(fullName);
+        if (name.Length == 0) return null;
+
+        var location = (k.GetValue("PackageRootFolder") as string)?.Trim() ?? "";
+        return new InstalledApp(name, VersionOf(fullName), "", location);
+    }
+
+    /// <summary>PackageFullName = <c>Name_Version_Arch__PublisherHash</c> → 取 Name 的最后一段。</summary>
+    private static string LastNameSegment(string fullName)
+    {
+        var name = fullName.Split('_')[0];
+        var dot = name.LastIndexOf('.');
+        return dot >= 0 && dot + 1 < name.Length ? name[(dot + 1)..] : name;
+    }
+
+    /// <summary>PackageFullName 的第二段就是版本号（如 <c>4.5.0.0</c>）。</summary>
+    private static string VersionOf(string fullName)
+    {
+        var parts = fullName.Split('_');
+        return parts.Length > 1 ? parts[1] : "";
     }
 
     private static void ReadHive(RegistryHive hive, RegistryView view, List<InstalledApp> sink)

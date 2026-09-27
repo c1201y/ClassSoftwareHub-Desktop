@@ -14,8 +14,14 @@ public static class SidebarModuleKinds
     /// <summary>讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。</summary>
     public const string Action = "action";
     /// <summary>
-    /// 贴边展开一栏的常驻面板（音量）：不外跳、不开新窗口，直接让边条**往屏幕里侧多长出一栏**。
-    /// 侧边栏是贴在屏幕边缘的一条，所以"往内长"就是往用户看得见的方向长。
+    /// 单滑块浮窗（音量 / 屏幕亮度）：不外跳，在边条**挨着的那一侧**弹一栏浮窗。
+    ///
+    /// ⚠️ 早先的写法是让边条**自己往屏幕里侧多长出一栏**（面板内嵌在侧边栏窗口里）—— **已推翻**（2026-09-26 Nick 定）。
+    ///    内嵌那一栏会把侧边栏越撑越宽，而且贴上/下边时边条只有 112 高、根本塞不下垂直滑块，
+    ///    还得为横条单写一套布局，两套并存。
+    ///    现在统一成**独立浮窗**（<c>Views/VolumeWindow</c> + <c>Views/VolumeMixerWindow</c>）：
+    ///    浮窗挨着边条长、**边条不收起**（靠 <c>VolumeFlyoutGroup.HoldSidebar()</c> 持续续期压住自动收起），
+    ///    贴哪条边都由同一个窗口按 <c>EdgeGeometry</c> 算出该往哪边滑入。
     /// </summary>
     public const string Panel = "panel";
 }
@@ -52,7 +58,7 @@ public sealed class SidebarModule
     {
         SidebarModuleKinds.Page => "打开主窗口里的这一页",
         SidebarModuleKinds.Action => "按一下就干活，不跳窗口、不抢焦点",
-        SidebarModuleKinds.Panel => "贴边往里展开一栏，不跳窗口、不开新窗",
+        SidebarModuleKinds.Panel => "挨着边条弹一栏浮窗，不跳窗口、不占主界面",
         _ => "弹一个小浮窗，不占主界面"
     };
 }
@@ -70,13 +76,13 @@ public static class SidebarModules
         new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", Glyph = "\uE943", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.EncodingToolPage) },
         new() { Id = "mirror-download", Name = "系统镜像下载", ShortName = "镜像", Glyph = "\uE896", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.MirrorToolPage) },
 
-        // ── 贴边展开一栏的常驻面板 ──
-        // 音量：点一下边条往屏幕里侧长出一栏 —— 上面是主音量（垂直滑块），下面是音量合成器。
-        // 贴上/下边时那条太矮，会改成弹一个独立小浮窗（同一个面板控件）。
-        new() { Id = "volume", Name = "音量调节", ShortName = "音量", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "点一下往屏幕里侧展开一栏：上面调系统主音量（带刻度的垂直滑块），下面是音量合成器，可以给每个正在发声的应用单独调音量" },
+        // ── 挨着边条弹浮窗的单滑块面板 ──
+        // 音量：点一下在边条内侧弹一栏（边条不收起）—— 竖向排「数值 + 垂直滑块 + 静音 + 展开」，
+        // 「展开」再弹一个横向的音量合成器浮窗，可以给每个正在发声的应用单独调音量。
+        new() { Id = "volume", Name = "音量调节", ShortName = "音量", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "点一下在侧边栏旁边弹一栏：调系统主音量（带刻度的垂直滑块），点下面的「展开」再弹出音量合成器，可以给每个正在发声的应用单独调音量" },
         // 屏幕亮度：跟音量同一套（同一个浮窗控件，点哪个就换成哪一栏）。下面那颗键是「自动亮度」，
         // **没有二级浮窗**；机器没有环境光传感器时那颗键是灰的（系统自带的自动亮度同样用不了）。
-        new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "点一下往屏幕里侧展开一栏调屏幕亮度（笔记本内屏可以，外接显示器一般不行）；下面那颗键是「自动亮度」，机器有环境光传感器才点得动" },
+        new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "点一下在侧边栏旁边弹一栏调屏幕亮度（笔记本内屏可以，外接显示器一般不行）；下面那颗键是「自动亮度」，机器有环境光传感器才点得动" },
 
         // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
         new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次点击关闭" },

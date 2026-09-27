@@ -139,7 +139,12 @@ public sealed partial class MachineCheckPage : Page
         var results = await Task.Run(() =>
         {
             var installed = InstalledApps.Enumerate();
-            return (Items: MachineCheck.Run(apps, installed), InstalledCount: installed.Count);
+            // 商店版应用不写「程序和功能」的键，只跑上面那一趟会把它们全判成"没装"
+            var store = InstalledApps.EnumerateStorePackages();
+            return (
+                Items: MachineCheck.Run(apps, installed, store),
+                InstalledCount: installed.Count,
+                StoreCount: store.Count);
         });
 
         _all = results.Items.Select(i => new CheckRow(i)).ToList();
@@ -150,14 +155,16 @@ public sealed partial class MachineCheckPage : Page
         StatOutdated.Text = s.Outdated.ToString();
         StatMissing.Text = s.Missing.ToString();
 
+        // 商店应用单独报个数：它跟「程序和功能」是两本账，混着数会显得"多报了"
+        var storeTail = results.StoreCount > 0 ? $"，另有 {results.StoreCount} 个 Microsoft Store 应用" : "";
         SummaryHint.Text = s.Outdated > 0
-            ? $"{s.Outdated} 个软件建议升级 · 本机共检测到 {results.InstalledCount} 个已安装软件"
-            : $"未发现需要升级的软件 · 本机共检测到 {results.InstalledCount} 个已安装软件";
+            ? $"{s.Outdated} 个软件建议升级 · 本机共检测到 {results.InstalledCount} 个已安装软件{storeTail}"
+            : $"未发现需要升级的软件 · 本机共检测到 {results.InstalledCount} 个已安装软件{storeTail}";
 
         FootNote.Text =
-            "检测口径：读取 Windows「程序和功能」的安装记录（64 位、32 位、当前用户三处），按软件名称与清单匹配。" +
-            "Microsoft Store 应用、免安装版以及改过名的软件不会出现在该记录中，可能被判定为「未安装」；" +
-            "版本差异仅在本机记录包含有效版本号时给出。点击卡片可查看软件详情。";
+            "检测口径：读取 Windows「程序和功能」的安装记录（64 位、32 位、当前用户三处），以及本账户注册的 Microsoft Store 应用，" +
+            "按软件名称与清单匹配。免安装版、改过名的软件、以及其他账户下安装的商店应用不在上述两处记录中，" +
+            "可能被判定为「未安装」；版本差异仅在本机记录包含有效版本号时给出。点击卡片可查看软件详情。";
 
         LoadingPanel.Visibility = Visibility.Collapsed;
         RescanButton.IsEnabled = true;

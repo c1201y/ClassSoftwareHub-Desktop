@@ -46,7 +46,19 @@ public sealed record CheckSummary(int Total, int Installed, int Outdated, int Ne
 /// </summary>
 public static class MachineCheck
 {
-    public static List<CheckItem> Run(IEnumerable<SoftwareApp> apps, IReadOnlyList<InstalledApp> installed)
+    /// <summary>索引里的一条候选：已装条目 + 归一化名 + 是否来自 Microsoft Store。</summary>
+    private readonly record struct Candidate(InstalledApp App, string Norm, bool Store);
+
+    /// <param name="installed">「程序和功能」里的安装记录（<see cref="InstalledApps.Enumerate"/>）。</param>
+    /// <param name="storePackages">
+    /// 当前用户的 Microsoft Store / MSIX 应用（<see cref="InstalledApps.EnumerateStorePackages"/>）。
+    /// 只参与**匹配**，不计进"本机检测到 N 个已安装软件"那个数 —— 商店应用属于另一本账，
+    /// 混在一起用户会以为咱们把系统自带的几十个组件也算成了"你装的软件"。
+    /// </param>
+    public static List<CheckItem> Run(
+        IEnumerable<SoftwareApp> apps,
+        IReadOnlyList<InstalledApp> installed,
+        IReadOnlyList<InstalledApp>? storePackages = null)
     {
         // 预处理：归一化一次，别在双重循环里反复算。
         // ⚠️ 这里**不按长度过滤**。踩过的坑：一开始写成 `Norm.Length >= 3` 才收进索引，
@@ -54,9 +66,17 @@ public static class MachineCheck
         //    于是本机明明装着，界面却永远显示"没查到"。老师一眼就能看出不对。
         //    长度只用来限制**包含式**匹配，精确相等不看长度。
         var index = installed
-            .Select(a => (App: a, Norm: InstalledApps.Normalize(a.Name)))
-            .Where(x => x.Norm.Length > 0)
+            .Where(a => InstalledApps.Normalize(a.Name).Length > 0)
+            .Select(a => new Candidate(a, InstalledApps.Normalize(a.Name), false))
             .ToList();
+
+        // 商店应用排在后面：同名时保留安装记录那条（它带得到版本号，更能判断要不要升级）
+        if (storePackages is not null)
+        {
+            index.AddRange(storePackages
+                .Where(a => InstalledApps.Normalize(a.Name).Length > 0)
+                .Select(a => new Candidate(a, InstalledApps.Normalize(a.Name), true)));
+        }
 
         var results = new List<CheckItem>();
 
@@ -65,19 +85,27 @@ public static class MachineCheck
             var norm = InstalledApps.Normalize(app.Name);
             var hit = norm.Length > 0 ? BestMatch(norm, index) : null;
 
+            // 整串没认出来时，再拿「空格切出来的每一段」单独试一次精确匹配。
+            // 清单里很多名字是「产品名 + 品类词」（ToDesk 远程控制 / PeaZip 解压缩工具 /
+            // Firefox 火狐浏览器），而注册表只写产品名 —— 整串比重合度会被品类词拉低到阈值以下，
+            // 于是本机明明装着也判"没装"（2026-09-27 实测：ToDesk 就是这么漏的）。
+            if (hit is null && norm.Length > 0)
+                hit = BestAliasMatch(app.Name, norm, index);
+
             if (hit is null)
             {
                 var missingNote = !string.IsNullOrWhiteSpace(app.Store)
-                    ? "该软件通过 Microsoft Store 分发，不在安装记录中，可在「Microsoft Store → 库」中核对"
+                    ? "清单标的是商店版；本机的安装记录和本账户的商店应用里都没找到。商店版装在别的账户下时查不到，可在「Microsoft Store → 库」确认"
                     : Weight(norm) < 4
                         ? "软件名称过短，无法可靠匹配，请在「程序和功能」中人工核对"
-                        : "安装记录中没有该软件（免安装版、商店版及改过名的软件不会出现）";
+                        : "安装记录和商店应用里都没有（免安装版、改过名的软件不会出现在这两处）";
                 results.Add(new CheckItem(app, CheckStatus.Missing, "", "", missingNote));
                 continue;
             }
 
             var installedVersion = hit.Value.App.Version;
             var (status, note) = Judge(app.Version, installedVersion, hit.Value.App.Name);
+            if (hit.Value.Store) note += "（匹配到的是 Microsoft Store 应用）";
             results.Add(new CheckItem(app, status, hit.Value.App.Name, installedVersion, note));
         }
 
@@ -99,14 +127,14 @@ public static class MachineCheck
     };
 
     /// <summary>在已装列表里挑最像的那一条。优先精确相等；否则取包含关系里重合度最高的。</summary>
-    private static (InstalledApp App, string Norm)? BestMatch(
-        string norm, List<(InstalledApp App, string Norm)> index)
+    private static Candidate? BestMatch(string norm, List<Candidate> index)
     {
-        (InstalledApp App, string Norm)? best = null;
+        Candidate? best = null;
         var bestScore = 0d;
 
-        foreach (var (app, normInstalled) in index)
+        foreach (var candidate in index)
         {
+            var normInstalled = candidate.Norm;
             double score;
 
             if (normInstalled == norm)
@@ -135,12 +163,35 @@ public static class MachineCheck
             if (score > bestScore)
             {
                 bestScore = score;
-                best = (app, normInstalled);
+                best = candidate;
             }
         }
 
         return best;
     }
+
+    /// <summary>
+    /// 兜底：把清单名按空格（含全角空格、中点、斜杠）切开，逐段做**精确**匹配。
+    ///
+    /// 只认精确相等 —— 用的是跟「钉钉」==「钉钉」同一把尺子，所以不会把"微信"配到"微信输入法"上。
+    /// 段太短（有效长度 &lt; 4）不要，否则「360 安全卫士」会被拆出一个「360」到处乱撞。
+    /// </summary>
+    private static Candidate? BestAliasMatch(string rawName, string norm, List<Candidate> index)
+    {
+        foreach (var segment in rawName.Split(AliasSeparators, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var alias = InstalledApps.Normalize(segment);
+            if (alias.Length == 0 || alias == norm) continue;
+            if (Weight(alias) < 4) continue;
+
+            foreach (var candidate in index)
+                if (candidate.Norm == alias) return candidate;
+        }
+
+        return null;
+    }
+
+    private static readonly char[] AliasSeparators = { ' ', '\u3000', '·', '・', '/', '｜', '|', '-' };
 
     /// <summary>
     /// 名称的「有效长度」：中日韩文字一个字按两个字算。

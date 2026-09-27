@@ -37,7 +37,14 @@ public sealed partial class ToolSidebarWindow : Window
     private const int PanelThicknessDip = 92;       // 展开后的厚度（竖着放时=宽）
     private const int PanelLengthDip = 450;         // 展开后的长度（竖着放时=高）
     private const int PanelThicknessFlatDip = 112;  // 上/下边时：两行（工具一行、按钮一行）的高度
-    private const int PanelLengthFlatDip = 470;     // 上/下边时：一排四个按钮（每个 104 dip + 间距）要放得下
+    private const int PanelLengthFlatDip = 470;     // 上/下边时：展开面板长度的**下限**（真实宽度按内容算，见 PlannedSize）
+
+    // 上/下边（横条）时底排按钮的排版参数。
+    // ⚠️ 横条宽度必须容得下**底排这一整排**（见 PlannedSize），不然最后一颗会被面板裁掉 ——
+    //    2026-09-27 用户截图就是这个：「打开应用」只露出半个「打」字。
+    private const int FooterFlatButtonWidthDip = 104;   // 底排每个按钮的最小宽度
+    private const int FooterFlatSpacingDip = 8;         // 底排按钮之间的间距
+    private const int FlatRowPadDip = 24;               // 横条里每一行的左右内边距 + 余量
 
     private static ToolSidebarWindow? _instance;
 
@@ -1395,7 +1402,7 @@ public sealed partial class ToolSidebarWindow : Window
             Sep.Margin = flat ? new Thickness(10, 4, 10, 4) : new Thickness(2, 3, 2, 3);
 
             FooterStack.Orientation = flat ? Orientation.Horizontal : Orientation.Vertical;
-            FooterStack.Spacing = flat ? 8 : 2;
+            FooterStack.Spacing = flat ? FooterFlatSpacingDip : 2;
             FooterStack.HorizontalAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
 
             // 贴上下边时给按钮留出宽度，别挤成一坨
@@ -1407,7 +1414,7 @@ public sealed partial class ToolSidebarWindow : Window
             }
             foreach (var b in FooterButtons())
             {
-                b.MinWidth = flat ? 104 : 0;
+                b.MinWidth = flat ? FooterFlatButtonWidthDip : 0;
                 // 横条时矮一点，不然两行加起来超出面板高度，下面一排会被裁掉
                 b.MinHeight = flat ? 32 : 44;
                 b.Padding = flat ? new Thickness(6, 2, 6, 2) : new Thickness(8, 4, 8, 4);
@@ -1573,8 +1580,15 @@ public sealed partial class ToolSidebarWindow : Window
             var lim = ExpandedLimits();
             if (IsFlat)
             {
-                // 上/下边：竖着两行 —— 第一行工具、第二行按钮
-                dipW = (int)Math.Min(Math.Max(PanelLengthFlatDip, count * 64 + (count - 1) * 8 + 24), lim.W);
+                // 上/下边：竖着两行 —— 第一行工具、第二行底排按钮。
+                // 宽度取**两行里更宽的那行**：底排是固定几个按钮（不被裁的硬要求），
+                // 工具行多到放不下时由 ToolsScroll 横向滚动兜底。
+                var toolsRow = count * 64 + (count - 1) * 8 + FlatRowPadDip;
+                var footerCount = FooterButtons().Length;
+                var footerRow = footerCount * FooterFlatButtonWidthDip
+                              + (footerCount - 1) * FooterFlatSpacingDip + FlatRowPadDip;
+
+                dipW = (int)Math.Min(Math.Max(Math.Max(PanelLengthFlatDip, toolsRow), footerRow), lim.W);
                 dipH = PanelThicknessFlatDip;
             }
             else

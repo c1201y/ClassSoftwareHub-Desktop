@@ -54,7 +54,9 @@ public sealed partial class MiniClock : UserControl
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
     {
         var dark = ActualTheme == ElementTheme.Dark;
-        new Views.ClockFullscreenWindow(new ClockSettings(), dark).Start();
+        // 传 null：已经开着全屏时钟的话只把它调到前面来。
+        // 这里手上只有一套默认外观，拿它去覆盖用户在工具页里调好的底色/字体是帮倒忙。
+        Views.ClockFullscreenWindow.Show(null, dark);
     }
 
     /// <summary>

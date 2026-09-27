@@ -82,6 +82,9 @@
 
                         <!-- 文件模式：拖进来算 -->
                         <StackPanel x:Name="FileArea" Spacing="10">
+                            <!-- 从软件详情页的「校验」键跳进来时才有：说明校验值是从哪来的 -->
+                            <TextBlock x:Name="FromAppHint" Visibility="Collapsed" FontSize="12.5"
+                                       TextWrapping="Wrap" Opacity="0.85" />
                             <Border x:Name="DropZone" Padding="16" CornerRadius="8" BorderThickness="2"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorDefaultBrush}"

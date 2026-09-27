@@ -229,7 +229,8 @@ public sealed partial class ClockToolPage : Page
             ShowDate = _settings.ShowDate,
             Hour12 = _settings.Hour12,
         };
-        new Views.ClockFullscreenWindow(copy, Dark).Start();
+        // 走统一入口：已经开着就就地换成这套设置（不会再叠出第二个全屏窗口）
+        Views.ClockFullscreenWindow.Show(copy, Dark);
     }
 
     private async void TimeSync_Click(object sender, RoutedEventArgs e)

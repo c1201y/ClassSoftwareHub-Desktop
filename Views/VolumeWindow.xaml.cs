@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Services.Audio;
@@ -24,6 +25,13 @@ namespace ClassSoftwareHub.Desktop.Views;
 ///
 /// 窗口外壳 / 材质（跟边条同一套）/ 贴边几何都在 <see cref="FlyoutChrome"/> + <see cref="EdgeGeometry"/> 里，
 /// 本文件只管「长什么样、报什么数」。
+///
+/// ⚠️ **音量那一路和亮度那一路的读取代价差了三个数量级**（2026-09-27 修）：
+///    音量 = 内存里的 Core Audio 调用（微秒级），1.5 秒轮一次没问题；
+///    亮度 = WMI 查一次十几到几十毫秒，**自动亮度还要起一个 powercfg 进程**（WaitForExit 最长 4 秒）。
+///    两条路都按 1.5 秒压在 UI 线程上 → 浮窗开着就周期性卡顿、白烧 CPU 和 IO。
+///    现在：亮度改 3 秒 + **后台线程读**（见 <see cref="KickBrightnessRead"/>），
+///    自动亮度状态只在**开窗那次**和**自己改过之后**读（那状态不会自己变）。
 /// </summary>
 public sealed partial class VolumeWindow : Window
 {
@@ -59,6 +67,12 @@ public sealed partial class VolumeWindow : Window
     private bool _flat;                 // 当前是不是横版（贴着上/下）
     private Target _target = Target.Volume;
 
+    // ── 亮度这一路的缓存（读数很重，见类注释）──
+    private bool? _adaptiveOn;              // 自动亮度状态；只在开窗那次和自己改过之后读
+    private int _brightnessPercent = -1;    // 亮度缓存（-1 = 还没读到）
+    private bool _brightnessReadable = true;
+    private bool _brightnessReading;        // 后台读正在进行，别叠着再发一个
+
     private VolumeWindow()
     {
         InitializeComponent();
@@ -87,8 +101,11 @@ public sealed partial class VolumeWindow : Window
             if (w._visible) w.Reposition();      // 已经开着：按新内容重新量一遍尺寸挪一下（不重播滑入）
             else w.ShowSelf();
         }
-        catch
+        catch (Exception ex)
         {
+            // ⚠️ 这里原来是个空 catch —— 整段异常全吞掉，"点了没反应"就完全查不出来。
+            //    项目其他地方一律走 ScreenCapture.Log，这里跟着统一。
+            ScreenCapture.Log("浮窗开关失败: " + ex.Message);
         }
     }
 
@@ -329,22 +346,39 @@ public sealed partial class VolumeWindow : Window
 
             ActionToggle.IsChecked = false;
             _chrome.AppWindow.Title = volume ? "音量" : "屏幕亮度";
+            _adaptiveOn = null;                          // 换了目标：自动亮度状态重新读一遍
 
             if (ActionToggle.Content is FontIcon fi)
                 fi.Glyph = volume ? "\uE74F" : "\uE706";
 
-            ToolTipService.SetToolTip(ActionToggle, volume
-                ? "静音 / 取消静音"
-                : BrightnessService.AdaptiveSupported
-                    ? "自动亮度（跟着环境光调）"
-                    : "自动亮度：这台机器没有环境光传感器，系统自带的也用不了");
+            UpdateActionTooltip();
 
             ExpandToggle.Visibility = volume ? Visibility.Visible : Visibility.Collapsed;
+            ApplyPollInterval();
+
+            // ⚠️ 亮度**没有**二级浮窗：切到亮度时要把已经开着的合成器收掉。
+            //    不然面板显示亮度、旁边还挂着一个列各应用音量的窗，
+            //    而且那个窗的位置是按旧尺寸算的（2026-09-27 修）。
+            if (!volume) VolumeMixerWindow.CloseIfOpen();
         }
         catch (Exception ex)
         {
             ScreenCapture.Log("浮窗换目标失败: " + ex.Message);
         }
+    }
+
+    /// <summary>第一颗键的悬停提示：音量固定一句话；亮度按「有没有传感器 / 上次有没有改失败」说清楚。</summary>
+    private void UpdateActionTooltip(string? error = null)
+    {
+        if (_target == Target.Volume)
+        {
+            ToolTipService.SetToolTip(ActionToggle, "静音 / 取消静音");
+            return;
+        }
+
+        ToolTipService.SetToolTip(ActionToggle, error ?? (BrightnessService.AdaptiveSupported
+            ? "自动亮度（跟着环境光调）"
+            : "自动亮度：这台机器没有环境光传感器，系统自带的也用不了"));
     }
 
     /// <summary>两个 ToggleButton 按真实状态点亮（静音中 / 合成器开着）。</summary>
@@ -362,17 +396,31 @@ public sealed partial class VolumeWindow : Window
         Refresh();
 
         _poll ??= DispatcherQueue.CreateTimer();
-        _poll.Interval = TimeSpan.FromMilliseconds(1500);
         _poll.IsRepeating = true;
         _poll.Tick -= OnPoll;
         _poll.Tick += OnPoll;
         _poll.Start();
+
+        ApplyPollInterval();
+    }
+
+    /// <summary>
+    /// ⚠️ 两条路的节奏必须分开（2026-09-27）：音量是 Core Audio 内存调用，1.5 秒轮一次很便宜；
+    ///    亮度要过 WMI、自动亮度还要起 powercfg 进程，按 1.5 秒压在 UI 线程上就是周期性卡顿。
+    /// </summary>
+    private void ApplyPollInterval()
+    {
+        if (_poll is null) return;
+        _poll.Interval = _target == Target.Volume
+            ? TimeSpan.FromMilliseconds(1500)
+            : TimeSpan.FromMilliseconds(3000);
     }
 
     private void Stop()
     {
         _started = false;
         _poll?.Stop();
+        _brightnessReading = false;      // 万一半路收窗，别把"正在读"的闸门永久卡住
     }
 
     private void OnPoll(DispatcherQueueTimer sender, object args) => Refresh();
@@ -412,11 +460,18 @@ public sealed partial class VolumeWindow : Window
 
     /// <summary>
     /// 屏幕亮度：笔记本内屏能调，**外接显示器基本调不了**（系统亮度接口不管它）→ 读不到就如实说。
-    /// 自动亮度那颗键：没有环境光传感器就置灰（点了也没用，别骗人）。
+    /// 读数本身在后台线程（<see cref="KickBrightnessRead"/>），这里只负责把已有结果刷到界面上。
     /// </summary>
     private void RefreshBrightness()
     {
-        if (!BrightnessService.TryGet(out var percent))
+        ApplyBrightnessUi();
+        KickBrightnessRead();
+    }
+
+    /// <summary>把缓存的亮度值刷到界面（读不到就明确写「读不到设备」，绝不假装 0%）。</summary>
+    private void ApplyBrightnessUi()
+    {
+        if (!_brightnessReadable || _brightnessPercent < 0)
         {
             MasterSlider.IsEnabled = false;
             ActionToggle.IsEnabled = false;
@@ -433,11 +488,43 @@ public sealed partial class VolumeWindow : Window
         MasterCaptionText.Text = "屏幕亮度";
         ToolTipService.SetToolTip(MasterCaptionText, null);
 
-        SetSliderSilently(percent);
-        MasterPercentText.Text = percent + "%";
+        SetSliderSilently(_brightnessPercent);
+        MasterPercentText.Text = _brightnessPercent + "%";
         MasterPercentText.Opacity = 1.0;
 
-        ActionToggle.IsChecked = BrightnessService.TryGetAdaptive(out var adaptive) && adaptive;
+        // 状态还不知道时别去动开关：先写个 false 再改回来会看到"闪一下"
+        if (_adaptiveOn.HasValue) ActionToggle.IsChecked = _adaptiveOn.Value;
+    }
+
+    /// <summary>
+    /// 后台读一次「当前亮度」+「自动亮度开关状态」，读完回 UI 线程刷。
+    /// 自动亮度只在**还不知道**的时候读 —— 那状态不会自己变，没必要每轮都去起一个 powercfg 进程。
+    /// </summary>
+    private void KickBrightnessRead()
+    {
+        if (_brightnessReading) return;
+        _brightnessReading = true;
+
+        var dq = DispatcherQueue;
+        var needAdaptive = !_adaptiveOn.HasValue;
+
+        _ = Task.Run(() =>
+        {
+            var ok = BrightnessService.TryGet(out var percent);
+            var adaptive = needAdaptive && BrightnessService.TryGetAdaptive(out var on) ? (bool?)on : null;
+
+            _ = dq.TryEnqueue(() =>
+            {
+                _brightnessReading = false;
+                if (!_started || _target != Target.Brightness) return;
+
+                _brightnessReadable = ok;
+                if (ok) _brightnessPercent = percent;
+                if (adaptive.HasValue) _adaptiveOn = adaptive;
+
+                ApplyBrightnessUi();
+            });
+        });
     }
 
     private void SetSliderSilently(int value)
@@ -456,8 +543,16 @@ public sealed partial class VolumeWindow : Window
         var percent = (int)Math.Round(e.NewValue);
         MasterPercentText.Text = percent + "%";
 
-        if (_target == Target.Volume) AudioService.SetMasterPercent(percent);
-        else BrightnessService.SetPercent(percent);
+        if (_target == Target.Volume)
+        {
+            AudioService.SetMasterPercent(percent);
+            return;
+        }
+
+        // ⚠️ 亮度写下去是异步的（50ms 合并窗口 + WMI 延迟），下一次后台读还可能读回旧值；
+        //    所以先把缓存改成用户刚设的值，界面就不会"自己弹回去"。
+        _brightnessPercent = percent;
+        BrightnessService.SetPercent(percent);
     }
 
     /// <summary>
@@ -481,10 +576,15 @@ public sealed partial class VolumeWindow : Window
         }
 
         var want = ActionToggle.IsChecked == true;
-        if (!BrightnessService.SetAdaptive(want))
+        if (BrightnessService.SetAdaptive(want))
+        {
+            _adaptiveOn = want;                  // SetAdaptive 内部已经复核过，直接记住
+            UpdateActionTooltip();               // ⚠️ 把上次失败留下的那条提示清掉，否则会一直挂着
+        }
+        else
         {
             ActionToggle.IsChecked = !want;
-            ToolTipService.SetToolTip(ActionToggle, "改不了自动亮度（可能需要管理员权限，或这台机器不支持）");
+            UpdateActionTooltip("改不了自动亮度（可能需要管理员权限，或这台机器不支持）");
         }
     }
 

@@ -60,9 +60,9 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 ```powershell
 $env:GITHUB_TOKEN = "..."   # 需要仓库写权限，别写进任何文件
 node --use-system-ca tools\publish-release.mjs `
-  --tag dv1.1.0-insider1.0 --channel insider `
-  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.0.exe" `
-  --name "ClassSoftwareHub dv1.1.0-insider1.0" --notes notes.md
+  --tag dv1.1.0-insider1.1 --channel insider `
+  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.1.exe" `
+  --name "ClassSoftwareHub dv1.1.0-insider1.1" --notes notes.md
 ```
 
 脚本会算 MD5/SHA256、生成同名 `.md5`、建 Release 并把安装包传上去。tag 里带 `insider` 就自动标预发布（只有 Insider 通道的客户端会收到），正式版用 `dv1.1.0` 这种。

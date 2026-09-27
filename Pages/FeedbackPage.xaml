@@ -268,12 +268,19 @@
                             <TextBlock Text="基本信息" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
 
                             <StackPanel Spacing="18">
-                                <!-- 子类型（只有「报告问题」有） -->
+                                <!--
+                                  子类型（只有「报告问题」有）。
+                                  ⚠️ DisplayMemberPath 不能省：ItemsSource 直接喂的是 SubKindDef 对象，
+                                     不指定就用 ToString() 显示成「ClassSoftwareHub.Desktop.Data.Feedback+SubKindDef」
+                                     —— 用户看到的是类型全名（2026-09-27 用户截图反馈后补上）。
+                                -->
                                 <ComboBox x:Name="SubKindCombo" Header="问题类型" PlaceholderText="请选择"
+                                          DisplayMemberPath="Title"
                                           HorizontalAlignment="Stretch" SelectionChanged="SubKind_Changed" />
 
-                                <!-- 涉及的软件 -->
+                                <!-- 涉及的软件。同上，不指定 DisplayMemberPath 会显示成 SoftwareApp 的类型全名。 -->
                                 <ComboBox x:Name="AppCombo" Header="涉及的软件" PlaceholderText="选择软件（选填）"
+                                          DisplayMemberPath="Name"
                                           HorizontalAlignment="Stretch" SelectionChanged="App_Changed" />
 
                                 <!-- 标题（必填） -->

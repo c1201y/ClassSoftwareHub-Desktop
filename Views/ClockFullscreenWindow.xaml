@@ -5,7 +5,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid x:Name="Root" IsTabStop="True" SizeChanged="Root_SizeChanged"
-          KeyDown="Root_KeyDown" DoubleTapped="Root_DoubleTapped">
+          KeyDown="Root_KeyDown" DoubleTapped="Root_DoubleTapped"
+          PointerMoved="Root_PointerMoved" PointerPressed="Root_PointerMoved"
+          Tapped="Root_Tapped">
         <Border x:Name="Veil" />
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -16,5 +18,28 @@
             </StackPanel>
             <TextBlock x:Name="DateText" FontSize="40" Opacity="0.9" HorizontalAlignment="Center" />
         </StackPanel>
+
+        <!--
+          退出入口（2026-09-27 加）。
+          在这之前只有「按 Esc」和「双击屏幕」两条路 —— 触屏用户（教学一体机）根本猜不到，
+          现场反馈原话就是「全屏时钟怎么退出」。
+          做法：进来的头几秒自动亮出来让人看清，之后淡出；鼠标一动 / 手指一碰再亮。
+          颜色**故意写死不跟主题走**：这块底下可能是白墙、可能是黑壁纸，
+          只有「深底白字 + 半透明」在任何背景上都读得清。
+        -->
+        <Border x:Name="ExitBar" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,18,18,0" CornerRadius="8" Padding="16,6,8,6"
+                Opacity="0" IsHitTestVisible="False"
+                Background="#CC1A1A1A" BorderBrush="#40FFFFFF" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="按 Esc、双击屏幕，或点这里退出" FontSize="14"
+                           Foreground="#FFFFFFFF" VerticalAlignment="Center" />
+                <Button Click="Exit_Click" MinWidth="36" MinHeight="36" Padding="0"
+                        Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="退出全屏时钟">
+                    <FontIcon Glyph="&#xE711;" FontSize="14" Foreground="#FFFFFFFF" />
+                </Button>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

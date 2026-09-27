@@ -105,9 +105,38 @@ public sealed partial class ShellPage : UserControl
     {
         TitleText.Text = ShellConfig.AppName;
 
-        SelectTag("home");
-        NavigateTag("home");
+        var start = StartupPageTag();
+        SelectTag(start);
+        NavigateTag(start);
         UpdateThemeButton();
+    }
+
+    /// <summary>
+    /// 启动落在哪一页：<c>--page=&lt;tag&gt;</c>，tag 跟导航项的一样（<c>--page=feedback</c>、
+    /// <c>--page=machinecheck</c>、<c>--page=tools</c>…）。没给、给了不认识的、或者参数本身读不到，
+    /// 一律回首页。
+    ///
+    /// 为什么留这个参数：以前想让程序直接落在某一页，只能临时改这个方法，验证完再改回来 ——
+    /// 一个页面固定吃掉两趟全量构建。有了它就只编一趟，排障和自动验证都省一半时间。
+    /// 正常启动不传这个参数，行为跟以前一模一样。
+    /// </summary>
+    private static string StartupPageTag()
+    {
+        try
+        {
+            foreach (var arg in Environment.GetCommandLineArgs())
+            {
+                if (!arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) continue;
+                var tag = arg["--page=".Length..].Trim();
+                if (tag.Length > 0) return tag;
+            }
+        }
+        catch
+        {
+            // 命令行读不到就当没给
+        }
+
+        return "home";
     }
 
     /// <summary>外部（首页卡片等）跳转导航用：先高亮导航项，再切页面。</summary>
@@ -132,12 +161,20 @@ public sealed partial class ShellPage : UserControl
     /// 跳到「内置工具」里的某个工具页（浮窗里的「详细设置」用）。
     /// 先把工具列表页铺一层，这样工具页左上角的返回按钮能正常退回列表。
     /// </summary>
-    public void NavigateToTool(Type pageType)
+    public void NavigateToTool(Type pageType) => NavigateToTool(pageType, null, viaList: true);
+
+    /// <summary>
+    /// 带参数跳工具页。
+    /// <paramref name="viaList"/> = false 时**不铺工具列表**：返回一次就回到来的那一页 ——
+    /// 软件详情页点「校验」去哈希工具，用户心理是"看一眼再回来"，不该先退到工具列表。
+    /// 两种走法都把导航高亮切到「内置工具」（人确实在工具区里）。
+    /// </summary>
+    public void NavigateToTool(Type pageType, object? parameter, bool viaList = true)
     {
         SelectTag("tools");
-        if (ContentFrame.CurrentSourcePageType != typeof(ToolsPage))
+        if (viaList && ContentFrame.CurrentSourcePageType != typeof(ToolsPage))
             ContentFrame.Navigate(typeof(ToolsPage));
-        ContentFrame.Navigate(pageType);
+        ContentFrame.Navigate(pageType, parameter);
     }
 
     /// <summary>只切页面，不动导航高亮（软件下载页内部按分类切换时用）。</summary>
