@@ -17,18 +17,105 @@ public partial class App : Application
         InitializeComponent();
         UnhandledException += OnUnhandledException;
 
-        // 单实例：第二个实例直接退出。
-        // 这个命名的互斥体同时也是安装程序 [Setup] AppMutex 用的名字 —— 装/升级时 Inno 靠它
+        // 单实例。这个命名的互斥体同时也是安装程序 [Setup] AppMutex 用的名字 —— 装/升级时 Inno 靠它
         // 判断"应用还在跑"，所以进程活着期间必须一直持有，不能释放。
-        _instanceMutex = new Mutex(initiallyOwned: true, Core.ShellConfig.MutexName, out var isFirstInstance);
-        if (!isFirstInstance)
+        var mutex = new Mutex(initiallyOwned: true, Core.ShellConfig.MutexName, out var isFirstInstance);
+
+        if (isFirstInstance)
+        {
+            _instanceMutex = mutex;
+            TryCreateActivateSignal();
+            return;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  已经有一个实例在跑 —— 来的是"用户又点了一次图标"
+        //
+        //  ⛔ 这里以前就一句 Environment.Exit(0)：界面、提示、日志全无。而默认关闭窗口是
+        //     **收进托盘**（CloseToTray 默认 true），进程并没有退出，所以用户看到的现象是
+        //     "把软件关掉之后点桌面图标打不开，点三四次一点反应都没有，只能去任务管理器结束进程"
+        //     （2026-09-30 用户实测反馈）。托盘图标如果又被系统折进溢出区，就彻底没有入口了。
+        //
+        //  现在改成：先敲门，让那个实例把主窗口叫出来；它确实还活着我们才退。
+        // ═══════════════════════════════════════════════════════════════════════
+        mutex.Dispose();
+
+        if (WakeUpExistingInstance())
         {
             Environment.Exit(0);
             return;
         }
+
+        // 敲门期间对方正好退出了（互斥体空了出来）→ 由本进程接管，照常启动
+        _instanceMutex = new Mutex(initiallyOwned: true, Core.ShellConfig.MutexName, out _);
+        TryCreateActivateSignal();
     }
 
     private static Mutex? _instanceMutex;
+
+    /// <summary>第一个实例监听用的"叫醒"事件。</summary>
+    private static EventWaitHandle? _activateSignal;
+
+    /// <summary>建"叫醒"事件。建不出来（极罕见）只是丢掉这条兜底路径，不影响启动。</summary>
+    private static void TryCreateActivateSignal()
+    {
+        try
+        {
+            _activateSignal = new EventWaitHandle(
+                initialState: false, EventResetMode.AutoReset, Core.ShellConfig.ActivateEventName);
+        }
+        catch (Exception ex)
+        {
+            _activateSignal = null;
+            Services.ScreenCapture.Log("[single] 叫醒事件建不出来: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 敲一下"叫醒"事件，请已经在跑的那个实例把主窗口亮出来。
+    /// 返回 <c>true</c> = 对方还活着（本实例该退）；<c>false</c> = 对方在这期间退出了（互斥体已空出来，本实例接管）。
+    /// </summary>
+    private static bool WakeUpExistingInstance()
+    {
+        var name = Core.ShellConfig.ActivateEventName;
+        var knocked = false;
+
+        // 第一个实例理论上可能还卡在启动途中（事件还没建），给几秒。正常情况第一次就成功。
+        for (var attempt = 0; attempt < 30 && !knocked; attempt++)
+        {
+            try
+            {
+                using var handle = EventWaitHandle.OpenExisting(name);
+                handle.Set();
+                knocked = true;
+            }
+            catch (WaitHandleCannotBeOpenedException)
+            {
+                Thread.Sleep(100);
+            }
+            catch (Exception ex)
+            {
+                // 打不开又不是"不存在"（多半是权限）→ 保守当作对方活着，别冒险双开
+                Services.ScreenCapture.Log("[single] 叫醒事件打不开: " + ex.Message);
+                return true;
+            }
+        }
+
+        if (!knocked) return true;
+
+        // 给第一个实例一点时间把窗口亮出来；同时看它是不是正在退出 —— 互斥体一空出来就归我们。
+        Thread.Sleep(1200);
+
+        try
+        {
+            using var probe = new Mutex(initiallyOwned: false, Core.ShellConfig.MutexName);
+            return !probe.WaitOne(0);
+        }
+        catch
+        {
+            return true;
+        }
+    }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -42,17 +129,99 @@ public partial class App : Application
 
         MainWindow = new MainWindow();
         MainWindow.Activate();
+
+        StartActivateListener();
+
+        // 两个实验性功能的到点巡检。⚠️ 都靠本进程内的定时器 —— 本程序没在跑就不会查杀
+        //    （2026-09-28 Nick 确认按这个来，不往系统里装计划任务）。
+        //    「白板专杀」与「程序专杀」各跑各的定时器、各存各的配置，刻意不合并（Nick 明确要求白板独立）。
+        Data.EasiNoteGuard.Start();
+        Data.ProcessGuard.Start();
+
+        // 虚拟键盘（实验性功能）：总开关是单一的 —— 关着的时候 Start() 第一句就 return，
+        // 触摸钩子、UIA 探测、注册表接管一个都不会上电（见 VirtualKeyboardService）。
+        Services.VirtualKeyboard.VirtualKeyboardService.Start();
+    }
+
+    /// <summary>
+    /// 起一条后台线程守"叫醒"事件：用户又点了一次桌面图标 → 第二个实例 Set 这个事件 →
+    /// 这里回到 UI 线程把主窗口叫出来（<see cref="MainWindow.ShowFromTray"/> 对"已可见"的窗口
+    /// 也会重新激活并抢前台，所以"程序开着但被压在后面"时点图标同样有效）。
+    ///
+    /// ⚠️ <c>IsBackground = true</c>：这条线程绝不能拦住进程退出。
+    /// ⚠️ 事件是 AutoReset 的 —— 第二次点击如果发生在处理途中，信号不会丢。
+    /// </summary>
+    private static void StartActivateListener()
+    {
+        var signal = _activateSignal;
+        if (signal is null) return;
+
+        var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (queue is null) return;
+
+        var listener = new Thread(() =>
+        {
+            while (true)
+            {
+                try
+                {
+                    if (!signal.WaitOne()) break;
+                }
+                catch
+                {
+                    break;
+                }
+
+                // 落一条日志：这条链路出问题时，日志是唯一能分辨"根本没收到"还是"收到了但窗口没出来"的依据
+                Services.ScreenCapture.Log("[single] 收到唤醒请求，把主窗口叫出来");
+
+                queue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        MainWindow?.ShowFromTray();
+                    }
+                    catch (Exception ex)
+                    {
+                        Services.ScreenCapture.Log("[single] 叫醒主窗口失败: " + ex.Message);
+                    }
+                });
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "csh-activate-listener",
+        };
+
+        listener.Start();
     }
 
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
+        // ⚠️ 2026-09-29：「页面布局循环」（LayoutCycleException）不是致命错误 —— WinUI 会放弃本次布局、
+        //    页面照样能用。但它会让 DEBUG 版直接 fail-fast（见下面 #if DEBUG），应用**瞬间消失**，
+        //    连"当时在哪一页"都留不下。所以这一类单独兜住：只记日志、不让它把进程带走。
+        var layoutCycle = e.Exception is Microsoft.UI.Xaml.LayoutCycleException;
+
         try
         {
             Telemetry.TrackException(e.Exception, "xaml_unhandled");
             var dir = SettingsStore.Dir;
             Directory.CreateDirectory(dir);
+
+            // 排障信息：当时停在哪一页 + 窗口多大。
+            // 「布局循环」这类问题只在特定尺寸下冒出来，没有这两个数根本无从复现。
+            var where = "page=" + Pages.ShellPage.CurrentTag;
+            try
+            {
+                if (MainWindow?.AppWindow is { } win)
+                    where += $" window={win.Size.Width}x{win.Size.Height}";
+            }
+            catch { /* 拿不到窗口尺寸不影响记录 */ }
+            if (layoutCycle) where += " ignored=1";
+
             File.AppendAllText(Path.Combine(dir, "crash.log"),
-                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {e.Message}\n{e.Exception}\n\n");
+                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] [{where}] {e.Message}\n{e.Exception}\n\n");
         }
         catch { /* 记录失败也不影响 */ }
 
@@ -61,7 +230,7 @@ public partial class App : Application
         // 都不该让整个应用消失、界面状态全丢 —— 那比"这个功能坏了"严重得多。
         // 上面已经写进 crash.log 了，事后能查；这里只负责"别死"。
 #if DEBUG
-        e.Handled = false;
+        e.Handled = layoutCycle;
 #else
         e.Handled = true;
 #endif

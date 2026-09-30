@@ -191,15 +191,19 @@ public sealed partial class SnipOverlayWindow : Window
 
         HintText.Text = mode switch
         {
-            SnipMode.Rect => "拖拽框选要贴的区域　·　Esc 取消",
-            SnipMode.Window => "把鼠标移到要截的窗口上，点一下　·　Esc 取消",
-            SnipMode.Full => "正在截全屏…",
-            _ => "选个方式：矩形 / 窗口 / 全屏　·　Esc 取消",
+            SnipMode.Rect => "拖动以选择截取区域　·　Esc 取消",
+            SnipMode.Window => "将鼠标移至目标窗口后单击　·　Esc 取消",
+            SnipMode.Full => "正在截取全屏",
+            _ => "选择截取方式：矩形 / 窗口 / 全屏　·　Esc 取消",
         };
 
         Highlight(ModeRect, mode == SnipMode.Rect);
         Highlight(ModeWindow, mode == SnipMode.Window);
         Highlight(ModeFull, mode == SnipMode.Full);
+
+        // 2026-09-27（Nick）：工具栏挪到屏幕正中之后，选完方式还不收就会正好压住要框的那块。
+        // 只在"还没选方式"时留着；收起来后 Esc / 右键仍可取消（见 Root_KeyDown / Root_Tapped）。
+        Toolbar.Visibility = mode == SnipMode.None ? Visibility.Visible : Visibility.Collapsed;
 
         Reset();                                           // 换方式就清掉上一坨框
     }

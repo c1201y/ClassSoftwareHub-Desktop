@@ -25,7 +25,7 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
 
-版本号默认取 `.iss` 里的 `DesktopVersion`，不用在命令行传。临时想改就加 `/DDesktopVersion=1.1.0-insider1.1`。
+版本号默认取 `.iss` 里的 `DesktopVersion`，不用在命令行传。临时想改就加 `/DDesktopVersion=1.1.0-insider1.2`。
 
 产物在 `dist\installer\ClassSoftwareHub-Setup-dv<DesktopVersion>.exe`。`.iss` 里的 `AppId` 是升级和回滚认亲用的，不要改。
 
@@ -44,7 +44,7 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 | `insider架构` | 预览线自己的架构/思路基线，性质同主版本第一位 |
 | `insider迭代` | 这条预览线上的具体更改次数 |
 
-递增流程：做出一个能用的版本 → 发 `1.1.0-insider1.0` → 用户反馈还有问题 → 继续改成 `1.1.0-insider1.1`
+递增流程：做出一个能用的版本 → 发 `1.1.0-insider1.0` → 用户反馈还有问题 → 继续改成 `1.1.0-insider1.1`、`1.1.0-insider1.2`
 → 一直改到没问题 → **整个 `-insider` 后缀删掉** → 上线正式版 `1.1.0`。
 
 要改版本时，**四处一起改**，缺一处就会出现"装上去还是旧版本号"：
@@ -57,15 +57,25 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 
 ## 发版
 
+**顺序：先 `git push` main → 再提交一次并打 tag → 最后跑脚本发 Release。**
+（tag 要指向已经推上去的提交，而且 Release 正文首行的配图链接指向本 tag 的资产，资产传完才显示得出来。）
+
 ```powershell
 $env:GITHUB_TOKEN = "..."   # 需要仓库写权限，别写进任何文件
 node --use-system-ca tools\publish-release.mjs `
-  --tag dv1.1.0-insider1.1 --channel insider `
-  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.1.exe" `
-  --name "ClassSoftwareHub dv1.1.0-insider1.1" --notes notes.md
+  --tag dv1.1.0-insider1.2 --channel insider `
+  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.2.exe" `
+  --image "dist\release\dv1.1.png" `
+  --name "ClassSoftwareHub dv1.1.0-insider1.2" --notes "dist\release\notes.md"
 ```
 
-脚本会算 MD5/SHA256、生成同名 `.md5`、建 Release 并把安装包传上去。tag 里带 `insider` 就自动标预发布（只有 Insider 通道的客户端会收到），正式版用 `dv1.1.0` 这种。
+不确定参数对不对、或者想先看一眼要发什么，加 `--dry-run`：只打印摘要 + 算哈希 + 写 `.md5`，不碰 GitHub。
+
+脚本会算 MD5/SHA256、生成同名 `.md5`、建 Release，并把**安装包 + 同名 `.md5` + 配图 png** 一起传上去。
+tag 里带 `insider` 就自动标预发布（只有 Insider 通道的客户端会收到），正式版用 `dv1.1.0` 这种。
+
+> ⚠️ 配图（Release 正文顶部那张 `![](...)`）**必须用 `--image` 传上去**，否则正文会挂一张空图。
+> 以前这步是手工补的，现在跟着一起走（2026-09-30）。
 
 ## 目录
 
@@ -109,6 +119,13 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 node tools\sync-content.mjs      # 把站点 dist/content 拷进 dist\app\content（80 个文件 / 约 450KB）
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
+
+> ⚠️ `dotnet publish -o dist\app` 是**覆盖式写入、不清理目录** —— 所以已经存在的 `dist\app\content`
+> 不会被弄丢，重复发布不用重新同步。**别为了"干净"去 `rm -rf dist\app`**，否则内容包一起没了。
+>
+> ⚠️ `sync-content.mjs` 要求站点工程里已经有 `dist\content`。站点那边没构建过时会直接报错退出；
+> 此时沿用 `dist\app\content` 里现成的那份即可 —— 它跟站点 `软件数据/` 同源，只可能稍旧一点
+> （装机自带的内容包本来就只是兜底，联网后 `ContentUpdater` 会拉新的覆盖）。
 
 `installer\ClassSoftwareHub.iss` 的 `[Files]` 是 `Source: "..\dist\app\*"` 整目录，所以 `dist\app\content`
 会自动进安装包。装完后 `{app}\content` 就是自带内容包；GitHub 同步会顺手把里面缺的 `text/*.json` 补进缓存目录。

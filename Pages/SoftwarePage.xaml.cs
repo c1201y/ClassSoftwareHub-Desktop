@@ -128,8 +128,8 @@ public sealed partial class SoftwarePage : Page
         var hasFilter = _keyword.Length > 0 || _category.Length > 0;
         if (hasFilter)
         {
-            EmptyTitle.Text = "没有找到匹配的软件";
-            EmptyText.Text = "请更换关键词，或点击「全部」查看所有软件。";
+            EmptyTitle.Text = "未找到匹配的软件";
+            EmptyText.Text = "请更换关键词，或单击「全部」查看所有软件。";
             EmptyText.Visibility = Visibility.Visible;
             EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}（共 {App.Content.Apps.Count} 个软件）";
             EmptyRetry.Visibility = Visibility.Collapsed;
@@ -137,7 +137,7 @@ public sealed partial class SoftwarePage : Page
         }
 
         EmptyTitle.Text = "软件清单为空";
-        EmptyText.Text = "清单位于「内容包」中：安装包内置一份，联网后会自动从站点更新。" +
+        EmptyText.Text = "清单位于「内容包」中：安装包内置一份，联网后自动从站点更新。" +
                          "若始终为空，通常是内容包未同步成功（网络不可用或站点尚未发布）。";
         EmptyText.Visibility = Visibility.Visible;
         EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}" +
@@ -151,9 +151,9 @@ public sealed partial class SoftwarePage : Page
     private async void EmptyRetry_Click(object sender, RoutedEventArgs e)
     {
         EmptyRetry.IsEnabled = false;
-        EmptyRetry.Content = "正在同步…";
+        EmptyRetry.Content = "正在同步";
         EmptyTitle.Text = "正在同步内容包";
-        EmptyText.Text = "正在从站点获取最新清单……";
+        EmptyText.Text = "正在从站点获取最新清单。";
         EmptyDetail.Text = "";
 
         try

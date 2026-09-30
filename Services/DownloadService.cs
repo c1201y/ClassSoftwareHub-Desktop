@@ -135,7 +135,7 @@ public static class DownloadService
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(url))
-            throw new ArgumentException("下载地址是空的。", nameof(url));
+            throw new ArgumentException("下载地址为空。", nameof(url));
 
         var dir = string.IsNullOrWhiteSpace(directory) ? DefaultDir : directory!;
         Directory.CreateDirectory(dir);

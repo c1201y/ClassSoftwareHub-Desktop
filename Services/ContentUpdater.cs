@@ -118,7 +118,7 @@ public static class ContentUpdater
                 if (File.Exists(target) && Sha256Of(target) == file.Sha256.ToLowerInvariant())
                     continue;
 
-                progress?.Report($"正在同步 {file.Path} …");
+                progress?.Report($"正在同步 {file.Path}");
                 var dir = Path.GetDirectoryName(target);
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 

@@ -141,7 +141,10 @@ public sealed partial class WelcomePage : Page
     {
         try
         {
-            var path = EmbeddedAssets.ExtractToCache("dv1.0.png", "banner-dv1.0.png");
+            // 换 banner 时这里和 csproj 的 EmbeddedResource 一起改。
+            // ⚠️ 缓存文件名也带上版本号：ExtractToCache 靠"长度不同"判过期，
+            //    万一同尺寸换图会被判成没过期，带上版本号就不会串图。
+            var path = EmbeddedAssets.ExtractToCache("dv1.1.png", "banner-dv1.1.png");
             if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
                 Banner.Source = new BitmapImage(new Uri(path));
         }

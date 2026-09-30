@@ -32,7 +32,7 @@
                 Opacity="0" IsHitTestVisible="False"
                 Background="#CC1A1A1A" BorderBrush="#40FFFFFF" BorderThickness="1">
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <TextBlock Text="按 Esc、双击屏幕，或点这里退出" FontSize="14"
+                <TextBlock Text="按 Esc、双击屏幕，或单击此处退出" FontSize="14"
                            Foreground="#FFFFFFFF" VerticalAlignment="Center" />
                 <Button Click="Exit_Click" MinWidth="36" MinHeight="36" Padding="0"
                         Background="Transparent" BorderThickness="0"

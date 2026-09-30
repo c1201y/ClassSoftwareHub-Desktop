@@ -39,7 +39,7 @@ public static class UpdateFlow
         {
             body.Children.Add(new TextBlock
             {
-                Text = "这次更新：",
+                Text = "本次更新内容：",
                 FontSize = 12,
                 Opacity = 0.7,
                 Margin = new Thickness(0, 4, 0, 0),
@@ -57,7 +57,7 @@ public static class UpdateFlow
 
         body.Children.Add(new TextBlock
         {
-            Text = "更新是自愿的，不会自动装。想更新就点「立即更新」，想晚点再说就点「稍后」。",
+            Text = "更新为自愿操作，不会自动安装。需更新请单击「立即更新」，暂不更新请单击「稍后」。",
             FontSize = 12,
             Opacity = 0.7,
             TextWrapping = TextWrapping.Wrap,
@@ -88,11 +88,11 @@ public static class UpdateFlow
         if (release.Primary is not { } package) return false;
 
         var bar = new ProgressBar { Minimum = 0, Maximum = 100, Value = 0 };
-        var status = new TextBlock { Text = $"正在下载 {release.Tag}…", TextWrapping = TextWrapping.Wrap };
+        var status = new TextBlock { Text = $"正在下载 {release.Tag}", TextWrapping = TextWrapping.Wrap };
         var note = new TextBlock
         {
-            Text = "下载完会先做 MD5 校验（防损坏 / 防替换），通过才会安装。" +
-               "安装时应用会自动关闭，装好之后会自动重新打开（大约十几秒），不是崩了。",
+            Text = "下载完成后先进行 MD5 校验（防损坏 / 防替换），校验通过后方可安装。" +
+               "安装过程中应用将自动关闭，安装完成后自动重新打开（约十几秒），此过程并非程序异常。",
             FontSize = 12,
             Opacity = 0.7,
             TextWrapping = TextWrapping.Wrap,
@@ -149,7 +149,7 @@ public static class UpdateFlow
             var progress = new Progress<double>(p =>
             {
                 bar.Value = p * 100;
-                status.Text = $"正在下载 {release.Tag}… {p:P0}";
+                status.Text = $"正在下载 {release.Tag} {p:P0}";
                 try { cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds)); } catch { /* 已取消/已释放 */ }
             });
 
@@ -158,7 +158,7 @@ public static class UpdateFlow
 
             cts.CancelAfter(Timeout.Infinite);   // 下载完了，别再触发超时打断安装
             bar.Value = 100;
-            status.Text = $"下载完成（{downloaded.VerifyNote}），正在安装…装好后应用会自动重新打开。";
+            status.Text = $"下载完成（{downloaded.VerifyNote}），正在安装：安装完成后应用将自动重新打开。";
 
             UpdateService.RunInstaller(downloaded.FilePath);
             await Task.Delay(1200);      // 让安装程序先起来，别跟自己抢文件
@@ -174,8 +174,8 @@ public static class UpdateFlow
             // 用户自己取消的：他已经知道了，不用再解释
             if (userCancelled) return false;
 
-            status.Text = $"下载卡住了（连续 {IdleSeconds} 秒没有任何进度），已经取消。\n" +
-                          "多半是网络问题或者下载源没响应 —— 稍后再试一次。";
+            status.Text = $"下载停滞（连续 {IdleSeconds} 秒无进度），已取消。\n" +
+                          "可能为网络问题或下载源无响应，可稍后重试。";
             await Task.Delay(2500);
             TryHide(dialog, closedByUser);
             return false;
@@ -183,7 +183,7 @@ public static class UpdateFlow
         catch (Exception ex)
         {
             allowClose = true;
-            status.Text = "❌ 更新失败：" + ex.Message;
+            status.Text = "更新失败：" + ex.Message;
             await Task.Delay(2500);
             TryHide(dialog, closedByUser);
             return false;

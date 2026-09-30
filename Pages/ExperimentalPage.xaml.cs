@@ -24,6 +24,24 @@ public sealed partial class ExperimentalPage : Page
             Desc = "对照 Windows 的已安装程序记录，看清单里的软件本机装没装",
             Glyph = "\uE7F4", Tag = "machinecheck"
         },
+        new ExperimentalFeature
+        {
+            Id = "easiguard", Name = "白板专杀",
+            Desc = "到达设定时间点后，结束希沃白板5 后台滞留的残留进程",
+            Glyph = "\uEA99", Tag = "easiguard"
+        },
+        new ExperimentalFeature
+        {
+            Id = "procguard", Name = "程序专杀",
+            Desc = "为指定程序单独设定结束时间点，到点结束其后驻留进程",
+            Glyph = "\uE7E8", Tag = "procguard"
+        },
+        new ExperimentalFeature
+        {
+            Id = "virtualkeyboard", Name = "虚拟键盘",
+            Desc = "自绘触屏键盘：手指点在输入框上自动弹出，外观全部使用系统控件与主题色",
+            Glyph = "\uE765", Tag = "virtualkeyboard"
+        },
     };
 
     public ExperimentalPage()

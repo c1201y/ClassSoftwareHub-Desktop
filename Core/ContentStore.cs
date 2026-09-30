@@ -45,9 +45,9 @@ public sealed class ContentStore
     public string SourceLabel => SourceKind switch
     {
         "cache" => "本地缓存（远端内容包）",
-        "dev" => "开发目录（远端内容包还没发布，先用本机的）",
-        "bundled" => "安装包自带的内容（离线也有清单，联网后自动更新）",
-        _ => "（没有数据源）",
+        "dev" => "开发目录（远端内容包尚未发布，使用本机内容）",
+        "bundled" => "安装包自带的内容（离线仍可显示清单，联网后自动更新）",
+        _ => "（无数据源）",
     };
 
     public string ContentVersion { get; private set; } = "";
@@ -71,7 +71,7 @@ public sealed class ContentStore
         SourceKind = kind;
         if (root is null)
         {
-            Source = "（没有数据源）";
+            Source = "（无数据源）";
             return;
         }
         Source = root;
@@ -194,7 +194,7 @@ public sealed class ContentStore
     {
         if (!Directory.Exists(appsDir))
         {
-            Issues.Add(new DataIssue { File = "apps/", Message = "找不到软件数据目录" });
+            Issues.Add(new DataIssue { File = "apps/", Message = "未找到软件数据目录" });
             return;
         }
 
@@ -208,7 +208,7 @@ public sealed class ContentStore
 
             string text;
             try { text = File.ReadAllText(path); }
-            catch (Exception ex) { Issues.Add(new DataIssue { File = file, Message = "读不出来：" + ex.Message }); continue; }
+            catch (Exception ex) { Issues.Add(new DataIssue { File = file, Message = "读取失败：" + ex.Message }); continue; }
 
             JsonDocument doc;
             try { doc = JsonDocument.Parse(text); }
@@ -219,7 +219,7 @@ public sealed class ContentStore
                 var root = doc.RootElement;
                 if (root.ValueKind != JsonValueKind.Object)
                 {
-                    Issues.Add(new DataIssue { File = file, Message = "最外层不是 { } 对象" });
+                    Issues.Add(new DataIssue { File = file, Message = "顶层结构不是 { } 对象" });
                     continue;
                 }
 
@@ -291,7 +291,7 @@ public sealed class ContentStore
         if (!File.Exists(file))
         {
             RebuildCategoriesFromApps();
-            Issues.Add(new DataIssue { File = "categories.json", Message = "分类文件缺失，已用软件里出现的分类临时顶替" });
+            Issues.Add(new DataIssue { File = "categories.json", Message = "分类文件缺失，已用软件中出现过的分类临时替代" });
             return;
         }
 
@@ -313,7 +313,7 @@ public sealed class ContentStore
         {
             Categories.Clear();
             RebuildCategoriesFromApps();
-            Issues.Add(new DataIssue { File = "categories.json", Message = "分类读取失败（" + FriendlyJsonHint(ex.Message) + "），已用软件分类临时顶替" });
+            Issues.Add(new DataIssue { File = "categories.json", Message = "分类读取失败（" + FriendlyJsonHint(ex.Message) + "），已用软件中的分类临时替代" });
         }
 
         foreach (var c in Categories)
@@ -362,9 +362,9 @@ public sealed class ContentStore
     /// <summary>把 JSON 报错翻译成人话（与网页端 friendlyHint 一致）。</summary>
     private static string FriendlyJsonHint(string raw)
     {
-        if (raw.Contains("end of data") || raw.Contains("end of JSON") || raw.Contains("depth")) return "文件不完整：可能漏了结尾的 } 或 ]，或末尾多了逗号";
-        if (raw.Contains("is invalid") || raw.Contains("Expected") || raw.Contains("cannot be parsed")) return "标点/引号有误：检查字段之间是否漏了逗号、引号是否配对";
-        if (raw.Contains("escape") || raw.Contains("control character")) return "字符串里有非法字符（换行要写 \\n）";
+        if (raw.Contains("end of data") || raw.Contains("end of JSON") || raw.Contains("depth")) return "文件不完整：可能缺少结尾的 } 或 ]，或末尾存在多余逗号";
+        if (raw.Contains("is invalid") || raw.Contains("Expected") || raw.Contains("cannot be parsed")) return "标点或引号有误：请检查字段之间是否缺少逗号、引号是否配对";
+        if (raw.Contains("escape") || raw.Contains("control character")) return "字符串中存在非法字符（换行需写作 \\n）";
         return "JSON 语法错误";
     }
 }

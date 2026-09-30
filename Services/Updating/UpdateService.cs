@@ -162,7 +162,7 @@ public sealed class UpdateService
                 throw new ChecksumMismatchException("SHA256", expectedSha, actualSha);
             }
             verified = true;
-            note = "SHA256 已校验通过（该发布没提供 MD5）";
+            note = "SHA256 已校验通过（该发布未提供 MD5）";
         }
 
         if (File.Exists(destinationFile)) File.Delete(destinationFile);

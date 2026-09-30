@@ -151,7 +151,7 @@ public sealed class DownloadTask : INotifyPropertyChanged
             ? $"{p.Percent:0}%   {p.SizeText}" + (p.SpeedText.Length > 0 ? "  ·  " + p.SpeedText : "")
             : Progress is { Received: > 0 } u
                 ? "已接收 " + u.SizeText + (u.SpeedText.Length > 0 ? "  ·  " + u.SpeedText : "")
-                : "正在连接…",
+                : "正在连接",
 
         DownloadState.Completed => "已完成  ·  " + DownloadProgress.Size(Bytes),
         DownloadState.Failed => "下载失败" + (string.IsNullOrWhiteSpace(Error) ? "" : "  ·  " + Error),

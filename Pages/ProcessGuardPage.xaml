@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.ProcessGuardPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      版式与「白板专杀」「本机核实」同源：三列 Grid 把内容钉在中间 960 宽。
+      ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
+    -->
+    <Grid Padding="24,36,24,44">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="960" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
+            <StackPanel Spacing="14">
+
+                <!-- 标题 + 实验性标记 -->
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="程序专杀" FontSize="30" FontWeight="Bold" />
+                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <FontIcon Glyph="&#xEA80;" FontSize="11"
+                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                <TextBlock Text="实验性功能" FontSize="11.5"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
+                               Text="为指定的程序单独设定结束时间：到达时间点后，若该程序仍驻留于后台，则结束其进程。每条程序规则各自独立配置，互不影响。" />
+                </StackPanel>
+
+                <!-- 总开关 -->
+                <Border CornerRadius="8" Padding="18,12"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Text="自动执行" FontSize="14" />
+                            <TextBlock x:Name="SwitchHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" Text="" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="EnableSwitch" Grid.Column="1" OnContent="开" OffContent="关"
+                                      MinWidth="0" Toggled="EnableSwitch_Toggled" />
+                    </Grid>
+                </Border>
+
+                <!-- 添加规则 -->
+                <Border CornerRadius="8" Padding="18,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="添加程序" FontSize="14" />
+                        <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Text="填写进程名即可（例如 chrome、notepad）。可省略 .exe 后缀；不区分大小写。添加后在下方为该程序设定结束时间。" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBox x:Name="NameBox" MinWidth="260" PlaceholderText="进程名" />
+                            <Button x:Name="AddRuleButton" Content="添加程序" Click="AddRule_Click"
+                                    VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock x:Name="AddHint" FontSize="12.5" TextWrapping="Wrap" Opacity="0.75" Text="" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 规则列表 -->
+                <Border CornerRadius="8" Padding="18,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="已配置的程序" FontSize="14" />
+                        <StackPanel x:Name="RulesHost" Spacing="12" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 手动执行 -->
+                <Border CornerRadius="8" Padding="18,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="立即执行一次" FontSize="14" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="CheckButton" Content="仅检测" Click="Check_Click" />
+                            <Button x:Name="CleanButton" Content="立即结束" Click="Clean_Click" />
+                        </StackPanel>
+                        <TextBlock x:Name="ResultText" FontSize="12.5" TextWrapping="Wrap" Opacity="0.75" Text="" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 当前命中进程 -->
+                <Border CornerRadius="8" Padding="18,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="当前命中的进程" FontSize="14" VerticalAlignment="Center" />
+                            <Button x:Name="RefreshButton" Content="刷新" Click="Refresh_Click"
+                                    FontSize="12" Padding="10,4,10,4" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel x:Name="ProcHost" Spacing="4" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 页脚：说明判定依据与局限 -->
+                <Border CornerRadius="8" Padding="18,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="7">
+                        <TextBlock Text="执行依据与限制" FontSize="12.5" FontWeight="Bold" Opacity="0.85" />
+                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                   Text="· 匹配方式：按进程名逐字比较，忽略大小写，.exe 后缀可省略。「chrome」与「chrome.exe」视为同一个程序。" />
+                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                   Text="· 判「是否正在使用」：仅检查该进程有无可见的顶层窗口。存在可见窗口即判定为正在使用，按规则设定跳过；无可见窗口的后台驻留进程才会被结束。" />
+                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                   Text="· 生效条件：本程序需处于运行状态。本程序完全退出后，到达时间点也不会执行（执行依赖本程序自身的计时，未向系统注册计划任务）。" />
+                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                   Text="· 结束失败的常见原因：目标进程的权限高于本程序（例如以管理员身份运行）。此时结果区会如实记录，不会标记为成功。" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

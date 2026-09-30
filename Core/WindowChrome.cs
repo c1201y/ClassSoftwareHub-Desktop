@@ -139,6 +139,29 @@ public static class WindowChrome
         }
     }
 
+    /// <summary>
+    /// **只调"四角圆不圆"，其余一律不动** —— 主窗口专用。
+    ///
+    /// ⚠️ 为什么不能拿 <see cref="RemoveBorder"/> 顶上：那一套是给**自绘浮窗**用的，
+    ///    它会把 WS_CAPTION / WS_THICKFRAME 整个拆掉换成 WS_POPUP，还把 DWMWA_NCRENDERING_POLICY 关掉。
+    ///    主窗口的缩放边、吸附、Win + 方向键、系统阴影全靠那套非客户区，拆了就不是个正常窗口了。
+    ///
+    /// ⚠️ 为什么必须显式设：WinUI 3 只要 <c>ExtendsContentIntoTitleBar = true</c>，
+    ///    窗口的圆角偏好就停在 Default(0)。2026-09-29 实测（同一台 Win11）：
+    ///    主窗口偏好 0 → 四角是**纯直角**；改成 2(ROUND) → 立刻变圆。
+    ///    Win11 原生圆角只有 8px，肉眼第一眼不一定注意得到，但没有它就是"不像原生应用"。
+    /// </summary>
+    public static void SetRounded(IntPtr hwnd, bool rounded)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        try
+        {
+            var corner = rounded ? CornerRound : CornerDoNotRound;
+            _ = DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref corner, sizeof(int));
+        }
+        catch { }
+    }
+
     /// <summary>告诉 DWM 这个窗口是深色的（决定系统给它画浅色还是深色的框/材质）。</summary>
     public static void SetDarkMode(IntPtr hwnd, bool dark)
     {

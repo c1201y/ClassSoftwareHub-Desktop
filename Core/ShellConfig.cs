@@ -32,7 +32,7 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.1.0-insider1.1";
+    public const string ShellVersion = "1.1.0-insider1.2";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -82,6 +82,17 @@ public static class ShellConfig
 
     /// <summary>单实例互斥名。</summary>
     public const string MutexName = "ClassSoftwareHub.Desktop.SingleInstance";
+
+    /// <summary>
+    /// 「把主窗口叫出来」的命名事件名。
+    ///
+    /// ⛔ 为什么必须有这个：默认关闭窗口是**收进托盘**（<c>CloseToTray</c> 默认 true），进程并没有退出。
+    /// 此时用户再点桌面图标 / 开始菜单 / 双击 exe，新起来的第二个实例会被 <see cref="MutexName"/>
+    /// 挡在门外 —— 2026-09-30 之前那里是直接 <c>Environment.Exit(0)</c>，**什么反应都没有**，
+    /// 用户只能去任务管理器结束进程（实测反馈就是这么来的）。
+    /// 现在第二个实例改为先敲这个事件，让第一个实例把主窗口亮出来，然后自己才退。
+    /// </summary>
+    public const string ActivateEventName = "ClassSoftwareHub.Desktop.ActivateMainWindow";
 
     // ════════════════════════════════════════════════════════════════
     // 内容（软件数据）—— 原生界面用，跟站点 dist/content/ 那套对应

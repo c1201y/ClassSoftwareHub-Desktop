@@ -96,7 +96,7 @@ public sealed partial class ImageColorToolPage : Page
         e.AcceptedOperation = DataPackageOperation.Copy;
         if (e.DragUIOverride is { } hint)
         {
-            hint.Caption = "松开就提取配色";
+            hint.Caption = "松开鼠标即提取配色";
             hint.IsCaptionVisible = true;
         }
         DropFrameAccent.Visibility = Visibility.Visible;
@@ -117,7 +117,7 @@ public sealed partial class ImageColorToolPage : Page
         }
         catch (Exception ex)
         {
-            ShowError("读取拖进来的文件失败：" + ex.Message);
+            ShowError("读取拖入的文件失败：" + ex.Message);
         }
     }
 
@@ -134,7 +134,7 @@ public sealed partial class ImageColorToolPage : Page
 
             var srcW = decoder.OrientedPixelWidth;
             var srcH = decoder.OrientedPixelHeight;
-            if (srcW == 0 || srcH == 0) { ShowError("读不到图片尺寸，换个格式试试。"); return; }
+            if (srcW == 0 || srcH == 0) { ShowError("无法读取图片尺寸，请更换格式。"); return; }
 
             var longest = Math.Max(srcW, srcH);
             var scale = Math.Min(1.0, MaxSide / (double)longest);
@@ -182,7 +182,7 @@ public sealed partial class ImageColorToolPage : Page
             if (pixels.Count == 0)
             {
                 HideResults();
-                ShowError("这张图里没有可用的不透明像素（可能是全透明图片），换一张试试。");
+                ShowError("该图片中没有可用的不透明像素（可能为全透明图片），请更换图片。");
                 return;
             }
 
@@ -190,7 +190,7 @@ public sealed partial class ImageColorToolPage : Page
             if (palette is null)
             {
                 HideResults();
-                ShowError("没抽出可用配色，换一张试试。");
+                ShowError("未提取到可用配色，请更换图片。");
                 return;
             }
 
@@ -292,7 +292,7 @@ public sealed partial class ImageColorToolPage : Page
             VerticalContentAlignment = VerticalAlignment.Stretch,
             Content = stack,
         };
-        ToolTipService.SetToolTip(button, $"点击复制 {variant.Hex}");
+        ToolTipService.SetToolTip(button, $"单击复制 {variant.Hex}");
         button.Click += (_, _) => CopyHex(variant.Hex);
 
         _checks.Add((variant.Hex, check));
@@ -320,7 +320,7 @@ public sealed partial class ImageColorToolPage : Page
                 TextTrimming = TextTrimming.CharacterEllipsis,
             },
         };
-        ToolTipService.SetToolTip(button, $"点击复制 {HslText(variant.Hsl)}");
+        ToolTipService.SetToolTip(button, $"单击复制 {HslText(variant.Hsl)}");
         button.Click += (_, _) => CopyValue(HslText(variant.Hsl));
         return button;
     }
@@ -386,7 +386,7 @@ public sealed partial class ImageColorToolPage : Page
         }
         catch
         {
-            Toast.Text = "复制失败（剪贴板被占用？）";
+            Toast.Text = "复制失败（剪贴板被占用）";
         }
     }
 

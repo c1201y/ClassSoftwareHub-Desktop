@@ -24,7 +24,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="实验性功能" FontSize="30" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                           Text="稳定性和准确度都还没到能上主界面的小玩意，先放在这里。能用，但结果不一定可靠，界面之后也可能再改。" />
+                           Text="暂未达到主界面功能可靠程度的试验性功能集中于此。功能可用，但结果不保证准确，界面后续仍可能调整。" />
             </StackPanel>
 
             <!-- 卡片 462 + 间距 16 = 478，960 里正好两列（跟内置工具页同一个尺寸口径） -->
@@ -80,10 +80,10 @@
 
                     <TextBlock Grid.Row="1" Grid.Column="1" FontSize="12.5" Opacity="0.7"
                                TextWrapping="Wrap"
-                               Text="这些功能还在成型期，所以入口留在这里而不是主界面：成熟一个，挪一个。放上来是为了先让愿意尝鲜的同学试，不代表已经达到正式功能的可靠程度。" />
+                               Text="以下功能处于成型阶段，因此入口保留在此处而非主界面：功能成熟后逐步移入主界面。列于此处表示功能已可试用，不代表其可靠程度已达到正式功能水平。" />
                     <TextBlock Grid.Row="2" Grid.Column="1" FontSize="12" Opacity="0.6"
                                TextWrapping="Wrap" Margin="0,4,0,0"
-                               Text="试下来觉得能用、或者发现它判断错了，都在「提交软件」里反馈一句 —— 这类功能的去留就看实际用的反馈。" />
+                               Text="使用中如确认功能可用，或发现判断有误，均可在「反馈中心」提交反馈。此类功能的去留取决于实际使用反馈。" />
                 </Grid>
             </Border>
         </Grid>

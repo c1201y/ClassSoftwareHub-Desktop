@@ -11,7 +11,7 @@
 
         <StackPanel x:Name="LoadingPanel" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center">
             <ProgressRing x:Name="Ring" IsActive="True" Width="38" Height="38" />
-            <TextBlock x:Name="LoadingText" Text="正在打开提交页…" Opacity="0.7" />
+            <TextBlock x:Name="LoadingText" Text="正在打开提交页" Opacity="0.7" />
         </StackPanel>
 
         <StackPanel x:Name="ErrorPanel" Visibility="Collapsed" Spacing="12" MaxWidth="380"
@@ -23,7 +23,7 @@
             <Button Content="重试" HorizontalAlignment="Center" Click="Retry_Click"
                     Style="{StaticResource AccentButtonStyle}" />
             <!-- 兜底：WebView2 缺失 / 站点打不开时，至少还能去浏览器提交 -->
-            <Button Content="用浏览器打开提交页" HorizontalAlignment="Center" Click="Browser_Click" />
+            <Button Content="在浏览器中打开提交页" HorizontalAlignment="Center" Click="Browser_Click" />
         </StackPanel>
     </Grid>
 </Window>

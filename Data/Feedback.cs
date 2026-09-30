@@ -14,7 +14,8 @@ namespace ClassSoftwareHub.Desktop.Data;
 /// 桌面版和站点一样**没有后端**，所以「提交」= 拼一个 **GitHub Issue 预填链接**
 /// 交给系统浏览器打开，用户点一下 GitHub 上的「Submit new issue」即可。
 /// 不走任何网络请求：既不用白等超时，也不受网络环境影响。
-/// 没有 GitHub 账号的用户走「复制反馈内容」（拿去 Q 群）。
+/// 没有 GitHub 账号的用户走「在 Q 群中反馈」（2026-09-30 起）：
+/// 打开 Q 群卡片 → 提醒浮窗里点「复制」→ 按图文流程把反馈连同截图提交到**群相册**。
 ///
 /// ⚠️ 目标仓库是**桌面版自己的仓库**（<see cref="Core.ShellConfig.UpdateRepoName"/>），
 ///    不是站点仓库 —— Nick 2026-09-26 定：桌面版的问题（侧边栏、音量、下载……）
@@ -138,6 +139,23 @@ public static class Feedback
         public string Contact { get; set; } = "";
         /// <summary>是否在正文里附带本机环境信息（桌面版比网页版多的这一项）。</summary>
         public bool IncludeEnv { get; set; } = true;
+
+        /// <summary>
+        /// 把另一份草稿整份拷进来（**就地改，不换实例**）。
+        ///
+        /// ⚠️ 必须就地拷：<see cref="FeedbackDraftStore.Current"/> 是长期被两个页面持有的同一个实例，
+        ///    若写成 <c>Current = saved</c> 那种"换个引用"，另一个页面手里还攥着旧对象，改了不生效。
+        /// </summary>
+        public void CopyFrom(Draft other)
+        {
+            Kind = other.Kind;
+            SubKind = other.SubKind;
+            AppId = other.AppId;
+            Title = other.Title;
+            Detail = other.Detail;
+            Contact = other.Contact;
+            IncludeEnv = other.IncludeEnv;
+        }
     }
 
     /// <summary>一行环境信息（标签 + 值）。</summary>
@@ -206,7 +224,7 @@ public static class Feedback
         }
 
         sb.Append('\n');
-        sb.Append("<!-- 由桌面版「反馈中心」生成。若标题或正文有误，直接改这里也行。 -->");
+        sb.Append("<!-- 由桌面版「反馈中心」生成。标题或正文如有错误，可直接在此修改。 -->");
 
         return sb.ToString();
     }
@@ -249,7 +267,7 @@ public static class Feedback
         if (url.Length <= UrlMax)
             return new IssueLink(url, body, false);
 
-        const string note = "\n\n（描述过长，已截断；完整内容请点页面上的「复制反馈内容」。）";
+        const string note = "\n\n（描述过长，已截断；完整内容请使用页面上的「在 Q 群中反馈」。）";
         var detail = draft.Detail.Trim();
 
         // 二分找「砍到多少字能让 URL 落进上限」，比逐字减快得多
@@ -285,13 +303,13 @@ public static class Feedback
     /// <summary>校验：返回第一条不满足的提示文案，全部通过返回空串。</summary>
     public static string Validate(Draft draft)
     {
-        if (draft.Kind.Length == 0) return "请选择反馈类型。";
+        if (draft.Kind.Length == 0) return "反馈类型为必填项。";
         if (draft.Kind == KindReport && draft.SubKind.Length == 0)
-            return "请选择问题类型。";
+            return "问题类型为必填项。";
         if (draft.Title.Trim().Length == 0 || draft.Detail.Trim().Length == 0)
-            return "请填写所有标有 * 的必填项。";
+            return "标有 * 的必填项尚未填写完整。";
         if (draft.Title.Trim().Length > TitleMax)
-            return $"标题超出 {TitleMax} 字上限，请精简后重试（现在 {draft.Title.Trim().Length} 字）。";
+            return $"标题超出 {TitleMax} 字上限，需精简后重试（当前 {draft.Title.Trim().Length} 字）。";
         return "";
     }
 }
@@ -305,6 +323,15 @@ public static class Feedback
 public static class FeedbackDraftStore
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+
+    /// <summary>
+    /// 正在填的这一份草稿（**进程内共享**，两个反馈页面拿到的永远是同一个实例）。
+    ///
+    /// ⚠️ 为什么不放在页面字段里：2026-09-30 起「选类型」与「填表单」拆成两个页面
+    ///    （<c>FeedbackPage</c> → <c>FeedbackFormPage</c>），页面实例会随 Frame 导航被丢掉重建，
+    ///    挂在页面上的字段过一趟就没了。落盘还是走 <see cref="Save"/>，这里只管进程内的那一份。
+    /// </summary>
+    public static Feedback.Draft Current { get; } = new();
 
     public static string FilePath { get; } =
         Path.Combine(Core.AppPaths.DataDir, "feedback-draft.json");

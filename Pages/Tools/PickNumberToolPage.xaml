@@ -5,13 +5,28 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid Padding="24,14,24,20" RowSpacing="12">
+    <!-- ═══ 2026-09-29 三次重排（Nick：「分号码和分人名的按钮太隐蔽了，很多用户根本不知道有这个功能」）═══
+         前两版一直在调"摆得齐不齐"，但真正的问题是**入口看不见**：
+           · 「抽取池」只是一个小字标签 + 两个小号 RadioButton，右边那个「班级名单」在没人点之前
+             连「导入名单」按钮都不出现 —— 一个从没看过说明书的老师，永远发现不了"还能按名单抽"；
+           · 「抽号 / 随机分组」是一条细页签（SelectorBar），夹在两组内容中间，同样容易滑过去。
+         这一版把**两个层级的选择都升格成卡片**（App.xaml 里的 CshModeCardStyle）：
+           第一层「功能」    —— 抽号 / 随机分组
+           第二层「抽取对象」—— 按号码 / 按名单（带一句话说明，未选中的那张也写着"能干什么"）
+         两张卡并排摆着，谁也不藏谁：不点也看得见另一条路。
+         选择之后，参数行（Row 3）跟着换内容 —— 号码模式给起止框，名单模式给导入按钮，
+         用户"切换 → 参数变了"的因果关系是连贯的。 -->
+    <Grid Padding="24,10,24,12" RowSpacing="8">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- ═══ 标题 ═══ -->
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -20,65 +35,228 @@
             <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="随机抽号" FontSize="24" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="输入号码范围即可抽号（如学号 1~50）。号码取自系统加密随机数，结果公平可靠；也可用于随机分组。" />
+                           Text="随机抽取学号或学生姓名，也可一键随机分组。号码取自系统加密随机数，结果公平可靠。" />
             </StackPanel>
             <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
-                    Click="OpenPalette_Click" ToolTipService.ToolTip="开一个小置顶窗，随手抽号" />
+                    Click="OpenPalette_Click" ToolTipService.ToolTip="打开置顶小窗口，便于随时抽号" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <Grid ColumnSpacing="14">
+        <!-- ═══ 第一层：这一页能做什么 ═══
+             ⚠️ IsChecked 一律在代码里赋初值，不写在这里（见 App.xaml 里 CshModeCardStyle 的注释）。 -->
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="76" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="功能" FontSize="12.5" Opacity="0.6" VerticalAlignment="Center"
+                       HorizontalAlignment="Right" Margin="0,0,12,0" />
+
+            <RadioButton x:Name="TaskDrawRadio" Grid.Column="1" GroupName="TaskMode"
+                         Style="{StaticResource CshModeCardStyle}" Width="230"
+                         Checked="TaskMode_Changed">
+                <TextBlock Text="抽号" FontSize="14" FontWeight="SemiBold" />
+            </RadioButton>
+
+            <RadioButton x:Name="TaskGroupRadio" Grid.Column="2" GroupName="TaskMode"
+                         Style="{StaticResource CshModeCardStyle}" Width="230"
+                         Checked="TaskMode_Changed">
+                <TextBlock Text="随机分组" FontSize="14" FontWeight="SemiBold" />
+            </RadioButton>
+        </Grid>
+
+        <!-- ═══ 第二层：从哪儿抽 ═══
+             这两张卡是这次改版的**核心**：并排、等宽、都带说明，未选中的那张也在讲自己能干什么。
+             图标位置用一个小方牌代替图标字体 —— 写着「1 ~ 50」和「姓名」，本身就是这两种用法的样子。 -->
+        <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="76" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="抽取对象" FontSize="12.5" Opacity="0.6" VerticalAlignment="Center"
+                       HorizontalAlignment="Right" Margin="0,0,12,0" />
+
+            <RadioButton x:Name="ModeRangeRadio" Grid.Column="1" GroupName="PoolMode"
+                         Style="{StaticResource CshModeCardStyle}"
+                         AutomationProperties.Name="按号码抽取"
+                         Checked="PoolMode_Changed">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="46" Height="46" CornerRadius="9" BorderThickness="1"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <TextBlock Text="1 ~ 50" FontSize="11.5" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="按号码抽取" FontSize="15" FontWeight="Bold" />
+                        <TextBlock Text="在学号范围里抽号（如 1 ~ 50），打开即可直接使用。" FontSize="12"
+                                   Opacity="0.65" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </RadioButton>
+
+            <RadioButton x:Name="ModeRosterRadio" Grid.Column="2" GroupName="PoolMode"
+                         Style="{StaticResource CshModeCardStyle}"
+                         AutomationProperties.Name="按名单抽取"
+                         Checked="PoolMode_Changed">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="46" Height="46" CornerRadius="9" BorderThickness="1"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <TextBlock Text="姓名" FontSize="13" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="按名单抽取" FontSize="15" FontWeight="Bold" />
+                        <TextBlock Text="导入 Excel 或 txt 名单，直接抽学生姓名。" FontSize="12"
+                                   Opacity="0.65" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </RadioButton>
+        </Grid>
+
+        <!-- ═══ 参数行：随「抽取对象」换内容，两个面板同一位置、同一尺寸口径 ═══
+             右边那句状态（池子多大 / 抽掉多少 / 还剩多少）两种模式共用 —— 它属于「池子」，
+             就该待在定义池子的这一行里，而不是甩到下面左栏去。 -->
+        <Border Grid.Row="3" CornerRadius="10" Padding="16,8,16,8" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- ═══ 抽号 ═══ -->
-                <Border CornerRadius="10" Padding="16" BorderThickness="1"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="抽号设置" FontSize="13" FontWeight="Bold" />
-
-                        <!-- ⚠️ Maximum 必须填：不填的话在框里粘一个大数字（比如一亿），
+                <Grid>
+                    <!-- 号码：起止范围 -->
+                    <StackPanel x:Name="RangePanel" Orientation="Horizontal" Spacing="10"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="号码范围" FontSize="12.5" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <!-- ⚠️ NumberBox 的 Maximum 必须填：不填的话在框里粘一个大数字（比如一亿），
                              后面 Enumerable.Range(Lo, size) 会瞬间申请几 GB → 界面冻死或直接 OOM。
                              上限与浮窗版保持一致；代码里另有一道夹取兜底。 -->
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <NumberBox x:Name="FromBox" Value="1" Minimum="0" Maximum="9999" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" Width="130" HorizontalAlignment="Stretch" />
-                            <TextBlock Text="~" VerticalAlignment="Center" Opacity="0.6" />
-                            <NumberBox x:Name="ToBox" Value="50" Minimum="0" Maximum="9999" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" Width="130" />
+                        <NumberBox x:Name="FromBox" Value="1" Minimum="0" Maximum="9999"
+                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="112" />
+                        <TextBlock Text="~" VerticalAlignment="Center" Opacity="0.6" />
+                        <NumberBox x:Name="ToBox" Value="50" Minimum="0" Maximum="9999"
+                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="112" />
+                    </StackPanel>
+
+                    <!-- 名单：导入 / 示例 / 查看修改 / 清空
+                         ⚠️「查看 / 编辑名单」为什么是弹窗而不是就地把列表摆在这儿：
+                            本机窗口可用高度只有 617 DIP，内容行只剩下 ~300 ——
+                            就地摆一个 ListView 实测被压到 19px（等于看不见）。
+                            弹窗能给它 400+ 的高度，一屏能核对十几个人，也不占主流程的地方。 -->
+                    <Grid x:Name="RosterPanel" ColumnSpacing="10" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="名单文件" FontSize="12.5" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <Button Grid.Column="1" Content="导入名单" Click="ImportRoster_Click" />
+                        <!-- 导入之前先让人看见"名单文件该长什么样"（图 + 可下载的示例） -->
+                        <Button Grid.Column="2" Content="示例名单" Click="SampleRoster_Click"
+                                ToolTipService.ToolTip="看看名单文件该怎么做，也可直接下载一份示例照着填" />
+                        <Button x:Name="OpenRosterButton" Grid.Column="3" Content="查看 / 编辑名单"
+                                Click="OpenRoster_Click"
+                                ToolTipService.ToolTip="列出名单里的每个人，可逐个改名、删除，也可导出成 Excel 或 txt" />
+                        <Button x:Name="ClearRosterButton" Grid.Column="4" Content="清空名单"
+                                Click="ClearRoster_Click" IsEnabled="False" />
+                    </Grid>
+                </Grid>
+
+                <TextBlock x:Name="PoolStatusText" Grid.Column="1" FontSize="12" FontWeight="SemiBold"
+                           Opacity="0.8" VerticalAlignment="Center" TextWrapping="Wrap"
+                           MaxWidth="420" TextAlignment="Right" />
+            </Grid>
+        </Border>
+
+        <!-- ═══ 内容：抽号 / 随机分组 ═══ -->
+        <Grid Grid.Row="4">
+            <!-- ══════════ 抽号：左设 / 右看 ══════════ -->
+            <ScrollViewer x:Name="DrawView" VerticalScrollBarVisibility="Auto">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="286" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- ── 左栏：设置 + 状态 ── -->
+                    <Border CornerRadius="10" Padding="16" BorderThickness="1"
+                            VerticalAlignment="Top"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="抽号设置" FontSize="13" FontWeight="Bold" />
+
+                            <NumberBox x:Name="CountBox" Header="抽取数量" Value="1" Minimum="1" Maximum="50"
+                                       SmallChange="1" SpinButtonPlacementMode="Compact"
+                                       HorizontalAlignment="Stretch" />
+                            <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0" Padding="6,0,0,0" />
+
+                            <!-- ⚠️ 这一颗是整个页面唯一的 Accent 按钮：告诉用户"主动作在这儿" -->
+                            <Button x:Name="DrawButton" Content="开始抽号"
+                                    Style="{StaticResource AccentButtonStyle}" Click="Draw_Click"
+                                    HorizontalAlignment="Stretch" Height="40" />
+
+                            <!-- 出错提示紧贴按钮：原来是甩在结果区下面，用户点完不知道哪儿不对 -->
+                            <TextBlock x:Name="ErrorText" FontSize="12.5"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       TextWrapping="Wrap" Visibility="Collapsed" />
+
+                            <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    Margin="0,2,0,2" />
+
+                            <!-- 状态区：当前抽什么、怎么抽 —— "还剩多少"已经挪到上面参数行里了
+                                 （那属于"池子"的信息，紧挨着定义池子的控件） -->
+                            <TextBlock x:Name="SummaryText" FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" />
+
+                            <!-- 公平性自检：低频的排查工具（实抽 2 万次看分布）。
+                                 做成"一行链接 + 浮出面板"：以前是折叠区，标题被挤到可视区外面
+                                 （实测被裁成 1px），等于没有入口；浮出面板贴着链接弹出，点哪儿看哪儿，
+                                 也不会把设置栏撑长。 -->
+                            <HyperlinkButton x:Name="FairLink" Content="公平性自检" Padding="0"
+                                             HorizontalAlignment="Left" Click="FairCheck_Click"
+                                             ToolTipService.ToolTip="在本机实抽 2 万次，检验号码分布是否均匀" />
                         </StackPanel>
+                    </Border>
 
-                        <StackPanel Orientation="Horizontal" Spacing="14">
-                            <NumberBox x:Name="CountBox" Header="抽几个" Value="1" Minimum="1" Maximum="50"
-                                       SmallChange="1" SpinButtonPlacementMode="Compact" Width="130" />
-                            <CheckBox x:Name="NoRepeatBox" Content="不重复（抽过的不再出现）"
-                                      IsChecked="True" VerticalAlignment="Bottom" Margin="0,0,0,6" />
-                        </StackPanel>
-
-                        <Button x:Name="DrawButton" Content="开始抽号" Style="{StaticResource AccentButtonStyle}"
-                                Click="Draw_Click" HorizontalAlignment="Stretch" />
-
-                        <TextBlock x:Name="SummaryText" FontSize="12.5" Opacity="0.65" TextWrapping="Wrap" />
-                        <TextBlock x:Name="RemainText" FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                                   Visibility="Collapsed" />
-
-                        <Border CornerRadius="8" Padding="14" MinHeight="118"
-                                Background="{ThemeResource ControlFillColorDefaultBrush}">
+                    <!-- ── 右栏：结果 ── -->
+                    <StackPanel Grid.Column="1" Spacing="12">
+                        <!-- 结果区：强调色描边 + 大字号，视线一眼落到这儿。
+                             高度只按内容走；300 是实测出来的值 —— 本机窗口可用高度只有 617 DIP，
+                             内容行总共 ~300，再高就会把下面的抽号记录顶出可视区。 -->
+                        <Border x:Name="ResultCard" CornerRadius="10" Padding="20" MinHeight="300"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Grid>
-                                <TextBlock x:Name="ResultHint" Text="结果会显示在这里" FontSize="12.5" Opacity="0.6"
+                                <TextBlock x:Name="ResultHint" Text="单击左侧「开始抽号」" FontSize="13" Opacity="0.55"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 <VariableSizedWrapGrid x:Name="ResultHost" Orientation="Horizontal"
-                                                       ItemWidth="124" ItemHeight="72"
+                                                       ItemWidth="150" ItemHeight="92"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
 
-                        <TextBlock x:Name="ErrorText" FontSize="12.5" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
-                                   Visibility="Collapsed" />
-
+                        <!-- 抽号记录紧贴结果下方：抽完立刻能回看，不再是被甩到页尾的孤岛 -->
                         <Grid x:Name="UsedRow" ColumnSpacing="10" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -89,47 +267,56 @@
                             <Button Grid.Column="1" Content="重置记录" Click="ResetUsed_Click" />
                         </Grid>
 
-                        <StackPanel Spacing="8">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Content="公平性自检" Click="FairCheck_Click" />
-                                <TextBlock Text="在本机实抽 2 万次，看分布平不平" FontSize="12" Opacity="0.6"
-                                           VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </StackPanel>
-                            <StackPanel x:Name="FairPanel" Spacing="8" Visibility="Collapsed">
-                                <Border CornerRadius="8" Padding="10,8,10,4" Height="124"
-                                        Background="{ThemeResource ControlFillColorDefaultBrush}">
-                                    <Grid x:Name="FairChart" VerticalAlignment="Bottom" />
-                                </Border>
-                                <TextBlock x:Name="FairNote" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </StackPanel>
                     </StackPanel>
-                </Border>
+                </Grid>
+            </ScrollViewer>
 
-                <!-- ═══ 分组 ═══ -->
-                <Border Grid.Column="1" CornerRadius="10" Padding="16" BorderThickness="1"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="随机分组" FontSize="13" FontWeight="Bold" />
+            <!-- ══════════ 随机分组：同样左设 / 右看 ══════════ -->
+            <ScrollViewer x:Name="GroupView" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="286" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <ComboBox x:Name="GroupModeBox" Width="220" />
-                            <NumberBox x:Name="GroupValueBox" Value="4" Minimum="1" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" Width="120" />
+                    <Border CornerRadius="10" Padding="16" BorderThickness="1"
+                            VerticalAlignment="Top"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="分组设置" FontSize="13" FontWeight="Bold" />
+
+                            <ComboBox x:Name="GroupModeBox" Header="分组方式" HorizontalAlignment="Stretch" />
+                            <NumberBox x:Name="GroupValueBox" Header="组数" Value="4" Minimum="1"
+                                       Maximum="9999" SmallChange="1" SpinButtonPlacementMode="Compact"
+                                       HorizontalAlignment="Stretch" />
+
+                            <Button x:Name="GroupButton" Content="开始分组"
+                                    Style="{StaticResource AccentButtonStyle}" Click="Group_Click"
+                                    HorizontalAlignment="Stretch" Height="40" />
+                            <Button x:Name="CopyGroupsButton" Content="复制分组结果" Click="CopyGroups_Click"
+                                    IsEnabled="False" HorizontalAlignment="Stretch"
+                                    ToolTipService.ToolTip="按「第 N 组：姓名、姓名…」的格式复制到剪贴板" />
+
+                            <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    Margin="0,2,0,2" />
+
+                            <TextBlock x:Name="GroupRangeHint" FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" />
+                            <!-- 用户最常问的就是"能分几次" —— 直接写在设置区里 -->
+                            <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                       Text="每次单击「开始分组」都会重新打散一次，可反复使用、没有次数限制，也不影响抽号那边的「不重复」记录。" />
                         </StackPanel>
-                        <TextBlock x:Name="GroupRangeHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                    </Border>
 
-                        <Button Content="开始分组" Click="Group_Click" HorizontalAlignment="Stretch" />
-
-                        <TextBlock x:Name="GroupHint" Text="分组结果会显示在这里" FontSize="12.5" Opacity="0.6"
-                                   TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1" Spacing="10">
+                        <TextBlock x:Name="GroupHint" Text="单击左侧「开始分组」后，各组名单按行列出。"
+                                   FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
                         <StackPanel x:Name="GroupsHost" Spacing="10" />
                     </StackPanel>
-                </Border>
-            </Grid>
-        </ScrollViewer>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
 
-        <TextBlock x:Name="Toast" Grid.Row="2" FontSize="12" Opacity="0.75" />
+        <TextBlock x:Name="Toast" Grid.Row="5" FontSize="12" Opacity="0.75" />
     </Grid>
 </Page>

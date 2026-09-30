@@ -11,10 +11,13 @@
       反馈中心：**照着网页版 #/feedback 一比一抄**（版式 / 留白 / 字号 / 图标都对齐，
       文案直接取站点「文字设置.ts」里 feedback.* 那批字，2026-09-26 Nick 要求）。
 
-        选择态：页头「反馈中心」→ 主视觉横幅（大标题 + 副标题）→ 两张类型卡
-                → 提交后的处理流程（三步）→ 请先查阅已有反馈 → 草稿条
-        表单态：返回 + 类型图标/名称 → 内容将公开可见 → 基本信息（含联系方式）→ 本机信息
-                → 出错/截断提示 → 提交 / 复制 / 恢复
+        本页 = **选择态**：页头「反馈中心」→ 主视觉横幅（大标题 + 副标题）→ 两张类型卡
+                          → 提交后的处理流程（三步）→ 请先查阅已有反馈 → 草稿条
+        表单态已拆成独立页面 FeedbackFormPage（2026-09-30）。
+
+      ⚠️ 2026-09-30 Nick 要求改成正常页面逻辑：单击类型卡走 **Frame 导航** 进
+         FeedbackFormPage，⛔ 不再是同一页里靠 Visibility 互斥切换。
+         返回走导航栏那一个返回按钮（全站铁律），所以这里没有页内"返回"。
 
       ⚠️ 卡片图标用的是跟网页版**同一套 PNG**（Assets\feedback\report.png / suggest.png），
          不是字体图标 —— 这两张图是站点 src/assets/feedback 里原样搬过来的。
@@ -36,13 +39,13 @@
                         <StackPanel MaxWidth="680" HorizontalAlignment="Left" Spacing="0">
                             <TextBlock Text="帮助改进 ClassSoftwareHub" FontSize="40" FontWeight="SemiBold"
                                        LineHeight="48" TextWrapping="Wrap" Margin="0,0,0,14" />
-                            <TextBlock Text="报告软件信息错误、下载链接失效或其他使用问题；也可以提出功能建议。每条反馈都会进入公开的议题列表，由维护者跟进。"
+                            <TextBlock Text="报告软件信息错误、下载链接失效或其他使用问题；亦可提出功能建议。每条反馈均进入公开的议题列表，由维护者跟进。"
                                        FontSize="14" LineHeight="22" TextWrapping="Wrap"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
                     </Border>
 
-                    <!-- 两张类型卡 -->
+                    <!-- 两张类型卡。单击 = 导航到 FeedbackFormPage（类型靠 Tag 带过去） -->
                     <Grid Margin="0,20,0,0" ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -124,8 +127,19 @@
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     Padding="18,18,18,20">
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <Grid Width="26" Height="26" VerticalAlignment="Top">
+                                <!--
+                                  ⚠️ 这里必须是 Grid（Auto + *），⛔ 不能用 Orientation="Horizontal" 的 StackPanel：
+                                     横向 StackPanel 会拿**无限宽度**去量孩子，里面那句 TextWrapping="Wrap"
+                                     就永远不触发（量出来是一整行），最后被 Border 的圆角裁剪切掉半个字
+                                     —— 2026-09-30 Nick 抓到的"文字被生硬切断"就是这个。
+                                -->
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid Grid.Column="0" Width="26" Height="26" VerticalAlignment="Top">
                                         <Border CornerRadius="13"
                                                 Background="{ThemeResource AccentFillColorDefaultBrush}"
                                                 Opacity="0.15" />
@@ -133,21 +147,27 @@
                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Grid>
-                                    <StackPanel Spacing="5">
+
+                                    <StackPanel Grid.Column="1" Spacing="5">
                                         <TextBlock Text="填写反馈信息" FontSize="14" FontWeight="SemiBold" />
                                         <TextBlock Text="选择反馈类型，说明问题或建议。填写内容将在本地自动保存为草稿，中途离开亦不会丢失。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                </StackPanel>
+                                </Grid>
                             </Border>
 
                             <Border Grid.Column="1" CornerRadius="8" BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     Padding="18,18,18,20">
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <Grid Width="26" Height="26" VerticalAlignment="Top">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid Grid.Column="0" Width="26" Height="26" VerticalAlignment="Top">
                                         <Border CornerRadius="13"
                                                 Background="{ThemeResource AccentFillColorDefaultBrush}"
                                                 Opacity="0.15" />
@@ -155,21 +175,27 @@
                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Grid>
-                                    <StackPanel Spacing="5">
+
+                                    <StackPanel Grid.Column="1" Spacing="5">
                                         <TextBlock Text="跳转至 GitHub" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="标题与正文已自动填入议题表单，登录后点击提交，内容将公开可见。"
+                                        <TextBlock Text="标题与正文已自动填入议题表单，登录后单击提交，内容将公开可见。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                </StackPanel>
+                                </Grid>
                             </Border>
 
                             <Border Grid.Column="2" CornerRadius="8" BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     Padding="18,18,18,20">
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <Grid Width="26" Height="26" VerticalAlignment="Top">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid Grid.Column="0" Width="26" Height="26" VerticalAlignment="Top">
                                         <Border CornerRadius="13"
                                                 Background="{ThemeResource AccentFillColorDefaultBrush}"
                                                 Opacity="0.15" />
@@ -177,13 +203,14 @@
                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Grid>
-                                    <StackPanel Spacing="5">
+
+                                    <StackPanel Grid.Column="1" Spacing="5">
                                         <TextBlock Text="维护者跟进处理" FontSize="14" FontWeight="SemiBold" />
                                         <TextBlock Text="反馈将进入公开议题列表，处理进度可在议题下方查看，亦可继续补充说明。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                </StackPanel>
+                                </Grid>
                             </Border>
                         </Grid>
                     </StackPanel>
@@ -217,152 +244,14 @@
                         </Grid>
                     </Border>
 
-                    <!-- 草稿条 -->
+                    <!-- 草稿条。单击「恢复上次填写」= 带着草稿里的类型直接进表单页 -->
                     <InfoBar x:Name="DraftBar" IsOpen="False" Severity="Informational"
-                             Title="上次填写的反馈还在" Message="可以直接接着填。"
+                             Title="存在上次填写的反馈草稿" Message="可直接继续填写。"
                              Margin="0,16,0,0" IsClosable="False">
                         <InfoBar.ActionButton>
                             <Button Content="恢复上次填写" Click="ResumeDraft_Click" />
                         </InfoBar.ActionButton>
                     </InfoBar>
-                </StackPanel>
-
-                <!-- ═══════════════ 表单态 ═══════════════ -->
-                <StackPanel x:Name="FormView" Visibility="Collapsed" Spacing="0">
-
-                    <!-- 返回 + 类型（图标 28、名称 20pt，跟网页版的表单头一样） -->
-                    <Grid Margin="0,20,0,0" ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <Button Grid.Column="0" Click="BackToChoose_Click"
-                                Background="Transparent" BorderThickness="0" VerticalAlignment="Center"
-                                ToolTipService.ToolTip="重新选择反馈类型">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE72B;" FontSize="13" />
-                                <TextBlock Text="重新选择反馈类型" />
-                            </StackPanel>
-                        </Button>
-
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image x:Name="FormKindImage" Width="28" Height="28" Stretch="Uniform" />
-                            <TextBlock x:Name="FormKindText" FontSize="20" FontWeight="SemiBold"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- 内容将公开可见 -->
-                    <InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,16,0,0"
-                             Title="内容将公开可见"
-                             Message="提交后，您填写的内容将公开显示于本站仓库的议题列表中，任何人均可查看。请勿填写密码、手机号等敏感信息。" />
-
-                    <!-- 基本信息 + 联系方式（跟网页版一样，同一张卡里用一条分隔线切开） -->
-                    <Border Margin="0,24,0,0" CornerRadius="8" BorderThickness="1"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            Padding="22,20,22,24">
-                        <StackPanel Spacing="0">
-                            <TextBlock Text="基本信息" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
-
-                            <StackPanel Spacing="18">
-                                <!--
-                                  子类型（只有「报告问题」有）。
-                                  ⚠️ DisplayMemberPath 不能省：ItemsSource 直接喂的是 SubKindDef 对象，
-                                     不指定就用 ToString() 显示成「ClassSoftwareHub.Desktop.Data.Feedback+SubKindDef」
-                                     —— 用户看到的是类型全名（2026-09-27 用户截图反馈后补上）。
-                                -->
-                                <ComboBox x:Name="SubKindCombo" Header="问题类型" PlaceholderText="请选择"
-                                          DisplayMemberPath="Title"
-                                          HorizontalAlignment="Stretch" SelectionChanged="SubKind_Changed" />
-
-                                <!-- 涉及的软件。同上，不指定 DisplayMemberPath 会显示成 SoftwareApp 的类型全名。 -->
-                                <ComboBox x:Name="AppCombo" Header="涉及的软件" PlaceholderText="选择软件（选填）"
-                                          DisplayMemberPath="Name"
-                                          HorizontalAlignment="Stretch" SelectionChanged="App_Changed" />
-
-                                <!-- 标题（必填） -->
-                                <StackPanel Spacing="6">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Text="标题" FontSize="13" FontWeight="SemiBold" />
-                                        <TextBlock Text="*" FontSize="13"
-                                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                    </StackPanel>
-                                    <TextBox x:Name="TitleBox" PlaceholderText="请用一句话概括问题或建议"
-                                             TextWrapping="Wrap" HorizontalAlignment="Stretch" />
-                                </StackPanel>
-
-                                <!-- 详细描述（必填） -->
-                                <StackPanel Spacing="6">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Text="详细描述" FontSize="13" FontWeight="SemiBold" />
-                                        <TextBlock Text="*" FontSize="13"
-                                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                    </StackPanel>
-                                    <TextBox x:Name="DetailBox" PlaceholderText="请说明问题出现的页面、操作步骤、预期结果与实际结果"
-                                             TextWrapping="Wrap" AcceptsReturn="True" MinHeight="112"
-                                             HorizontalAlignment="Stretch" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <!-- 分隔线：联系方式另起一节（网页版同款） -->
-                            <Border Height="1" Margin="0,28,0,24"
-                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-
-                            <TextBlock Text="联系方式" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
-                            <StackPanel Spacing="6">
-                                <TextBox x:Name="ContactBox" Header="联系方式" PlaceholderText="QQ / 微信 / 邮箱"
-                                         HorizontalAlignment="Stretch" />
-                                <TextBlock Text="选填。填写后将公开展示，便于维护者联系确认。"
-                                           FontSize="12" TextWrapping="Wrap"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 本机信息（桌面版独有，网页版给不了，所以单独一张卡） -->
-                    <Border Margin="0,24,0,0" CornerRadius="8" BorderThickness="1"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            Padding="22,20,22,24">
-                        <StackPanel Spacing="0">
-                            <TextBlock Text="本机信息" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" />
-                            <CheckBox x:Name="IncludeEnvCheck" Content="随反馈附上本机信息"
-                                      Checked="IncludeEnv_Changed" Unchecked="IncludeEnv_Changed" />
-                            <TextBlock x:Name="EnvPreview" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 提示条 -->
-                    <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" Title="无法提交"
-                             Margin="0,16,0,0" IsClosable="True" />
-
-                    <InfoBar x:Name="TruncateBar" IsOpen="False" Severity="Warning" Title="内容已自动截断"
-                             Message="描述长度超出链接可承载的上限，已自动截断。请点击「复制反馈内容」，将完整内容粘贴到议题正文中。"
-                             Margin="0,16,0,0" IsClosable="True" />
-
-                    <!-- 动作 -->
-                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,24,0,0">
-                        <Button x:Name="OpenIssueButton" Click="OpenIssue_Click"
-                                Style="{StaticResource AccentButtonStyle}" Padding="18,8,18,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE8A7;" FontSize="14" />
-                                <TextBlock Text="提交至 GitHub" />
-                            </StackPanel>
-                        </Button>
-
-                        <Button x:Name="CopyButton" Content="复制反馈内容" Click="Copy_Click"
-                                Padding="18,8,18,8" />
-
-                        <Button Content="恢复上次填写" Click="ResumeDraft_Click" Padding="18,8,18,8" />
-                    </StackPanel>
-
-                    <TextBlock Margin="0,14,0,0" FontSize="12" TextWrapping="Wrap" LineHeight="18"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               Text="将打开 GitHub 议题创建页面，标题与正文已自动填入，登录后点击「Submit new issue」即可提交。若无 GitHub 账号，可先「复制反馈内容」，再自行提交或通过 QQ 群反馈。" />
                 </StackPanel>
 
             </StackPanel>

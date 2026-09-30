@@ -64,7 +64,7 @@
                                         <Button Content="打开文件夹" Tag="{x:Bind}" Click="Reveal_Click"
                                                 Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
                                         <Button Tag="{x:Bind}" Click="Remove_Click" Padding="9,5"
-                                                ToolTipService.ToolTip="从列表移除（不会删掉已下载的文件）"
+                                                ToolTipService.ToolTip="从列表移除（不删除已下载的文件）"
                                                 Visibility="{x:Bind RetryVisibility, Mode=OneWay}">
                                             <FontIcon Glyph="&#xE74D;" FontSize="12" />
                                         </Button>
@@ -89,10 +89,10 @@
             <StackPanel x:Name="EmptyPanel" Grid.Row="1" Spacing="12" Visibility="Collapsed"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE896;" FontSize="34" Opacity="0.45" HorizontalAlignment="Center" />
-                <TextBlock Text="当前没有下载任务" FontSize="15" FontWeight="SemiBold" Opacity="0.75"
+                <TextBlock Text="当前无下载任务" FontSize="15" FontWeight="SemiBold" Opacity="0.75"
                            HorizontalAlignment="Center" />
                 <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12.5" Opacity="0.6"
-                           Text="在「软件下载」中打开任意软件并点击「下载」，任务会显示在这里。下载期间可继续使用其他功能，左侧入口会显示进行中的任务数。" />
+                           Text="在「软件下载」中打开任意软件并单击「下载」，任务将显示在此处。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
             </StackPanel>
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">

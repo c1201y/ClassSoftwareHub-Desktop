@@ -3,7 +3,7 @@
 ;
 ;  编译（在工程根目录）：
 ;    & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
-;    （版本号默认取下面的 DesktopVersion；临时覆盖就加 /DDesktopVersion=1.1.0-insider1.1）
+;    （版本号默认取下面的 DesktopVersion；临时覆盖就加 /DDesktopVersion=1.1.0-insider1.2）
 ;
 ;  产物：dist\installer\ClassSoftwareHub-Setup-dv<DesktopVersion>.exe
 ;        内测例：ClassSoftwareHub-Setup-dv1.1.0-insider1.0.exe
@@ -23,7 +23,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.1.0-insider1.1"
+  #define DesktopVersion "1.1.0-insider1.2"
 #endif
 
 #define AppName "ClassSoftwareHub"

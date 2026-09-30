@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.FeedbackFormPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+      反馈中心的**表单页**（2026-09-30 从 FeedbackPage 里拆出来的独立页面）。
+
+        反馈中心 navigation：FeedbackPage（选类型）→ 本页（填内容）→ 提交出口
+        ⚠️ 2026-09-30 Nick 要求改成正常页面逻辑：⛔ 不再在同一页里靠 Visibility 互斥切换。
+           所以「退回选类型」不再有页内按钮，走**导航栏那一个返回按钮**
+           （ShellPage 的 Nav_BackRequested → ContentFrame.GoBack）。
+
+      本页没有自己的返回按钮是有意为之 —— 全站铁律「返回按钮一律用导航栏那一个」。
+
+      ⚠️ 草稿不挂在本页字段上，而是 FeedbackDraftStore.Current（进程内共享）：
+         页面实例会随 Frame 导航被丢掉重建，挂在页面上的字段过一趟就没了。
+    -->
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
+            <StackPanel MaxWidth="1064" Padding="24,32,24,44">
+
+                <!-- 页头 = 类型图标 + 名称（跟网页版的表单头一致：图标 30、名称 28pt） -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Image x:Name="FormKindImage" Width="30" Height="30" Stretch="Uniform"
+                           VerticalAlignment="Center" />
+                    <TextBlock x:Name="FormKindText" FontSize="28" FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- 内容将公开可见 -->
+                <InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,18,0,0"
+                         Title="内容将公开可见"
+                         Message="提交后，所填内容将公开显示于本站仓库的议题列表中，任何人均可查看。请勿填写密码、手机号等敏感信息。" />
+
+                <!-- 基本信息 + 联系方式（跟网页版一样，同一张卡里用一条分隔线切开） -->
+                <Border Margin="0,24,0,0" CornerRadius="8" BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        Padding="22,20,22,24">
+                    <StackPanel Spacing="0">
+                        <TextBlock Text="基本信息" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+                        <StackPanel Spacing="18">
+                            <!--
+                              子类型（只有「报告问题」有）。
+                              ⚠️ DisplayMemberPath 不能省：ItemsSource 直接喂的是 SubKindDef 对象，
+                                 不指定就用 ToString() 显示成「ClassSoftwareHub.Desktop.Data.Feedback+SubKindDef」
+                                 —— 用户看到的是类型全名（2026-09-27 用户截图反馈后补上）。
+                            -->
+                            <ComboBox x:Name="SubKindCombo" Header="问题类型" PlaceholderText="请选择"
+                                      DisplayMemberPath="Title"
+                                      HorizontalAlignment="Stretch" SelectionChanged="SubKind_Changed" />
+
+                            <!-- 涉及的软件。同上，不指定 DisplayMemberPath 会显示成 SoftwareApp 的类型全名。 -->
+                            <ComboBox x:Name="AppCombo" Header="涉及的软件" PlaceholderText="选择软件（选填）"
+                                      DisplayMemberPath="Name"
+                                      HorizontalAlignment="Stretch" SelectionChanged="App_Changed" />
+
+                            <!-- 标题（必填） -->
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="标题" FontSize="13" FontWeight="SemiBold" />
+                                    <TextBlock Text="*" FontSize="13"
+                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBox x:Name="TitleBox" PlaceholderText="一句话概括问题或建议"
+                                         TextWrapping="Wrap" HorizontalAlignment="Stretch" />
+                            </StackPanel>
+
+                            <!-- 详细描述（必填） -->
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="详细描述" FontSize="13" FontWeight="SemiBold" />
+                                    <TextBlock Text="*" FontSize="13"
+                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBox x:Name="DetailBox" PlaceholderText="说明问题出现的页面、操作步骤、预期结果与实际结果"
+                                         TextWrapping="Wrap" AcceptsReturn="True" MinHeight="112"
+                                         HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 分隔线：联系方式另起一节（网页版同款） -->
+                        <Border Height="1" Margin="0,28,0,24"
+                                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                        <TextBlock Text="联系方式" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
+                        <StackPanel Spacing="6">
+                            <TextBox x:Name="ContactBox" Header="联系方式" PlaceholderText="QQ / 微信 / 邮箱"
+                                     HorizontalAlignment="Stretch" />
+                            <TextBlock Text="选填。填写后将公开展示，便于维护者联系确认。"
+                                       FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 本机信息（桌面版独有，网页版给不了，所以单独一张卡） -->
+                <Border Margin="0,24,0,0" CornerRadius="8" BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        Padding="22,20,22,24">
+                    <StackPanel Spacing="0">
+                        <TextBlock Text="本机信息" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" />
+                        <CheckBox x:Name="IncludeEnvCheck" Content="随反馈附上本机信息"
+                                  Checked="IncludeEnv_Changed" Unchecked="IncludeEnv_Changed" />
+                        <TextBlock x:Name="EnvPreview" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 提示条 -->
+                <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" Title="无法提交"
+                         Margin="0,16,0,0" IsClosable="True" />
+
+                <InfoBar x:Name="TruncateBar" IsOpen="False" Severity="Warning" Title="内容已自动截断"
+                         Message="描述长度超出链接可承载的上限，已自动截断。单击「在 Q 群中反馈」可取得完整内容，粘贴到群相册的说明栏即可。"
+                         Margin="0,16,0,0" IsClosable="True" />
+
+                <!-- 动作 -->
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,24,0,0">
+                    <Button x:Name="OpenIssueButton" Click="OpenIssue_Click"
+                            Style="{StaticResource AccentButtonStyle}" Padding="18,8,18,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+                            <TextBlock Text="提交至 GitHub" />
+                        </StackPanel>
+                    </Button>
+
+                    <!--
+                      「在 Q 群中反馈」= 原来那颗「复制反馈内容」的升级（2026-09-30 Nick 指定）：
+                      单击 = 打开 Q 群卡片（外部浏览器）+ 弹「加群后请复制反馈信息」浮窗；
+                      浮窗里点「复制」才真正写剪贴板，并顺势摊开图文提交流程。
+                    -->
+                    <Button x:Name="QqGroupButton" Click="QqGroup_Click" Padding="18,8,18,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8BD;" FontSize="14" />
+                            <TextBlock Text="在 Q 群中反馈" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <TextBlock Margin="0,14,0,0" FontSize="12" TextWrapping="Wrap" LineHeight="18"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Text="「提交至 GitHub」将打开议题创建页面，标题与正文已自动填入，登录后单击「Submit new issue」即可提交；若无 GitHub 账号，可改用「在 Q 群中反馈」，按弹出的图文流程把反馈提交至群相册。填写内容在本地自动保存为草稿，中途离开亦不会丢失。" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

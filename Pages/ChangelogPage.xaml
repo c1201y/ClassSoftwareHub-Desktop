@@ -25,7 +25,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="更新日志" FontSize="30" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                           Text="各版本的更新内容，读取自更新仓库的发布说明，与应用内「检查更新」显示的内容一致。左侧点版本号可以直接跳到那一版。" />
+                           Text="各版本的更新内容读取自更新仓库的发布说明，与应用内「检查更新」显示的内容一致。在左侧单击版本号可直接跳转至该版本。" />
             </StackPanel>
 
             <!-- 当前版本 -->
@@ -57,7 +57,7 @@
                 </Grid.ColumnDefinitions>
 
                 <Button x:Name="RefreshButton" Content="刷新" Click="Refresh_Click" />
-                <Button Grid.Column="1" Content="在浏览器里看全部发布" Click="OpenWeb_Click" />
+                <Button Grid.Column="1" Content="在浏览器中查看全部发布" Click="OpenWeb_Click" />
 
                 <!--
                   只分「全部版本 / 正式版本」两种。**故意不做「预览版」这一档** ——
@@ -166,7 +166,7 @@
                                     VerticalAlignment="Center" Visibility="Collapsed">
                             <ProgressRing x:Name="LoadingRing" IsActive="True" Width="34" Height="34"
                                           HorizontalAlignment="Center" />
-                            <TextBlock Text="正在从更新仓库读取发布说明……" FontSize="13" Opacity="0.7"
+                            <TextBlock Text="正在从更新仓库读取发布说明。" FontSize="13" Opacity="0.7"
                                        HorizontalAlignment="Center" />
                         </StackPanel>
 

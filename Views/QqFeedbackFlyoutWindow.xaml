@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.QqFeedbackFlyoutWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      「在 Q 群中反馈」第一步的提醒浮窗：点完那颗按钮、Q 群卡片在浏览器里打开的同时弹出来，
+      提醒用户"加群后请复制反馈信息"。两颗键：复制（主）/ 取消。
+
+      外壳（无边框 + 亚克力 + 不进 Alt+Tab + 置顶）走 FlyoutChrome，跟侧边栏那几个浮窗同一套，
+      所以它**不会被浏览器盖住** —— 用户切到 QQ 那边时提醒还在眼前。
+
+      ⚠️ 这里所有横向排列一律用 Grid（Auto + *），⛔ 不用 Orientation="Horizontal" 的 StackPanel：
+         横向 StackPanel 会拿无限宽度去量孩子，里面的 TextBlock 就算写了 TextWrapping="Wrap"
+         也永远不换行（量出来是一整行），最后被 Border 的圆角裁剪切掉半个字。
+         反馈页「提交后的处理流程」那三张卡就是这么被切断的（2026-09-30 修）。
+    -->
+    <Grid x:Name="Root" Background="Transparent" IsTabStop="True" KeyDown="Root_KeyDown">
+        <Border x:Name="Panel" CornerRadius="8" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+
+            <StackPanel x:Name="ContentHost" Padding="18,16,18,14" Spacing="14">
+
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <FontIcon Grid.Column="0" Glyph="&#xE8BD;" FontSize="17" Margin="0,2,0,0"
+                              VerticalAlignment="Top"
+                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Text="加群后请复制反馈信息" FontSize="15" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="在群相册点「创建相册」，把复制的信息粘贴到说明栏。"
+                                   FontSize="12.5" LineHeight="19" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- 主操作在左、取消在右（跟系统 ContentDialog 的排法一致） -->
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="复制" Click="Copy_Click"
+                            Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+
+                    <Button Grid.Column="1" Content="取消" Click="Cancel_Click"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

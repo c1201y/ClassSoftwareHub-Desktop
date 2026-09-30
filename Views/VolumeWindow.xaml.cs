@@ -117,7 +117,11 @@ public sealed partial class VolumeWindow : Window
     /// <summary>主音量浮窗现在开着吗。</summary>
     public static bool IsVisible => _instance?._visible == true;
 
-    /// <summary>侧边栏贴哪条边（跟侧边栏同一个设置）。竖/横版、滑入方向、合成器排哪儿全靠它。</summary>
+    /// <summary>
+    /// 侧边栏贴哪条边（跟侧边栏同一个设置）。竖/横版、滑入方向、合成器排哪儿全靠它。
+    /// ⚠️ 侧边栏选「左右两边」（= "both"）时这里**落到 right** —— 音量浮窗固定挂右边那条，
+    ///    锚点也是右边的 <c>ToolSidebarWindow.CurrentRect</c>（见那边的 AnchorInstance）。
+    /// </summary>
     public static string Edge => App.Settings.Current.SidebarEdge is "left" or "top" or "bottom"
         ? App.Settings.Current.SidebarEdge
         : "right";
@@ -377,8 +381,8 @@ public sealed partial class VolumeWindow : Window
         }
 
         ToolTipService.SetToolTip(ActionToggle, error ?? (BrightnessService.AdaptiveSupported
-            ? "自动亮度（跟着环境光调）"
-            : "自动亮度：这台机器没有环境光传感器，系统自带的也用不了"));
+            ? "自动亮度（跟随环境光调节）"
+            : "自动亮度不可用：设备不具备环境光传感器"));
     }
 
     /// <summary>两个 ToggleButton 按真实状态点亮（静音中 / 合成器开着）。</summary>
@@ -440,8 +444,8 @@ public sealed partial class VolumeWindow : Window
             MasterSlider.IsEnabled = false;
             ActionToggle.IsEnabled = false;
             MasterPercentText.Text = "—";
-            MasterCaptionText.Text = "读不到设备";
-            ToolTipService.SetToolTip(MasterCaptionText, "读不到音量设备（没声卡或音频服务没起来）");
+            MasterCaptionText.Text = "未检测到设备";
+            ToolTipService.SetToolTip(MasterCaptionText, "未检测到音量设备（无音频设备或音频服务未启动）");
             ActionToggle.IsChecked = false;
             return;
         }
@@ -476,9 +480,9 @@ public sealed partial class VolumeWindow : Window
             MasterSlider.IsEnabled = false;
             ActionToggle.IsEnabled = false;
             MasterPercentText.Text = "—";
-            MasterCaptionText.Text = "读不到设备";
+            MasterCaptionText.Text = "无法读取设备";
             ToolTipService.SetToolTip(MasterCaptionText,
-                "读不到屏幕亮度：这台显示器的亮度不由系统管（外接显示器一般是这样）");
+                "无法读取屏幕亮度：该显示器亮度不受系统管理（外接显示器通常如此）");
             ActionToggle.IsChecked = false;
             return;
         }
@@ -584,7 +588,7 @@ public sealed partial class VolumeWindow : Window
         else
         {
             ActionToggle.IsChecked = !want;
-            UpdateActionTooltip("改不了自动亮度（可能需要管理员权限，或这台机器不支持）");
+            UpdateActionTooltip("无法修改自动亮度（可能需要管理员权限，或设备不支持）");
         }
     }
 

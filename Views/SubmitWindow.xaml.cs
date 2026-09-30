@@ -110,8 +110,8 @@ public sealed partial class SubmitWindow : Window
 
     private static string DescribeWebError(CoreWebView2WebErrorStatus status) => status switch
     {
-        CoreWebView2WebErrorStatus.HostNameNotResolved => "域名解析失败（检查网络或 hosts）",
-        CoreWebView2WebErrorStatus.ServerUnreachable => "服务器连不上",
+        CoreWebView2WebErrorStatus.HostNameNotResolved => "域名解析失败（网络或 hosts 配置有误）",
+        CoreWebView2WebErrorStatus.ServerUnreachable => "服务器不可达",
         CoreWebView2WebErrorStatus.Timeout => "连接超时",
         CoreWebView2WebErrorStatus.ConnectionAborted => "连接被中断",
         CoreWebView2WebErrorStatus.Disconnected => "网络已断开",

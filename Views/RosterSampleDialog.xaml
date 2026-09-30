@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="ClassSoftwareHub.Desktop.Views.RosterSampleDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="示例名单">
+
+    <!-- 2026-09-29（Nick 提）：导入名单之前，先让人看见"名单文件该长什么样"。
+         两张示意截图并排（Excel / txt），下面三个按钮：直接用示例试试 / 下载示例文件。
+         ⚠️ 默认对话框宽 548，两张图并排会被压得看不清 —— 覆盖主题资源放宽到 940。
+            这是 ContentDialog 唯一能改宽度的办法（设 MaxWidth 属性没用，模板里走的是主题资源）。 -->
+    <ContentDialog.Resources>
+        <x:Double x:Key="ContentDialogMaxWidth">940</x:Double>
+    </ContentDialog.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="14">
+
+            <TextBlock FontSize="13" Opacity="0.75" TextWrapping="Wrap"
+                       Text="下面两份是同一批姓名的两种做法，任选一种 —— 左边是 Excel 表格里的样子，右边是记事本里的样子。程序只认「一格 / 一行一个名字」：表头（如「姓名」）会自动跳过，重复的姓名只算一次，最多支持 2000 人。" />
+
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ── Excel ──
+                     ⚠️ 图是**整屏截图**，故意不裁：留着的标题栏、行列标、功能区正是"这是 Excel"的招牌。
+                        MaxHeight 只用来兜住小屏，图本身按 Uniform 等比缩，不会变形。 -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="做法一：Excel 表格（.xlsx）" FontSize="12.5" FontWeight="SemiBold" />
+                    <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="姓名放在同一列即可，前面有没有序号列、上面有没有表头都行。" />
+                    <Border Height="380" CornerRadius="8" BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource ControlFillColorDefaultBrush}">
+                        <Image x:Name="ExcelImage" Stretch="Uniform"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+
+                <!-- ── txt ── -->
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBlock Text="做法二：纯文本（.txt / .csv）" FontSize="12.5" FontWeight="SemiBold" />
+                    <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="用记事本一行写一个名字；一行里写多个，用逗号、顿号或分号隔开也行。" />
+                    <Border Height="380" CornerRadius="8" BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource ControlFillColorDefaultBrush}">
+                        <Image x:Name="TxtImage" Stretch="Uniform"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- ⚠️ 不用 ContentDialog 的底部按钮：三个动作里有两个是"下载"，塞不进 Primary/Secondary/Close 三格；
+                 而且单独一个「关闭」在底部会被拉成一条很宽的横条，看着像主操作，抢了「用示例名单试一下」的注意力。
+                 现在所有按钮聚在内容底部一行，右边留一个「关闭」。 -->
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button x:Name="UseButton" Content="用示例名单试一下"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="Use_Click"
+                            ToolTipService.ToolTip="把这些姓名装进抽取池，可立刻抽号或分组" />
+                    <Button x:Name="DownloadExcelButton" Content="下载 Excel 示例"
+                            Click="DownloadExcel_Click"
+                            ToolTipService.ToolTip="另存一份 .xlsx 示例，照着改就行" />
+                    <Button x:Name="DownloadTxtButton" Content="下载 txt 示例"
+                            Click="DownloadTxt_Click"
+                            ToolTipService.ToolTip="另存一份 .txt 示例，照着改就行" />
+                </StackPanel>
+
+                <Button Grid.Column="1" Content="关闭" Click="Close_Click" />
+            </Grid>
+
+            <TextBlock x:Name="NoteText" FontSize="12" Opacity="0.7" TextWrapping="Wrap"
+                       Visibility="Collapsed" />
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

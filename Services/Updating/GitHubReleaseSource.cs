@@ -38,14 +38,14 @@ public sealed class GitHubReleaseSource : IUpdateSource
         _apiBase = string.IsNullOrWhiteSpace(apiBase) ? "https://api.github.com" : apiBase.TrimEnd('/');
     }
 
-    public string DisplayName => IsConfigured ? $"GitHub（{_owner}/{_repo}）" : "GitHub（还没配置）";
+    public string DisplayName => IsConfigured ? $"GitHub（{_owner}/{_repo}）" : "GitHub（未配置）";
 
     public bool IsConfigured => _owner.Length > 0 && _repo.Length > 0;
 
     public async Task<IReadOnlyList<UpdateRelease>> GetReleasesAsync(UpdateChannel channel, int max, CancellationToken ct = default)
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("还没配置更新仓库（owner/repo）。");
+            throw new InvalidOperationException("尚未配置更新仓库（owner/repo）。");
 
         var url = $"{_apiBase}/repos/{_owner}/{_repo}/releases?per_page=30";
         using var req = new HttpRequestMessage(HttpMethod.Get, url);

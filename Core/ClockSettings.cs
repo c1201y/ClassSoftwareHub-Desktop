@@ -23,6 +23,35 @@ public sealed class ClockSettings
     public bool ShowSeconds { get; set; } = true;
     public bool ShowDate { get; set; } = true;
     public bool Hour12 { get; set; }
+
+    /// <summary>
+    /// 把另一份设置的值整体拷进来。
+    ///
+    /// ⚠️ 2026-09-28：这段以前在工具页和浮窗各写了一份（字段列表容易漏同步）。
+    /// 现在只有这一处 —— 加字段就改这里，别在调用方再手抄一遍。
+    /// </summary>
+    public void CopyFrom(ClockSettings other)
+    {
+        if (other is null) return;
+        BackgroundImagePath = other.BackgroundImagePath;
+        Veil = other.Veil;
+        VeilStrength = other.VeilStrength;
+        Tone = other.Tone;
+        Ink = other.Ink;
+        FontFamily = other.FontFamily;
+        Scale = other.Scale;
+        ShowSeconds = other.ShowSeconds;
+        ShowDate = other.ShowDate;
+        Hour12 = other.Hour12;
+    }
+
+    /// <summary>复制一份。存"上次使用的样子"时要的是**快照**，不是引用。</summary>
+    public ClockSettings Clone()
+    {
+        var copy = new ClockSettings();
+        copy.CopyFrom(this);
+        return copy;
+    }
 }
 
 /// <summary>把设置翻译成颜色 / 画刷 / 文字（页面预览与全屏窗口共用，保证两边一致）。</summary>
@@ -31,7 +60,7 @@ public static class ClockRender
     public static readonly string[] VeilLabels = { "无", "白色蒙版", "黑色蒙版", "亚克力（Acrylic）", "云母（Mica）" };
     public static readonly string[] ToneLabels = { "跟随应用主题", "白色", "黑色" };
     public static readonly string[] InkLabels = { "自动（跟随底色）", "白色字", "黑色字" };
-    public static readonly string[] FontLabels = { "等宽 · 同课堂计时器", "工业风 · Bahnschrift", "现代等宽 · Cascadia", "系统 UI · Segoe", "优雅衬线 · Georgia" };
+    public static readonly string[] FontLabels = { "等宽 · 与课堂计时器一致", "工业风 · Bahnschrift", "现代等宽 · Cascadia", "系统 UI · Segoe", "优雅衬线 · Georgia" };
     public static readonly string[] FontFamilies = { "Consolas", "Bahnschrift", "Cascadia Mono", "Segoe UI Variable Display", "Georgia" };
 
     private static Color Ink => Color.FromArgb(255, 17, 17, 17);

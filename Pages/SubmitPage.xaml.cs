@@ -99,7 +99,7 @@ public sealed partial class SubmitPage : Page
         stack.Children.Add(row);
 
         stack.Children.Add(Field("下载直链 *", "https://…/setup.exe", null, value => draft.Url = value));
-        stack.Children.Add(Field("校验值（选填，防掉包）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value));
+        stack.Children.Add(Field("校验值（选填，用于防篡改）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value));
 
         var card = new Border
         {
@@ -163,14 +163,14 @@ public sealed partial class SubmitPage : Page
 
         if (RepoBox.Text.Trim().Length == 0)
         {
-            ImportErrorBar.Message = "请先填写仓库地址，例如 github.com/owner/repo。";
+            ImportErrorBar.Message = "仓库地址为必填项，例如 github.com/owner/repo。";
             ImportErrorBar.IsOpen = true;
             return;
         }
 
         _importing = true;
         ImportButton.IsEnabled = false;
-        ImportButton.Content = "读取中…";
+        ImportButton.Content = "正在读取";
 
         try
         {
@@ -181,9 +181,9 @@ public sealed partial class SubmitPage : Page
         {
             ImportErrorBar.Message = exception.Kind switch
             {
-                Services.GithubImportErrorKind.Invalid => "无法识别该仓库地址，请使用 github.com/owner/repo 形式。",
+                Services.GithubImportErrorKind.Invalid => "无法识别该仓库地址，需使用 github.com/owner/repo 形式。",
                 Services.GithubImportErrorKind.NotFound => "未找到该仓库（可能为私有仓库或地址有误）。",
-                Services.GithubImportErrorKind.RateLimit => "GitHub 接口调用次数已达上限（未登录时每小时 60 次，按网络出口共享），请稍后重试。",
+                Services.GithubImportErrorKind.RateLimit => "GitHub 接口调用次数已达上限（未登录时每小时 60 次，按网络出口共享），可稍后重试。",
                 _ => "读取失败：" + exception.Message,
             };
             ImportErrorBar.IsOpen = true;
@@ -242,12 +242,12 @@ public sealed partial class SubmitPage : Page
             var suffix = 2;
             while (takenIds.Contains($"{suggestedId}-{suffix}") && suffix < 100) suffix++;
             var corrected = $"{suggestedId}-{suffix}";
-            warnings.Add($"站内已经有 id 为 {suggestedId} 的软件了，自动改成 {corrected}。");
+            warnings.Add($"站内已存在 id 为 {suggestedId} 的软件，已自动改为 {corrected}。");
             suggestedId = corrected;
         }
         Put("软件 ID", IdBox.Text, suggestedId, text => IdBox.Text = text);
         if (IdBox.Text.Trim().Length > 0 && takenIds.Contains(IdBox.Text.Trim()))
-            warnings.Add($"站内已经有 id 为 {IdBox.Text.Trim()} 的软件，直接提交会撞车，建议改一个。");
+            warnings.Add($"站内已存在 id 为 {IdBox.Text.Trim()} 的软件，直接提交会产生冲突，建议更换。");
 
         // ── 文本字段 ──
         Put("软件名称", NameBox.Text, repo.Repo, text => NameBox.Text = text);
@@ -261,7 +261,7 @@ public sealed partial class SubmitPage : Page
             Put("应用商店地址", StoreBox.Text, repo.Homepage, text => StoreBox.Text = text);
         // 用的是预发布版：写一条提示条，详情页会在下载区上方提示
         if (result.Facts.UsedPrerelease && release is not null)
-            Put("提示条", NoticeBox.Text, $"当前提交的是预发布版本（{release.TagName}），稳定版请等正式发布。", text => NoticeBox.Text = text);
+            Put("提示条", NoticeBox.Text, $"当前提交的为预发布版本（{release.TagName}），稳定版需等待正式发布。", text => NoticeBox.Text = text);
 
         // ── 图标：接口拿不到软件图标，先用仓库所有者的头像顶上 ──
         var icon = IconBox.Text.Trim();
@@ -271,7 +271,7 @@ public sealed partial class SubmitPage : Page
             IconBox.Text = repo.OwnerAvatar;
             _lastFilled["图标"] = repo.OwnerAvatar;
             filled.Add("图标");
-            warnings.Add($"GitHub 接口拿不到软件图标，先用仓库所有者（{repo.Owner}）的头像顶上，记得换成官方图标。");
+            warnings.Add($"GitHub 接口无法获取软件图标，暂以仓库所有者（{repo.Owner}）的头像替代，需更换为官方图标。");
         }
         else if (icon.Length > 0)
         {
@@ -294,7 +294,7 @@ public sealed partial class SubmitPage : Page
             if (downloadsEditedByUser && !overwrite)
             {
                 kept.Add("下载项");
-                warnings.Add("下载项检测为手动填写，已保留原内容；如需使用读取到的链接，请勾选「覆盖我手写的内容」后重新读取。");
+                warnings.Add("下载项检测为手动填写，已保留原内容；如需使用读取到的链接，需勾选「覆盖已填写的内容」后重新读取。");
             }
             else
             {
@@ -319,21 +319,21 @@ public sealed partial class SubmitPage : Page
             {
                 SetDownloads(new List<(string, string, string, string, string)>
                 {
-                    ("最新版（网页）", "仓库没有可直接下载的安装包，点开是 Release 页面", "网页", url, ""),
+                    ("最新版（网页）", "仓库无可直接下载的安装包，打开后为 Release 页面", "网页", url, ""),
                 });
                 filled.Add("下载项");
             }
         }
 
         // ── 需注意的地方 ──
-        if (result.Facts.ReleaseFailed) warnings.Add("无法读取该仓库的版本信息（接口限流或网络异常），已填入仓库信息，版本号与安装包请手动补充。");
-        if (result.Facts.NoRelease) warnings.Add("该仓库尚未发布任何 Release，版本号与安装包请手动填写。");
-        if (result.Facts.NoAsset) warnings.Add("该 Release 中没有可下载的安装包（可能仅含源码包），请手动填写下载直链。");
+        if (result.Facts.ReleaseFailed) warnings.Add("无法读取该仓库的版本信息（接口限流或网络异常），已填入仓库信息，版本号与安装包需手动补充。");
+        if (result.Facts.NoRelease) warnings.Add("该仓库尚未发布任何 Release，版本号与安装包需手动填写。");
+        if (result.Facts.NoAsset) warnings.Add("该 Release 中没有可下载的安装包（可能仅含源码包），需手动填写下载直链。");
         if (result.Facts.AssetSkipped > 0) warnings.Add($"已自动跳过 {result.Facts.AssetSkipped} 个非安装包文件（校验文件、调试符号、源码包等）。");
         if (result.Facts.Truncated) warnings.Add($"安装包数量较多，仅填入前 {result.Downloads.Count} 个。");
         if (result.Facts.UsedPrerelease && release is not null) warnings.Add($"当前使用预发布版本 {release.TagName}。");
-        if (result.Facts.NewerPrereleaseTag.Length > 0) warnings.Add($"存在更新的预发布版 {result.Facts.NewerPrereleaseTag}。如需获取，请勾选「优先取最新预发布版」后重新读取。");
-        if (repo.Archived) warnings.Add("该仓库已归档（不再维护），建议确认是否仍要收录。");
+        if (result.Facts.NewerPrereleaseTag.Length > 0) warnings.Add($"存在更新的预发布版 {result.Facts.NewerPrereleaseTag}。如需获取，需勾选「优先取最新预发布版」后重新读取。");
+        if (repo.Archived) warnings.Add("该仓库已归档（不再维护），建议确认是否仍需收录。");
 
         // 地址栏统一成规范写法，方便核对
         RepoBox.Text = repo.HtmlUrl;
@@ -471,13 +471,13 @@ public sealed partial class SubmitPage : Page
                       || ((string?)payload["system"] ?? "").Length == 0
                       || ((string?)payload["_联系方式"] ?? "").Length == 0
                       || ((List<Dictionary<string, object?>>)payload["downloads"]!).Count == 0;
-        if (missing) return "请把带 * 的必填项填完（至少一条下载直链）。";
+        if (missing) return "带 * 的必填项尚未填写完整（至少需一条下载直链）。";
 
         var downloads = (List<Dictionary<string, object?>>)payload["downloads"]!;
         for (var i = 0; i < downloads.Count; i++)
         {
             if (downloads[i].TryGetValue("hash", out var hash) && hash is string text && !IsHashLike(text))
-                return $"第 {i + 1} 个下载项的校验值格式不对：必须是纯十六进制，位数要能对上一种算法（32/40/56/64/96/128）。";
+                return $"第 {i + 1} 个下载项的校验值格式不正确：需为纯十六进制，位数需匹配一种算法（32/40/56/64/96/128）。";
         }
         return null;
     }
@@ -491,7 +491,7 @@ public sealed partial class SubmitPage : Page
         var error = Validate(payload);
         if (error is not null)
         {
-            ShowResult(false, "还不能提交", error);
+            ShowResult(false, "无法提交", error);
             return;
         }
 
@@ -510,7 +510,7 @@ public sealed partial class SubmitPage : Page
                 SaveDraft(payload);
                 _pending = payload;
                 RefreshDraftButton();
-                ShowResult(false, "提交失败", "提交服务没连上（网络或地区限制）。内容已存在本机，可以重试或走下面的兜底方式。");
+                ShowResult(false, "提交失败", "无法连接提交服务（网络或地区限制）。内容已保存于本机，可重试或使用下方的备用方式。");
                 FallbackPanel.Visibility = Visibility.Visible;
                 return;
             }
@@ -523,17 +523,17 @@ public sealed partial class SubmitPage : Page
                 _pending = null;
                 RefreshDraftButton();
                 ShowResult(true, "已提交", string.IsNullOrWhiteSpace(reply.Value.Message)
-                    ? "提交成功，管理员审核通过后就会上架。"
+                    ? "提交成功，审核通过后上架。"
                     : reply.Value.Message!);
             }
             else
             {
-                ShowResult(false, "提交未通过校验", reply.Value.Error ?? "服务端拒绝了这份内容，请检查后重试。");
+                ShowResult(false, "提交未通过校验", reply.Value.Error ?? "服务端未接受该内容，检查后可重试。");
             }
         }
         catch (Exception ex)
         {
-            ShowResult(false, "提交失败", "出现意外错误：" + ex.Message);
+            ShowResult(false, "提交失败", "发生意外错误：" + ex.Message);
         }
         finally
         {
@@ -545,9 +545,9 @@ public sealed partial class SubmitPage : Page
     private void SetBusy(bool busy)
     {
         SubmitButton.IsEnabled = !busy;
-        SubmitButton.Content = busy ? "提交中…" : "提交";
+        SubmitButton.Content = busy ? "正在提交" : "提交";
         FallbackRetryButton.IsEnabled = !busy;
-        FallbackRetryButton.Content = busy ? "提交中…" : "重试";
+        FallbackRetryButton.Content = busy ? "正在提交" : "重试";
     }
 
     private void ShowResult(bool ok, string title, string message)
@@ -700,7 +700,7 @@ public sealed partial class SubmitPage : Page
 
         FallbackPanel.Visibility = Visibility.Collapsed;
         _pending = null;
-        ShowResult(true, "已恢复", "上次没提交成功的内容已经填回表单，检查一下再提交。");
+        ShowResult(true, "已恢复", "上次未提交成功的内容已填回表单，检查后可再次提交。");
     }
 
     private static string JsonText(JsonElement element, string key)
@@ -745,7 +745,7 @@ public sealed partial class SubmitPage : Page
     private async void DownloadSubmission_Click(object sender, RoutedEventArgs e)
     {
         var file = BuildSubmissionFile(_pending ?? LoadDraft());
-        if (file is null) { Toast.Text = "没有可导出的内容"; return; }
+        if (file is null) { Toast.Text = "无可导出的内容"; return; }
         try
         {
             var picker = new FileSavePicker { SuggestedFileName = file.Value.Name };
@@ -765,7 +765,7 @@ public sealed partial class SubmitPage : Page
     private void CopySubmission_Click(object sender, RoutedEventArgs e)
     {
         var file = BuildSubmissionFile(_pending ?? LoadDraft());
-        if (file is null) { Toast.Text = "没有可复制的内容"; return; }
+        if (file is null) { Toast.Text = "无可复制的内容"; return; }
         try
         {
             var package = new DataPackage();
@@ -786,6 +786,6 @@ public sealed partial class SubmitPage : Page
             ? RepoNewFileUrl
             : $"{RepoNewFileUrl}?filename={Uri.EscapeDataString(file.Value.Name)}";
         try { await Launcher.LaunchUriAsync(new Uri(url)); }
-        catch (Exception ex) { Toast.Text = "打不开浏览器：" + ex.Message; }
+        catch (Exception ex) { Toast.Text = "无法打开浏览器：" + ex.Message; }
     }
 }

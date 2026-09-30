@@ -33,6 +33,7 @@ public static class TeachingActions
             switch (id)
             {
                 case "mag": ToggleSystemMagnifier(); break;
+                case "keyboard": Views.VirtualKeyboardWindow.Toggle(); break;
                 case "taskview": TaskView(); break;
                 case "showdesktop": ShowDesktop(); break;
                 case "minall": MinimizeAll(); break;
@@ -45,7 +46,7 @@ public static class TeachingActions
         catch (Exception ex)
         {
             Log($"{id} 失败: " + ex.Message);
-            return "出错了（看日志）";
+            return "操作失败，详见日志";
         }
 
         return null;
@@ -166,7 +167,7 @@ public static class TeachingActions
         catch (Exception ex)
         {
             Log("截屏启动失败: " + ex.Message);
-            return "截屏启动失败，看日志";
+            return "截屏启动失败，详见日志";
         }
 
         return null;
@@ -261,7 +262,7 @@ public static class TeachingActions
         if (found.Count == 0)
         {
             Log("关闭全部：没有可关的窗口");
-            return "没有可关的窗口";
+            return "无可关闭的窗口";
         }
 
         _pendingCloseAll.AddRange(found);
@@ -271,7 +272,7 @@ public static class TeachingActions
         if (titles.Count > 3) sample += " 等";
 
         Log($"关闭全部：待确认 {found.Count} 个 → " + string.Join(" / ", found.Take(12).Select(TitleOf)));
-        return $"确定关闭 {found.Count} 个窗口吗？\n含最小化的窗口：{sample}";
+        return $"将关闭 {found.Count} 个窗口\n含最小化的窗口：{sample}";
     }
 
     /// <summary>执行关闭（面板上按了红按钮之后）。</summary>

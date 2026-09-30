@@ -7,8 +7,13 @@
     <!--
       框选层，照抄 Windows 自带「截图工具」的套路：
         * 先冻屏（背景就是刚抓的那张全屏图，看着跟没动一样）+ 压暗；
-        * **顶上弹一条工具栏**：矩形 / 窗口 / 全屏 三种方式 + 取消；
+        * **正中弹一条工具栏**：矩形 / 窗口 / 全屏 三种方式 + 取消；
         * 选完矩形/窗口就裁那一块 → 剪贴板 + 贴图。
+
+      ⚠️ 工具栏的位置换过三回（2026-09-27 Nick 定稿）：
+        顶部 → 底部 → **屏幕正中**。顶/底都不行 —— 教学一体机挂得高，坐后排的学生
+        看不清角落里的那排小字。中间 + 大字号才是给"全班一起看"用的。
+        选中方式后由代码把整条工具栏收掉（ApplyMode），别让它挡住要框的区域。
     -->
     <Grid x:Name="Root" Background="Black">
 
@@ -30,54 +35,53 @@
             </Border>
         </Canvas>
 
-        <!-- 工具栏（放**下面**：教学大屏很高，顶上够不着；放底部谁都点得到） -->
-        <Border x:Name="Toolbar" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                Margin="0,0,0,20" Padding="6"
-                Background="{ThemeResource FlyoutPresenterBackground}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1" CornerRadius="8">
-            <StackPanel Orientation="Horizontal" Spacing="4">
-                <Button x:Name="ModeRect" Tag="rect" Click="Mode_Click" Padding="10,7"
-                        Background="Transparent" BorderThickness="0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE7A8;" FontSize="15" />
-                        <TextBlock Text="矩形" FontSize="13.5" />
-                    </StackPanel>
-                </Button>
+        <!-- 工具栏 + 提示：整体**屏幕正中**（后排也看得清），选中方式后由 ApplyMode 收起 -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+            <Border x:Name="Toolbar" Padding="10"
+                    Background="{ThemeResource FlyoutPresenterBackground}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="10">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button x:Name="ModeRect" Tag="rect" Click="Mode_Click" Padding="18,12"
+                            Background="Transparent" BorderThickness="0">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE7A8;" FontSize="22" />
+                            <TextBlock Text="矩形" FontSize="18" />
+                        </StackPanel>
+                    </Button>
 
-                <Button x:Name="ModeWindow" Tag="window" Click="Mode_Click" Padding="10,7"
-                        Background="Transparent" BorderThickness="0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE7F4;" FontSize="15" />
-                        <TextBlock Text="窗口" FontSize="13.5" />
-                    </StackPanel>
-                </Button>
+                    <Button x:Name="ModeWindow" Tag="window" Click="Mode_Click" Padding="18,12"
+                            Background="Transparent" BorderThickness="0">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE7F4;" FontSize="22" />
+                            <TextBlock Text="窗口" FontSize="18" />
+                        </StackPanel>
+                    </Button>
 
-                <Button x:Name="ModeFull" Tag="full" Click="Mode_Click" Padding="10,7"
-                        Background="Transparent" BorderThickness="0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE740;" FontSize="15" />
-                        <TextBlock Text="全屏" FontSize="13.5" />
-                    </StackPanel>
-                </Button>
+                    <Button x:Name="ModeFull" Tag="full" Click="Mode_Click" Padding="18,12"
+                            Background="Transparent" BorderThickness="0">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE740;" FontSize="22" />
+                            <TextBlock Text="全屏" FontSize="18" />
+                        </StackPanel>
+                    </Button>
 
-                <Rectangle Width="1" Margin="4,7" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+                    <Rectangle Width="1" Margin="6,10" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
 
-                <Button x:Name="ModeCancel" Click="Cancel_Click" Padding="10,7"
-                        Background="Transparent" BorderThickness="0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE711;" FontSize="15" />
-                        <TextBlock Text="取消" FontSize="13.5" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </Border>
+                    <Button x:Name="ModeCancel" Click="Cancel_Click" Padding="18,12"
+                            Background="Transparent" BorderThickness="0">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE711;" FontSize="22" />
+                            <TextBlock Text="取消" FontSize="18" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
 
-        <!-- 提示（跟着工具栏挪到底部，排在它上面一行） -->
-        <Border Background="#E6101010" CornerRadius="6" Padding="16,9"
-                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,80">
-            <TextBlock x:Name="HintText" Foreground="White" FontSize="13.5" />
-        </Border>
+            <Border Background="#E6101010" CornerRadius="8" Padding="20,11">
+                <TextBlock x:Name="HintText" Foreground="White" FontSize="16" />
+            </Border>
+        </StackPanel>
 
         <!-- 隐形按钮：只为了让键盘事件有地方落（Esc 取消） -->
         <Button x:Name="KeyCatcher" Width="0" Height="0" Opacity="0" IsTabStop="True" />

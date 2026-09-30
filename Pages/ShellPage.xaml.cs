@@ -13,6 +13,8 @@ namespace ClassSoftwareHub.Desktop.Pages;
 /// 导航：上半区「首页 / 软件下载 / 内置工具 / 侧边布局 / 实验性功能」，
 /// 下半区「任务进行 / 提交软件 / 反馈中心 / 更新日志 / 设置」。
 /// ⚠️「实验性功能」是分组父项，点它=进总览页，子项「本机核实」可直达（见 ShellPage.xaml 的注释）。
+/// ⚠️「反馈中心」是**两级**：选类型页（<see cref="FeedbackPage"/>）→ 表单页（<see cref="FeedbackFormPage"/>），
+///    卡片单击走 <see cref="NavigateToFeedbackForm"/>，返回走导航栏那一个返回按钮。
 /// ⚠️ 所有页面（含「提交软件」）都是 WinUI3 自绘；只有详情页那种「在应用内看一眼网页」的浮层（MainWindow.WebSheet）会用到 WebView2。
 /// </summary>
 public sealed partial class ShellPage : UserControl
@@ -97,6 +99,12 @@ public sealed partial class ShellPage : UserControl
         UpdateThemeButton();
     }
 
+    /// <summary>
+    /// 当前所在页面的 tag（<see cref="NavigateTagCore"/> 每次导航时更新）。
+    /// 用途：未处理异常写日志时带上它 —— 否则「布局循环」这类只在某一页出现的问题根本没法定位。
+    /// </summary>
+    public static string CurrentTag { get; private set; } = "home";
+
     /// <summary>标题栏小图标（MainWindow 把站点图标塞进来）。</summary>
     public void SetIcon(Microsoft.UI.Xaml.Media.ImageSource? source) => TitleIcon.Source = source;
 
@@ -177,6 +185,19 @@ public sealed partial class ShellPage : UserControl
         ContentFrame.Navigate(pageType, parameter);
     }
 
+    /// <summary>
+    /// 进反馈中心的**表单页**（「报告问题」/「提出建议」卡片单击时调）。
+    ///
+    /// 导航高亮一起切到「反馈中心」—— 人确实还在反馈中心这一区里，只是从"选类型"走到了"填内容"。
+    /// ⚠️ 这里**不铺选择页**：用户本来就是从选择页点进来的，它已经在返回栈里，
+    ///    导航栏返回按钮（<c>ContentFrame.GoBack()</c>）一按就回去。
+    /// </summary>
+    public void NavigateToFeedbackForm(string kind)
+    {
+        SelectTag("feedback");
+        ContentFrame.Navigate(typeof(FeedbackFormPage), kind);
+    }
+
     /// <summary>只切页面，不动导航高亮（软件下载页内部按分类切换时用）。</summary>
     public void NavigateTag(string tag)
     {
@@ -198,6 +219,7 @@ public sealed partial class ShellPage : UserControl
 
     private void NavigateTagCore(string tag)
     {
+        CurrentTag = tag;   // 崩溃日志靠它记下"当时在哪一页"（见 App.OnUnhandledException）
         switch (tag)
         {
             case "submit":
@@ -206,11 +228,26 @@ public sealed partial class ShellPage : UserControl
             case "feedback":
                 ContentFrame.Navigate(typeof(FeedbackPage));
                 return;
+            case "feedback-form":
+                // 反馈中心的表单页。正常流程是从「反馈中心」点类型卡进来（带 kind 参数，
+                // 走 NavigateToFeedbackForm）；这个 case 只服务 --page=feedback-form 直达 ——
+                // 不带参数，页面自己退回草稿里记着的类型。
+                ContentFrame.Navigate(typeof(FeedbackFormPage));
+                return;
             case "downloads":
                 ContentFrame.Navigate(typeof(DownloadsPage));
                 return;
             case "machinecheck":
                 ContentFrame.Navigate(typeof(MachineCheckPage));
+                return;
+            case "easiguard":
+                ContentFrame.Navigate(typeof(EasiNoteGuardPage));
+                return;
+            case "procguard":
+                ContentFrame.Navigate(typeof(ProcessGuardPage));
+                return;
+            case "virtualkeyboard":
+                ContentFrame.Navigate(typeof(VirtualKeyboardPage));
                 return;
             case "experimental":
                 // 「实验性功能」分组的父项**自己就是总览入口**：点它 = 展开/收起分组 + 进这一页。

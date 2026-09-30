@@ -138,6 +138,10 @@ public sealed partial class ToolPaletteWindow : Window
         }
 
         UpdateCaptionButtonColors();
+
+        // ⚠️ 上面那句 ExtendsContentIntoTitleBar 会把窗口圆角偏好按回 Default —— 实测在 Win11 上
+        //    渲染出来是**直角**，跟"圆角交给系统"的设计意图正好相反。必须显式要一次 ROUND。
+        Core.WindowChrome.SetRounded(WindowNative.GetWindowHandle(this), rounded: true);
     }
 
     /// <summary>右上角系统按钮的配色跟着深浅色走（照搬主窗口那套）。</summary>

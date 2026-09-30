@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services.Updating;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
@@ -16,6 +18,13 @@ public sealed partial class SettingsPage : Page
 {
     private bool _loading = true;
     private bool _contentBusy;
+    /// <summary>「贴在哪条边」下拉正在按模式重建选项（期间忽略 SelectionChanged）。</summary>
+    private bool _edgeRebuild;
+    /// <summary>
+    /// 打开设置页后把滚动位置拉回顶部的定时器。
+    /// ⚠️ 必须存字段 —— DispatcherQueueTimer 被 GC 收走就不会触发（本项目踩过）。
+    /// </summary>
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _settleTimer;
 
     public SettingsPage()
     {
@@ -42,13 +51,25 @@ public sealed partial class SettingsPage : Page
         // 常用工具窗口 / 侧边栏
         PaletteTopSwitch.IsOn = s.PaletteOnTop;
         SidebarSwitch.IsOn = s.SidebarEnabled;
-        EdgeLeft.IsChecked = s.SidebarEdge == "left";
-        EdgeRight.IsChecked = s.SidebarEdge == "right";
-        EdgeTop.IsChecked = s.SidebarEdge == "top";
-        EdgeBottom.IsChecked = s.SidebarEdge == "bottom";
-        if (EdgeLeft.IsChecked != true && EdgeRight.IsChecked != true
-            && EdgeTop.IsChecked != true && EdgeBottom.IsChecked != true)
-            EdgeRight.IsChecked = true;
+
+        // 贴靠模式只认左右两条边（Nick 2026-09-28 定：贴靠 = 左右模式）。
+        // 老设置里若留着 top/bottom，这里归到右边 —— 想贴上下边需切到自由模式。
+        if (s.SidebarEdge is not ("left" or "both" or "right"))
+        {
+            s.SidebarEdge = "right";
+            App.Settings.Save();
+        }
+
+        // 自由模式：左 / 右 / 上 / 下四条边
+        if (s.SidebarFreeEdge is not ("left" or "right" or "top" or "bottom"))
+        {
+            s.SidebarFreeEdge = "right";
+            App.Settings.Save();
+        }
+
+        SidebarModeCombo.SelectedIndex = s.SidebarMode == "free" ? 1 : 0;
+        RebuildEdgeCombo();
+        UpdateSidebarHints();
 
         // 截图自动保存
         ShotAutoSaveSwitch.IsOn = s.ShotAutoSave;
@@ -79,6 +100,22 @@ public sealed partial class SettingsPage : Page
             BuildAboutHeader();
             SettingsQuickGrid.ItemsSource = Core.QuickLinks.Build(App.Content.Ui);
             _loading = false;
+
+        // 「版本记录」固定折叠：里面是十几条运行记录，摊开会把设置页拉得极长。
+        // ⚠️ 只在 XAML 里写 IsExpanded="False" 不够 —— 实测加载过程中仍会被撑开，这里再压一次。
+        HistoryExpander.IsExpanded = false;
+
+        // 打开设置页固定从顶部开始：卡片高度会被设置值二次刷新，ScrollViewer 的锚点跟着漂，
+        // 实测会直接停到「常用工具」那一段（2026-09-28）。
+        _settleTimer = DispatcherQueue.CreateTimer();
+        _settleTimer.Interval = TimeSpan.FromMilliseconds(200);
+        _settleTimer.IsRepeating = false;
+        _settleTimer.Tick += (_, _) =>
+        {
+            _settleTimer.Stop();
+            RootScroll.ChangeView(null, 0, null, true);
+        };
+        _settleTimer.Start();
     }
 
     private void RefreshContentInfo()
@@ -204,13 +241,103 @@ public sealed partial class SettingsPage : Page
         Views.ToolSidebarWindow.ApplySetting();
     }
 
-    private void Edge_Checked(object sender, RoutedEventArgs e)
+    // ── 侧边栏放置模式 / 贴在哪条边 ───────────────────────────
+    // 2026-09-28 Nick：这两项本质是"多个互斥选项里选一个"，跟「颜色模式」「更新通道」同类，
+    // 一律做成下拉；不做成一排单选按钮（会把 Header 和控件挤到卡片两端，中间空出一大片）。
+
+    /// <summary>
+    /// 按当前放置模式重建「贴在哪条边」的选项：
+    /// 贴靠 = 左 / 左右两边 / 右；自由 = 左 / 右 / 上 / 下。
+    /// ⚠️ 重建期间必须挡住 SelectionChanged —— Items.Clear() 会把 SelectedIndex 打成 -1，
+    ///    不然会把设置误写成空值。
+    /// </summary>
+    private void RebuildEdgeCombo()
+    {
+        var s = App.Settings.Current;
+        var free = s.SidebarMode == "free";
+
+        _edgeRebuild = true;
+        try
+        {
+            SidebarEdgeCombo.Items.Clear();
+            if (free)
+            {
+                AddEdgeItem("左边", "left");
+                AddEdgeItem("右边", "right");
+                AddEdgeItem("上边", "top");
+                AddEdgeItem("下边", "bottom");
+                SelectEdge(s.SidebarFreeEdge);
+            }
+            else
+            {
+                AddEdgeItem("左边", "left");
+                AddEdgeItem("左右两边", "both");
+                AddEdgeItem("右边", "right");
+                SelectEdge(s.SidebarEdge);
+            }
+        }
+        finally
+        {
+            _edgeRebuild = false;
+        }
+    }
+
+    private void AddEdgeItem(string text, string tag) =>
+        SidebarEdgeCombo.Items.Add(new ComboBoxItem { Content = text, Tag = tag });
+
+    private void SelectEdge(string tag)
+    {
+        foreach (var item in SidebarEdgeCombo.Items)
+        {
+            if (item is ComboBoxItem it && it.Tag as string == tag)
+            {
+                SidebarEdgeCombo.SelectedItem = it;
+                return;
+            }
+        }
+        if (SidebarEdgeCombo.Items.Count > 0) SidebarEdgeCombo.SelectedIndex = 0;
+    }
+
+    /// <summary>说明文案随模式切换，免得对着下拉不知道是两条边还是四条边。</summary>
+    private void UpdateSidebarHints()
+    {
+        var free = App.Settings.Current.SidebarMode == "free";
+
+        ModeHint.Text = free
+            ? "侧边栏可吸附屏幕任意一条边；贴上边或下边时呈横条。"
+            : "侧边栏只吸附屏幕左右两条边，可选左右同时显示。";
+
+        EdgeHint.Text = free
+            ? "四条边均可吸附；贴上边或下边时侧边栏为横条。拖动收起状态的抓手也可改边。"
+            : "选「左右两边」时两侧同时显示，上下位置保持一致，拖动其中一条另一条同步移动。拖动收起状态的抓手也可改边。";
+    }
+
+    private void SidebarMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
-        if (sender is not RadioButton rb || rb.Tag is not string edge) return;
-        App.Settings.Current.SidebarEdge = edge;
+        if (SidebarModeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string mode) return;
+
+        App.Settings.Current.SidebarMode = mode;
         App.Settings.Save();
+
+        // 模式变了 → 可选的边也变了，下拉要整个换一套
+        RebuildEdgeCombo();
+        UpdateSidebarHints();
+
         if (App.Settings.Current.SidebarEnabled) Views.ToolSidebarWindow.ApplySetting();
+    }
+
+    private void SidebarEdge_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || _edgeRebuild) return;
+        if (SidebarEdgeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string edge) return;
+
+        var s = App.Settings.Current;
+        if (s.SidebarMode == "free") s.SidebarFreeEdge = edge;
+        else s.SidebarEdge = edge;
+        App.Settings.Save();
+
+        if (s.SidebarEnabled) Views.ToolSidebarWindow.ApplySetting();
     }
 
     // ── 截图自动保存 ──────────────────────────────────────────
@@ -423,7 +550,12 @@ public sealed partial class SettingsPage : Page
 
     // ── 版本记录（本机运行过的版本） ────────────────────────────
 
-    private void History_Expanding(Expander sender, ExpanderExpandingEventArgs args) => LoadLocalHistory();
+    /// <summary>
+    /// 版本记录展开时才去读本机记录（迁到 SettingsExpander 后事件名由 Expanding 变成 Expanded）。
+    /// ⚠️ 签名写成 (object, EventArgs) 而不是 (SettingsExpander, ...)：事件参数类型无论哪个派生类都能接，
+    /// 省得把 Toolkit 的内部事件参数类型引进来。
+    /// </summary>
+    private void History_Expanded(object sender, EventArgs args) => LoadLocalHistory();
 
     /// <summary>本机记录：这台电脑运行过哪些版本（启动时自动记的），不是仓库的 Release 列表。</summary>
     private void LoadLocalHistory()

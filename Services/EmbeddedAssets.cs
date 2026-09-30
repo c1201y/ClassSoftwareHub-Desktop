@@ -18,6 +18,35 @@ public static class EmbeddedAssets
         return reader.ReadToEnd();
     }
 
+    /// <summary>
+    /// 把内嵌资源**原样**写到指定路径（「下载示例文件」用）。
+    /// 与 <see cref="ExtractToCache"/> 的区别：这个不比较新旧、直接覆盖，因为用户是自己点了"保存到这儿"。
+    /// </summary>
+    public static bool ExtractTo(string fileNameEndingWith, string outPath)
+    {
+        try
+        {
+            var asm = Assembly.GetExecutingAssembly();
+            var name = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith(fileNameEndingWith, StringComparison.OrdinalIgnoreCase));
+            if (name is null) return false;
+
+            using var stream = asm.GetManifestResourceStream(name);
+            if (stream is null) return false;
+
+            var dir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            using var file = File.Create(outPath);
+            stream.CopyTo(file);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>把内嵌图片释放到本地缓存目录，返回文件路径（BitmapImage 用）。</summary>
     public static string? ExtractToCache(string fileNameEndingWith, string outFileName)
     {

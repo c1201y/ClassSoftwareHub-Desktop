@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
 using ClassSoftwareHub.Desktop.Data;
+using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Views;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
@@ -71,7 +72,10 @@ public sealed partial class SidebarLayoutPage : Page
     private const int MorphMs = 150;
 
     /// <summary>↑/↓ 交换动画的时长。</summary>
-    private const int SwapMs = 220;
+    private const int SwapMs = 210;
+
+    /// <summary>让位（行跟着空档挪）的时长。跟空档的上下出现同一档，看着才是"一起动"。</summary>
+    private const int SlotMs = 145;
 
     /// <summary>预览格子的尺寸，和真侧边栏一致。</summary>
     private const double TileW = 96;
@@ -80,11 +84,9 @@ public sealed partial class SidebarLayoutPage : Page
     /// <summary>当前拼好的模块 id，顺序 = 侧边栏上从上到下。</summary>
     private readonly List<string> _ids = new();
 
-    /// <summary>预览条里的模块格子（顺序同上）。</summary>
+    /// <summary>预览条里的模块格子（顺序同上）。⚠️ 拖动过程中**这个列表不变** ——
+    /// 让位不靠真实布局，靠每行的 TranslateY，所以顺序一乱就对不上了。</summary>
     private readonly List<FrameworkElement> _tiles = new();
-
-    /// <summary>按下那一刻各格子的原始 Y（不含偏移）—— 算落点用它，免得被让位动画带着来回抖。</summary>
-    private readonly List<double> _tileBaseY = new();
 
     private string? _dragId;                // 正被按住的模块
     private bool _dragFromPreview;          // 是从预览里拖的，还是从库里拖的
@@ -93,9 +95,14 @@ public sealed partial class SidebarLayoutPage : Page
     private Point _pressInRoot;
     private FrameworkElement? _pressSource;
     private Border? _ghost;                 // 跟着指针跑的那张卡
-    private Border? _spacer;                // 让位用的"空档"（在缝的位置插进去，自己长高）
-    private int _gapIndex = -1;             // 现在让开的是第几个缝
+    private Border? _hole;                  // 浮层里画的那个"空档"提示框
+    private Border? _pad;                   // 末尾的垫片：空档打开时它长一格高，预览条跟着变长
+    private FrameworkElement? _hiddenRow;   // 从预览里拿起来后暂时收起来的那一行
+    private int _holeSlot = -1;             // 空档开在第几个可见位置（-1 = 合上）
+    private int _dragSrcIndex = -1;         // 拿起来的那一行在 _tiles 里的下标（-1 = 从模块库拖的）
+    private double _rowsTop;                // 第一行在 PreviewPanel 里的 Y（按下那一刻量的）
     private bool _swapping;                 // ↑/↓ 的滑动动画正在进行（这段时间别再点）
+    private bool _footerSync;               // 正在把设置刷进底排的那五个开关（此时 Toggled 是"回声"，别当用户拨的）
     private double _pageScrollOffset;       // 拖起来之前的滚动位置（拖的时候要把整页滚动锁掉）
     private double _maxMove;                // 按下之后指针走过的最大直线距离（用来看"这是想滚还是想拖"）
 
@@ -168,6 +175,30 @@ public sealed partial class SidebarLayoutPage : Page
 
         if (SidebarButton is not null)
             SidebarButton.Content = ToolSidebarWindow.IsSidebarVisible ? "隐藏侧边栏" : "显示侧边栏";
+
+        SyncFooterToggles();
+    }
+
+    /// <summary>
+    /// 把设置里的"底下那排按钮哪几颗被关了"刷进五个开关。
+    /// ⚠️ 赋值会触发 Toggled，全程压着 <c>_footerSync</c> 挡住那声"回声"，否则每次进这一页都会
+    ///    白写一遍设置、还顺手重建一遍真侧边栏（页面还没挂到窗口上时更没必要）。
+    /// </summary>
+    private void SyncFooterToggles()
+    {
+        var hidden = App.Settings.Current.SidebarFooterHidden ?? Array.Empty<string>();
+
+        _footerSync = true;
+        try
+        {
+            // 设置里记的是"关掉的"，所以这里取反 = 开关的"显示"
+            if (FoldToggle is not null) FoldToggle.IsOn = !hidden.Contains(SidebarFooterKeys.Fold);
+            if (PinToggle is not null) PinToggle.IsOn = !hidden.Contains(SidebarFooterKeys.Pin);
+            if (ResetToggle is not null) ResetToggle.IsOn = !hidden.Contains(SidebarFooterKeys.Reset);
+            if (HideToggle is not null) HideToggle.IsOn = !hidden.Contains(SidebarFooterKeys.Hide);
+            if (OpenAppToggle is not null) OpenAppToggle.IsOn = !hidden.Contains(SidebarFooterKeys.OpenApp);
+        }
+        finally { _footerSync = false; }
     }
 
     private void AddToEnd(string id)
@@ -262,7 +293,7 @@ public sealed partial class SidebarLayoutPage : Page
         });
         text.Children.Add(new TextBlock
         {
-            Text = used ? "已经在侧边栏里了" : m.Hint,
+            Text = used ? "已在侧边栏中" : m.Hint,
             FontSize = 11.5,
             Opacity = 0.65,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -305,7 +336,7 @@ public sealed partial class SidebarLayoutPage : Page
             Opacity = used ? 0.5 : 1,
             Child = grid
         };
-        ToolTipService.SetToolTip(card, used ? $"{m.Name}（已在侧边栏里）" : $"{m.Name} —— 点一下加进侧边栏，也可以拖到右边");
+        ToolTipService.SetToolTip(card, used ? $"{m.Name}（已在侧边栏中）" : $"{m.Name}：单击加入侧边栏，亦可拖入右侧");
 
         if (used) return card;                          // 已经在了：只展示，不加不拖
 
@@ -326,8 +357,10 @@ public sealed partial class SidebarLayoutPage : Page
     private void BuildPreview()
     {
         PreviewPanel.Children.Clear();
+        HoleLayer.Children.Clear();
         _tiles.Clear();
-        _spacer = null;
+        _hole = null;
+        _tweens.Clear();        // 旧行要整个换掉，挂在它们身上的补间一并作废
 
         // 顶部那条"常用工具"标题（照侧边栏的样子来）
         PreviewPanel.Children.Add(new TextBlock
@@ -349,7 +382,7 @@ public sealed partial class SidebarLayoutPage : Page
         {
             PreviewPanel.Children.Add(new TextBlock
             {
-                Text = "把左边\n卡片拖进来",
+                Text = "将左侧\n卡片拖入此处",
                 FontSize = 10.5,
                 Opacity = 0.5,
                 TextAlignment = TextAlignment.Center,
@@ -360,14 +393,32 @@ public sealed partial class SidebarLayoutPage : Page
             });
         }
 
+        // 末尾垫片：默认 0 高、全透明，只在空档打开时长到一格高。
+        // 它负责让预览条跟着变长 —— 不然行滑下去的部分会伸出边框外面（预览条是 Auto 高，得有人把它撑开）。
+        _pad = new Border
+        {
+            Width = TileW,
+            Height = 0,
+            Opacity = 0,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        PreviewPanel.Children.Add(_pad);
+
+        // 让位状态归零（重建之后每行都是新对象，本来就没有偏移）
+        _holeSlot = -1;
+        _hiddenRow = null;
+        _dragSrcIndex = -1;
+
         // 注：侧边栏自带的「收起 / 位置复原 / 隐藏」在这里**不画**（不能拼不能删，画出来只会挤位置）。
-        // 让位用的空档也不再有"顶到下面固定键"的顾虑，所以不用预留额外高度。
     }
 
     /// <summary>
     /// 预览里的一行：左边是模块格子（照侧边栏的样子），右边三个独立按钮（上移 / 下移 / 移除）。
     /// 按钮做得大（38×38）且常显 —— 之前挤在格子里 20×17，触屏根本点不准。
-    /// 整行一起做让位动画，所以带按钮一起挪。
+    ///
+    /// ⚠️ 让位（空档挪位置时其它行退开）**不靠真实布局**，靠每行自己的 <see cref="SetRowShift"/> 偏移 ——
+    ///    靠布局的话，空档每跨过一行，那一行会被瞬间顶走一格（2026-09-29 复现：用户说的"截屏自己突变到上面去了"）。
+    ///    而偏移之所以用 Margin、不用 <c>TranslateTransform</c>，见 <see cref="RowShift"/> 上面那段（整格位移会整片不重画）。
     /// </summary>
     private FrameworkElement BuildRow(SidebarModule m)
     {
@@ -380,11 +431,11 @@ public sealed partial class SidebarLayoutPage : Page
             Spacing = 6,
             VerticalAlignment = VerticalAlignment.Center
         };
-        actions.Children.Add(ActionButton("\uE70E", "往上挪一位", m.Id, MoveUp_Click, index > 0));
-        actions.Children.Add(ActionButton("\uE70D", "往下挪一位", m.Id, MoveDown_Click, index < _ids.Count - 1));
+        actions.Children.Add(ActionButton("\uE70E", "上移一位", m.Id, MoveUp_Click, index > 0));
+        actions.Children.Add(ActionButton("\uE70D", "下移一位", m.Id, MoveDown_Click, index < _ids.Count - 1));
         actions.Children.Add(ActionButton("\uE711", "从侧边栏移除", m.Id, Remove_Click, true));
 
-        var row = new Grid { Height = 56, ColumnSpacing = 8 };
+        var row = new Grid { Height = TileH, ColumnSpacing = 8 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.Children.Add(tile);
@@ -449,7 +500,7 @@ public sealed partial class SidebarLayoutPage : Page
             Tag = m.Id,
             Child = content
         };
-        ToolTipService.SetToolTip(tile, $"{m.Name} —— 拖着重排，拖到别处松手就移除");
+        ToolTipService.SetToolTip(tile, $"{m.Name}：拖动可调整顺序，拖至别处松手即移除");
 
         tile.PointerEntered += (_, _) =>
         {
@@ -499,7 +550,7 @@ public sealed partial class SidebarLayoutPage : Page
             HorizontalAlignment = HorizontalAlignment.Left,
             Child = content
         };
-        ToolTipService.SetToolTip(tile, "侧边栏自带的按钮，不参与拼接");
+        ToolTipService.SetToolTip(tile, "侧边栏自带按钮，不参与拼接");
         return tile;
     }
 
@@ -517,7 +568,9 @@ public sealed partial class SidebarLayoutPage : Page
         _dragFromPreview = fromPreview;
         _dragging = false;
         _armed = false;
-        _gapIndex = -1;
+        _holeSlot = -1;
+        _hiddenRow = null;
+        _dragSrcIndex = fromPreview ? _ids.IndexOf(id) : -1;
         _pressSource = src;
         _pointerId = e.Pointer.PointerId;
         _heldPointer = e.Pointer;
@@ -538,7 +591,7 @@ public sealed partial class SidebarLayoutPage : Page
             _srcW > 1 ? Math.Clamp(inSrc.X / _srcW, 0, 1) : 0.5,
             _srcH > 1 ? Math.Clamp(inSrc.Y / _srcH, 0, 1) : 0.5);
 
-        CaptureBaseY();
+        MeasureRowsTop();
 
         _isTouch = e.Pointer.PointerDeviceType == PointerDeviceType.Touch;
 
@@ -636,7 +689,8 @@ public sealed partial class SidebarLayoutPage : Page
         _armed = false;
         _pressSource = null;
         _heldPointer = null;
-        _gapIndex = -1;
+        _holeSlot = -1;
+        _dragSrcIndex = -1;
         _maxMove = 0;
     }
 
@@ -668,7 +722,8 @@ public sealed partial class SidebarLayoutPage : Page
             if (Math.Abs(inRoot.X - _pressInRoot.X) + Math.Abs(inRoot.Y - _pressInRoot.Y) < DragSlop) return;
 
             _dragging = true;
-            if (_pressSource is not null) _pressSource.Opacity = 0.45;   // 原位置变淡，视觉上"被抠起来了"
+            if (_dragFromPreview) HideSourceRow();       // 预览里拿起来的：这一行先收掉，别和跟手替身"变成两个"
+            else if (_pressSource is not null) _pressSource.Opacity = 0.45;   // 库里拖出来的：原位只留个淡影
             ShowGhost();
         }
 
@@ -680,13 +735,52 @@ public sealed partial class SidebarLayoutPage : Page
         var inside = inStrip.X >= 0 && inStrip.Y >= 0
                      && inStrip.X <= PreviewStrip.ActualWidth && inStrip.Y <= PreviewStrip.ActualHeight;
 
-        UpdateGap(inside ? IndexFromPointer(e.GetCurrentPoint(PreviewPanel).Position.Y) : -1);
+        UpdateHole(inside ? SlotFromPointer(e.GetCurrentPoint(PreviewPanel).Position.Y) : -1);
 
         // 进了预览条就收缩成"预览格子"的样子，离开再变回卡片大小 —— 拖到哪儿就是哪儿的样子
         if (!_dragFromPreview) MorphGhost(inside);
 
         // 从预览里往外拖：提示"松手就移除"
         RemoveHint.Visibility = (!inside && _dragFromPreview) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// 从预览里把某一行拿起来：这一行自己先收起来（高度归零 + 全透明），屏幕上只留跟手的那张替身。
+    /// ⚠️ 用 Height / Opacity 而**不是** <c>Visibility.Collapsed</c> —— 折叠会连带丢掉指针捕获
+    ///    （捕获点就在这行里面的格子上），拖动当场就断。
+    /// ⚠️ 紧接着把各行的让位偏移**不带动画**地设一遍：这行高度归零后，它后面的行在布局上会立刻往上爬一格，
+    ///    而空档正好开在它原来的位置、那些行要留在原地 —— 两者抵消。所以拿起来这一下，屏幕上除了
+    ///    "多了一张跟着手走的卡"，别的什么都不该动。
+    /// </summary>
+    private void HideSourceRow()
+    {
+        if (_dragSrcIndex < 0 || _dragSrcIndex >= _tiles.Count) return;
+
+        _hiddenRow = _tiles[_dragSrcIndex];
+        _hiddenRow.Opacity = 0;
+        _hiddenRow.Height = 0;
+
+        // 空档就落在它自己原来的位置（行下标 == 可见位置：可见位置只在"排在它后面"的行上才会减一）
+        _holeSlot = _dragSrcIndex;
+        ApplyRowOffsets(animate: false);
+        AnimatePad();
+        ShowHole();
+    }
+
+    /// <summary>把"拿起来"的那一行放回去（收尾兜底；正常路径随后会整页重建）。</summary>
+    private void RestoreHiddenRow()
+    {
+        if (_hiddenRow is not null)
+        {
+            _hiddenRow.Height = TileH;
+            _hiddenRow.Opacity = 1;
+            _hiddenRow = null;
+        }
+        foreach (var t in _tiles)
+        {
+            CancelTween(t);
+            SetRowShift(t, 0);
+        }
     }
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -710,7 +804,11 @@ public sealed partial class SidebarLayoutPage : Page
         var inStrip = e.GetCurrentPoint(PreviewStrip).Position;
         var inside = inStrip.X >= 0 && inStrip.Y >= 0
                      && inStrip.X <= PreviewStrip.ActualWidth && inStrip.Y <= PreviewStrip.ActualHeight;
-        var index = inside ? IndexFromPointer(e.GetCurrentPoint(PreviewPanel).Position.Y) : -1;
+
+        // ⚠️ 这一步必须在 EndDrag 之前算：_dragSrcIndex / _rowsTop 都是拖动期间的状态，收尾时会清掉。
+        var index = inside
+            ? InsertIndexFromSlot(SlotFromPointer(e.GetCurrentPoint(PreviewPanel).Position.Y))
+            : -1;
 
         // ⚠️ ReleasePointerCapture 会**同步**触发 PointerCaptureLost → 我们的处理器会去 CancelDrag()，
         //    那里面又 Refresh() 重建列表 —— 等于在收尾到一半时把列表换掉，后面的 MoveTo 踩在新建的对象上。
@@ -758,6 +856,8 @@ public sealed partial class SidebarLayoutPage : Page
         _holdTimer?.Stop();
         HintPress(false);
         HideGhost();
+        HideHole();
+        RestoreHiddenRow();
         RemoveHint.Visibility = Visibility.Collapsed;
         if (_pressSource is not null) _pressSource.Opacity = 1;
 
@@ -782,8 +882,17 @@ public sealed partial class SidebarLayoutPage : Page
         _armed = false;
         _pressSource = null;
         _heldPointer = null;
-        _gapIndex = -1;
+        _holeSlot = -1;
+        _dragSrcIndex = -1;
         _maxMove = 0;
+    }
+
+    /// <summary>把空档合上（收尾兜底；正常路径随后整页重建）。</summary>
+    private void HideHole()
+    {
+        _holeSlot = -1;
+        if (_hole is not null) FadeElement(_hole, 0, 90);
+        AnimatePad();
     }
 
     /// <summary>拖的时候把整页滚动锁掉：不然触摸拖拽会被外层 ScrollViewer 当"滚动"处理，整页跟着跑。</summary>
@@ -1004,94 +1113,285 @@ public sealed partial class SidebarLayoutPage : Page
         _ghostTile = null;
     }
 
-    /// <summary>算落点：指针落在第几个格子的上半边，就插到它前面（全在下面 = 插到最后）。</summary>
-    private int IndexFromPointer(double yInPanel)
-    {
-        for (var i = 0; i < _tiles.Count && i < _tileBaseY.Count; i++)
-        {
-            if (yInPanel < _tileBaseY[i] + _tiles[i].ActualHeight / 2) return i;
-        }
-        return _tiles.Count;
-    }
+    // ── 让位：行不动位，靠每行自己的偏移；空档画在浮层上 ──────────────────────
+    //
+    // 两套坐标，别混：
+    //   · 「行下标 k」= _tiles / _ids 里的下标 —— 整个拖动过程中**始终不变**（只有落位时才改 _ids）
+    //   · 「可见位置 v」= 把被拿起来的那一行摘掉之后重新数的位置
+    // 某一行的让位偏移 = 空档在它上面（v >= 空档位置）就往下退一格，否则不动。
+    //
+    // ⚠️ 为什么不把空档做成 StackPanel 里的一个元素（老做法）：那样空档每跨过一行，那一行是被**布局**
+    //    瞬间顶走的，没有中间过程 —— 用户看到的就是"截屏自己突变到上面去了"。
 
-    /// <summary>拖起来那一刻记下每个格子的原始位置（让位动画会挪它们，落点判断不能受它影响）。</summary>
-    private void CaptureBaseY()
+    /// <summary>可见行的个数（被拿起来的那一行不算）。</summary>
+    private int VisibleCount => _tiles.Count - (_dragSrcIndex >= 0 ? 1 : 0);
+
+    /// <summary>行下标 → 可见位置。</summary>
+    private int VisibleIndex(int k) => _dragSrcIndex >= 0 && k > _dragSrcIndex ? k - 1 : k;
+
+    /// <summary>这一行该偏移多少：正数 = 往下退。</summary>
+    /// <remarks>
+    /// 被拿起来那一行的高度已经归零，所以**布局自己就把它后面的行往上收了一格**，
+    /// 这里只需要再加"空档造成的下退"。别再补一次"往上" —— 那会和布局的收拢重掉（踩过）。
+    /// </remarks>
+    private double RowOffset(int k) =>
+        _holeSlot >= 0 && VisibleIndex(k) >= _holeSlot ? GapDip : 0;
+
+    /// <summary>把所有行挪到当前让位状态该在的位置。animate=false 用于"刚拿起来"那一下（必须瞬时就位）。</summary>
+    private void ApplyRowOffsets(bool animate)
     {
-        _tileBaseY.Clear();
-        foreach (var t in _tiles)
+        for (var k = 0; k < _tiles.Count; k++)
         {
-            var p = t.TransformToVisual(PreviewPanel).TransformPoint(new Point(0, 0));
-            _tileBaseY.Add(p.Y);
+            if (k == _dragSrcIndex) continue;           // 被拿起来那行正跟手，不参与让位
+            SlideRow(_tiles[k], RowOffset(k), animate);
         }
     }
 
     /// <summary>
-    /// 把缝让出来：在 index 之前插一个"空档"，让它自己长到一格高 —— 后面的模块是被**真实布局**顶下去的，
-    /// 不是靠 transform 平移（平移那套会飘、会被裁，之前"三个组件下滑消失"就是它）。
-    /// index &lt; 0 = 合上缝。
+    /// 指针落在第几个可见位置（0 = 第一行上面，VisibleCount = 最后一行下面）。
+    /// 行高固定 56、行距 3，所以直接按格子推 —— 不去量每行的实际位置：量出来的位置带着它自己的让位偏移，
+    /// 那正是老写法"落点忽上忽下"的来源。
     /// </summary>
-    private void UpdateGap(int index)
+    private int SlotFromPointer(double yInPanel)
     {
-        if (index == _gapIndex) return;
-        _gapIndex = index;
-        Log($"缝 -> {index}（当前 {_tiles.Count} 行）");
-
-        if (index < 0)
+        for (var v = 0; v < VisibleCount; v++)
         {
-            CloseSpacer();
+            if (yInPanel < _rowsTop + v * GapDip + TileH / 2) return v;
+        }
+        return VisibleCount;
+    }
+
+    /// <summary>可见位置 → 插回 _ids 的下标（被拿起来的那一行自己占着一个下标，要跳过去）。</summary>
+    private int InsertIndexFromSlot(int slot) =>
+        slot + (_dragSrcIndex >= 0 && slot >= _dragSrcIndex ? 1 : 0);
+
+    /// <summary>量第一行在 PreviewPanel 里的 Y —— 空档画在哪儿、指针落在第几格，都靠它。</summary>
+    private void MeasureRowsTop()
+    {
+        _rowsTop = 0;
+        if (PreviewPanel.Children.Count <= 1) return;
+        if (PreviewPanel.Children[1] is not FrameworkElement first) return;
+        _rowsTop = first.TransformToVisual(PreviewPanel).TransformPoint(new Point(0, 0)).Y;
+    }
+
+    /// <summary>
+    /// 空档挪到第 slot 个可见位置（-1 = 合上，例如指针拖出了预览条）。
+    /// ⚠️ 传进来的必须是**可见位置**，别直接塞行下标。
+    /// </summary>
+    private void UpdateHole(int slot)
+    {
+        if (slot == _holeSlot) return;
+        _holeSlot = slot;
+        Log($"空档 -> {slot}（可见 {VisibleCount} 行 / 整体 {_tiles.Count} 行）");
+
+        ApplyRowOffsets(animate: true);
+        AnimatePad();
+        ShowHole();
+    }
+
+    /// <summary>空档提示框：跟行一样大小，画在浮层上（在行的下面一层）。</summary>
+    private void ShowHole()
+    {
+        if (_holeSlot < 0)
+        {
+            if (_hole is not null) FadeElement(_hole, 0, 110);
             return;
         }
 
-        var spacer = EnsureSpacer();
-        if (PreviewPanel.Children.Contains(spacer)) PreviewPanel.Children.Remove(spacer);
+        if (_hole is null)
+        {
+            _hole = new Border
+            {
+                Width = TileW,
+                Height = TileH,
+                CornerRadius = new CornerRadius(6),
+                Background = Br("ModHoverBg"),
+                BorderBrush = Br("ModAccent"),
+                BorderThickness = new Thickness(1),
+                Opacity = 0
+            };
+            HoleLayer.Children.Add(_hole);
+        }
 
-        // 插到第 index 个模块前面（index = 个数时插到最后）
-        var anchor = index < _tiles.Count ? _tiles[index] : null;
-        var pos = anchor is null ? PreviewPanel.Children.Count : PreviewPanel.Children.IndexOf(anchor);
-        PreviewPanel.Children.Insert(pos, spacer);
-
-        // 空档 56 + StackPanel 间距 3 = 59，正好一格
-        AnimateSpacer(spacer, GapDip - 3);
+        // 位置是**瞬时**换的：空档换格时，被跨过的那一行正好滑过来把它盖住、再露出来，
+        // 看着就是"缝被填上、又在下一格重新裂开"。给空档自己也做滑动，反而会和行的动画对不齐。
+        Canvas.SetLeft(_hole, 0);
+        Canvas.SetTop(_hole, _rowsTop + _holeSlot * GapDip);
+        FadeElement(_hole, 1, 110);
     }
 
-    private Border EnsureSpacer() =>
-        _spacer ??= new Border
-        {
-            Width = TileW,
-            Height = 0,
-            CornerRadius = new CornerRadius(6),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Background = Br("ModHoverBg"),
-            BorderBrush = Br("ModAccent"),
-            BorderThickness = new Thickness(1)
-        };
-
-    private void CloseSpacer()
+    /// <summary>末尾垫片：空档打开时补一格高度（预览条跟着变长），合上时收回去。</summary>
+    private void AnimatePad()
     {
-        if (_spacer is null) return;
-        var spacer = _spacer;
-        AnimateSpacer(spacer, 0, () =>
+        if (_pad is not { } pad) return;
+        AnimateHeight(pad, _holeSlot >= 0 ? GapDip : 0, SlotMs);
+    }
+
+    // ── 位移补间：自己按帧插值（别改回 TranslateTransform，也别改回 Storyboard） ──
+    //
+    // 为什么位移没法用动画、只能这样一帧一帧算：**见上面 <see cref="RowShift"/> 的注释** ——
+    // 真正的自变量是"位移有没有到达自身高度"，跟用不用 Storyboard 无关；到达了就整片不重画。
+    // 所以位移只能改 Margin，而 Margin 是布局属性，没有对应的 Animation 类型，只能自己插值。
+    //
+    // ⚠️ 别重走这两次误判（2026-09-29 各浪费一轮）：
+    //    ① 以为"漏了 EnableDependentAnimation"；② 以为"照抄 MainWindow.PlaySheetAnimation 的写法就行"。
+    //    两次的依赖属性值都在逐帧正常变化，屏幕却一动不动。
+    // （Height / Opacity 的 Storyboard 动画是真能重画的，不用动。）
+
+    private sealed class SlideTween
+    {
+        public FrameworkElement Owner = null!;
+        public Action<double> Apply = _ => { };
+        public double From;
+        public double To;
+        public int Ms;
+        public long StartMs;
+        public bool EaseInOut;
+        public Action? Done;
+    }
+
+    private readonly List<SlideTween> _tweens = new();
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _tweenTick;
+
+    /// <summary>
+    /// 读 / 写一行的让位偏移。
+    ///
+    /// ⚠️⚠️ **偏移走 Margin，不走 RenderTransform**（2026-09-29 实测，这条是整件事的根）：
+    ///    只要用 <c>TranslateTransform.Y</c> 把一行挪到"整个离开它自己那一格"（我们的让位恰好就是挪一格 = 59 = 行高 + 间距），
+    ///    在 WinUI 3 上这行就**整片不再重画** —— 依赖属性的值是对的（TransformToVisual 读出来分毫不差），
+    ///    但屏幕上一片空白。用户看到的就是「一旦我下滑，剩下的组件全部划消失了」。
+    ///    对照实验（同一帧、同一数值 30）：走 RenderTransform 但没离开格子的两行**画得出来**；
+    ///    整格离开的两行**完全看不到**。改成 Margin 就正常 —— 它是布局属性，走的是和 Height 同一条必然重画的路径。
+    ///    负的 Bottom 刚好把 Top 顶掉，所以这一行总占高不变、后面的行不会被顶走。
+    /// </summary>
+    private static double RowShift(FrameworkElement row) => row.Margin.Top;
+
+    private static void SetRowShift(FrameworkElement row, double v)
+    {
+        row.Margin = new Thickness(0, v, 0, -v);
+    }
+
+    /// <summary>把行挪到目标偏移。animate=false 直接落值（用于"刚拿起来"那一下）。</summary>
+    private void SlideRow(FrameworkElement row, double to, bool animate)
+    {
+        if (!animate)
         {
-            if (_gapIndex < 0 && spacer.Height <= 0.5) PreviewPanel.Children.Remove(spacer);
+            CancelTween(row);
+            SetRowShift(row, to);
+            return;
+        }
+
+        var from = RowShift(row);
+        if (Math.Abs(from - to) < 0.5) return;
+
+        StartTween(row, v => SetRowShift(row, v), from, to, SlotMs, easeInOut: false, done: null);
+    }
+
+    /// <summary>起一个补间。同一元素上已有的补间被顶掉（后发制人）。</summary>
+    private void StartTween(FrameworkElement owner, Action<double> apply, double from, double to, int ms,
+                            bool easeInOut, Action? done)
+    {
+        CancelTween(owner);
+        _tweens.Add(new SlideTween
+        {
+            Owner = owner,
+            Apply = apply,
+            From = from,
+            To = to,
+            Ms = ms,
+            StartMs = Environment.TickCount64,
+            EaseInOut = easeInOut,
+            Done = done
         });
+        EnsureTweenTick();
     }
 
-    /// <summary>空档高度动画。⚠️ 动 Height 属于"依赖动画"，必须开 EnableDependentAnimation，否则直接被忽略。</summary>
-    private static void AnimateSpacer(FrameworkElement spacer, double to, Action? done = null)
+    private void CancelTween(FrameworkElement owner)
     {
+        for (var i = _tweens.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_tweens[i].Owner, owner)) _tweens.RemoveAt(i);
+        }
+    }
+
+    private void EnsureTweenTick()
+    {
+        if (_tweenTick is null)
+        {
+            _tweenTick = DispatcherQueue.CreateTimer();
+            _tweenTick.Interval = TimeSpan.FromMilliseconds(15);
+            _tweenTick.IsRepeating = true;
+            _tweenTick.Tick += (_, _) => StepTweens();
+        }
+        if (!_tweenTick.IsRunning) _tweenTick.Start();
+    }
+
+    private void StepTweens()
+    {
+        for (var i = _tweens.Count - 1; i >= 0; i--)
+        {
+            var tw = _tweens[i];
+            var p = tw.Ms <= 0 ? 1 : Math.Min(1, (Environment.TickCount64 - tw.StartMs) / (double)tw.Ms);
+            var e = tw.EaseInOut ? EaseInOutCubic(p) : EaseOutCubic(p);
+            tw.Apply(tw.From + (tw.To - tw.From) * e);
+
+            if (p >= 1)
+            {
+                _tweens.RemoveAt(i);
+                tw.Done?.Invoke();      // ⚠️ 放在移除之后：回调里可能 Refresh()（整列表换掉）
+            }
+        }
+        if (_tweens.Count == 0) _tweenTick?.Stop();
+    }
+
+    private static double EaseOutCubic(double p) => 1 - Math.Pow(1 - p, 3);
+
+    private static double EaseInOutCubic(double p) =>
+        p < 0.5 ? 4 * p * p * p : 1 - Math.Pow(-2 * p + 2, 3) / 2;
+
+    /// <summary>高度动画（垫片用）。⚠️ Height 是布局属性，属于"依赖动画"，不开 EnableDependentAnimation 会被直接忽略。</summary>
+    private static void AnimateHeight(FrameworkElement el, double to, int ms)
+    {
+        if (Math.Abs(el.Height - to) < 0.5) return;
+
         var anim = new DoubleAnimation
         {
             To = to,
-            Duration = new Duration(TimeSpan.FromMilliseconds(130)),
+            Duration = new Duration(TimeSpan.FromMilliseconds(ms)),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
             EnableDependentAnimation = true
         };
-        Storyboard.SetTarget(anim, spacer);
+        Storyboard.SetTarget(anim, el);
         Storyboard.SetTargetProperty(anim, "Height");
 
         var sb = new Storyboard();
         sb.Children.Add(anim);
-        if (done is not null) sb.Completed += (_, _) => done();
+        sb.Begin();
+    }
+
+    /// <summary>
+    /// 透明度淡入淡出。
+    /// ⚠️ 用 <c>FillBehavior.Stop</c> + 先把基准值写成目标值：HoldEnd 会把动画值**钉住**，
+    ///    之后再给 Opacity 赋基准值是不生效的（下次想淡出就淡不动了）。
+    /// </summary>
+    private static void FadeElement(FrameworkElement el, double to, int ms)
+    {
+        if (Math.Abs(el.Opacity - to) < 0.01) return;
+
+        var anim = new DoubleAnimation
+        {
+            From = el.Opacity,
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(ms)),
+            FillBehavior = FillBehavior.Stop,
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        el.Opacity = to;                                // 基准值 = 目标值：动画跑完自动交还给它
+        Storyboard.SetTarget(anim, el);
+        Storyboard.SetTargetProperty(anim, "Opacity");
+
+        var sb = new Storyboard();
+        sb.Children.Add(anim);
         sb.Begin();
     }
 
@@ -1163,125 +1463,42 @@ public sealed partial class SidebarLayoutPage : Page
     }
 
     /// <summary>
-    /// ↑ / ↓ 点一下：两行**滑过去**再落位（瞬间跳太不显眼）。
+    /// ↑ / ↓ 点一下：两行**同时反向滑一格**，滑完再落盘重建。
     ///
-    /// ⚠️ 为什么不能只是"两行同时反向平移"（之前那版就是这么写的，看着很怪）：
-    ///    两行尺寸一样、底色一样，平移路程都是 59px 而且是同时反向跑的，
-    ///    于是中途**必然完全重合**，屏幕上就是"两张卡片糊成一团、然后又分开"。
-    ///    现在让被点的那一行"浮起来"：滑动时略微缩小 + 压低透明度，像从另一行上面飘过去，
-    ///    重合的那一瞬间也能一眼分清是两张卡。缓动也换成 EaseInOut（EaseOut 起步太冲）。
+    /// ⚠️ 只做滑动 —— **不压透明度、不缩小**（老写法在中间把被点的那行压到 0.72、缩到 0.94）。
+    ///    两行是朝相反方向滑开的（一个 +59、一个 −59），中途根本不会重合，
+    ///    那两个原本用来"区分两张卡"的动作没有意义，反而让被点的那行在中点那一刻看着快没了
+    ///    —— 用户 2026-09-29 反馈的"缩小了一下，移到一半就消失了"就是它。
+    /// ⚠️ 被点的那行抬到上层（Canvas.ZIndex）：万一真和谁重叠，也该是"手上这张"在上面。
     /// </summary>
     private void AnimateSwap(int i, int j)
     {
         if (_swapping) return;
         if (i == j || i < 0 || j < 0 || i >= _tiles.Count || j >= _tiles.Count) return;
+        if (_dragId is not null || _holeSlot >= 0) return;      // 正在拖的时候别叠交换动画
 
-        var mover = _tiles[i];          // 用户点的那一行：让它浮起来走
+        var mover = _tiles[i];          // 用户点的那一行
         var other = _tiles[j];
         var dy = (j - i) * GapDip;      // 相邻两行 = 59
 
-        var tm = Shift(mover);
-        var to = Shift(other);
-        ResetTransform(tm);
-        ResetTransform(to);
+        SlideRow(mover, 0, animate: false);     // 起点归零，同时把可能还挂着的补间收掉
+        SlideRow(other, 0, animate: false);
+        Canvas.SetZIndex(mover, 1);
         _swapping = true;
 
-        var sb = new Storyboard();
-        sb.Children.Add(SlideY(tm, dy));
-        sb.Children.Add(SlideY(to, -dy));
-        sb.Children.Add(Fade(mover, 0.72));
-        sb.Children.Add(Fade(other, 0.88));
-        sb.Children.Add(ScaleKey(tm, "ScaleX", 0.94));
-        sb.Children.Add(ScaleKey(tm, "ScaleY", 0.94));
-        sb.Completed += (_, _) =>
+        var left = 2;
+        void Finish()
         {
+            if (--left > 0) return;
             (_ids[i], _ids[j]) = (_ids[j], _ids[i]);
-            Refresh();          // 先重建：新行没有 transform，静态位置就是动画终点，看不出接缝
-            sb.Stop();          // 再显式收工 —— HoldEnd 会把旧行钉在中间位置，虽然它已经不在树上了
+            Refresh();          // 先重建：新行没有偏移，静态位置就是动画终点，看不出接缝
+            Canvas.SetZIndex(mover, 0);
             _swapping = false;
             Save();
-        };
-        sb.Begin();
-    }
+        }
 
-    /// <summary>拿这一行的变换对象（没有就配一个）。⚠️ 缩放要围绕行中心，不然会从左上角缩。</summary>
-    private static CompositeTransform Shift(FrameworkElement el)
-    {
-        if (el.RenderTransform is CompositeTransform t) return t;
-        t = new CompositeTransform();
-        el.RenderTransform = t;
-        el.RenderTransformOrigin = new Point(0.5, 0.5);
-        return t;
-    }
-
-    private static void ResetTransform(CompositeTransform t)
-    {
-        t.TranslateX = 0;
-        t.TranslateY = 0;
-        t.ScaleX = 1;
-        t.ScaleY = 1;
-    }
-
-    private static DoubleAnimation SlideY(CompositeTransform t, double to)
-    {
-        var anim = new DoubleAnimation
-        {
-            To = to,
-            Duration = new Duration(TimeSpan.FromMilliseconds(SwapMs)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
-        };
-        Storyboard.SetTarget(anim, t);
-        Storyboard.SetTargetProperty(anim, "TranslateY");
-        return anim;
-    }
-
-    /// <summary>滑到一半变淡一点、过去之后再回来 —— 这就是"浮起来"的那点层次感。</summary>
-    private static DoubleAnimationUsingKeyFrames Fade(FrameworkElement el, double mid)
-    {
-        var anim = new DoubleAnimationUsingKeyFrames
-        {
-            Duration = new Duration(TimeSpan.FromMilliseconds(SwapMs))
-        };
-        anim.KeyFrames.Add(new EasingDoubleKeyFrame { KeyTime = TimeSpan.Zero, Value = 1 });
-        anim.KeyFrames.Add(new EasingDoubleKeyFrame
-        {
-            KeyTime = TimeSpan.FromMilliseconds(SwapMs * 0.45),
-            Value = mid,
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        });
-        anim.KeyFrames.Add(new EasingDoubleKeyFrame
-        {
-            KeyTime = TimeSpan.FromMilliseconds(SwapMs),
-            Value = 1,
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-        });
-        Storyboard.SetTarget(anim, el);
-        Storyboard.SetTargetProperty(anim, "Opacity");
-        return anim;
-    }
-
-    private static DoubleAnimationUsingKeyFrames ScaleKey(CompositeTransform t, string prop, double mid)
-    {
-        var anim = new DoubleAnimationUsingKeyFrames
-        {
-            Duration = new Duration(TimeSpan.FromMilliseconds(SwapMs))
-        };
-        anim.KeyFrames.Add(new EasingDoubleKeyFrame { KeyTime = TimeSpan.Zero, Value = 1 });
-        anim.KeyFrames.Add(new EasingDoubleKeyFrame
-        {
-            KeyTime = TimeSpan.FromMilliseconds(SwapMs * 0.45),
-            Value = mid,
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        });
-        anim.KeyFrames.Add(new EasingDoubleKeyFrame
-        {
-            KeyTime = TimeSpan.FromMilliseconds(SwapMs),
-            Value = 1,
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-        });
-        Storyboard.SetTarget(anim, t);
-        Storyboard.SetTargetProperty(anim, prop);
-        return anim;
+        StartTween(mover, v => SetRowShift(mover, v), 0, dy, SwapMs, easeInOut: true, done: Finish);
+        StartTween(other, v => SetRowShift(other, v), 0, -dy, SwapMs, easeInOut: true, done: Finish);
     }
 
     private void ResetDefault_Click(object sender, RoutedEventArgs e)
@@ -1297,5 +1514,24 @@ public sealed partial class SidebarLayoutPage : Page
         if (ToolSidebarWindow.IsSidebarVisible) ToolSidebarWindow.HideSidebar();
         else ToolSidebarWindow.ShowSidebar();
         Refresh();
+    }
+
+    /// <summary>
+    /// 侧边栏底部那排按钮里**某一颗**的显示开关（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用，五颗各自一个）。
+    /// 落设置后立刻让真侧边栏重排 —— 竖条的高矮、横条（贴上/下边）的宽窄都跟着**可见颗数**变
+    /// （见 <c>ToolSidebarWindow.PlannedSize</c>）。
+    /// </summary>
+    private void FooterItem_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_footerSync) return;                                     // 是 Refresh 同步过来的回声，不是用户拨的
+        if (sender is not ToggleSwitch t || t.Tag is not string key) return;
+
+        var hidden = (App.Settings.Current.SidebarFooterHidden ?? Array.Empty<string>()).ToList();
+        if (t.IsOn) hidden.Remove(key);
+        else if (!hidden.Contains(key)) hidden.Add(key);
+
+        App.Settings.Current.SidebarFooterHidden = hidden.ToArray();
+        App.Settings.Save();
+        ToolSidebarWindow.ApplyFooterSetting();
     }
 }

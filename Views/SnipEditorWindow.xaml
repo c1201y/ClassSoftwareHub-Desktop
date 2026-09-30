@@ -68,7 +68,7 @@
                         VerticalAlignment="Center" Margin="2,0" />
 
             <Button x:Name="BtThickness" Click="Thickness_Click" Padding="9,7"
-                    ToolTipService.ToolTip="线条粗细（点一次换一档）">
+                    ToolTipService.ToolTip="线条粗细（每次单击切换一档）">
                 <StackPanel Orientation="Horizontal" Spacing="7">
                     <FontIcon Glyph="&#xEDA8;" FontSize="15" />
                     <TextBlock x:Name="ThicknessText" Text="中" FontSize="12.5" VerticalAlignment="Center" />
@@ -101,7 +101,7 @@
                     <TextBlock Text="保存" FontSize="12.5" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
-            <Button x:Name="BtPin" Click="Pin_Click" Padding="9,7" ToolTipService.ToolTip="钉在屏幕上（1:1，可拖边框缩放）">
+            <Button x:Name="BtPin" Click="Pin_Click" Padding="9,7" ToolTipService.ToolTip="钉在屏幕上（1:1，可拖动边框缩放）">
                 <StackPanel Orientation="Horizontal" Spacing="7">
                     <FontIcon Glyph="&#xE718;" FontSize="15" />
                     <TextBlock Text="钉图" FontSize="12.5" VerticalAlignment="Center" />

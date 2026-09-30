@@ -72,9 +72,9 @@ public sealed partial class DetailPage : Page
         InfoTitle.Text = ui.T("detail.info", "详细信息");
         DownloadsTitle.Text = ui.T("detail.downloads", "下载");
         StoreTitle.Text = ui.T("detail.store-title", "使用 Microsoft Store 下载");
-        StoreDesc.Text = ui.T("detail.store-desc", "由应用商店托管，安装后自动更新，不用手动跟版本。");
+        StoreDesc.Text = ui.T("detail.store-desc", "由应用商店托管，安装后自动更新，无需手动跟随版本。");
         StoreButton.Content = ui.T("detail.store-button", "下载");
-        StoreOnlyHint.Text = ui.T("detail.store-only", "该软件通过 Microsoft Store 分发，点上方按钮打开商店页面即可获取");
+        StoreOnlyHint.Text = ui.T("detail.store-only", "该软件通过 Microsoft Store 分发，单击上方按钮打开商店页面即可获取");
 
         var app = App.Content.FindById(e.Parameter as string ?? "");
         if (app is null)
@@ -157,7 +157,7 @@ public sealed partial class DetailPage : Page
             .ToList();
         if (issues.Count > 0)
         {
-            IssueBar.Title = "这个软件的数据有提示";
+            IssueBar.Title = "该软件的数据存在提示";
             IssueBar.Message = string.Join("\n", issues.Select(i => i.File + "：" + i.Message));
             IssueBar.IsOpen = true;
         }
@@ -252,13 +252,13 @@ public sealed partial class DetailPage : Page
             Title = "Microsoft Store（微软商店）",
             Content = new TextBlock
             {
-                Text = "若本机未安装 Microsoft Store，商店链接将无法打开 —— 安装过程依赖商店自身。\n\n" +
+                Text = "若本机未安装 Microsoft Store，商店链接将无法打开：安装过程依赖商店自身。\n\n" +
                        "· 打开微软商店：跳转到「Microsoft Store」应用\n" +
-                       "· 未安装或已损坏：调用系统自带方式重新安装（约 1～2 分钟，期间可能出现命令行窗口，请勿关闭）",
+                       "· 未安装或已损坏：调用系统自带方式重新安装（约 1 至 2 分钟，期间可能出现命令行窗口，请勿关闭）",
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = "打开微软商店",
-            SecondaryButtonText = "未安装？一键恢复",
+            SecondaryButtonText = "一键恢复商店",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary,
         };
@@ -278,11 +278,11 @@ public sealed partial class DetailPage : Page
                         Title = "已开始安装微软商店",
                         Content = new TextBlock
                         {
-                            Text = "如出现命令行窗口，请等待其自动关闭（约 1～2 分钟）。\n" +
-                                   "安装完成后，Microsoft Store 会出现在开始菜单中，返回此处再次点击「打开微软商店」即可。",
+                            Text = "如出现命令行窗口，请等待其自动关闭（约 1 至 2 分钟）。\n" +
+                                   "安装完成后，Microsoft Store 会出现在开始菜单中，返回此处再次单击「打开微软商店」即可。",
                             TextWrapping = TextWrapping.Wrap,
                         },
-                        CloseButtonText = "知道了",
+                        CloseButtonText = "确定",
                     }.ShowAsync();
                 }
                 else
@@ -297,7 +297,7 @@ public sealed partial class DetailPage : Page
                                    "https://apps.microsoft.com/detail/9wzdncrfjbmp 手动安装。",
                             TextWrapping = TextWrapping.Wrap,
                         },
-                        CloseButtonText = "知道了",
+                        CloseButtonText = "确定",
                     }.ShowAsync();
                 }
                 break;
@@ -384,7 +384,7 @@ public sealed partial class DetailPage : Page
         var panel = new StackPanel { Spacing = 8, MaxWidth = 380 };
         panel.Children.Add(new TextBlock
         {
-            Text = ui.T("detail.mirror-desc", "下面的镜像站会把上面的链接原样转发一份，国内下载通常快很多。"),
+            Text = ui.T("detail.mirror-desc", "下列镜像站将上方链接原样转发，国内下载速度通常显著提升。"),
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.8,
             FontSize = 12.5,
@@ -412,7 +412,7 @@ public sealed partial class DetailPage : Page
 
         panel.Children.Add(new TextBlock
         {
-            Text = ui.T("detail.mirror-note", "镜像由第三方公益提供：本站只做跳转，不中转、不修改文件，也不保证它们一直可用。"),
+            Text = ui.T("detail.mirror-note", "镜像由第三方公益提供：本站仅做跳转，不中转、不修改文件，亦不保证始终可用。"),
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.6,
             FontSize = 11.5,

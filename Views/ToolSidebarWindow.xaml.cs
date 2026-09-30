@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ClassSoftwareHub.Desktop.Core;
@@ -28,6 +29,19 @@ namespace ClassSoftwareHub.Desktop.Views;
 /// 位置（贴哪条边 + 沿边位置）会记在设置里；「位置复原」= 回到右边的居中位置。
 /// 置顶、不进任务栏、无标题栏、不能缩放/最大化/最小化。
 ///
+/// ⚠️ 2026-09-27（Nick）：**左右两边可以同时显示**（设置里选「左右两边」= <c>SidebarEdge</c> 为 "both"）。
+/// 所以它不再是个单例 —— 见 <see cref="_pool"/>：一条边一个实例，设置里的 "both" 会被拆成 left + right 两条。
+/// 两条共享 <c>SidebarPosRatio</c>，上下位置天然一致；拖任意一条时对面实时跟随（<see cref="FollowPartner"/>）。
+/// 上边 / 下边**只有单条**（Nick：横着放一条就够了）。
+///
+/// ⚠️ 2026-09-28（Nick）：再加**两种模式**（<c>SidebarMode</c>）——
+///   · <c>dock</c> 贴靠模式：**只贴左右两条边**（可选「左右两边」同时显示两条），沿边位置共用
+///     <c>SidebarPosRatio</c>；上/下边**不归它管**。
+///   · <c>free</c> 自由模式：**四条边都能吸**（左/右/上/下），贴哪条边存 <c>SidebarFreeEdge</c>，
+///     贴上/下边时是横条。它**不是**"浮在屏幕中间不吸边"—— 侧边栏永远吸在某条边上。
+/// 两种模式走的是**同一套**实例池与吸附逻辑（<see cref="_pool"/> / <see cref="SyncInstances"/>），
+/// 差别只在"允许哪几条边"（见 <see cref="DesiredEdges"/>）与"松手时把边存进哪个设置"（<see cref="DockToNearestEdge"/>）。
+///
 /// 用法：<c>ToolSidebarWindow.ShowSidebar()</c> / <c>HideSidebar()</c> / <c>ApplySetting()</c>。
 /// </summary>
 public sealed partial class ToolSidebarWindow : Window
@@ -39,6 +53,27 @@ public sealed partial class ToolSidebarWindow : Window
     private const int PanelThicknessFlatDip = 112;  // 上/下边时：两行（工具一行、按钮一行）的高度
     private const int PanelLengthFlatDip = 470;     // 上/下边时：展开面板长度的**下限**（真实宽度按内容算，见 PlannedSize）
 
+    /// <summary>
+    /// 底部按钮那一排在竖条里的高度增量 —— <b>五颗全显</b>时的经验值（2026-09-27 定的）。
+    /// 注意它**不是**五颗的真实高度（那是 5×44 + 4×2 = 228）：面板高度基数
+    /// <see cref="PanelLengthDip"/>（450）里本来就已经含了标题和一段留白，这 94 只是把五颗"补齐"。
+    /// ⚠️ 2026-09-29 底排改成**逐颗开关**后，这里必须按**可见颗数**摊算（见 <see cref="FooterDipFor"/>），
+    ///    别改写成 <c>n × 44</c> 这种"真实高度" —— 会跟 450 的基数重复计算，面板凭空长一截。
+    /// </summary>
+    private const int FooterBaseDip = 94;
+
+    /// <summary>底排可见 <paramref name="visible"/> 颗时，竖条高度里的增量（0 颗 = 完全不留）。</summary>
+    private static int FooterDipFor(int visible) =>
+        visible <= 0 ? 0 : (int)Math.Round(FooterBaseDip * visible / 5.0);
+
+    /// <summary>
+    /// 上/下边（横条）下**只有工具那一行**时的高度（= 底排一颗都不显示）。
+    /// 两行版是 <see cref="PanelThicknessFlatDip"/>（112）；底排一颗都没有时只剩一行，
+    /// 面板上下的 padding（5+6）+ 外框（2）+ 工具按钮的行高（图标 20 + 间距 3 + 文字 11 ≈ 54）
+    /// ≈ 67，给几像素余量取 72。不跟着缩的话底下会空出一大块；反过来给小了会把按钮裁掉。
+    /// </summary>
+    private const int PanelThicknessFlatBareDip = 72;
+
     // 上/下边（横条）时底排按钮的排版参数。
     // ⚠️ 横条宽度必须容得下**底排这一整排**（见 PlannedSize），不然最后一颗会被面板裁掉 ——
     //    2026-09-27 用户截图就是这个：「打开应用」只露出半个「打」字。
@@ -46,7 +81,18 @@ public sealed partial class ToolSidebarWindow : Window
     private const int FooterFlatSpacingDip = 8;         // 底排按钮之间的间距
     private const int FlatRowPadDip = 24;               // 横条里每一行的左右内边距 + 余量
 
-    private static ToolSidebarWindow? _instance;
+    /// <summary>
+    /// 按边缓存的窗口实例（键 = left | right | top | bottom）。
+    ///
+    /// ⚠️ 2026-09-27（Nick 需求）：竖直状态要能**左右同时**有侧边栏，所以从"单例"改成了"一条边一个实例"。
+    /// 建过的实例留着复用 —— 切边只是显隐，不反复建窗。当前该显示哪几条见 <see cref="SyncInstances"/>。
+    /// 设置里的 "both" 在这儿会被拆成 left + right 两个实例，每个实例的边存在 <see cref="_edge"/>（不读设置）。
+    /// 换边 / 换模式都只是改这个字典里"该显示哪几条" —— 同一条路（<see cref="SyncInstances"/>）。
+    /// </summary>
+    private static readonly Dictionary<string, ToolSidebarWindow> _pool = new();
+
+    /// <summary>这条实例贴的边：left | right | top | bottom。**实例级** —— 设置里那个 "both" 是拆出来的两条，不是它的值。</summary>
+    private readonly string _edge;
 
     private AppWindow? _appWindow;
     private bool _expanded;
@@ -96,16 +142,20 @@ public sealed partial class ToolSidebarWindow : Window
     /// <summary>压住自动收起的最长时间（秒）。确认面板活 10 秒，这里给够余量。</summary>
     private const int SuppressMaxSeconds = 15;
 
-    /// <summary>侧边栏当前在屏幕上的矩形（给"挨着它弹提示"用）；还没建/拿不到就返回 null。</summary>
+    /// <summary>
+    /// 侧边栏当前在屏幕上的矩形（给"挨着它弹提示"用）；还没建/拿不到就返回 null。
+    /// 左右两条同时显示时**优先右边那条** —— 音量浮窗一直挂右边（见 <c>VolumeWindow.Edge</c>），锚点得跟它一致。
+    /// </summary>
     public static Windows.Graphics.RectInt32? CurrentRect
     {
         get
         {
+            var w = AnchorInstance();
+            if (w?._appWindow is null) return null;
             try
             {
-                if (_instance?._appWindow is null) return null;
-                var pos = _instance._appWindow.Position;
-                var size = _instance._appWindow.Size;
+                var pos = w._appWindow.Position;
+                var size = w._appWindow.Size;
                 return new Windows.Graphics.RectInt32(pos.X, pos.Y, size.Width, size.Height);
             }
             catch
@@ -113,6 +163,14 @@ public sealed partial class ToolSidebarWindow : Window
                 return null;
             }
         }
+    }
+
+    /// <summary>挑一条"可见的"实例当锚点：优先右边 → 再任意一条可见的 → 都没有就 null。</summary>
+    private static ToolSidebarWindow? AnchorInstance()
+    {
+        if (_pool.TryGetValue("right", out var r) && r._visible) return r;
+        foreach (var w in _pool.Values) if (w._visible) return w;
+        return null;
     }
 
     // 收起状态下的拖拽（屏幕坐标算，别用窗口内坐标，会自己滚起来）
@@ -137,8 +195,9 @@ public sealed partial class ToolSidebarWindow : Window
     private int _lastIssuedDeltaY;
     private int _dragSamples;                 // 诊断用：这次拖动记了几条样本
 
-    private ToolSidebarWindow()
+    private ToolSidebarWindow(string edge)
     {
+        _edge = edge;
         InitializeComponent();
 
         // 展开后没人动 → 自己收回去（触屏没地方"点空白处收起"）
@@ -160,10 +219,64 @@ public sealed partial class ToolSidebarWindow : Window
             App.Settings.Current.SidebarEnabled = true;
             App.Settings.Save();
         }
-        (_instance ??= new ToolSidebarWindow()).Present();
+        foreach (var w in SyncInstances()) w.Present();
     }
 
-    public static void HideSidebar() => _instance?.HideSelf();
+    public static void HideSidebar()
+    {
+        foreach (var w in _pool.Values) w.HideSelf();
+    }
+
+    /// <summary>
+    /// 按设置把实例集合对齐到"该有哪几条边"：该显示的建出来/显示，不该显示的藏起来。
+    /// 返回**本次该显示的那些实例**（顺序：左 → 右；单条就是一个）。
+    /// </summary>
+    private static List<ToolSidebarWindow> SyncInstances()
+    {
+        var want = DesiredEdges();
+
+        foreach (var kv in _pool)
+            if (!want.Contains(kv.Key)) kv.Value.HideSelf();
+
+        var list = new List<ToolSidebarWindow>();
+        foreach (var e in want)
+        {
+            if (!_pool.TryGetValue(e, out var w))
+            {
+                w = new ToolSidebarWindow(e);
+                _pool[e] = w;
+            }
+            list.Add(w);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 设置说该有哪几条边。
+    ///   · 贴靠模式（<c>dock</c>）：**只有左右两条边** —— <c>both</c> 拆成 left + right。
+    ///   · 自由模式（<c>free</c>）：用户选的那**一条边**，左/右/上/下都行（<see cref="FreeEdgeSetting"/>），
+    ///     贴上/下边时是横条（<see cref="IsFlat"/>）。自由模式**不提供「左右两边」**。
+    /// </summary>
+    private static List<string> DesiredEdges()
+    {
+        if (IsFreeMode) return new List<string> { FreeEdgeSetting };
+
+        return App.Settings.Current.SidebarEdge switch
+        {
+            "left" => new List<string> { "left" },
+            "both" => new List<string> { "left", "right" },
+            // ⚠️ 贴靠模式只认左右。老设置里如果留着 top/bottom（那时贴靠也能贴上下边），这里一律归到右边 ——
+            //    想贴上下边得切到自由模式（Nick 2026-09-28 定：贴靠 = 左右模式）。
+            _ => new List<string> { "right" },
+        };
+    }
+
+    /// <summary>自由模式贴的那条边（设置值认不出就退回 right）。</summary>
+    private static string FreeEdgeSetting => App.Settings.Current.SidebarFreeEdge switch
+    {
+        "left" or "top" or "bottom" => App.Settings.Current.SidebarFreeEdge,
+        _ => "right",
+    };
 
     /// <summary>
     /// 音量浮窗（主音量 + 合成器）**全部收干净了**叫一声：边条这时候也该跟着收回去。
@@ -175,14 +288,16 @@ public sealed partial class ToolSidebarWindow : Window
     /// </summary>
     public static void CollapseAfterVolumeFlyoutsClosed()
     {
-        try
+        foreach (var w in _pool.Values)
         {
-            var inst = _instance;
-            if (inst is null || !inst._visible || !inst._expanded) return;
-            if (App.Settings.Current.SidebarPinned) return;
-            inst.Collapse();
+            try
+            {
+                if (!w._visible || !w._expanded) continue;
+                if (App.Settings.Current.SidebarPinned) continue;
+                w.Collapse();
+            }
+            catch { }
         }
-        catch { }
     }
 
     /// <summary>
@@ -191,24 +306,35 @@ public sealed partial class ToolSidebarWindow : Window
     /// </summary>
     public static void CollapseForCapture()
     {
-        try
+        foreach (var w in _pool.Values)
         {
-            var inst = _instance;
-            if (inst is null) return;
-            if (!inst._expanded) return;
-            inst.Collapse(animate: false);                // 截图前必须当帧收干净，不然把淡出中的边条也照进去
+            try
+            {
+                if (!w._expanded) continue;
+                w.Collapse(animate: false);               // 截图前必须当帧收干净，不然把淡出中的边条也照进去
+            }
+            catch { }
         }
-        catch { }
     }
 
-    public static bool IsSidebarVisible => _instance?._visible == true;
+    public static bool IsSidebarVisible
+    {
+        get
+        {
+            foreach (var w in _pool.Values) if (w._visible) return true;
+            return false;
+        }
+    }
 
     /// <summary>设置里的开关/边选项变了：开就显示、关就藏起来；边变了重新贴过去。</summary>
     public static void ApplySetting()
     {
         if (!App.Settings.Current.SidebarEnabled) { HideSidebar(); return; }
-        ShowSidebar();
-        _instance?.SnapToSetting();
+        foreach (var w in SyncInstances())
+        {
+            w.Present();
+            w.SnapToSetting();
+        }
     }
 
     private void SnapToSetting()
@@ -220,17 +346,25 @@ public sealed partial class ToolSidebarWindow : Window
 
     // ── 窗口本身 ─────────────────────────────────────────────
 
-    /// <summary>贴哪条边：left | right | top | bottom（默认 right）。</summary>
-    private static string Edge
-    {
-        get
-        {
-            var e = App.Settings.Current.SidebarEdge;
-            return e is "left" or "top" or "bottom" ? e : "right";
-        }
-    }
+    /// <summary>这条实例贴的边：left | right | top | bottom。⚠️ 实例级 —— 别改回"读设置"，那样两条实例会贴到同一条边上去。</summary>
+    private string Edge => _edge;
 
-    private static bool IsFlat => Edge is "top" or "bottom";
+    /// <summary>横条（贴上/下边）还是竖条（贴左/右边）。</summary>
+    private bool IsFlat => _edge is "top" or "bottom";
+
+    /// <summary>设置里选的是自由模式（能吸四条边）。⚠️ 认不出的值一律当贴靠模式。</summary>
+    private static bool IsFreeMode => App.Settings.Current.SidebarMode == "free";
+
+    /// <summary>左右两条同时显示（贴靠模式里选的 "both"）。拖动时靠它决定"锁竖直、不换边"以及要不要带对面一起动。</summary>
+    private static bool IsDual => !IsFreeMode && App.Settings.Current.SidebarEdge == "both";
+
+    /// <summary>对面那条实例（双边模式下用来做位置联动）；自由模式、单边模式都是 null。</summary>
+    private ToolSidebarWindow? Partner()
+    {
+        if (!IsDual) return null;
+        var other = _edge == "left" ? "right" : "left";
+        return _pool.TryGetValue(other, out var w) ? w : null;
+    }
 
     private void Configure()
     {
@@ -549,13 +683,24 @@ public sealed partial class ToolSidebarWindow : Window
     private static Windows.UI.Color AccentColor() =>
         new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
 
-    /// <summary>位置复原：回右边、沿边居中。</summary>
+    /// <summary>
+    /// 位置复原：沿边居中；两种模式都顺便把边退回默认的那条。
+    /// ⚠️ 双边模式（both）下**不改边** —— 它没有"哪一条边"的概念，保持两条并一起摆正。
+    /// </summary>
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
-        App.Settings.Current.SidebarEdge = "right";
+        if (!IsDual)
+        {
+            if (IsFreeMode) App.Settings.Current.SidebarFreeEdge = "right";
+            else App.Settings.Current.SidebarEdge = "right";
+        }
+
         App.Settings.Current.SidebarPosRatio = -1;
         App.Settings.Save();
-        SnapToSetting();
+
+        // 边可能变了 → 得走 ApplySetting()（按新设置重建实例集合），不能只 SnapToSetting()
+        ApplySetting();
+        Partner()?.SnapToSetting();
         Touch();
     }
 
@@ -564,7 +709,7 @@ public sealed partial class ToolSidebarWindow : Window
     {
         App.Settings.Current.SidebarEnabled = false;
         App.Settings.Save();
-        HideSelf();
+        HideSidebar();                                    // 双边时两条一起藏
     }
 
     /// <summary>
@@ -583,13 +728,19 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>设置里的模块清单变了（侧边布局页改完调它）：重建按钮 + 重新量尺寸贴边。</summary>
+    /// <summary>设置里的模块清单变了（侧边布局页改完调它）：重建按钮 + 重新量尺寸贴边（左右两条都要）。</summary>
     public static void ApplyModules()
     {
-        if (_instance is null) return;
         if (!App.Settings.Current.SidebarEnabled) return;
-        _instance.RebuildModules();
+        foreach (var w in _pool.Values) w.RebuildModules();
     }
+
+    /// <summary>
+    /// 底排那几颗按钮（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用）的显示开关变了
+    /// （「侧边布局」页底部那五个开关，逐颗）。
+    /// 跟换模块清单走同一条路：重排 + 重新量尺寸 —— 面板高矮、横条宽窄都跟着**可见颗数**变。
+    /// </summary>
+    public static void ApplyFooterSetting() => ApplyModules();
 
     private void RebuildModules()
     {
@@ -1075,6 +1226,10 @@ public sealed partial class ToolSidebarWindow : Window
 
         _dragging = true;
 
+        // ⚠️ 双边模式：拖动**只沿竖直走** —— 横向锁在自己那条边，免得一拖就把"两边都有"拖成单边。
+        //    上下方向由下面每帧 Move 之后的 FollowPartner 带给对面那条。
+        if (IsDual) targetX = _dragOrigin.X;
+
         _lastIssuedDeltaX = targetX - _issuedX;          // 这一下我们自己要挪多少（下一步算 ΔF 要用）
         _lastIssuedDeltaY = targetY - _issuedY;
         if (_lastIssuedDeltaX == 0 && _lastIssuedDeltaY == 0) { e.Handled = true; return; }
@@ -1082,6 +1237,10 @@ public sealed partial class ToolSidebarWindow : Window
         _issuedY = targetY;
 
         _appWindow.Move(new PointInt32(targetX, targetY));
+
+        // 双边：对面那条实时跟到同一高度（拖动中不落盘，松手才存）
+        if (IsDual) FollowPartner(targetY, _appWindow.Size.Height);
+
         e.Handled = true;
     }
 
@@ -1212,7 +1371,12 @@ public sealed partial class ToolSidebarWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>松手时：看窗口中心离哪条边最近就贴哪条边，沿边的位置按松手处记下来。</summary>
+    /// <summary>
+    /// 松手时定位置：看窗口中心离哪条边最近就吸过去，沿边的位置按松手处记下来。
+    ///   · 自由模式：左/右/上/下**四条边**都参与吸附，吸到哪条边存进 <c>SidebarFreeEdge</c>。
+    ///   · 贴靠模式：**只吸左右两条** —— 松手时中心若更靠上下，也按左右就近归位（贴靠 = 左右模式）。
+    ///     ⚠️ 双边模式（设置 = both）下**不许换边** —— 换边就等于把"两边都有"拆成单边了。
+    /// </summary>
     private void DockToNearestEdge()
     {
         if (_appWindow is null) return;
@@ -1221,18 +1385,36 @@ public sealed partial class ToolSidebarWindow : Window
             var work = DisplayArea.Primary.WorkArea;
             var size = _appWindow.Size;
             var pos = _appWindow.Position;
+
             double cx = pos.X + size.Width / 2.0;
             double cy = pos.Y + size.Height / 2.0;
 
             var dl = Math.Abs(cx - work.X);
             var dr = Math.Abs(work.X + work.Width - cx);
-            var dt = Math.Abs(cy - work.Y);
-            var db = Math.Abs(work.Y + work.Height - cy);
-            var min = Math.Min(Math.Min(dl, dr), Math.Min(dt, db));
-            var edge = min == dl ? "left" : min == dr ? "right" : min == dt ? "top" : "bottom";
 
-            if (edge != Edge) Log("换边: " + edge);
-            App.Settings.Current.SidebarEdge = edge;
+            string edge;
+            if (IsDual)
+            {
+                edge = _edge;                            // 留在自己这条边，只挪上下
+            }
+            else
+            {
+                var dt = Math.Abs(cy - work.Y);
+                var db = Math.Abs(work.Y + work.Height - cy);
+                var min = Math.Min(Math.Min(dl, dr), Math.Min(dt, db));
+                edge = min == dl ? "left" : min == dr ? "right" : min == dt ? "top" : "bottom";
+
+                if (IsFreeMode)
+                {
+                    App.Settings.Current.SidebarFreeEdge = edge;    // 四条边都收
+                }
+                else
+                {
+                    // 贴靠模式没有上下边：更靠上/下时按左右就近归位
+                    if (edge is "top" or "bottom") edge = dl <= dr ? "left" : "right";
+                    App.Settings.Current.SidebarEdge = edge;
+                }
+            }
 
             // 沿边位置存成 0~1 的比例，这样收起/展开尺寸不一样时也能对得上
             var flat = edge is "top" or "bottom";
@@ -1245,11 +1427,51 @@ public sealed partial class ToolSidebarWindow : Window
                 free <= 0 ? 0.5 : Math.Clamp((at - alongStart) / (double)free, 0, 1);
 
             App.Settings.Save();
+
+            // ⚠️⚠️ 2026-09-28 修：单边模式换不了边（Nick 报的"拖了但固定不到上/下/左边"）。
+            //   上次把单例改成"一条边一个实例"之后，_edge 变成**实例级只读**字段，
+            //   这里只改设置再 SnapToSetting() 是没用的 —— 这条实例还按自己那条老边走，松手一贴就弹回原边。
+            //   换边必须走 ApplySetting()：它按新设置重建实例集合（新的那条建出来、这条藏起来）再贴过去。
+            if (edge != _edge)
+            {
+                Log("换边: " + _edge + " → " + edge);
+                ApplySetting();
+                return;
+            }
+
             SnapToSetting();
+
+            // 双边：比例共享，让对面那条也落回同一高度收尾
+            Partner()?.SnapToSetting();
         }
         catch (Exception ex)
         {
             Log("换边失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 双边模式的位置联动：把自己当前的沿边位置算成 0~1 比例甩给对面那条，让它立刻贴到同一高度。
+    ///
+    /// 拖动中每帧都会调，所以**故意不落盘** —— 每帧写一次 settings.json 会顿。
+    /// 落盘交给松手时的 <see cref="DockToNearestEdge"/> 统一做。
+    /// 用 <c>verify: false</c> 挪对面：跟着走的东西要跟手，别一帧里读回位置纠偏好几次。
+    /// </summary>
+    private void FollowPartner(int myY, int myHeight)
+    {
+        var other = Partner();
+        if (other is null) return;
+        try
+        {
+            var work = DisplayArea.Primary.WorkArea;
+            var free = Math.Max(0, work.Height - myHeight);
+            App.Settings.Current.SidebarPosRatio =
+                free <= 0 ? 0.5 : Math.Clamp((myY - work.Y) / (double)free, 0, 1);
+            other.MoveToEdge(verify: false);
+        }
+        catch (Exception ex)
+        {
+            Log("联动对面失败: " + ex.Message);
         }
     }
 
@@ -1405,6 +1627,19 @@ public sealed partial class ToolSidebarWindow : Window
             FooterStack.Spacing = flat ? FooterFlatSpacingDip : 2;
             FooterStack.HorizontalAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
 
+            // 底部那排按钮是**逐颗**开关（「侧边布局」页底部那五个开关，key 见 SidebarFooterKeys）。
+            // 关掉的那颗用 Collapsed —— StackPanel 不吃折叠子项，整排自己跟着收；一颗都不剩时连分隔线一起收。
+            // ⚠️ 但**别靠 Visibility 反推高度**：尺寸那几处都有独立的"可见颗数"分支
+            //    （<see cref="PlannedSize"/> / <see cref="ExpandedLimits"/> / <see cref="ApplyScrollLimit"/>），
+            //    靠 Visibility 算会在"重排前先量尺寸"的顺序上算错。
+            var hiddenFooter = App.Settings.Current.SidebarFooterHidden ?? Array.Empty<string>();
+            foreach (var (key, btn) in FooterItems())
+                btn.Visibility = hiddenFooter.Contains(key) ? Visibility.Collapsed : Visibility.Visible;
+
+            var footerCount = VisibleFooterCount();
+            FooterStack.Visibility = footerCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+            Sep.Visibility = footerCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+
             // 贴上下边时给按钮留出宽度，别挤成一坨
             foreach (var b in _toolButtons)
             {
@@ -1412,7 +1647,7 @@ public sealed partial class ToolSidebarWindow : Window
                 b.MinHeight = flat ? 48 : 52;
                 b.Padding = flat ? new Thickness(4, 6, 4, 6) : new Thickness(0, 8, 0, 8);
             }
-            foreach (var b in FooterButtons())
+            foreach (var (_, b) in FooterItems())
             {
                 b.MinWidth = flat ? FooterFlatButtonWidthDip : 0;
                 // 横条时矮一点，不然两行加起来超出面板高度，下面一排会被裁掉
@@ -1431,7 +1666,9 @@ public sealed partial class ToolSidebarWindow : Window
             ApplyScrollLimit();
             if (_foldIcon is not null)
             {
-                _foldIcon.Glyph = edge switch
+                // 箭头 = "点了会往哪边收"：贴着哪条边就朝哪边收
+                var dir = edge;
+                _foldIcon.Glyph = dir switch
                 {
                     "left" => "\uE76C",      // 往左收
                     "top" => "\uE70D",       // 往下收
@@ -1556,8 +1793,28 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    private Button[] FooterButtons() =>
-        new Button[] { FoldButton, PinButton, ResetButton, HideButton, OpenAppButton };
+    /// <summary>
+    /// 底排五颗按钮 + 各自的设置 key（顺序 = 在侧边栏上的先后）。
+    /// ⚠️ key 是**存档格式**的一部分（<see cref="SidebarFooterKeys"/>），别随手改字面量。
+    /// </summary>
+    private (string Key, Button Btn)[] FooterItems() => new (string, Button)[]
+    {
+        (SidebarFooterKeys.Fold, FoldButton),
+        (SidebarFooterKeys.Pin, PinButton),
+        (SidebarFooterKeys.Reset, ResetButton),
+        (SidebarFooterKeys.Hide, HideButton),
+        (SidebarFooterKeys.OpenApp, OpenAppButton),
+    };
+
+    /// <summary>
+    /// 底排当前**可见**几颗（0~5）—— 按设置里"关掉了哪几颗"过滤。
+    /// 尺寸处处用它，⛔ 别写死 5：逐颗开关之后，少一颗面板就得少一截。
+    /// </summary>
+    private static int VisibleFooterCount()
+    {
+        var hidden = App.Settings.Current.SidebarFooterHidden ?? Array.Empty<string>();
+        return SidebarFooterKeys.All.Count(k => !hidden.Contains(k));
+    }
     private double Scale()
     {
         try
@@ -1574,28 +1831,32 @@ public sealed partial class ToolSidebarWindow : Window
         var scale = Scale();
         // 模块数量：按钮 52 + 间距 3；竖着时面板高度 = 200 + 55×个数（少于 4 个也不缩太多，免得看着空）
         var count = Math.Max(1, _toolButtons.Count);
+        // 底排现在能看见几颗（逐颗开关，见 VisibleFooterCount）：尺寸处处按它算，
+        // 少一颗竖条矮一截、横条窄一截，一颗不剩时横条还会从两行变一行（薄一截）。
+        var footerCount = VisibleFooterCount();
         int dipW, dipH;
         if (_expanded)
         {
             var lim = ExpandedLimits();
             if (IsFlat)
             {
-                // 上/下边：竖着两行 —— 第一行工具、第二行底排按钮。
-                // 宽度取**两行里更宽的那行**：底排是固定几个按钮（不被裁的硬要求），
+                // 上/下边：竖着两行 —— 第一行工具、第二行底排按钮（一颗不剩就只剩第一行）。
+                // 宽度取**两行里更宽的那行**：底排是固定几颗（不被裁的硬要求），
                 // 工具行多到放不下时由 ToolsScroll 横向滚动兜底。
                 var toolsRow = count * 64 + (count - 1) * 8 + FlatRowPadDip;
-                var footerCount = FooterButtons().Length;
-                var footerRow = footerCount * FooterFlatButtonWidthDip
-                              + (footerCount - 1) * FooterFlatSpacingDip + FlatRowPadDip;
+                var footerRow = footerCount > 0
+                    ? footerCount * FooterFlatButtonWidthDip
+                      + (footerCount - 1) * FooterFlatSpacingDip + FlatRowPadDip
+                    : 0;
 
                 dipW = (int)Math.Min(Math.Max(Math.Max(PanelLengthFlatDip, toolsRow), footerRow), lim.W);
-                dipH = PanelThicknessFlatDip;
+                dipH = footerCount > 0 ? PanelThicknessFlatDip : PanelThicknessFlatBareDip;
             }
             else
             {
                 dipW = PanelThicknessDip;
-                // 底下那排按钮现在有**五个**（收起/常驻/位置复原/隐藏/打开应用），比原来多两格，高度基数 +94
-                dipH = (int)Math.Min(Math.Max(PanelLengthDip, 200 + 55 * count) + 94, lim.H);
+                // 底排最多五颗（收起/常驻/位置复原/隐藏/打开应用），增量按可见颗数摊（见 FooterDipFor）
+                dipH = (int)Math.Min(Math.Max(PanelLengthDip, 200 + 55 * count) + FooterDipFor(footerCount), lim.H);
             }
         }
         else
@@ -1615,11 +1876,14 @@ public sealed partial class ToolSidebarWindow : Window
         var work = DisplayArea.Primary.WorkArea;
         var workW = work.Width / scale - 32;          // 离屏幕两边留点空
         var workH = work.Height / scale - 32;
+        var footerCount = VisibleFooterCount();
 
         if (IsFlat)
-            return (Math.Min(workW, Math.Max(PanelLengthFlatDip, workW * 0.92)), PanelThicknessFlatDip);
+            return (Math.Min(workW, Math.Max(PanelLengthFlatDip, workW * 0.92)),
+                    footerCount > 0 ? PanelThicknessFlatDip : PanelThicknessFlatBareDip);
 
-        return (PanelThicknessDip, Math.Min(workH, Math.Max(PanelLengthDip + 94, workH * 0.85)));
+        return (PanelThicknessDip,
+                Math.Min(workH, Math.Max(PanelLengthDip + FooterDipFor(footerCount), workH * 0.85)));
     }
 
     /// <summary>工具区最多能占多高/多宽（面板高度 - 标题/分隔线/底排按钮）。</summary>
@@ -1640,7 +1904,9 @@ public sealed partial class ToolSidebarWindow : Window
             else
             {
                 var title = TitleRow.Visibility == Visibility.Visible ? 26 : 0;
-                var footer = 5 * 44 + 4 * 2;                             // 底排五个按钮 + 间距
+                // 底排：可见 n 颗 → n×44 + (n−1)×2；一颗都不显示时这段是 0（工具区能多吃掉这份高度）
+                var fn = VisibleFooterCount();
+                var footer = fn > 0 ? fn * 44 + (fn - 1) * 2 : 0;
                 var chrome = title + 7 + footer + 17 + 9;                // + 分隔线 + 面板 padding + 几个间距
                 ToolsScroll.MaxHeight = Math.Max(120, ExpandedLimits().H - chrome);
                 ToolsScroll.MaxWidth = double.PositiveInfinity;
@@ -1680,6 +1946,7 @@ public sealed partial class ToolSidebarWindow : Window
     private PointInt32 EdgePosition(int width, int height)
     {
         var work = DisplayArea.Primary.WorkArea;
+
         var edge = Edge;
         var flat = edge is "top" or "bottom";
 

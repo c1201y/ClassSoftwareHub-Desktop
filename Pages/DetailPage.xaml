@@ -118,7 +118,7 @@
                                                 <Button Tag="{x:Bind Hash}" Visibility="{x:Bind HashVisibility}"
                                                         Click="HashCheck_Click"
                                                         Padding="8,3" FontSize="11.5" Opacity="0.9"
-                                                        ToolTipService.ToolTip="到「编码 / 哈希工具」里核对这个校验值：选好下载的安装包就会自动比对">
+                                                        ToolTipService.ToolTip="在「编码 / 哈希工具」中核对该校验值：选择下载的安装包后自动比对">
                                                     <StackPanel Orientation="Horizontal" Spacing="5">
                                                         <FontIcon Glyph="&#xE73E;" FontSize="11" />
                                                         <TextBlock Text="校验" FontSize="11.5" />

@@ -23,13 +23,15 @@
 
             <TextBlock Text="内置工具" FontSize="30" FontWeight="Bold" />
 
-            <!-- 6 个工具：卡片 462 + 间距 16 = 478，960 里正好两列；单行卡片（图标 + 名称 + 箭头） -->
+            <!-- 6 个工具：卡片 462 + 间距 16 = 478，960 里正好两列。
+                 2026-09-29：加上一句话说明（ToolDef.Desc 一直有这个字段，之前没显示）——
+                 光看工具名猜不出点进去能干什么，用户得挨个试一遍。 -->
             <GridView x:Name="ToolGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
                       ItemClick="ToolGrid_ItemClick" Padding="0,2,0,0"
                       ItemContainerStyle="{StaticResource CshCardItemStyle}">
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="data:ToolDef">
-                        <Border Width="462" Height="64" CornerRadius="8" Padding="20,0" Margin="0,0,16,14"
+                        <Border Width="462" Height="88" CornerRadius="8" Padding="20,0" Margin="0,0,16,14"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
@@ -41,8 +43,13 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon Glyph="{x:Bind Glyph}" FontSize="20" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontSize="15" FontWeight="Bold"
-                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="Bold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Desc}" FontSize="12.5" Opacity="0.65"
+                                               TextWrapping="Wrap" MaxLines="2"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                                 <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="13" Opacity="0.5"
                                           VerticalAlignment="Center" />
                             </Grid>
@@ -70,16 +77,16 @@
                     <StackPanel Grid.Column="1" Spacing="3">
                         <TextBlock Text="常用工具窗口" FontSize="15" FontWeight="Bold" />
                         <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
-                                   Text="一个置顶小窗口，只放四个常用的：随机抽号、课堂计时、秒表计时、全屏时钟。不用打开主界面 —— 系统托盘里有它自己的图标，点一下就出来（窗口能拖，Esc 收起来）。屏幕边上还有一条更省事的「侧边栏」，全屏放 PPT 时也点得到。" />
+                                   Text="置顶小窗口，仅包含四项常用工具：随机抽号、课堂计时、秒表计时、全屏时钟。无需打开主界面：系统托盘提供独立图标，单击即可显示（窗口可拖动，按 Esc 收起）。屏幕边缘另提供「侧边栏」入口，全屏播放 PPT 时仍可单击。" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="侧边栏、窗口置顶这些开关在「设置 → 常用工具」里。" />
+                                   Text="侧边栏、窗口置顶等开关位于「设置 → 常用工具」中。" />
                     </StackPanel>
                     <Button Grid.Column="2" Content="打开窗口" Style="{StaticResource AccentButtonStyle}"
                             VerticalAlignment="Top" Click="OpenPalette_Click" />
 
                     <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="28">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="点关闭时收进托盘" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock Text="关闭时收进系统托盘" FontSize="13" VerticalAlignment="Center" />
                             <ToggleSwitch x:Name="TraySwitch" OnContent="开" OffContent="关" MinWidth="0"
                                           Toggled="TraySwitch_Toggled" />
                         </StackPanel>

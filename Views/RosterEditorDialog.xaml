@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="ClassSoftwareHub.Desktop.Views.RosterEditorDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="名单"
+    CloseButtonText="关闭"
+    DefaultButton="Close"
+    CornerRadius="8">
+
+    <!-- 2026-09-29（Nick 提："加一个 listview，方便预览哪些人，同时支持简单的修改"）。
+         做成弹窗而不是就地摆在抽号页里，是**实测**决定的：
+         本机窗口可用高度只有 617 DIP，抽号页内容行总共 ~300 —— 就地把 ListView 摆进去，
+         实测被压到 19px 高（等于看不见）。弹窗能给它 400+ 的高度，一屏核对十几个人，
+         而且不占主流程的地方。入口是参数行上一个写着「查看 / 编辑名单」的按钮，
+         跟「导入名单」并排，不藏。
+
+         ⚠️ 宽度靠覆盖主题资源 ContentDialogMaxWidth（ContentDialog 唯一的加宽办法，
+            直接设 MaxWidth 属性没用 —— 模板里走的是这个资源）。 -->
+    <ContentDialog.Resources>
+        <x:Double x:Key="ContentDialogMaxWidth">720</x:Double>
+    </ContentDialog.Resources>
+
+    <Grid RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 表头：人数 + 来源 + 导出 -->
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock x:Name="CountText" FontSize="13" FontWeight="Bold" Text="共 0 人" />
+                <TextBlock FontSize="11.5" Opacity="0.6" TextWrapping="Wrap"
+                           Text="名字直接改：单击即可编辑，按回车或点别处生效；右侧按键移除这一行；「添加姓名」在末尾加人。" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <!-- ⚠️ 2026-09-29 Nick 抓到：「只有删除没有增加，只删不增是吧？」
+                     原来这排只有两个「导出」—— 用户能把人删掉，却没有任何办法加回来，
+                     只能关掉弹窗去重新导入一份文件。加人这条路必须留在原地。
+                     用 Accent 样式：导出是"带走结果"、加人是"改内容"，后者才是这张表的主要动作。 -->
+                <Button x:Name="AddNameButton" Click="Add_Click"
+                        Style="{StaticResource AccentButtonStyle}"
+                        AutomationProperties.Name="添加一行姓名"
+                        ToolTipService.ToolTip="在名单末尾加一行，填好姓名后按回车即可">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE710;" FontSize="13" />
+                        <TextBlock Text="添加姓名" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="ExportExcelButton" Content="导出 Excel" Click="ExportExcel_Click"
+                        ToolTipService.ToolTip="另存为 .xlsx 表格（序号 + 姓名两列）" />
+                <Button x:Name="ExportTxtButton" Content="导出 txt" Click="ExportTxt_Click"
+                        ToolTipService.ToolTip="另存为 .txt 文本，一行一个名字" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 名单本体。⚠️ 高度写死 + 内部滚动：名单最多 2000 人，弹窗不能跟着长 -->
+        <ListView x:Name="RosterList" Grid.Row="1" Height="380" SelectionMode="None" Padding="0">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnSpacing="10" Padding="0,3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="34" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding NoText}" FontSize="12" Opacity="0.55"
+                                   VerticalAlignment="Center" />
+                        <!-- 名字那一格**就是输入框**（不是"先点编辑再变输入框"）—— 少一步、不用猜哪儿能点。
+                             ⚠️ AutomationProperties.Name 必须给：不然读屏软件在这一格上读不出任何东西
+                                （输入框的 Name 是"标签"、Text 才是"内容"）。 -->
+                        <TextBox Grid.Column="1" Text="{Binding Name}" FontSize="13" Padding="8,4"
+                                 VerticalAlignment="Center"
+                                 AutomationProperties.Name="{Binding RowLabel}"
+                                 LostFocus="Name_LostFocus" KeyDown="Name_KeyDown" />
+                        <Button Grid.Column="2" Click="Delete_Click" Padding="9,6"
+                                VerticalAlignment="Center" AutomationProperties.Name="{Binding DeleteLabel}"
+                                ToolTipService.ToolTip="从名单中移除这一行">
+                            <FontIcon Glyph="&#xE74D;" FontSize="13" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- 底部：空名单引导 + 说明
+             ⚠️「关闭」按钮由根节点上的 CloseButtonText 提供 —— 别以为它可有可无：
+                没有按钮的 ContentDialog 连"怎么退出去"都看不出来（Esc 也未必管用），
+                这一版实测就漏过一次，UIA 树里整个弹窗找不到任何退出入口。
+             编辑是"当场生效"的，所以**只有**关闭，没有确定 / 取消 —— 免得改了五十个名字点取消全丢。 -->
+        <StackPanel Grid.Row="2" Spacing="6">
+            <TextBlock x:Name="EmptyHint" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                       Visibility="Collapsed"
+                       Text="名单是空的。可以单击上方「添加姓名」逐个输入，也可以关闭本窗口后单击「导入名单」选择 Excel（.xlsx）或 txt / csv 文件；不清楚该怎么做，可先单击「示例名单」看一份现成的。" />
+            <TextBlock x:Name="ToastText" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</ContentDialog>

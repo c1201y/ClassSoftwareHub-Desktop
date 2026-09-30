@@ -107,6 +107,11 @@ public sealed partial class MainWindow : Window
         if (_firstActivated) return;
         _firstActivated = true;
         Activated -= OnFirstActivated;
+
+        // 窗口真正显示之后再兜一次圆角：框架在首帧还会碰一次标题栏，
+        // 早于显示设的值有可能被它按回去（图标那边也踩过同样的重置，见上面的 Activated 补刀）。
+        ApplyWindowRounding();
+
         if (_startPalette)
         {
             // --palette：主窗口不露脸，托盘 + 工具浮窗直接摆出来
@@ -159,7 +164,7 @@ public sealed partial class MainWindow : Window
     /// <summary>主窗口没露脸时，用系统通知提醒"有新版本"（点通知 = 打开主界面并重新走一次检查）。</summary>
     private void NotifyUpdateAvailable(Services.Updating.UpdateRelease release)
     {
-        ShowBalloon($"发现新版本 {release.Tag}", "当前不是最新版，点这里看看要不要更新。",
+        ShowBalloon($"发现新版本 {release.Tag}", "当前版本不是最新版，单击查看更新详情。",
             () => { ShowFromTray(); _ = CheckUpdateManualAsync(); });
     }
 
@@ -176,7 +181,7 @@ public sealed partial class MainWindow : Window
         }
         else if (task.State == DownloadState.Failed)
         {
-            ShowBalloon("下载失败", $"{task.Title} 没能下载完：{task.Error}",
+            ShowBalloon("下载失败", $"{task.Title} 下载未完成：{task.Error}",
                 () => { ShowFromTray(); Shell.NavigateTo("downloads"); });
         }
     }
@@ -378,6 +383,7 @@ public sealed partial class MainWindow : Window
             if (_exitRequested || !_settings.Current.CloseToTray || _tray?.IsReady != true) return;
             args.Cancel = true;
             HideToTray();
+            ShowTrayHideHintOnce();
         };
         _appWindow.Changed += (_, args) =>
         {
@@ -385,6 +391,7 @@ public sealed partial class MainWindow : Window
             {
                 SendCaptionInsets();
                 RequestTitlebarRegions();
+                ApplyWindowRounding();   // 最大化 / 还原 → 圆角跟着切换（最大化必须直角）
             }
         };
     }
@@ -412,6 +419,29 @@ public sealed partial class MainWindow : Window
         }
 
         UpdateCaptionButtonColors();
+        ApplyWindowRounding();   // ⚠️ 必须在 ExtendsContentIntoTitleBar 之后 —— 那一步会把圆角偏好按回 Default(直角)
+    }
+
+    /// <summary>
+    /// 主窗口四角圆角（Win 11 原生观感）。
+    ///
+    /// 为什么得手动兜：WinUI 3 的 <see cref="ConfigureTitleBar"/> 一旦伸进标题栏，
+    /// 窗口圆角偏好就留在 Default —— 实测在这台 Win 11 上就是**直角**，和系统别处的窗口并排看很出戏。
+    /// 显式写 ROUND 即可复原（见 WindowChrome.SetRounded 的实测记录）。
+    ///
+    /// ⚠️ 最大化时反而要写 DONOTROUND：贴边的窗口不该削角，万一某个版本认了 ROUND，
+    ///    屏幕四角就会露出底下的桌面 —— 全屏时钟当初踩的就是这个坑（见 ClockFullscreenWindow）。
+    /// </summary>
+    private void ApplyWindowRounding()
+    {
+        if (_appWindow is null) return;
+        try
+        {
+            var maximized = _appWindow.Presenter is OverlappedPresenter p
+                            && p.State == OverlappedPresenterState.Maximized;
+            WindowChrome.SetRounded(WindowNative.GetWindowHandle(this), !maximized);
+        }
+        catch { }
     }
 
     private void UpdateCaptionButtonColors()
@@ -897,7 +927,7 @@ public sealed partial class MainWindow : Window
         ErrorPanel.Visibility = Visibility.Collapsed;
         LoadingPanel.Visibility = Visibility.Visible;
         LoadingRing.IsActive = true;
-        LoadingText.Text = "正在加载…";
+        LoadingText.Text = "正在加载";
         try
         {
             Web.CoreWebView2.Navigate(url);
@@ -966,7 +996,7 @@ public sealed partial class MainWindow : Window
 
     private static string DescribeWebError(CoreWebView2WebErrorStatus status) => status switch
     {
-        CoreWebView2WebErrorStatus.HostNameNotResolved => "无法解析域名（可能是断网或 DNS 问题）",
+        CoreWebView2WebErrorStatus.HostNameNotResolved => "无法解析域名（可能为网络断开或 DNS 问题）",
         CoreWebView2WebErrorStatus.ServerUnreachable => "无法连接到服务器",
         CoreWebView2WebErrorStatus.Timeout => "连接超时",
         CoreWebView2WebErrorStatus.ConnectionAborted => "连接被中断",
@@ -1224,6 +1254,25 @@ public sealed partial class MainWindow : Window
         Services.MemoryTrimmer.TrimLater(1200);
     }
 
+    /// <summary>
+    /// 第一次「点 × 收进托盘」时提示一次（只提示一次，之后不再打扰）。
+    ///
+    /// 用户反馈（2026-09-30）：关掉窗口后以为程序退了，去点桌面图标毫无反应，
+    /// 托盘图标又不一定在看得见的地方 —— 只能去任务管理器。这条提示把"程序还在后台"
+    /// 与"两条回来的路"一次讲清，点气泡本身也直接叫回窗口。
+    /// </summary>
+    private void ShowTrayHideHintOnce()
+    {
+        if (_settings.Current.TrayHideHintShown) return;
+
+        _settings.Current.TrayHideHintShown = true;
+        try { _settings.Save(); } catch { }
+
+        ShowBalloon("程序仍在后台运行",
+            "点「×」是把窗口收进托盘，程序并没有退出。点托盘图标或桌面图标都可以重新打开主界面。",
+            () => ShowFromTray());
+    }
+
     /// <summary>从托盘把主窗口叫回来。</summary>
     public void ShowFromTray()
     {
@@ -1295,9 +1344,9 @@ public sealed partial class MainWindow : Window
             var dialog = new ContentDialog
             {
                 XamlRoot = root,
-                Title = "已经是最新版本",
+                Title = "当前已是最新版本",
                 Content = $"当前：dv{ShellConfig.ShellVersion}\n通道：{Services.Updating.UpdateChannels.ToDisplay(channel)}",
-                CloseButtonText = "好",
+                CloseButtonText = "确定",
             };
             await dialog.ShowAsync();
         }
@@ -1501,7 +1550,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             WebSheetRing.IsActive = false;
-            WebSheetTitle.Text = "网页打不开：" + ex.Message;
+            WebSheetTitle.Text = "网页无法打开：" + ex.Message;
         }
     }
 
@@ -1603,10 +1652,10 @@ public sealed partial class MainWindow : Window
         }
 
         var bar = new ProgressBar { Minimum = 0, Maximum = 100, IsIndeterminate = true };
-        var status = new TextBlock { Text = "正在连接…", FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
+        var status = new TextBlock { Text = "正在连接", FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
         var hint = new TextBlock
         {
-            Text = $"保存到：{DownloadService.DefaultDir}\n急着用别的就先点「看看别的」，下载会转到后台继续。",
+            Text = $"保存到：{DownloadService.DefaultDir}\n单击「后台继续」后，下载任务转入后台运行。",
             FontSize = 11.5,
             Opacity = 0.6,
             TextWrapping = TextWrapping.Wrap,
@@ -1621,7 +1670,7 @@ public sealed partial class MainWindow : Window
             XamlRoot = root,
             Title = "下载 " + task.Title,
             Content = panel,
-            PrimaryButtonText = "看看别的",     // 只是把弹窗收掉，下载继续
+            PrimaryButtonText = "后台继续",     // 只是把弹窗收掉，下载继续
             CloseButtonText = "取消下载",
             DefaultButton = ContentDialogButton.Primary,
         };
@@ -1679,10 +1728,10 @@ public sealed partial class MainWindow : Window
                 Title = "下载失败",
                 Content = new TextBlock
                 {
-                    Text = $"{task.Title}\n\n{task.Error}\n\n可以在左侧「任务进行」里点「重试」。",
+                    Text = $"{task.Title}\n\n{task.Error}\n\n可在左侧「任务进行」页单击「重试」。",
                     TextWrapping = TextWrapping.Wrap,
                 },
-                CloseButtonText = "知道了",
+                CloseButtonText = "确定",
             }.ShowAsync();
             return;
         }
@@ -1731,12 +1780,12 @@ public sealed partial class MainWindow : Window
             Title = "缺少 WebView2 运行时",
             Content = new TextBlock
             {
-                Text = "这个页面需要系统里的 WebView2 运行时（微软 Edge 内核组件，免费）。\n\n" +
-                       "可以现在去装；也可以直接用浏览器打开——内容是一样的。",
+                Text = "本页面需要系统安装 WebView2 运行时（Microsoft Edge 内核组件，免费）。\n\n" +
+                       "可立即安装，也可使用浏览器打开，内容一致。",
                 TextWrapping = TextWrapping.Wrap,
             },
-            PrimaryButtonText = "去安装 WebView2",
-            SecondaryButtonText = "用浏览器打开",
+            PrimaryButtonText = "安装 WebView2",
+            SecondaryButtonText = "浏览器打开",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary,
         };

@@ -19,10 +19,10 @@ public sealed class CheckRow
         Title = item.App.Name;
         StatusText = item.Status switch
         {
-            CheckStatus.Installed => "已装",
-            CheckStatus.Newer => "已装（更新）",
+            CheckStatus.Installed => "已安装",
+            CheckStatus.Newer => "已安装（更新）",
             CheckStatus.Outdated => "建议升级",
-            CheckStatus.Unknown => "已装（版本未知）",
+            CheckStatus.Unknown => "已安装（版本未知）",
             _ => "未安装",
         };
         StatusBrush = BrushFor(item.Status);
@@ -92,8 +92,8 @@ public sealed partial class MachineCheckPage : Page
 {
     private const string All = "全部";
     private const string Outdated = "建议升级";
-    private const string InstalledOnly = "已装的";
-    private const string MissingOnly = "未安装的";
+    private const string InstalledOnly = "已安装";
+    private const string MissingOnly = "未安装";
 
     private List<CheckRow> _all = new();
     private bool _ready;
@@ -163,8 +163,8 @@ public sealed partial class MachineCheckPage : Page
 
         FootNote.Text =
             "检测口径：读取 Windows「程序和功能」的安装记录（64 位、32 位、当前用户三处），以及本账户注册的 Microsoft Store 应用，" +
-            "按软件名称与清单匹配。免安装版、改过名的软件、以及其他账户下安装的商店应用不在上述两处记录中，" +
-            "可能被判定为「未安装」；版本差异仅在本机记录包含有效版本号时给出。点击卡片可查看软件详情。";
+            "按软件名称与清单匹配。免安装版、已更名的软件，以及其他账户下安装的商店应用不在上述两处记录中，" +
+            "可能被判定为「未安装」；版本差异仅在本机记录包含有效版本号时给出。单击卡片可查看软件详情。";
 
         LoadingPanel.Visibility = Visibility.Collapsed;
         RescanButton.IsEnabled = true;

@@ -1,0 +1,73 @@
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.VirtualKeyboardWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="mc">
+
+    <!--
+        ⚠️ 窗口外壳：无边框 + 置顶 + 不进 Alt+Tab，走 Core.WindowChrome.RemoveBorder（项目统一那一套）。
+        ⛔ 这里**不写 Window.Resources** —— WinUI 3 的 Window 不是 FrameworkElement，
+           写上去编译报 WMC0011。样式挂在下面 Root 的 Grid.Resources 里。
+
+        ⛔ 键帽**不在 XAML 里**，是按 Data/VirtualKeyboard/KeyboardLayouts.cs 的表在代码里生成的 ——
+           它们全是**真正的系统 Button / ToggleButton**，不设 Style、不设颜色，
+           模板 / 圆角 / 悬停 / 按下 / 焦点全交给系统。（自己叠 Border + 写死 RGB 就是
+           Nick 说的"劣质网页感 / 分层乱七八糟"的字面来源。）
+    -->
+
+    <Grid x:Name="Root" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+
+        <Grid.Resources>
+            <!-- 顶栏图标按钮：透明底 + 系统前景色，跟项目里其它浮窗一个手感 -->
+            <Style x:Key="KbdIconButton" TargetType="Button">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="26" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+        </Grid.Resources>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 顶栏：握把 + 层名 + 两颗图标按钮。整条都是拖动区。 -->
+        <Grid x:Name="Toolbar" Grid.Row="0" Height="34" Background="Transparent"
+              PointerPressed="Toolbar_PointerPressed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <FontIcon Grid.Column="0" Glyph="&#xE700;" FontSize="11" Margin="12,0,0,0"
+                      Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
+            <TextBlock x:Name="LayerHint" Grid.Column="1" VerticalAlignment="Center"
+                       Margin="8,0,0,0" FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="0,0,6,0">
+                <Button x:Name="FloatButton" Style="{StaticResource KbdIconButton}"
+                        Click="Float_Click"
+                        ToolTipService.ToolTip="贴靠屏幕底边 / 自由悬浮">
+                    <FontIcon x:Name="FloatIcon" Glyph="&#xE8A7;" FontSize="12" />
+                </Button>
+                <Button Style="{StaticResource KbdIconButton}"
+                        Click="Hide_Click"
+                        ToolTipService.ToolTip="收起键盘">
+                    <FontIcon Glyph="&#xE70D;" FontSize="12" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- 键区：行列都在代码里按布局表建 -->
+        <Grid x:Name="KeyArea" Grid.Row="1" Margin="6,0,6,8" RowSpacing="4" ColumnSpacing="4" />
+    </Grid>
+</Window>

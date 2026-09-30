@@ -613,6 +613,53 @@ public static class SystemInfo
 
     // ══════════════════════════ 系统信息 ══════════════════════════
 
+    // ── 反馈中心「本机信息」要的三样（2026-09-30 Nick 指定）：型号 / 版本名 / 具体内部版本号 ──
+
+    /// <summary>
+    /// 处理器**型号**：只要型号串，不带核数、不带频率（如「13th Gen Intel(R) Core(TM) i7-13700H」）。
+    /// 与首页那张「处理器」行刻意不同 —— 反馈正文里维护者要看的是"什么型号"，不是"几核几线程"。
+    /// </summary>
+    public static string CpuModel()
+    {
+        try
+        {
+            using var k = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+            var name = (k?.GetValue("ProcessorNameString") as string)?.Trim() ?? "";
+            // 型号串常自带 "@ 2.60GHz"，删掉 —— 那是当前频率，跟型号无关
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\s*@\s*[\d.]+\s*GHz", "").Trim();
+            // Intel 的串尾巴上多半还挂一个 " CPU"（"…i7-9750H CPU"）—— 反馈正文里是噪声，去掉。
+            // ⚠️ 只删**结尾**那个，别全局替换：Xeon 的正式型号是 "Xeon(R) CPU E5-2670 v2"，
+            //    全局替换会把型号本身改掉。
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+CPU$", "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            return name;
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>操作系统的完整显示名（如「Windows 11 专业版 25H2」）—— 反馈正文里用。</summary>
+    public static string OsDisplay() => OsNameText();
+
+    /// <summary>
+    /// **具体**的内部版本号：<c>CurrentBuildNumber</c> + <c>UBR</c>（如 <c>26220.1234</c>）。
+    /// ⚠️ 只给 <c>CurrentBuildNumber</c>（26220）是不够的 —— 同一个 build 上装没装某个累积更新
+    ///    就靠 UBR 区分，排查"打了某补丁之后才出问题"时缺了它根本对不上。
+    /// </summary>
+    public static string OsBuildEx()
+    {
+        try
+        {
+            using var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            var build = (k?.GetValue("CurrentBuildNumber") as string)?.Trim() ?? "";
+            if (build.Length == 0) return "";
+
+            // UBR 是 REG_DWORD；个别阉割系统上可能读不到，那就只给 build
+            var ubr = (k?.GetValue("UBR"))?.ToString()?.Trim() ?? "";
+            return ubr.Length > 0 ? $"{build}.{ubr}" : build;
+        }
+        catch { return ""; }
+    }
+
     // ── 操作系统：名称 + 大版本号（如 Windows 11 专业版 24H2） ──
     private static string OsNameText()
     {

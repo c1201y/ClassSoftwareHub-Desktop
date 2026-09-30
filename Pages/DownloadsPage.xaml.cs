@@ -49,10 +49,10 @@ public sealed partial class DownloadsPage : Page
         var finished = all.Count - active;
 
         SummaryText.Text = all.Count == 0
-            ? "下载任务不会占用界面，可随时切换到其他页面；下载完成后会弹出系统通知。"
+            ? "下载任务不占用界面，可随时切换至其他页面；下载完成后显示系统通知。"
             : active > 0
                 ? $"正在下载 {active} 个" + (finished > 0 ? $"　·　已完成 {finished} 个" : "")
-                : $"没有正在下载的任务　·　已完成 {finished} 个";
+                : $"当前无进行中的下载任务　·　已完成 {finished} 个";
 
         EmptyPanel.Visibility = all.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ClearButton.IsEnabled = finished > 0;

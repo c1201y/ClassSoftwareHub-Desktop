@@ -26,7 +26,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="提交软件" FontSize="30" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                           Text="提交先作为草稿进仓库（submissions/），审核通过后才会上架。带 * 的是必填项。" />
+                           Text="提交内容先以草稿形式存入仓库（submissions/），审核通过后上架。带 * 的为必填项。" />
             </StackPanel>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -37,7 +37,7 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="从 GitHub 一键读取" FontSize="18" FontWeight="Bold" />
+                            <TextBlock Text="从 GitHub 读取" FontSize="18" FontWeight="Bold" />
                             <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
                                        Text="填写 GitHub 仓库地址，自动读取简介、版本号与各安装包的直链，无需手动抄录。读取使用公开接口，不会改动任何内容。" />
 
@@ -52,7 +52,7 @@
                                         Click="Import_Click" />
                             </Grid>
 
-                            <CheckBox x:Name="OverwriteBox" Content="覆盖我手写的内容" />
+                            <CheckBox x:Name="OverwriteBox" Content="覆盖已填写的内容" />
                             <TextBlock FontSize="12" Opacity="0.6" Margin="28,0,0,0" TextWrapping="Wrap"
                                        Text="默认仅填写空白字段；勾选后已填写的内容也会被覆盖。" />
                             <CheckBox x:Name="PrereleaseBox" Content="优先取最新预发布版（Beta / Alpha）" />
@@ -78,7 +78,7 @@
                             <TextBlock Text="基本信息" FontSize="18" FontWeight="Bold" />
 
                             <TextBox x:Name="IdBox" PlaceholderText="小写字母 / 数字 / 短横线，如 7-zip"
-                                     Description="详情页网址就是 #/download/&lt;id&gt;，不能带 ? &amp; = 等符号">
+                                     Description="详情页网址为 #/download/&lt;id&gt;，不可包含 ? &amp; = 等符号">
                                 <TextBox.Header>
                                     <TextBlock><Run Text="软件 ID" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
@@ -98,7 +98,7 @@
                                 <TextBox x:Name="IconBox" Header="图标链接（选填，256×256 方图最佳）"
                                          PlaceholderText="https://…/icon.png" />
                                 <ComboBox x:Name="CategoryCombo" Grid.Column="1" Header="分类 *"
-                                          HorizontalAlignment="Stretch" PlaceholderText="选一个分类" />
+                                          HorizontalAlignment="Stretch" PlaceholderText="选择分类" />
                             </Grid>
 
                             <TextBox x:Name="TaglineBox" PlaceholderText="一句话简介，显示在首页卡片上">
@@ -108,7 +108,7 @@
                             </TextBox>
 
                             <TextBox x:Name="DescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="120"
-                                     PlaceholderText="详细介绍：这款软件的用途与使用注意事项（可换行）">
+                                     PlaceholderText="详细介绍：软件的用途与使用注意事项（可换行）">
                                 <TextBox.Header>
                                     <TextBlock><Run Text="详细介绍" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
@@ -159,7 +159,7 @@
                     <!-- ═══ 下载项 ═══ -->
                     <TextBlock Text="下载项" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="直链需填写文件本身（.exe / .zip / .msi…），点击后直接开始下载；请勿填写官网下载页。" />
+                               Text="直链需填写文件本身（.exe / .zip / .msi 等），单击后直接开始下载；请勿填写官网下载页。" />
                     <StackPanel x:Name="DownloadsHost" Spacing="12" />
                     <Button Content="+ 添加下载项" Click="AddDownload_Click" HorizontalAlignment="Left" />
 
@@ -176,17 +176,17 @@
                     <!-- 连不上提交服务时的兜底 -->
                     <StackPanel x:Name="FallbackPanel" Spacing="10" Visibility="Collapsed">
                         <InfoBar x:Name="FallbackBar" IsOpen="True" IsClosable="False" Severity="Warning"
-                                 Title="提交服务连不上"
-                                 Message="内容已经存在本机，不会丢。可以稍后重试、把提交文件下载下来手动放进仓库，或直接去 GitHub 提一个 Pull Request。" />
+                                 Title="无法连接提交服务"
+                                 Message="内容已保存于本机，不会丢失。可稍后重试，或将提交文件下载后手动放入仓库，亦可直接前往 GitHub 提交 Pull Request。" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="FallbackRetryButton" Content="重试" Click="Submit_Click"
                                     Style="{StaticResource AccentButtonStyle}" />
                             <Button Content="下载提交文件" Click="DownloadSubmission_Click" />
                             <Button Content="复制 JSON" Click="CopySubmission_Click" />
-                            <Button Content="去 GitHub 提交" Click="OpenGithubSubmit_Click" />
+                            <Button Content="在 GitHub 提交" Click="OpenGithubSubmit_Click" />
                         </StackPanel>
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="去 GitHub 提交：会打开「新建文件」页面并带上文件名，把内容粘进去保存即可（没有写权限时 GitHub 会引导你 fork + 提 PR），合并后同样会生成审核工单。" />
+                                   Text="在 GitHub 提交：打开「新建文件」页面并携带文件名，粘贴内容后保存即可（无写权限时，GitHub 会引导 fork 并提交 PR），合并后同样生成审核工单。" />
                     </StackPanel>
 
                     <TextBlock x:Name="Toast" FontSize="12" Opacity="0.75" Margin="0,4,0,10" />

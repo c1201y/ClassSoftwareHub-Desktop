@@ -38,7 +38,7 @@
                 </ScrollViewer>
 
                 <TextBlock x:Name="SessionEmptyText" Grid.Row="1" Visibility="Collapsed"
-                           Text="当前没有正在发声的应用。" FontSize="12" Opacity="0.6"
+                           Text="当前无正在发声的应用。" FontSize="12" Opacity="0.6"
                            TextWrapping="Wrap" VerticalAlignment="Top" />
             </Grid>
         </Border>

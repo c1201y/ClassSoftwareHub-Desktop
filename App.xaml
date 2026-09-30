@@ -29,6 +29,179 @@
                 <Setter Property="BorderThickness" Value="0" />
             </Style>
 
+            <!--
+              ═══════════════════════════════════════════════════════════════════════════════
+              CshModeCardStyle —— 把「模式选择」做成一张看得见、点得懂的卡片。
+
+              用途：页面里有「两种以上玩法」需要用户先选一个的场合（抽号 / 分组、号码 / 名单、
+              文件校验 / 文本编解码、倒计时 / 秒表…）。原来这些都用小号 RadioButton 或一列
+              平铺按钮，未选中的那一边几乎等于不存在，用户根本不知道这个页面还有另一种用法。
+
+              为什么用 RadioButton 而不是自己写 Button：
+                · GroupName 自带互斥，不用手写"选中状态"逻辑；
+                · 方向键切换、屏幕阅读器朗读（RadioButton 语义）都是白送的；
+                · ⚠️ 但 RadioButton 的 IsChecked **不能在 XAML 里写 True**（会运行时报
+                  「Failed to assign to property」，整页加载失败）—— 一律在代码里赋初值。
+
+              卡片长什么样：整块可点，内容自定（通常是「图标 + 标题 + 一句话说明」）。
+                · 未选中：普通卡片底 + 普通描边；
+                · 选中：强调色描边 2px + 强调色淡底 + 右侧一个对勾 —— 三处同时变，绝不靠颜色一项。
+              ═══════════════════════════════════════════════════════════════════════════════
+            -->
+            <Style x:Key="CshModeCardStyle" TargetType="RadioButton">
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Margin" Value="0" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="VerticalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Border x:Name="Card" CornerRadius="10" BorderThickness="1.5" Padding="0"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                <Grid>
+                                    <!-- 选中时的强调色淡底：作为最底下的一层铺满整卡（内容区自带 16,13 内边距，
+                                         所以这里不需要负边距）。上面再压内容，文字永远清晰。 -->
+                                    <Border x:Name="Tint" CornerRadius="9" Opacity="0"
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    <!-- 悬停 / 按下时的浅灰底（未选中才有感，选中时被 Tint 盖住也不难看） -->
+                                    <Border x:Name="Hover" CornerRadius="9" Opacity="0"
+                                            Background="{ThemeResource ControlFillColorSecondaryBrush}" />
+
+                                    <Grid x:Name="Body" Padding="15,11" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ContentPresenter Content="{TemplateBinding Content}"
+                                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                          HorizontalAlignment="Stretch"
+                                                          VerticalAlignment="Center" />
+                                        <FontIcon x:Name="CheckGlyph" Grid.Column="1" Glyph="&#xE73E;"
+                                                  FontSize="15" FontWeight="SemiBold" Visibility="Collapsed"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.7" Duration="0" />
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0" />
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Card"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.4" Duration="0" />
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+
+                                <VisualStateGroup x:Name="CheckedStates">
+                                    <VisualState x:Name="Unchecked" />
+                                    <VisualState x:Name="Checked">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Card"
+                                                                           Storyboard.TargetProperty="BorderBrush">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                    Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <DoubleAnimation Storyboard.TargetName="Card"
+                                                             Storyboard.TargetProperty="BorderThickness"
+                                                             To="2" Duration="0" />
+                                            <DoubleAnimation Storyboard.TargetName="Tint"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.13" Duration="0" />
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="CheckGlyph"
+                                                                           Storyboard.TargetProperty="Visibility">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Hover"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0" />
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!--
+              ═══════════════════════════════════════════════════════════════════════════════
+              ⚠️⚠️ 弹窗圆角。2026-09-29 Nick 抓到的 bug：「名单」「示例名单」两个弹窗四角是**直角**，
+              在 Win 11 上看着像 Win 10。
+
+              弹窗是进程内的浮层（不是独立窗口），DWM 的圆角管不到它 —— 圆角只能来自 XAML 模板。
+
+              ⛔ 为什么覆盖主题资源 `OverlayCornerRadius` 没用（试过，无效）：
+                 这个版本里 ContentDialog 模板画底色那个 Border 的圆角绑的是
+                 `{TemplateBinding CornerRadius}`，也就是 **ContentDialog.CornerRadius** ——
+                 实测 dump 模板树，覆盖 OverlayCornerRadius 后它仍然是 0。
+                 而 ContentDialog.CornerRadius 的默认值就是 0（不像 WinUI 2 里默认 8），
+                 所以四角开箱即直角，且不报任何错。
+
+              → 修法：给所有 ContentDialog 设上 CornerRadius，隐式 Style 让全站一次生效。
+                ⛔ BasedOn 不能省 —— 不写就等于把默认样式整个换掉，弹窗的模板会直接消失。
+              ═══════════════════════════════════════════════════════════════════════════════
+            -->
+            <Style TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
+                <Setter Property="CornerRadius" Value="8" />
+            </Style>
+
+            <!--
+              ═══════════════════════════════════════════════════════════════════════════════
+              ⚠️⚠️ 滚动区"死区"。2026-09-29 Nick 抓到的 bug：「设置页每个标题上面那一块区域，
+              鼠标放上去滚轮就不动了」。
+
+              ⛔ 真因不是哪个控件吞了滚轮 —— 实测（进程内 AddHandler 打事件 + 逐点扫描）：
+                 卡住的位置，滚轮事件**根本没有到达 ScrollViewer**（应用内一条日志都没有）。
+                 原因：ScrollViewer 默认 `Background` 是 null，它内层的 Grid / StackPanel 也没有背景
+                 → 这些元素**不参与命中测试**。于是落到"没有任何控件"的缝隙上时，命中测试直接穿过去，
+                 事件从 ScrollViewer 外面的元素开始冒泡，ScrollViewer 自己永远收不到。
+
+                 缝隙长什么样：分区标题上方的 `Margin="0,24,0,8"`、卡片之间的 StackPanel 间距、
+                 ScrollViewer 自己的 Padding —— 全是"看着有地方、其实没有东西"的区域。
+
+              → 修法：全站 ScrollViewer 统一给一个 Transparent 底。
+                `Transparent` 不画任何像素（外观与 null 完全一致），但会让整块矩形参与命中测试，
+                事件因此能正常冒泡到 ScrollViewer。
+                ⛔ 别改成 `{x:Null}`（等于没设）；页面里若显式写了 Background，会盖住这条样式，也要一并去掉。
+              ═══════════════════════════════════════════════════════════════════════════════
+            -->
+            <Style TargetType="ScrollViewer">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
             <SolidColorBrush x:Key="GridViewItemBackground" Color="Transparent" />
             <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="Transparent" />
             <SolidColorBrush x:Key="GridViewItemBackgroundPressed" Color="Transparent" />

@@ -6,12 +6,17 @@
     xmlns:palette="using:ClassSoftwareHub.Desktop.Views.Palette">
 
     <!--
-      浮窗版随机抽号：范围 + 个数 + 是否重复 + 大号结果 + 抽号/重置。
-      数据和「内置工具 → 随机抽号」共用同一个存档（%LOCALAPPDATA%\ClassSoftwareHub\pick-number.json）。
+      浮窗版随机抽号：抽什么（号码 / 名单）+ 个数 + 是否重复 + 大号结果 + 抽号/重置。
+      数据和「内置工具 → 随机抽号」共用同一个存档（%LOCALAPPDATA%\ClassSoftwareHub\pick-number.json），
+      名单也是同一份 —— 在工具页导入，浮窗这边直接抽。
       数字输入用的是自己写的 NumberStepper（大按钮、可长按连发、触屏不会弹复制粘贴）。
+
+      ⚠️ RadioButton 的 IsChecked / 事件一律放 code-behind：XAML 里写 IsChecked="True"
+      会在运行时抛 Failed to assign to property（见 MEMORY §8 的 CheckBox 坑）。
     -->
     <Grid RowSpacing="8">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -19,15 +24,31 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 范围 -->
-        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+        <!-- 抽什么：号码 / 名单（2026-09-27 Nick 提：浮窗里也能按名单抽） -->
+        <StackPanel Orientation="Horizontal" Spacing="14" HorizontalAlignment="Center">
+            <RadioButton x:Name="ModeRangeRadio" Content="按号码" GroupName="MiniPoolMode"
+                         MinWidth="0" Padding="6,0,0,0" />
+            <RadioButton x:Name="ModeRosterRadio" Content="按名单" GroupName="MiniPoolMode"
+                         MinWidth="0" Padding="6,0,0,0" />
+        </StackPanel>
+
+        <!-- 号码范围 -->
+        <StackPanel x:Name="RangeRow" Grid.Row="1" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
             <palette:NumberStepper x:Name="FromStepper" Label="范围" Minimum="0" Maximum="9999" Step="1" />
             <TextBlock Text="~" FontSize="12.5" Opacity="0.7" VerticalAlignment="Center" />
             <palette:NumberStepper x:Name="ToStepper" Minimum="0" Maximum="9999" Step="1" />
         </StackPanel>
 
+        <!-- 名单（名单模式的显示；导入在工具页做，这边只读同一份存档） -->
+        <StackPanel x:Name="RosterRow" Grid.Row="1" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Center" Visibility="Collapsed">
+            <TextBlock x:Name="RosterInfoText" FontSize="12" Opacity="0.7" VerticalAlignment="Center"
+                       Text="名单：—" TextWrapping="Wrap" />
+            <Button Content="导入名单" Click="OpenRosterTool_Click" Padding="8,3" FontSize="12" />
+        </StackPanel>
+
         <!-- 抽几个 + 能不能重复（跟完整版页面对应，写回同一个存档） -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
             <palette:NumberStepper x:Name="CountStepper" Label="个数" Minimum="1" Maximum="50" Step="1" />
             <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0" Padding="6,0,0,0"
                       VerticalAlignment="Center" />
@@ -35,22 +56,22 @@
         </StackPanel>
 
         <!-- 大号结果（抽多个时自动缩小字号、换行） -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <TextBlock x:Name="ResultText" Text="—" FontSize="64" FontWeight="SemiBold"
                        FontFamily="Bahnschrift" HorizontalAlignment="Center" VerticalAlignment="Center"
                        TextAlignment="Center" TextWrapping="Wrap" />
         </Grid>
 
-        <TextBlock x:Name="HintText" Grid.Row="3" FontSize="12" Opacity="0.6"
+        <TextBlock x:Name="HintText" Grid.Row="4" FontSize="12" Opacity="0.6"
                    TextAlignment="Center" TextWrapping="Wrap" />
 
         <!-- 按钮 -->
-        <Grid Grid.Row="4" ColumnSpacing="8">
+        <Grid Grid.Row="5" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="DrawButton" Content="抽一个" Style="{StaticResource AccentButtonStyle}"
+            <Button x:Name="DrawButton" Content="抽取" Style="{StaticResource AccentButtonStyle}"
                     HorizontalAlignment="Stretch" Click="Draw_Click" />
             <Button Grid.Row="0" Grid.Column="1" Content="重置" Click="Reset_Click" />
         </Grid>

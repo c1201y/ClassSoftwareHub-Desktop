@@ -56,10 +56,10 @@ public sealed class SidebarModule
     /// <summary>给用户看的一句话说明。</summary>
     public string Hint => Note ?? Kind switch
     {
-        SidebarModuleKinds.Page => "打开主窗口里的这一页",
-        SidebarModuleKinds.Action => "按一下就干活，不跳窗口、不抢焦点",
-        SidebarModuleKinds.Panel => "挨着边条弹一栏浮窗，不跳窗口、不占主界面",
-        _ => "弹一个小浮窗，不占主界面"
+        SidebarModuleKinds.Page => "打开主窗口中的该页面",
+        SidebarModuleKinds.Action => "单击即执行，不切换窗口、不抢占焦点",
+        SidebarModuleKinds.Panel => "在侧边栏旁显示面板，不切换窗口、不占用主界面",
+        _ => "显示浮窗，不占用主界面"
     };
 }
 
@@ -79,18 +79,19 @@ public static class SidebarModules
         // ── 挨着边条弹浮窗的单滑块面板 ──
         // 音量：点一下在边条内侧弹一栏（边条不收起）—— 竖向排「数值 + 垂直滑块 + 静音 + 展开」，
         // 「展开」再弹一个横向的音量合成器浮窗，可以给每个正在发声的应用单独调音量。
-        new() { Id = "volume", Name = "音量调节", ShortName = "音量", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "点一下在侧边栏旁边弹一栏：调系统主音量（带刻度的垂直滑块），点下面的「展开」再弹出音量合成器，可以给每个正在发声的应用单独调音量" },
+        new() { Id = "volume", Name = "音量调节", ShortName = "音量", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节系统主音量（带刻度的垂直滑块）。面板中的「展开」可显示音量合成器，为各发声应用单独调节音量" },
         // 屏幕亮度：跟音量同一套（同一个浮窗控件，点哪个就换成哪一栏）。下面那颗键是「自动亮度」，
         // **没有二级浮窗**；机器没有环境光传感器时那颗键是灰的（系统自带的自动亮度同样用不了）。
-        new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "点一下在侧边栏旁边弹一栏调屏幕亮度（笔记本内屏可以，外接显示器一般不行）；下面那颗键是「自动亮度」，机器有环境光传感器才点得动" },
+        new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节屏幕亮度（笔记本内屏可用，外接显示器通常不可用）。面板中的「自动亮度」按钮需设备具备环境光传感器才能使用" },
 
         // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
-        new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次点击关闭" },
-        new() { Id = "screenshot", Name = "截屏贴图", ShortName = "截屏", Glyph = "\uE722", Kind = SidebarModuleKinds.Action, Note = "框选区域后在**编辑窗**中标注：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克 + 撤销重做，再**复制到剪贴板 / 保存到本地 / 钉图**（钉图 1:1，拖边框缩放，双击或右键关闭）" },
+        new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },
+        new() { Id = "keyboard", Name = "打开键盘", ShortName = "键盘", Glyph = "\uE765", Kind = SidebarModuleKinds.Action, Note = "在屏幕底边摆出自绘虚拟键盘（再单击收起）。键盘是独立浮窗，不切换主界面、显示时不抢焦点；「只有触摸才弹」等行为在「实验性功能 → 虚拟键盘」里设" },
+        new() { Id = "screenshot", Name = "截屏贴图", ShortName = "截屏", Glyph = "\uE722", Kind = SidebarModuleKinds.Action, Note = "框选区域后在编辑窗中标注：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克，并支持撤销与重做；随后可复制到剪贴板 / 保存到本地 / 钉图（钉图按 1:1 显示，拖动边框可缩放，双击或右键关闭）" },
         new() { Id = "taskview", Name = "任务视图", ShortName = "任务", Glyph = "\uE7C4", Kind = SidebarModuleKinds.Action, Note = "等同 Win+Tab" },
-        new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次点击即可还原（不会关闭任何程序）" },
-        new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同点击标题栏 ×，会提示是否保存，不会强制结束）" },
-        new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中所有窗口（含最小化窗口）。防误触：**首次点击仅计数，再次点击才会执行**；均为正常关闭，不会强制结束" },
+        new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次单击即可还原（不关闭任何程序）" },
+        new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同单击标题栏 ×，会提示是否保存，不强制结束）" },
+        new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中的所有窗口（含最小化窗口）。防误触：首次单击仅计数，再次单击才会执行；均为正常关闭，不强制结束" },
         // 「最小化全部窗口」已删（2026-09-25）：「回到桌面」在 Windows 上做的事跟它一模一样（都是把窗口全收起来、再按一次还原），
         // 两个按钮一个效果，留着只会让人问「有区别吗」。要恢复就把这行抄回去。
     };

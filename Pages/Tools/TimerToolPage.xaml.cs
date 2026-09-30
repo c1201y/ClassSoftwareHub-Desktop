@@ -28,6 +28,7 @@ public sealed partial class TimerToolPage : Page
     private long _endAtMs;
     private bool _running;
     private bool _finished;
+    private bool _syncingMode;      // SetMode 回写模式卡时挡一下 Checked 回调
 
     public TimerToolPage()
     {
@@ -56,6 +57,9 @@ public sealed partial class TimerToolPage : Page
 
         ApplyTime();
         UpdateDisplay();
+
+        // 初始模式：倒计时（卡片初值一律在代码里赋，不能写在 XAML 上）
+        SetMode(Mode.Countdown);
     }
 
     private Microsoft.UI.Xaml.Media.Brush Res(string key, Windows.UI.Color fallback) => Services.ThemeBrush.Get(this, key);
@@ -64,9 +68,12 @@ public sealed partial class TimerToolPage : Page
     private void OpenPalette_Click(object sender, RoutedEventArgs e)
         => Views.ToolPaletteWindow.ShowTool("timer");
 
-    private void Mode_Countdown_Click(object sender, RoutedEventArgs e) => SetMode(Mode.Countdown);
-
-    private void Mode_Stopwatch_Click(object sender, RoutedEventArgs e) => SetMode(Mode.Stopwatch);
+    /// <summary>两张模式卡谁被选中就切到哪个模式（事件挂在 XAML 的 Checked 上）。</summary>
+    private void Mode_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncingMode) return;      // SetMode 自己在回写卡片状态，别绕回来
+        SetMode(BtnCountdown.IsChecked == true ? Mode.Countdown : Mode.Stopwatch);
+    }
 
     private void SetMode(Mode mode)
     {
@@ -78,9 +85,19 @@ public sealed partial class TimerToolPage : Page
         _baseMs = 0;
         _sw.Reset();
 
-        BtnCountdown.Content = mode == Mode.Countdown ? "● 倒计时" : "倒计时";
-        BtnStopwatch.Content = mode == Mode.Stopwatch ? "● 秒表" : "秒表";
-        SetupPanel.Visibility = mode == Mode.Countdown ? Visibility.Visible : Visibility.Collapsed;
+        // 卡片状态跟着走（从「预设分钟数」按钮进来时也可能要切回倒计时）
+        _syncingMode = true;
+        BtnCountdown.IsChecked = mode == Mode.Countdown;
+        BtnStopwatch.IsChecked = mode == Mode.Stopwatch;
+        _syncingMode = false;
+
+        // 设定时长那一栏：倒计时显示输入框，秒表显示说明 —— 两种模式共用同一个位置，
+        // 不再是一边有内容、另一边留一大块空白（原来秒表模式下整块 Collapsed）。
+        var countdown = mode == Mode.Countdown;
+        SetupTitle.Text = countdown ? "设定时长" : "秒表模式";
+        SetRow.Visibility = countdown ? Visibility.Visible : Visibility.Collapsed;
+        StopwatchHint.Visibility = countdown ? Visibility.Collapsed : Visibility.Visible;
+
         _blink.Stop();
         UpdateDisplay();
         SyncInputs();

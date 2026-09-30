@@ -5,6 +5,14 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- ═══ 2026-09-29 二次重排（Nick：「五六组设置密密麻麻堆在一起，没有呼吸感」）═══
+         上一版把设置按「背景 / 文字 / 显示内容」分了组，但组标题只有 12px、组间只差 6px 边距，
+         视觉上还是一坨 —— 想调个字号得挨行读过去。
+         这一版做三件事：
+           ① **重分组、按使用频次排**：常用的「显示与字号」「配色与字体」在前，
+              低频的「背景与材质」在后；每组之间拉一条**真的分隔线**，边界一眼可见；
+           ② **组内一件事一行**，不再上下堆叠 —— 组标题 12.5 SemiBold、组内间距 10、组间 18；
+           ③ 左栏预览从"半屏"加宽成主角（1.15 : 1），时钟本身才是这一页要看的东西。 -->
     <Grid Padding="24,14,24,20" RowSpacing="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -20,20 +28,23 @@
             <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="全屏时钟" FontSize="24" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="将屏幕变为大型时钟，考试、自习时抬头即可查看时间。默认使用跟随主题的黑白配色，也可设置背景图片并叠加蒙版、亚克力或云母材质。" />
+                           Text="将屏幕变为大型时钟，便于考试、自习时查看时间。默认使用跟随主题的黑白配色，也可设置背景图片并叠加蒙版、亚克力或云母材质。" />
             </StackPanel>
             <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
-                    Click="OpenPalette_Click" ToolTipService.ToolTip="开一个小置顶窗，随手看时间" />
+                    Click="OpenPalette_Click" ToolTipService.ToolTip="打开置顶小窗口，便于随时查看时间" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="RootScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="14">
             <Grid ColumnSpacing="14">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="1.15*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- ═══ 预览 ═══ -->
+                <!-- ═══ 左：预览（主角）═══ -->
+                <!-- ⚠️ 这里**不写** VerticalAlignment="Top"：写了就各自按内容高度、底边对不齐。
+                     交给 Grid 拉满行高，左右两卡永远等高（见右侧那段注释的 ①）。 -->
                 <Border CornerRadius="10" Padding="16" BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -59,66 +70,209 @@
                                 <Border x:Name="DropHint" Visibility="Collapsed"
                                         Background="#33000000" BorderThickness="2" BorderBrush="#0078D4"
                                         CornerRadius="8" Margin="4">
-                                    <TextBlock Text="松开鼠标，设为背景图" FontSize="14" FontWeight="SemiBold"
+                                    <TextBlock Text="松开鼠标即设为背景图" FontSize="14" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                             </Grid>
                         </Border>
 
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="可将图片直接拖入上方区域作为背景，也可点击下方「选择图片」。" />
+                                   Text="可将图片直接拖入上方区域作为背景，也可在右侧「背景图片」中选择图片。" />
 
+                        <!-- 这一页唯一的强调按钮：其余（保存预设、校时…）一律普通按钮 -->
                         <Button x:Name="FullscreenButton" Content="全屏显示" Click="Fullscreen_Click"
-                                Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" />
+                                Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"
+                                Height="40" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                    Text="全屏后双击屏幕（或按 Esc）退出。" />
 
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Content="校准系统时间" Click="TimeSync_Click" />
-                            <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap" VerticalAlignment="Center"
-                                       Text="时钟使用本机系统时间，如显示不准可访问 time.is 校准。" />
-                        </StackPanel>
+                        <!-- 校时：只在"时钟显示不准"时才用的补救入口 —— 做成链接样式，
+                             别跟上面那个「全屏显示」抢注意力（原来是个跟主按钮一样大的普通按钮）。 -->
+                        <HyperlinkButton Content="系统时间显示不准？打开 time.is 校时"
+                                         Click="TimeSync_Click" Padding="0" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ 外观设置 ═══ -->
+                <!-- ═══ 右：外观设置 ═══
+                     2026-09-29 三次重排（Nick：「卡片高度不一致；字体凭什么独占一行；字号大小到
+                     「配色与字体」中间空得能开一万家蜜雪冰城」）—— 三条一并解决：
+                       ① **不再 VerticalAlignment="Top"**：左右两卡都交给 Grid 拉满行高，
+                          底边永远对齐（哪张内容高就以哪张为准）；
+                       ② **两条"独占一整行"砍掉**：字号标签与滑块同行、时间字体与蒙版/材质并排
+                          —— 少掉的正是"一整行"的高度；
+                       ③ **分组线改成"标题 + 横线"同一行**（原来是"空带 + 一条横线 + 空带"）：
+                          分隔线本来就要独占一行，那就让它和组标题共用这一行 —— 组间因此只剩
+                          一次间距，"标题上面一大片空"从根上没有了。 -->
                 <Border Grid.Column="1" CornerRadius="10" Padding="16" BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="12">
+                    <StackPanel>
                         <TextBlock Text="外观设置" FontSize="13" FontWeight="Bold" />
 
-                        <TextBlock Text="背景图片" FontSize="12.5" />
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Content="选择图片" Click="PickBg_Click" />
-                            <Button x:Name="ClearBgButton" Content="移除图片" Click="ClearBg_Click" IsEnabled="False" />
+                        <!-- ── ① 显示与字号（最常调，排最前）──
+                             ⚠️ 组标题一律用这个「标题 + 右侧横线」的行结构（见 #GroupHeader 注释），
+                             别退回"上面空一段、下面一条线"。 -->
+                        <Grid ColumnSpacing="10" Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="显示与字号" FontSize="12.5" FontWeight="SemiBold"
+                                       Opacity="0.65" VerticalAlignment="Center" />
+                            <!-- ⚠️ 这里必须用 DividerStrokeColorDefaultBrush：卡片描边那支
+                                 （CardStrokeColorDefaultBrush）在深色主题下是「黑 10%」，压在卡片底上
+                                 只有 ~1.6% 的亮度差，实测肉眼看不出来。 -->
+                            <Border Grid.Column="1" Height="1" VerticalAlignment="Center"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                        </Grid>
+                        <StackPanel Spacing="20" Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <CheckBox x:Name="ShowSecondsBox" Content="显示秒" IsChecked="True"
+                                          MinWidth="0" Padding="6,0,0,0" />
+                                <CheckBox x:Name="ShowDateBox" Content="显示日期 / 星期" IsChecked="True"
+                                          MinWidth="0" Padding="6,0,0,0" />
+                                <CheckBox x:Name="Hour12Box" Content="12 小时制" MinWidth="0" Padding="6,0,0,0" />
+                            </StackPanel>
+                            <!-- 标签与滑块同行 —— 「字号大小 85%」只有两个字，不值得独占一行 -->
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="ScaleLabel" FontSize="12.5" VerticalAlignment="Center" />
+                                <Slider x:Name="ScaleSlider" Grid.Column="1"
+                                        Minimum="0.6" Maximum="1.3" StepFrequency="0.05" />
+                            </Grid>
                         </StackPanel>
-                        <TextBlock x:Name="BgName" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="当前未设置背景图（上面拖一张进来即可）" />
 
-                        <ComboBox x:Name="VeilBox" Header="蒙版 / 材质" HorizontalAlignment="Stretch" />
-                        <StackPanel x:Name="VeilStrengthPanel" Spacing="6">
-                            <TextBlock x:Name="VeilStrengthLabel" FontSize="12.5" />
-                            <Slider x:Name="VeilSlider" Minimum="0" Maximum="100" StepFrequency="1" />
+                        <!-- ── ② 配色 · 字体 · 材质 ──
+                             四个下拉框排成 2×2：底/字色一行、字体/蒙版一行。
+                             两列等宽是因为「等宽 · 与课堂计时器一致」这类名字较长，半行刚好放得下。 -->
+                        <Grid ColumnSpacing="10" Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="配色 · 字体 · 材质" FontSize="12.5" FontWeight="SemiBold"
+                                       Opacity="0.65" VerticalAlignment="Center" />
+                            <!-- ⚠️ 这里必须用 DividerStrokeColorDefaultBrush：卡片描边那支
+                                 （CardStrokeColorDefaultBrush）在深色主题下是「黑 10%」，压在卡片底上
+                                 只有 ~1.6% 的亮度差，实测肉眼看不出来。 -->
+                            <Border Grid.Column="1" Height="1" VerticalAlignment="Center"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                        </Grid>
+                        <StackPanel Spacing="20" Margin="0,10,0,0">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="ToneBox" Header="背景底色" HorizontalAlignment="Stretch" />
+                                <ComboBox x:Name="InkBox" Grid.Column="1" Header="文字颜色"
+                                          HorizontalAlignment="Stretch" />
+                            </Grid>
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="FontBox" Header="时间字体" HorizontalAlignment="Stretch" />
+                                <ComboBox x:Name="VeilBox" Grid.Column="1" Header="蒙版 / 材质"
+                                          HorizontalAlignment="Stretch" />
+                            </Grid>
+                            <!-- 强度只在"真有蒙版"时才出现，和上面的「蒙版 / 材质」挨着看 -->
+                            <Grid x:Name="VeilStrengthPanel" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="VeilStrengthLabel" FontSize="12.5" VerticalAlignment="Center" />
+                                <Slider x:Name="VeilSlider" Grid.Column="1"
+                                        Minimum="0" Maximum="100" StepFrequency="1" />
+                            </Grid>
                         </StackPanel>
 
-                        <ComboBox x:Name="ToneBox" Header="背景底色" HorizontalAlignment="Stretch" />
-                        <ComboBox x:Name="InkBox" Header="文字颜色" HorizontalAlignment="Stretch" />
-                        <ComboBox x:Name="FontBox" Header="时间字体" HorizontalAlignment="Stretch" />
-
-                        <StackPanel Spacing="6">
-                            <TextBlock x:Name="ScaleLabel" FontSize="12.5" />
-                            <Slider x:Name="ScaleSlider" Minimum="0.6" Maximum="1.3" StepFrequency="0.05" />
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Spacing="18">
-                            <CheckBox x:Name="ShowSecondsBox" Content="显示秒" IsChecked="True" />
-                            <CheckBox x:Name="ShowDateBox" Content="显示日期 / 星期" IsChecked="True" />
-                            <CheckBox x:Name="Hour12Box" Content="12 小时制" />
+                        <!-- ── ③ 背景图片（低频，放在最后）── -->
+                        <Grid ColumnSpacing="10" Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="背景图片" FontSize="12.5" FontWeight="SemiBold"
+                                       Opacity="0.65" VerticalAlignment="Center" />
+                            <!-- ⚠️ 这里必须用 DividerStrokeColorDefaultBrush：卡片描边那支
+                                 （CardStrokeColorDefaultBrush）在深色主题下是「黑 10%」，压在卡片底上
+                                 只有 ~1.6% 的亮度差，实测肉眼看不出来。 -->
+                            <Border Grid.Column="1" Height="1" VerticalAlignment="Center"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                        </Grid>
+                        <StackPanel Spacing="20" Margin="0,10,0,0">
+                            <!-- 图片按钮 + 当前文件名 + 删除：一行放完（文件名占中间，长了省略号，悬停看全） -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button Content="选择图片" Click="PickBg_Click" />
+                                <TextBlock x:Name="BgName" Grid.Column="1" FontSize="12" Opacity="0.6"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Text="未设置背景图（可拖入图片）" />
+                                <Button x:Name="ClearBgButton" Grid.Column="2" Content="删除图片"
+                                        Click="ClearBg_Click" IsEnabled="False" />
+                            </Grid>
                         </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <!-- ═══ 外观预设（通栏卡片列）═══
+                 2026-09-28（Nick）：光有名字看不出这套长什么样 —— 每套画成一张小卡，
+                 底下再放一排，一眼就能挑。 -->
+            <Border CornerRadius="10" Padding="16" BorderThickness="1"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="外观预设" FontSize="13" FontWeight="Bold" />
+                            <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                       Text="把当前外观整体存下来，下次一键套用。下面每张卡片就是该预设的实际效果。" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Button x:Name="SavePresetButton" Content="保存预设" Click="SavePreset_Click" />
+                            <Button Content="恢复默认外观" Click="ResetPreset_Click" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock x:Name="PresetHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+
+                    <!-- ⚠️ GridView 自己的滚动要关掉：外面已经有个 ScrollViewer 在滚，双滚动条会打架；
+                         关掉之后它按内容量高度，卡片自然换行（最多 5 张）。 -->
+                    <GridView x:Name="PresetHost" SelectionMode="None" IsItemClickEnabled="False"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                              ScrollViewer.HorizontalScrollMode="Disabled"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              Padding="0" Margin="0,0,-10,-10">
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,10,10" />
+                                <Setter Property="MinWidth" Value="0" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                <Setter Property="VerticalContentAlignment" Value="Top" />
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                    </GridView>
+                </StackPanel>
+            </Border>
+          </StackPanel>
         </ScrollViewer>
 
         <TextBlock x:Name="Toast" Grid.Row="2" FontSize="12" Opacity="0.75" />

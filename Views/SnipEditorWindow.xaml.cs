@@ -119,6 +119,21 @@ public sealed partial class SnipEditorWindow : Window
         }
     }
 
+    /// <summary>
+    /// 四角圆角（最大化时退回直角）。为什么要手动设、为什么不能拿 RemoveBorder 顶上，
+    /// 见 Core/WindowChrome.SetRounded 的说明 —— 这里和主窗口是同一个坑。
+    /// </summary>
+    private void ApplyRounded(AppWindow app)
+    {
+        try
+        {
+            var maximized = app.Presenter is OverlappedPresenter p
+                            && p.State == OverlappedPresenterState.Maximized;
+            Core.WindowChrome.SetRounded(WindowNative.GetWindowHandle(this), !maximized);
+        }
+        catch { }
+    }
+
     private void Setup(ScreenFrame frame, int cropX, int cropY, int cropW, int cropH)
     {
         _frame = frame;
@@ -158,6 +173,15 @@ public sealed partial class SnipEditorWindow : Window
             bar.ButtonInactiveBackgroundColor = Colors.Transparent;
             UpdateCaptionColors();
             RootGrid.ActualThemeChanged += (_, _) => UpdateCaptionColors();
+
+            // ⚠️ 上面那句 ExtendsContentIntoTitleBar 会把窗口圆角偏好按回 Default —— 2026-09-29 实测
+            //    在这台 Win11 上渲染出来就是**直角**，跟"拖动/阴影/圆角还是系统的"那句注释正好相反。
+            //    必须显式要一次 ROUND；这个窗口可以最大化，最大化时再退回直角（贴边窗口不该削角）。
+            ApplyRounded(app);
+            app.Changed += (_, e) =>
+            {
+                if (e.DidPresenterChange || e.DidSizeChange) ApplyRounded(app);
+            };
         }
         catch (Exception ex)
         {
@@ -616,13 +640,13 @@ public sealed partial class SnipEditorWindow : Window
         _textPending = true;
         try
         {
-            var box = new TextBox { PlaceholderText = "要写的字", AcceptsReturn = false, Width = 260 };
+            var box = new TextBox { PlaceholderText = "输入文字", AcceptsReturn = false, Width = 260 };
             var dlg = new ContentDialog
             {
                 XamlRoot = RootGrid.XamlRoot,
-                Title = "加文字",
+                Title = "添加文字",
                 Content = box,
-                PrimaryButtonText = "放上去",
+                PrimaryButtonText = "添加",
                 CloseButtonText = "取消",
                 DefaultButton = ContentDialogButton.Primary,
             };

@@ -33,6 +33,44 @@
                         CompactModeThresholdWidth="820" ExpandedModeThresholdWidth="1180"
                         BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">
+
+            <!--
+              材质底座（2026-09-28 起；2026-09-29 修正过一次 —— 之前刷得太狠了）。
+              ⚠️ 本窗口的外观是 Mica / 亚克力（MainWindow.ApplyBackdrop 挂 SystemBackdrop）。
+                 NavigationView 的默认模板会给**内容区**糊一层不透明底色
+                 （SolidBackgroundFillColorBaseBrush），把窗口材质整个盖住 ——
+                 表现就是设置页一片死灰/死黑。所以**只需要把这一层改透明**，材质才透得上来。
+              ⚠️ 必须写成同 key 的 SolidColorBrush 定义：模板用的是 {ThemeResource} 查表，
+                 换成 StaticResource 重指向同一 key 是无效的（会自引用）。
+
+              ⛔⛔ 其余键**一律不要覆盖** —— 2026-09-29 Nick 连着报的两个 bug 全出在这里：
+
+              ① 面板背景（`NavigationViewExpandedPaneBackground` /
+                 `NavigationViewDefaultPaneBackground`）刷成透明会连出两个毛病：
+                   · 窄窗口点汉堡，弹出的浮层面板透明 → 后面的页面内容整个漏出来；
+                   · 并排展开时面板和内容区成了同一张底 → 左边分不出"导航栏"这一块。
+                 官方对照表（NavigationView → Pane Backgrounds）：
+                   Left                       → NavigationViewExpandedPaneBackground
+                   LeftCompact / LeftMinimal  → NavigationViewDefaultPaneBackground
+                   Top                        → NavigationViewTopPaneBackground
+                 系统给它们的是**亚克力**（Expanded 是 background acrylic、跟着窗口材质；
+                 Compact/Minimal 是 in-app acrylic，专为"浮在内容之上"设计）——
+                 本身就是半透明的，不会把材质盖住，⛔ 别再改回 Transparent。
+
+              ② `NavigationViewPaneBorderBrush` / `NavigationViewPaneBorderThickness`
+                 —— 这就是**导航面板与内容区之间那条分隔线**。
+                 2026-09-28 顺手刷成透明 + 粗细 0，线就没了。Nick 原话：
+                 「原先导航栏还有标题栏，他们俩的是连接在一起的，并且与右边的内容区域是有分隔开的，
+                   有一条线的，现在却是没有的」。
+                 同类的还有 `NavigationViewContentGridBorderBrush` / `...GridBorderThickness`
+                 （内容区那一圈边框），一并交回系统。
+
+              → 结论：**这里只留 `NavigationViewContentBackground` 一条透明**。
+                 面板自然有"一整块"的底，那条分隔线也还在。
+            -->
+            <NavigationView.Resources>
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+            </NavigationView.Resources>
             <!-- 上半区：首页 / 软件下载 / 内置工具 / 侧边布局 / 实验性功能（实验性功能永远排最后）
                  ⚠️ 图标别撞脸：E719（购物袋）＝软件商店，E896（下载箭头）留给「任务进行」，
                     E7F4（显示器）＝本机核实，EA80（灯泡）＝实验性功能。
@@ -85,6 +123,39 @@
                         <NavigationViewItem Content="本机核实" Tag="machinecheck">
                             <NavigationViewItem.Icon>
                                 <FontIcon Glyph="&#xE7F4;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
+                          白板专杀：到点结束希沃白板5 后台滞留的残留进程。
+                          ⚠️ 与「程序专杀」是**两个独立功能**，Nick 2026-09-28 明确要求不合并 ——
+                             本项写死只认白板5 家族（EasiNote*），不碰集控端与更新组件，所以不能拿通用专杀替代。
+                          ⚠️ 为啥塞进实验性：要真机上装了白板5 才能验，而且"有窗口就不动"这套判定
+                             在真实课堂里的误判率还没底（比如白板5 挂了个不可见的辅助窗口）。
+                        -->
+                        <NavigationViewItem Content="白板专杀" Tag="easiguard">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xEA99;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
+                          程序专杀：用户自己指定进程名，每个程序单独配结束时间点。
+                          ⚠️ 与白板专杀各存各的配置、各跑各的定时器（Nick 明确要求白板独立出来）。
+                        -->
+                        <NavigationViewItem Content="程序专杀" Tag="procguard">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE7E8;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
+                          虚拟键盘：自绘触屏键盘，取代系统触摸键盘的使用体验。
+                          ⚠️ 为什么塞进实验性：它要装全局触摸钩子、跑 UIA 落点判定，还要（可选地）
+                             改一个注册表键 —— 而且"手指点在输入框上才弹"这套判定在真实课堂里的
+                             误判率还没底（不同输入法、不同自绘输入框的表现不完全一致）。
+                          源码：Services/VirtualKeyboard/* + Views/VirtualKeyboardWindow.*
+                        -->
+                        <NavigationViewItem Content="虚拟键盘" Tag="virtualkeyboard">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE765;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
                     </NavigationViewItem.MenuItems>

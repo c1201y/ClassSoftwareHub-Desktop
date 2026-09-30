@@ -95,10 +95,10 @@ public static class MachineCheck
             if (hit is null)
             {
                 var missingNote = !string.IsNullOrWhiteSpace(app.Store)
-                    ? "清单标的是商店版；本机的安装记录和本账户的商店应用里都没找到。商店版装在别的账户下时查不到，可在「Microsoft Store → 库」确认"
+                    ? "清单标记为商店版；本机安装记录与本账户商店应用均未匹配到。商店版安装在其它账户下时无法查询，可在「Microsoft Store → 库」中确认"
                     : Weight(norm) < 4
                         ? "软件名称过短，无法可靠匹配，请在「程序和功能」中人工核对"
-                        : "安装记录和商店应用里都没有（免安装版、改过名的软件不会出现在这两处）";
+                        : "安装记录与商店应用中均未匹配到（免安装版、已更名的软件不在这两处记录中）";
                 results.Add(new CheckItem(app, CheckStatus.Missing, "", "", missingNote));
                 continue;
             }

@@ -4,12 +4,15 @@
 //   set GITHUB_TOKEN=ghp_xxx            # 只在当前终端，别写进任何文件
 //   node tools/publish-release.mjs --tag dv1.0.0-insider1.3 --channel insider ^
 //        --installer "dist\installer\ClassSoftwareHub-Setup-dv1.0.0-insider1.3.exe" ^
+//        --image "dist\release\dv1.1.png" ^
 //        --notes notes.md
 //
 // 参数：
 //   --tag        必填。正式版 dv1.0.0 / 预发布 dv1.0.0-insider1.3（跟 ShellConfig.ShellVersion 对齐）
 //   --channel    stable | insider（insider 会自动勾 Pre-release）
 //   --installer  必填。安装包路径；同名 .md5 会自动生成并一起上传
+//   --image      可选。Release 配图（png）。上传后正文顶部那句 ![..](..) 才显示得出来 ——
+//                以前这步得手工补，现在跟着一起传
 //   --notes      可选。更新说明文件（md/txt，会原样显示在更新对话框里）
 //   --name       可选。Release 标题，默认就用 tag
 //   --draft     可选。发成草稿（不发布，先看一眼）
@@ -17,8 +20,11 @@
 //
 // 约定（跟 Core/ShellConfig.cs 里的说明一致，改了要一起改）：
 //   tag   ：dv<版本>（正式）/ dv<版本>-insider<x>（勾 Pre-release）
-//   资产  ：安装包（名字里带 setup 会被识别）+ 同名 .md5（MD5 校验用）
-//   正文  ：Release body = 更新内容
+//   资产  ：安装包（名字里带 setup 会被识别）+ 同名 .md5（MD5 校验用）+ 配图 png
+//   正文  ：Release body = 更新内容（首行一般是配图的 ![](...)）
+//
+// ⚠️ 顺序：先 push main + 打 tag，再跑本脚本（正文里的配图链接指向本 tag 的资产，
+//    资产传完才显示得出来）。
 
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, stat } from 'node:fs/promises';
@@ -38,6 +44,7 @@ function opt(name, fallback = '') {
 const tag = opt('tag');
 const channel = (opt('channel', 'insider') || 'insider').toLowerCase();
 const installer = opt('installer');
+const imageFile = opt('image');
 const notesFile = opt('notes');
 const releaseName = opt('name') || tag;
 const isDraft = args.includes('--draft');
@@ -89,6 +96,21 @@ await writeFile(md5Path, `${md5}  ${basename(exePath)}\n`, 'utf8');
 
 const body = notesFile ? await readFile(resolve(notesFile), 'utf8') : '';
 
+// 配图（可选）。给了就必须存在 —— 不然正文首行那条 ![]() 会挂一张 404 的图。
+const imagePath = imageFile ? resolve(imageFile) : '';
+if (imagePath) {
+  try {
+    await stat(imagePath);
+  } catch {
+    console.error(`--image 指的图不存在：${imagePath}`);
+    process.exit(2);
+  }
+  if (!/\.png$/i.test(imagePath)) {
+    console.error(`--image 建议用 png（现在给的是 "${basename(imagePath)}"）。`);
+    process.exit(2);
+  }
+}
+
 console.log('── 要发的 Release ──────────────────────────');
 console.log(`仓库    : ${OWNER}/${REPO}`);
 console.log(`tag     : ${tag}${isDraft ? ' (草稿)' : ''}`);
@@ -98,6 +120,7 @@ console.log(`安装包  : ${basename(exePath)}  ${sizeMB} MB`);
 console.log(`MD5     : ${md5}`);
 console.log(`SHA256  : ${sha}`);
 console.log(`说明    : ${body ? notesFile + '（' + body.length + ' 字）' : '（空）'}`);
+console.log(`配图    : ${imagePath ? basename(imagePath) : '（没给 --image）'}`);
 console.log(`多传一个: ${basename(md5Path)}`);
 
 if (dryRun) {
@@ -134,7 +157,10 @@ const release = await gh(`${api}/repos/${OWNER}/${REPO}/releases`, {
 console.log('   ✓ ' + release.html_url);
 
 console.log('2/2 上传资产…');
-for (const file of [exePath, md5Path]) {
+// 顺序：先把安装包和 .md5 传上去（客户端认这个），再传配图
+// —— 正文首行的 ![](url) 指向的就是这张图，传完才显示得出来。
+const uploads = [exePath, md5Path, ...(imagePath ? [imagePath] : [])];
+for (const file of uploads) {
   const data = await readFile(file);
   const name = basename(file);
   const uploadUrl = `https://uploads.github.com/repos/${OWNER}/${REPO}/releases/${release.id}/assets?name=${encodeURIComponent(name)}`;

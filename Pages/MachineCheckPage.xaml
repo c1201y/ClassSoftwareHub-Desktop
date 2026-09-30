@@ -48,7 +48,7 @@
                     </Border>
                 </StackPanel>
                 <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                           Text="对照软件清单检查这台电脑的安装情况，快速找出漏装和建议升级的软件。检测依据是 Windows 已安装程序记录，Microsoft Store 应用与免安装版不在记录中，可能显示为「未安装」。" />
+                           Text="对照软件清单核实本机安装情况，列出未安装与建议升级的软件。检测依据为 Windows 已安装程序记录；Microsoft Store 应用与免安装版不在记录中，可能显示为「未安装」。" />
             </StackPanel>
 
             <!-- 工具栏：左边统计，右边筛选（合成一行，把纵向空间让给列表） -->
@@ -70,7 +70,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock x:Name="StatInstalled" Text="—" FontSize="19" FontWeight="Bold" />
-                            <TextBlock Text="已装" FontSize="12" Opacity="0.6"
+                            <TextBlock Text="已安装" FontSize="12" Opacity="0.6"
                                        VerticalAlignment="Bottom" Margin="0,0,0,3" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -151,7 +151,7 @@
                 <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                     <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
-                    <TextBlock Text="正在读取本机已安装的软件……" FontSize="13" Opacity="0.7"
+                    <TextBlock Text="正在读取本机已安装的软件" FontSize="13" Opacity="0.7"
                                HorizontalAlignment="Center" />
                 </StackPanel>
 

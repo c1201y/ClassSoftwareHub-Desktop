@@ -23,7 +23,7 @@
                 <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image x:Name="LoadingIcon" Width="64" Height="64" Opacity="0.9" />
                     <ProgressRing x:Name="LoadingRing" IsActive="True" Width="28" Height="28" />
-                    <TextBlock x:Name="LoadingText" Text="正在加载…" FontSize="12" Opacity="0.65"
+                    <TextBlock x:Name="LoadingText" Text="正在加载" FontSize="12" Opacity="0.65"
                                HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
@@ -64,7 +64,7 @@
                            TextAlignment="Center" TextWrapping="Wrap" />
                 <TextBlock FontSize="13" Opacity="0.75" TextAlignment="Center" TextWrapping="Wrap"
                            Text="ClassSoftwareHub 需要系统安装 WebView2 运行时才能显示网页内容。安装后重新打开本应用即可。" />
-                <CheckBox x:Name="NoPromptCheck" Content="不再提示（记住我的选择）" />
+                <CheckBox x:Name="NoPromptCheck" Content="不再提示（记住该选择）" />
                 <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
                     <Button Content="立即安装" Style="{StaticResource AccentButtonStyle}" Click="InstallRuntime_Click" />
                     <Button Content="在浏览器中打开" Click="OpenInBrowser_Click" />

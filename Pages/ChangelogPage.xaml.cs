@@ -115,8 +115,8 @@ public sealed partial class ChangelogPage : Page
 
         var target = $"{ShellConfig.UpdateRepoOwner}/{ShellConfig.UpdateRepoName}";
         CurrentHint.Text = ShellConfig.IsInsider
-            ? $"{target} 上的发布说明会显示在下面。当前是内测（Insider）构建，可能还没发到仓库 —— 那就先看已发布的版本。"
-            : $"{target} 上的发布说明会显示在下面。";
+            ? $"{target} 上的发布说明显示于下方。当前为内测（Insider）构建，可能尚未发布至仓库：可先查看已发布的版本。"
+            : $"{target} 上的发布说明显示于下方。";
 
         _ = LoadAsync();
     }
@@ -137,7 +137,7 @@ public sealed partial class ChangelogPage : Page
         {
             if (!_updater.Source.IsConfigured)
             {
-                ShowFallback("还没配置更新仓库地址，看不到发布说明。");
+                ShowFallback("尚未配置更新仓库地址，无法显示发布说明。");
                 return;
             }
 
@@ -148,7 +148,7 @@ public sealed partial class ChangelogPage : Page
 
             if (releases.Count == 0)
             {
-                ShowFallback("更新仓库里还没有发布过版本。发布之后，每个版本的更新说明会出现在这里。");
+                ShowFallback("更新仓库尚未发布任何版本。发布后，各版本的更新说明将显示在此处。");
                 return;
             }
 
@@ -159,13 +159,13 @@ public sealed partial class ChangelogPage : Page
                 string.Equals(r.Version, ShellConfig.ShellVersion, StringComparison.OrdinalIgnoreCase));
             _currentPublishedNote = hasCurrent
                 ? ""
-                : $" · 当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion} 还没发到仓库";
+                : $" · 当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion} 尚未发布至仓库";
 
             ApplyFilter(scrollToTop: false);
         }
         catch (Exception ex)
         {
-            ShowFallback($"读不到发布说明（{ex.GetType().Name}）。多半是没网，或者 GitHub 一时不通 —— 点「刷新」再试一次。");
+            ShowFallback($"无法读取发布说明（{ex.GetType().Name}）。可能为无网络连接，或 GitHub 暂时不可访问：请单击「刷新」重试。");
         }
         finally
         {
@@ -190,8 +190,8 @@ public sealed partial class ChangelogPage : Page
         if (_rows.Count == 0)
         {
             ShowFallback(stableOnly
-                ? "仓库里还没有正式版发布。切到「全部版本」可以看到内测（Insider）的发布记录。"
-                : "更新仓库里还没有发布过版本。发布之后，每个版本的更新说明会出现在这里。");
+                ? "仓库中尚无正式版发布。切换至「全部版本」可查看内测（Insider）的发布记录。"
+                : "更新仓库尚未发布任何版本。发布后，各版本的更新说明将显示在此处。");
         }
         else
         {
@@ -251,7 +251,7 @@ public sealed partial class ChangelogPage : Page
 
     private void ShowFallback(string message)
     {
-        FallbackText.Text = message + "\n本机跑过的版本记录在「设置 → 关于」里。";
+        FallbackText.Text = message + "\n本机历史版本记录位于「设置 → 关于」中。";
         FallbackPanel.Visibility = Visibility.Visible;
     }
 

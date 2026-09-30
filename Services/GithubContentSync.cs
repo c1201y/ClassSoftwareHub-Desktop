@@ -91,10 +91,10 @@ public static class GithubContentSync
             try { if (File.Exists(stamp)) known = (await File.ReadAllTextAsync(stamp, ct).ConfigureAwait(false)).Trim(); }
             catch { /* 读不到就当没记过 */ }
 
-            progress?.Report("正在问 GitHub 仓库有没有新数据…");
+            progress?.Report("正在检查 GitHub 仓库是否有新数据");
             var head = await GetHeadShaAsync(ct).ConfigureAwait(false);
             if (head is null)
-                return new RepoContentResult(false, false, CountApps(), "GitHub 仓库暂时问不到（没网或被校园网拦了），先用本机数据。");
+                return new RepoContentResult(false, false, CountApps(), "暂时无法访问 GitHub 仓库（可能为无网络连接或被网络策略拦截），暂用本机数据。");
 
             var appsDir = Path.Combine(Dir, "apps");
             var hasApps = Directory.Exists(appsDir) && Directory.EnumerateFiles(appsDir, "*.json").Any();
@@ -105,10 +105,10 @@ public static class GithubContentSync
                 return new RepoContentResult(true, false, CountApps(), $"软件数据已是最新（GitHub 仓库 {Short(head)}）");
             }
 
-            progress?.Report("正在列出仓库里的软件数据…");
+            progress?.Report("正在列出仓库中的软件数据");
             var paths = await ListDataFilesAsync(head, ct).ConfigureAwait(false);
             if (paths.Count == 0)
-                return new RepoContentResult(false, false, CountApps(), "GitHub 仓库里没列出软件数据文件，本机数据先不动。");
+                return new RepoContentResult(false, false, CountApps(), "GitHub 仓库中未列出软件数据文件，本机数据暂不更新。");
 
             Directory.CreateDirectory(appsDir);
             var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -127,7 +127,7 @@ public static class GithubContentSync
                 keep.Add(target);
 
                 done++;
-                progress?.Report($"正在读软件数据 {done}/{paths.Count} …");
+                progress?.Report($"正在读取软件数据 {done}/{paths.Count}");
                 var text = await GetRawAsync(head, path, ct).ConfigureAwait(false);
                 if (text.Length == 0) continue;
 
@@ -163,11 +163,11 @@ public static class GithubContentSync
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden || ex.StatusCode == (HttpStatusCode)429)
         {
             return new RepoContentResult(false, false, CountApps(),
-                "GitHub 接口次数用超了（没登录每小时 60 次，机房同一个出口 IP 分着用），过一会儿自己会再来，先用本机数据。");
+                "GitHub 接口访问次数已达上限（未登录状态每小时 60 次），稍后将自动重试，暂用本机数据。");
         }
         catch (Exception ex)
         {
-            return new RepoContentResult(false, false, CountApps(), "从 GitHub 读软件数据失败：" + ex.Message);
+            return new RepoContentResult(false, false, CountApps(), "从 GitHub 读取软件数据失败：" + ex.Message);
         }
         finally
         {
@@ -245,7 +245,7 @@ public static class GithubContentSync
                 last = ex;
             }
         }
-        throw last ?? new HttpRequestException("GitHub 接口所有入口都不通");
+        throw last ?? new HttpRequestException("GitHub 接口所有入口均不可用");
     }
 
     /// <summary>取仓库里某个文件的内容（raw → jsDelivr → gh-proxy 镜像）。</summary>
@@ -273,7 +273,7 @@ public static class GithubContentSync
                 last = ex;
             }
         }
-        throw last ?? new HttpRequestException("文件内容所有入口都不通");
+        throw last ?? new HttpRequestException("文件内容所有入口均不可用");
     }
 
     // ── 路径 / 入口记忆 ─────────────────────────────────────────────
