@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="ClassSoftwareHub.Desktop.Pages.WelcomePage"
-    NavigationCacheMode="Disabled"
+    NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:core="using:ClassSoftwareHub.Desktop.Core">
@@ -13,7 +13,7 @@
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95" />
-                    <TextBlock Text="{Binding Name}" FontSize="13" HorizontalAlignment="Center"
+                    <TextBlock Text="{Binding Name}" FontSize="14" HorizontalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 </StackPanel>
             </Border>
@@ -25,7 +25,7 @@
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Opacity="0.95" />
-                    <TextBlock Text="{Binding Name}" FontSize="13" HorizontalAlignment="Center"
+                    <TextBlock Text="{Binding Name}" FontSize="14" HorizontalAlignment="Center"
                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                 </StackPanel>
             </Border>
@@ -43,12 +43,15 @@
     </Page.Resources>
 
 
-    <ScrollViewer Padding="24,36,24,44" VerticalScrollBarVisibility="Auto">
+    <!-- ⛔ 间距必须写在内部 Grid 的 Margin 上，不能写成 ScrollViewer 的 Padding：
+         WinUI 3 的 ScrollViewer.Padding 底部不参与滚动范围计算，滚到底最后一条内容仍被裁
+         （2026-10-01 实测：首页滚到 100% DirectX 行被底边切半）。Gallery 全部用内部 Margin。 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
         <!--
           ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列**右甩**（左边空一大块）→ 看起来就是「变形」。
           这里用「三列 Grid：* / 960 / *」把内容钉在中间 960 宽，导航展开或收起都不动。
         -->
-        <Grid>
+        <Grid Margin="24,36,24,44">
             <!-- 中间列 = 想要 960 宽：窗口够宽就正好 960 且居中（剩余给两侧星列），窗口太窄就自动缩、不裁切 -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="1*" />
@@ -58,9 +61,18 @@
 
             <StackPanel Grid.Column="1" Spacing="14">
 
-            <TextBlock Text="ClassSoftwareHub" FontSize="44" FontWeight="Bold" />
+            <!-- 更新待装横幅：后台下载完成后每次启动都提醒，装上新版本后自检清除 -->
+            <InfoBar x:Name="UpdateReadyBar" Severity="Informational" IsOpen="False"
+                     Title="新版本已下载就绪"
+                     Message="安装包已通过校验，可立即安装；继续使用当前版本也不受影响。">
+                <InfoBar.ActionButton>
+                    <Button Content="立即安装" Click="InstallPending_Click" />
+                </InfoBar.ActionButton>
+            </InfoBar>
 
-            <TextBlock x:Name="HomeTitleText" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" />
+            <TextBlock Text="ClassSoftwareHub" FontSize="40" FontWeight="Bold" />
+
+            <TextBlock x:Name="HomeTitleText" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
 
             <!-- 图片（高 140，宽按比例）+ 版本号（左）+ 代号 Panorama（右，别跟版本号挤一起） -->
             <Grid ColumnSpacing="20" Margin="0,10,0,0">
@@ -84,13 +96,13 @@
 
                 <!-- 应用代号：贴右（跟顶上那串版本号岔开，不打架） -->
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <TextBlock Text="代号" FontSize="11" Opacity="0.6" HorizontalAlignment="Right" />
-                    <TextBlock x:Name="CodeNameText" Text="Panorama" FontSize="30" FontWeight="Bold"
+                    <TextBlock Text="代号" FontSize="12" Opacity="0.6" HorizontalAlignment="Right" />
+                    <TextBlock x:Name="CodeNameText" Text="Panorama" FontSize="28" FontWeight="Bold"
                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                 </StackPanel>
             </Grid>
 
-            <TextBlock Text="快速开始" FontSize="22" FontWeight="Bold" Margin="0,20,0,4" />
+            <TextBlock Text="快速开始" FontSize="20" FontWeight="Bold" Margin="0,20,0,4" />
 
             <!-- 更宽的一行：体验网页版（主题色底） -->
             <Border x:Name="WebCard" Tag="web" Height="60" CornerRadius="8" Padding="20,0"
@@ -105,10 +117,10 @@
                     </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE774;" FontSize="20" VerticalAlignment="Center"
                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                    <TextBlock Grid.Column="1" Text="访问网页版" FontSize="15" FontWeight="Bold"
+                    <TextBlock Grid.Column="1" Text="访问网页版" FontSize="14" FontWeight="Bold"
                                VerticalAlignment="Center"
                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                    <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="13" VerticalAlignment="Center"
+                    <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="12" VerticalAlignment="Center"
                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                 </Grid>
             </Border>
@@ -127,7 +139,7 @@
                         Tapped="Card_Tapped">
                     <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE896;" FontSize="20" />
-                        <TextBlock Text="下载首页" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="下载首页" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
 
@@ -138,7 +150,7 @@
                         Tapped="Card_Tapped">
                     <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE71D;" FontSize="20" />
-                        <TextBlock Text="内置工具" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="内置工具" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
             </Grid>
@@ -157,7 +169,7 @@
                         Tapped="Card_Tapped">
                     <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8A0;" FontSize="20" />
-                        <TextBlock Text="侧边布局" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="侧边布局" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
 
@@ -172,7 +184,7 @@
                         Tapped="Card_Tapped">
                     <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xEA80;" FontSize="20" />
-                        <TextBlock Text="实验性功能" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="实验性功能" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
             </Grid>
@@ -196,7 +208,7 @@
                         Tapped="Card_Tapped">
                     <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE898;" FontSize="20" />
-                        <TextBlock Text="提交软件" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="提交软件" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
 
@@ -208,7 +220,7 @@
                         Tapped="Card_Tapped">
                     <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE939;" FontSize="20" />
-                        <TextBlock Text="反馈中心" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="反馈中心" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
             </Grid>
@@ -221,7 +233,7 @@
                     Tapped="Card_Tapped">
                 <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE713;" FontSize="20" />
-                    <TextBlock Text="设置" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock Text="设置" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
 
@@ -239,10 +251,10 @@
             </GridView>
 
             <!-- ===== 硬件信息 / 系统信息：列表形式（不用卡片），行在 code-behind 里填 ===== -->
-            <TextBlock Text="硬件信息" FontSize="22" FontWeight="Bold" Margin="0,20,0,2" />
+            <TextBlock Text="硬件信息" FontSize="20" FontWeight="Bold" Margin="0,20,0,2" />
             <StackPanel x:Name="HardwareList" Margin="2,0,0,0" />
 
-            <TextBlock Text="系统信息" FontSize="22" FontWeight="Bold" Margin="0,22,0,2" />
+            <TextBlock Text="系统信息" FontSize="20" FontWeight="Bold" Margin="0,22,0,2" />
             <StackPanel x:Name="SystemList" Margin="2,0,0,0" />
 
             </StackPanel>

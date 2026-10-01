@@ -18,6 +18,16 @@ public sealed partial class SoftwarePage : Page
     private bool _loading;
     private readonly List<ToggleButton> _chips = new();
 
+    /// <summary>
+    /// 上一次真正重建列表时的「状态指纹」（分类|关键词|视图|内容包版本|内容来源）。
+    ///
+    /// 为什么要有它：本页 XAML 是 NavigationCacheMode="Enabled"，实例会被 Frame 留下来，
+    /// 但 <see cref="Apply"/> 每次都把 ItemsSource 换成新的 List —— GridView 见到新集合
+    /// 会把**所有卡片容器整个重建一遍**（含图标），那 200ms 左右的停顿又回来了，缓存等于白做。
+    /// 指纹没变就什么都不做，"退出去再进来"就变成零成本。
+    /// </summary>
+    private string _appliedKey = "";
+
     public SoftwarePage()
     {
         InitializeComponent();
@@ -34,9 +44,15 @@ public sealed partial class SoftwarePage : Page
         _loading = false;
         UpdateView();
 
+        if (Fingerprint() == _appliedKey) return;   // 状态没变 → 保留现有卡片，别重建
+
         BuildChips();
         Apply();
     }
+
+    /// <summary>当前"页面状态"的指纹；任一要素变了才值得重建列表与分类条。</summary>
+    private string Fingerprint()
+        => string.Join("\u0001", _category, _keyword, _view, App.Content.ContentVersion, App.Content.Source);
 
     /// <summary>磁贴（3 列，带简介）/ 网格（5 列，紧凑）切换，选择会记进设置。</summary>
     private void ViewChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -109,6 +125,8 @@ public sealed partial class SoftwarePage : Page
             : App.Content.CategoryName(_category);
 
         UpdateEmptyState(list.Count);
+
+        _appliedKey = Fingerprint();   // 记下这次是按什么状态建的，下次同状态直接跳过
     }
 
     /// <summary>

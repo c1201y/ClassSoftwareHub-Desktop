@@ -141,6 +141,10 @@ public partial class App : Application
         // 虚拟键盘（实验性功能）：总开关是单一的 —— 关着的时候 Start() 第一句就 return，
         // 触摸钩子、UIA 探测、注册表接管一个都不会上电（见 VirtualKeyboardService）。
         Services.VirtualKeyboard.VirtualKeyboardService.Start();
+
+        // 更新安装包自动清理：updates 目录只留最近 N 个（默认 3），更早的删掉。
+        // 走后台线程，不沾首帧；新版本装完后的第一次启动正好把旧包收掉。
+        Services.Updating.InstallerCleanup.Start();
     }
 
     /// <summary>

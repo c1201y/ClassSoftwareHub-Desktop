@@ -186,18 +186,22 @@ public static class EdgeGeometry
 
     /// <summary>
     /// 挨着锚点（边条 / 主音量浮窗）往屏幕**里侧**排：
-    /// 进退方向贴住锚点的内侧，沿边方向跟锚点**对齐居中**，最后夹进工作区别跑出屏幕。
-    /// 返回（滑入起点 = 往边外退半块，最终位置）。
+    /// 进退方向贴住锚点的内侧；沿边方向默认跟锚点**对齐居中**，
+    /// <paramref name="alignStart"/> 为 true 时改**顶对齐**（左右边）/**左对齐**（上下边）——
+    /// 链上两个高矮不一的浮窗（主音量 + 合成器）顶对齐排出来才像一个整齐的块，
+    /// 居中会让高窗口两头都冒出来，看着像叠在一起（2026-10-01）。
+    /// 最后夹进工作区别跑出屏幕。返回（滑入起点 = 往边外退半块，最终位置）。
     /// </summary>
     public static (PointInt32 Start, PointInt32 Final) BesideAnchor(
-        string edge, RectInt32 anchor, RectInt32 work, int w, int h, double scale)
+        string edge, RectInt32 anchor, RectInt32 work, int w, int h, double scale, bool alignStart = false)
     {
         var gap = (int)Math.Round(GapDip * scale);
         var flat = IsFlat(edge);
 
-        // 沿边方向：以锚点这条边的中点为基准，浮窗自己居中
-        var anchorCenter = flat ? anchor.X + anchor.Width / 2 : anchor.Y + anchor.Height / 2;
-        var along = anchorCenter - (flat ? w : h) / 2;
+        // 沿边方向：默认以锚点中线为基准居中；alignStart 则与锚点的起点边对齐
+        var along = alignStart
+            ? (flat ? anchor.X : anchor.Y)
+            : (flat ? anchor.X + anchor.Width / 2 : anchor.Y + anchor.Height / 2) - (flat ? w : h) / 2;
 
         var final = edge switch
         {

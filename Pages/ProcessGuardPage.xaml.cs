@@ -202,7 +202,7 @@ public sealed partial class ProcessGuardPage : Page
         pickRow.Children.Add(new TextBlock
         {
             Text = "结束时间点",
-            FontSize = 12.5,
+            FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Opacity = 0.8
         });
@@ -262,7 +262,7 @@ public sealed partial class ProcessGuardPage : Page
         skipRow.Children.Add(new TextBlock
         {
             Text = "程序存在可见窗口（正在使用）时的处理方式：跳过则不结束，等下一个时间点。",
-            FontSize = 11.5,
+            FontSize = 12,
             Opacity = 0.55,
             TextWrapping = TextWrapping.Wrap
         });
@@ -345,7 +345,7 @@ public sealed partial class ProcessGuardPage : Page
             ProcHost.Children.Add(new TextBlock
             {
                 Text = "当前未检测到列表中的进程。",
-                FontSize = 12.5,
+                FontSize = 12,
                 Opacity = 0.6,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -359,7 +359,7 @@ public sealed partial class ProcessGuardPage : Page
                 Text = $"{p.Name}（PID {p.Pid}）—— " + (p.HasWindow
                     ? "存在可见窗口，正在使用 → 将跳过"
                     : "无可见窗口，后台驻留 → 将结束"),
-                FontSize = 12.5,
+                FontSize = 12,
                 Opacity = 0.75,
                 TextWrapping = TextWrapping.Wrap
             });

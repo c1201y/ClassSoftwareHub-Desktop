@@ -25,7 +25,7 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
 
-版本号默认取 `.iss` 里的 `DesktopVersion`，不用在命令行传。临时想改就加 `/DDesktopVersion=1.1.0-insider1.2`。
+版本号默认取 `.iss` 里的 `DesktopVersion`，不用在命令行传。临时想改就加 `/DDesktopVersion=1.1.0-insider1.3`。
 
 产物在 `dist\installer\ClassSoftwareHub-Setup-dv<DesktopVersion>.exe`。`.iss` 里的 `AppId` 是升级和回滚认亲用的，不要改。
 
@@ -63,10 +63,10 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 ```powershell
 $env:GITHUB_TOKEN = "..."   # 需要仓库写权限，别写进任何文件
 node --use-system-ca tools\publish-release.mjs `
-  --tag dv1.1.0-insider1.2 --channel insider `
-  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.2.exe" `
+  --tag dv1.1.0-insider1.3 --channel insider `
+  --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.3.exe" `
   --image "dist\release\dv1.1.png" `
-  --name "ClassSoftwareHub dv1.1.0-insider1.2" --notes "dist\release\notes.md"
+  --name "ClassSoftwareHub dv1.1.0-insider1.3" --notes "dist\release\notes.md"
 ```
 
 不确定参数对不对、或者想先看一眼要发什么，加 `--dry-run`：只打印摘要 + 算哈希 + 写 `.md5`，不碰 GitHub。

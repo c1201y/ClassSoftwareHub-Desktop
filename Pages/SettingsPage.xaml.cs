@@ -18,8 +18,6 @@ public sealed partial class SettingsPage : Page
 {
     private bool _loading = true;
     private bool _contentBusy;
-    /// <summary>「贴在哪条边」下拉正在按模式重建选项（期间忽略 SelectionChanged）。</summary>
-    private bool _edgeRebuild;
     /// <summary>
     /// 打开设置页后把滚动位置拉回顶部的定时器。
     /// ⚠️ 必须存字段 —— DispatcherQueueTimer 被 GC 收走就不会触发（本项目踩过）。
@@ -47,33 +45,6 @@ public sealed partial class SettingsPage : Page
         AutoStartSwitch.IsOn = s.AutoStart;
         MinimizeSwitch.IsOn = s.MinimizeOnStart;
         TraySwitch.IsOn = s.CloseToTray;
-
-        // 常用工具窗口 / 侧边栏
-        PaletteTopSwitch.IsOn = s.PaletteOnTop;
-        SidebarSwitch.IsOn = s.SidebarEnabled;
-
-        // 贴靠模式只认左右两条边（Nick 2026-09-28 定：贴靠 = 左右模式）。
-        // 老设置里若留着 top/bottom，这里归到右边 —— 想贴上下边需切到自由模式。
-        if (s.SidebarEdge is not ("left" or "both" or "right"))
-        {
-            s.SidebarEdge = "right";
-            App.Settings.Save();
-        }
-
-        // 自由模式：左 / 右 / 上 / 下四条边
-        if (s.SidebarFreeEdge is not ("left" or "right" or "top" or "bottom"))
-        {
-            s.SidebarFreeEdge = "right";
-            App.Settings.Save();
-        }
-
-        SidebarModeCombo.SelectedIndex = s.SidebarMode == "free" ? 1 : 0;
-        RebuildEdgeCombo();
-        UpdateSidebarHints();
-
-        // 截图自动保存
-        ShotAutoSaveSwitch.IsOn = s.ShotAutoSave;
-        RefreshShotDir();
         ThemeCombo.SelectedIndex = s.Theme switch
         {
             "light" => 1,
@@ -94,6 +65,8 @@ public sealed partial class SettingsPage : Page
 
         ChannelCombo.SelectedIndex = UpdateChannels.Parse(s.UpdateChannel) == UpdateChannel.Insider ? 1 : 0;
         AutoCheckSwitch.IsOn = s.AutoCheckUpdate;
+        // 安装包保留数量：下拉项 1~10 与索引一一对应；存档里的怪值夹回 1~10 再定位
+        KeepCombo.SelectedIndex = Math.Clamp(s.InstallerKeepCount, 1, 10) - 1;
         UpdateCurrent.Text = $"当前版本：{ShellConfig.VersionPrefix}{ShellConfig.ShellVersion}· 更新源：{UpdateService.CreateDefault().Source.DisplayName}";
 
         RefreshContentInfo();
@@ -104,6 +77,7 @@ public sealed partial class SettingsPage : Page
         // 「版本记录」固定折叠：里面是十几条运行记录，摊开会把设置页拉得极长。
         // ⚠️ 只在 XAML 里写 IsExpanded="False" 不够 —— 实测加载过程中仍会被撑开，这里再压一次。
         HistoryExpander.IsExpanded = false;
+        InstallerExpander.IsExpanded = false;
 
         // 打开设置页固定从顶部开始：卡片高度会被设置值二次刷新，ScrollViewer 的锚点跟着漂，
         // 实测会直接停到「常用工具」那一段（2026-09-28）。
@@ -227,184 +201,6 @@ public sealed partial class SettingsPage : Page
         App.MainWindow?.SetCloseToTray(TraySwitch.IsOn);
     }
 
-    private void PaletteTopSwitch_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        App.MainWindow?.SetPaletteOnTop(PaletteTopSwitch.IsOn);
-    }
-
-    private void SidebarSwitch_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        App.Settings.Current.SidebarEnabled = SidebarSwitch.IsOn;
-        App.Settings.Save();
-        Views.ToolSidebarWindow.ApplySetting();
-    }
-
-    // ── 侧边栏放置模式 / 贴在哪条边 ───────────────────────────
-    // 2026-09-28 Nick：这两项本质是"多个互斥选项里选一个"，跟「颜色模式」「更新通道」同类，
-    // 一律做成下拉；不做成一排单选按钮（会把 Header 和控件挤到卡片两端，中间空出一大片）。
-
-    /// <summary>
-    /// 按当前放置模式重建「贴在哪条边」的选项：
-    /// 贴靠 = 左 / 左右两边 / 右；自由 = 左 / 右 / 上 / 下。
-    /// ⚠️ 重建期间必须挡住 SelectionChanged —— Items.Clear() 会把 SelectedIndex 打成 -1，
-    ///    不然会把设置误写成空值。
-    /// </summary>
-    private void RebuildEdgeCombo()
-    {
-        var s = App.Settings.Current;
-        var free = s.SidebarMode == "free";
-
-        _edgeRebuild = true;
-        try
-        {
-            SidebarEdgeCombo.Items.Clear();
-            if (free)
-            {
-                AddEdgeItem("左边", "left");
-                AddEdgeItem("右边", "right");
-                AddEdgeItem("上边", "top");
-                AddEdgeItem("下边", "bottom");
-                SelectEdge(s.SidebarFreeEdge);
-            }
-            else
-            {
-                AddEdgeItem("左边", "left");
-                AddEdgeItem("左右两边", "both");
-                AddEdgeItem("右边", "right");
-                SelectEdge(s.SidebarEdge);
-            }
-        }
-        finally
-        {
-            _edgeRebuild = false;
-        }
-    }
-
-    private void AddEdgeItem(string text, string tag) =>
-        SidebarEdgeCombo.Items.Add(new ComboBoxItem { Content = text, Tag = tag });
-
-    private void SelectEdge(string tag)
-    {
-        foreach (var item in SidebarEdgeCombo.Items)
-        {
-            if (item is ComboBoxItem it && it.Tag as string == tag)
-            {
-                SidebarEdgeCombo.SelectedItem = it;
-                return;
-            }
-        }
-        if (SidebarEdgeCombo.Items.Count > 0) SidebarEdgeCombo.SelectedIndex = 0;
-    }
-
-    /// <summary>说明文案随模式切换，免得对着下拉不知道是两条边还是四条边。</summary>
-    private void UpdateSidebarHints()
-    {
-        var free = App.Settings.Current.SidebarMode == "free";
-
-        ModeHint.Text = free
-            ? "侧边栏可吸附屏幕任意一条边；贴上边或下边时呈横条。"
-            : "侧边栏只吸附屏幕左右两条边，可选左右同时显示。";
-
-        EdgeHint.Text = free
-            ? "四条边均可吸附；贴上边或下边时侧边栏为横条。拖动收起状态的抓手也可改边。"
-            : "选「左右两边」时两侧同时显示，上下位置保持一致，拖动其中一条另一条同步移动。拖动收起状态的抓手也可改边。";
-    }
-
-    private void SidebarMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_loading) return;
-        if (SidebarModeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string mode) return;
-
-        App.Settings.Current.SidebarMode = mode;
-        App.Settings.Save();
-
-        // 模式变了 → 可选的边也变了，下拉要整个换一套
-        RebuildEdgeCombo();
-        UpdateSidebarHints();
-
-        if (App.Settings.Current.SidebarEnabled) Views.ToolSidebarWindow.ApplySetting();
-    }
-
-    private void SidebarEdge_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_loading || _edgeRebuild) return;
-        if (SidebarEdgeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string edge) return;
-
-        var s = App.Settings.Current;
-        if (s.SidebarMode == "free") s.SidebarFreeEdge = edge;
-        else s.SidebarEdge = edge;
-        App.Settings.Save();
-
-        if (s.SidebarEnabled) Views.ToolSidebarWindow.ApplySetting();
-    }
-
-    // ── 截图自动保存 ──────────────────────────────────────────
-
-    private void ShotAutoSave_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        App.Settings.Current.ShotAutoSave = ShotAutoSaveSwitch.IsOn;
-        App.Settings.Save();
-        RefreshShotDir();
-    }
-
-    /// <summary>把当前保存位置显示出来（没设 = 桌面）。</summary>
-    private void RefreshShotDir()
-    {
-        var dir = Services.ShotSaver.DirSetting();
-        var custom = !string.IsNullOrWhiteSpace(App.Settings.Current.ShotSaveDir);
-        ShotDirText.Text = custom ? dir : $"{dir}（默认：桌面，没改过）";
-        ShotDirText.Opacity = ShotAutoSaveSwitch.IsOn ? 0.7 : 0.4;
-    }
-
-    private async void ShotDir_Change_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var picker = new Windows.Storage.Pickers.FolderPicker
-            {
-                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop,
-            };
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(
-                picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow!));
-
-            var folder = await picker.PickSingleFolderAsync();
-            if (folder is null) return;
-
-            App.Settings.Current.ShotSaveDir = folder.Path;
-            App.Settings.Save();
-            RefreshShotDir();
-        }
-        catch (Exception ex)
-        {
-            Services.ScreenCapture.Log("选截图目录失败: " + ex.Message);
-        }
-    }
-
-    private void ShotDir_Open_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var dir = Services.ShotSaver.Dir();
-            Directory.CreateDirectory(dir);
-            Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            Services.ScreenCapture.Log("打开截图目录失败: " + ex.Message);
-        }
-    }
-
-    private void ShotDir_Reset_Click(object sender, RoutedEventArgs e)
-    {
-        App.Settings.Current.ShotSaveDir = "";                // 空 = 桌面
-        App.Settings.Save();
-        RefreshShotDir();
-    }
-
     private void ReloadContent_Click(object sender, RoutedEventArgs e)
     {
         App.Content.Load();
@@ -504,7 +300,17 @@ public sealed partial class SettingsPage : Page
                 UpdateStatus.Text = $"发现新版本 {release.Tag}，可自行选择是否安装。";
 
                 // 先问；选「稍后」就什么都不做
-                if (!await UpdateFlow.AskAsync(XamlRoot, release)) return;
+                var choice = await UpdateFlow.AskAsync(XamlRoot, release);
+                if (choice == UpdateFlow.UpdateChoice.Later) return;
+
+                if (choice == UpdateFlow.UpdateChoice.Background)
+                {
+                    if (UpdateFlow.StartBackgroundDownload(_updater, release))
+                        UpdateStatus.Text = $"已转为后台下载 {release.Tag}，完成后通过系统通知提醒。";
+                    else
+                        UpdateStatus.Text = "已有一个更新正在后台下载，完成后会通知。";
+                    return;
+                }
 
                 if (!await UpdateFlow.RunAsync(XamlRoot, _updater, release))
                     UpdateStatus.Text = "更新失败：可稍后重试，或前往发布页手动下载新版本。";
@@ -715,5 +521,120 @@ public sealed partial class SettingsPage : Page
         if (string.IsNullOrWhiteSpace(text)) return "";
         var t = text.Replace("\r", "").Trim();
         return t.Length <= max ? t : t[..max] + "…";
+    }
+
+    // ── 安装包自动清理（updates 目录） ─────────────────────────
+
+    /// <summary>保留数量改动：存档 + 后台立刻清一轮（不用等下次启动），列表若摊开着就跟着刷新。</summary>
+    private void KeepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (KeepCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag) return;
+        if (!int.TryParse(tag, out var keep)) return;
+
+        App.Settings.Current.InstallerKeepCount = Math.Clamp(keep, 1, 10);
+        App.Settings.Save();
+
+        var target = App.Settings.Current.InstallerKeepCount;
+        _ = Task.Run(() =>
+        {
+            try { InstallerCleanup.Clean(target); }
+            catch { /* 清理失败不打扰界面，下次启动会再试 */ }
+        }).ContinueWith(_ =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (InstallerExpander.IsExpanded) RefreshInstallerList();
+            });
+        });
+    }
+
+    private void Installer_Expanded(object sender, EventArgs args) => RefreshInstallerList();
+
+    private void RefreshInstallerList()
+    {
+        InstallerList.Children.Clear();
+        InstallerDirText.Text = $"存放位置：{InstallerCleanup.InstallerDirectory}";
+
+        var files = InstallerCleanup.Scan();
+        if (files.Count == 0)
+        {
+            InstallerList.Children.Add(new TextBlock
+            {
+                Text = "本地暂无安装包。更新完成后会自动存放于此。",
+                FontSize = 12,
+                Opacity = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
+        foreach (var f in files)
+            InstallerList.Children.Add(BuildInstallerRow(f));
+    }
+
+    /// <summary>单行：左边名称 + 大小/时间，右边「删除」。实例方法 —— Click 里要用 this.XamlRoot。</summary>
+    private StackPanel BuildInstallerRow(InstallerFileInfo f)
+    {
+        var meta = $"{FormatSize(f.Length)}　·　{f.ModifiedUtc.LocalDateTime:yyyy-MM-dd HH:mm}"
+                   + (f.HasMd5File ? "　·　含校验文件" : "");
+
+        var name = new TextBlock
+        {
+            Text = f.Name,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var sub = new TextBlock
+        {
+            Text = meta,
+            FontSize = 12,
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        var del = new Button { Content = "删除" };
+        del.Click += async (_, _) => await DeleteInstallerAsync(f);
+
+        var left = new StackPanel { Spacing = 2 };
+        left.Children.Add(name);
+        left.Children.Add(sub);
+
+        var grid = new Grid { ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        left.VerticalAlignment = VerticalAlignment.Center;
+        del.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(left, 0);
+        Grid.SetColumn(del, 1);
+        grid.Children.Add(left);
+        grid.Children.Add(del);
+
+        return new StackPanel { Spacing = 0, Children = { grid } };
+    }
+
+    private async Task DeleteInstallerAsync(InstallerFileInfo f)
+    {
+        var confirm = new ContentDialog
+        {
+            XamlRoot = this.XamlRoot,
+            Title = "删除安装包",
+            Content = $"删除 {f.Name}？删除后装回该版本需重新下载。",
+            PrimaryButtonText = "删除",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        InstallerCleanup.TryDeleteWithMd5(f.FullPath);
+        RefreshInstallerList();
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes >= 1024 * 1024 * 1024) return $"{bytes / 1024.0 / 1024 / 1024:0.0#} GB";
+        if (bytes >= 1024 * 1024) return $"{bytes / 1024.0 / 1024:0.0#} MB";
+        if (bytes >= 1024) return $"{bytes / 1024.0:0} KB";
+        return $"{bytes} B";
     }
 }

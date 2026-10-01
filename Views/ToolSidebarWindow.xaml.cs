@@ -54,6 +54,13 @@ public sealed partial class ToolSidebarWindow : Window
     private const int PanelLengthFlatDip = 470;     // 上/下边时：展开面板长度的**下限**（真实宽度按内容算，见 PlannedSize）
 
     /// <summary>
+    /// 收起动画的第二段：面板滑出屏幕之后，**抓手从屏幕外滑回贴边位**要花的毫秒（2026-10-01）。
+    /// 第一段是 <see cref="SlideOutToEdge"/> 的 240ms（整个面板推出屏幕）。两段加起来 ≈ 430ms。
+    /// 抓手的行程很短（只有自身厚度 20dip + 2px ≈ 27px），所以这段比第一段快一些才跟得上。
+    /// </summary>
+    private const double CollapseSlideMs = 190;
+
+    /// <summary>
     /// 底部按钮那一排在竖条里的高度增量 —— <b>五颗全显</b>时的经验值（2026-09-27 定的）。
     /// 注意它**不是**五颗的真实高度（那是 5×44 + 4×2 = 228）：面板高度基数
     /// <see cref="PanelLengthDip"/>（450）里本来就已经含了标题和一段留白，这 94 只是把五颗"补齐"。
@@ -103,8 +110,15 @@ public sealed partial class ToolSidebarWindow : Window
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _idle;
 
-    /// <summary>展开滑动用的按帧计时器（滑完置空）。</summary>
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _slideTimer;
+    /// <summary>展开滑动用的渲染循环帧回调（滑完置空）。⚠️ 见 <see cref="TweenWindow"/>。</summary>
+    private EventHandler<object>? _slideFrame;
+
+    /// <summary>渲染循环万一停摆（窗口被藏、渲染暂停）时的收尾兜底定时器。</summary>
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _slideWatchdog;
+
+    /// <summary>滑动的**落点存档**（目标位置）。滑动进行中 <see cref="CurrentRect"/> 返回它，
+    /// 别让锚定方（音量浮窗）读到半路上的实时位置 —— 锚到半路的位置，等边条滑到位两个就叠上了（2026-10-01 修）。</summary>
+    private Windows.Graphics.RectInt32? _restRect;
 
     /// <summary>
     /// 滑动动画的"代次"。每次状态变化（收起/展开/拖动/隐藏）都 +1，让**还在跑的那一波动画立刻作废**。
@@ -154,6 +168,10 @@ public sealed partial class ToolSidebarWindow : Window
             if (w?._appWindow is null) return null;
             try
             {
+                // 滑动进行中：返回落点存档（动画的目标位置）。实时位置还在半路上，
+                // 锚定方拿到它会把自己的落座点算歪，等边条滑到位就叠上了。
+                if (w._slideFrame is not null && w._restRect is { } rest) return rest;
+
                 var pos = w._appWindow.Position;
                 var size = w._appWindow.Size;
                 return new Windows.Graphics.RectInt32(pos.X, pos.Y, size.Width, size.Height);
@@ -173,6 +191,34 @@ public sealed partial class ToolSidebarWindow : Window
         return null;
     }
 
+    /// <summary>
+    /// 侧边栏**当前实际**贴的那条边（音量浮窗按它决定往哪边排）。
+    ///
+    /// ⚠️ 绝不能用 <c>App.Settings.Current.SidebarEdge</c> 代替：那条是**停靠模式**的设置，
+    ///    **自由模式**下它可能还是老值（`SidebarFreeEdge` 才是真身），用户还能把边条拖到任意一边。
+    ///    读错方向的后果（2026-10-01 踩到）：浮窗被摆到边条的**另一侧**（等于屏幕外）→
+    ///    又被 ClampToWork 夹回屏幕边缘 → 正好压在边条（乃至合成器）身上，看着就是"三个窗叠一起"。
+    /// </summary>
+    public static string CurrentEdge
+    {
+        get
+        {
+            try
+            {
+                var inst = AnchorInstance();
+                if (inst is not null) return inst._edge;
+
+                // 没有可见实例：按设置推一个（音量浮窗一直挂右边，双双模式也取右）
+                var want = DesiredEdges();
+                return want.Contains("right") ? "right" : want[0];
+            }
+            catch
+            {
+                return "right";
+            }
+        }
+    }
+
     // 收起状态下的拖拽（屏幕坐标算，别用窗口内坐标，会自己滚起来）
     private bool _pressed;
     private bool _dragging;
@@ -184,15 +230,8 @@ public sealed partial class ToolSidebarWindow : Window
     private int _pressOffsetPx;               // 按下时手指在窗口里的物理偏移（绝对坐标拖动用）
     private int _pressOffsetPy;
     private bool _loggedSource;               // 这次拖动记过"坐标源"了吗（每拖只记一次）
-    private bool _haveLastSample;             // 相对算法：本次拖动记过上一次采样吗
-    private double _lastCurDipX;              // 上一次采样：手指相对窗口（DIP）
-    private double _lastCurDipY;
-    private double _winTargetX;               // 相对算法：累加出来的"窗口该在哪儿"（浮点，别再拿读数纠偏）
-    private double _winTargetY;
-    private int _issuedX;                     // 我们自己最后发出去的窗口位置（只信自己，不读 API）
-    private int _issuedY;
-    private int _lastIssuedDeltaX;            // 上一次采样之后我们自己挪了多少（算 ΔF 要用）
-    private int _lastIssuedDeltaY;
+    private int _lastTargetX;                 // 上一次真正发出去的目标位置（相同就别重复 Move）
+    private int _lastTargetY;
     private int _dragSamples;                 // 诊断用：这次拖动记了几条样本
 
     private ToolSidebarWindow(string edge)
@@ -407,6 +446,7 @@ public sealed partial class ToolSidebarWindow : Window
             Root.ActualThemeChanged += (_, _) =>
             {
                 ApplyPanelBrush();
+                UpdatePinVisual();                         // 常驻块的图标颜色也跟主题（钉住=主题色，松开=默认前景）
                 // 窗口那圈边的颜色也是跟着深浅色走的，换主题得重画一次
                 try
                 {
@@ -539,16 +579,33 @@ public sealed partial class ToolSidebarWindow : Window
         ExpandedView.Visibility = Visibility.Collapsed;
         CollapsedView.Visibility = Visibility.Visible;
 
-        // 一次到位：收起尺寸 + 贴边位置。
+        // 一次到位：收起尺寸 + 位置。
         // 滑出动画已经把**整个窗口**推出屏幕外了，所以这一步的"变身"（尺寸 92×450 → 20×110、
         // 内容换视图）用户在屏幕上看不到 —— 不会再出现"没滑出去就突然缩一下"（2026-09-26 修）。
+        //
+        // ⚠️ fadeIn 的落点是**屏幕外的抓手起点**，不是贴边位（2026-10-01 改）：
+        //    面板滑出去之后，抓手再从屏幕外滑回贴边（见下面的 TweenWindow）——
+        //    "大块滑走 + 小条滑回"一口气看完，比"大块滑走 + 小条原地淡入"连贯。
+        //    起点在屏幕外，所以尺寸变身依旧藏得住。
+        PointInt32? slideFrom = null, slideTo = null;
         try
         {
             if (_appWindow is not null)
             {
                 var size = CollapsedSize();
                 var pos = EdgePosition(size.Width, size.Height);
-                _appWindow.MoveAndResize(new RectInt32(pos.X, pos.Y, size.Width, size.Height));
+                var startPos = fadeIn
+                    ? OutwardOffset(pos, (IsFlat ? size.Height : size.Width) + 2)   // 整个抓手推到屏幕外 + 2px 余量
+                    : pos;
+
+                _appWindow.MoveAndResize(new RectInt32(startPos.X, startPos.Y, size.Width, size.Height));
+
+                if (fadeIn)
+                {
+                    slideFrom = startPos;
+                    slideTo = pos;
+                    _restRect = new Windows.Graphics.RectInt32(pos.X, pos.Y, size.Width, size.Height);  // 滑动期间 CurrentRect 返回它
+                }
             }
         }
         catch (Exception ex)
@@ -556,7 +613,11 @@ public sealed partial class ToolSidebarWindow : Window
             Log("收尾落位失败: " + ex.Message);
         }
 
-        if (fadeIn) FadePanelToOpaque(150);
+        if (fadeIn)
+        {
+            FadePanelToOpaque(CollapseSlideMs);
+            if (slideFrom is { } f && slideTo is { } t) TweenWindow(f, t, CollapseSlideMs);
+        }
         else ResetPanelOpacity();
 
         ReassertCollapsed();
@@ -611,6 +672,11 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 if (_expanded || _appWindow is null) return;
 
+                // ⚠️ 抓手正在从屏幕外滑入时**别纠位**：这一帧它本来就还在路上，
+                //    抢先挪到贴边位会把滑入动画打断成"闪一下就到了"（2026-10-01）。
+                //    落位交给动画自己的最后一帧（TweenWindow 里那次 SetWindowPos）。
+                if (_slideFrame is not null) return;
+
                 // ⚠️ 已经落对了就**什么都别做**。多挪一次窗口就多一帧重绘 ——
                 //    动画刚结束那一下最容易看出抖，这里不能无脑再摆一次（2026-09-26 优化）。
                 var size = CollapsedSize();
@@ -662,11 +728,20 @@ public sealed partial class ToolSidebarWindow : Window
             if (_pinIcon is not null)
             {
                 _pinIcon.Glyph = pinned ? "\uE840" : "\uE718";      // Pinned / Pin
-                _pinIcon.Foreground = pinned
-                    ? new SolidColorBrush(AccentColor())
-                    : (Root.ActualTheme == ElementTheme.Dark
-                        ? new SolidColorBrush(Colors.White)
-                        : new SolidColorBrush(Windows.UI.Color.FromArgb(255, 30, 30, 30)));
+
+                if (pinned)
+                {
+                    _pinIcon.Foreground = new SolidColorBrush(AccentColor());
+                }
+                else
+                {
+                    // ⚠️ 松开状态**清掉本地值、跟着主题走**（2026-10-01 修「亮色模式下钉子白得看不见」）：
+                    //    以前这里写死成 SolidColorBrush（暗色给白、亮色给黑）—— 可换主题时只有面板底色会重刷
+                    //    （ActualThemeChanged 里只调了 ApplyPanelBrush），这个写死的颜色不会跟着变：
+                    //    暗色下启动过再切亮色，就成了「白钉子压白底」，整颗图标消失。
+                    //    清掉本地值后它回到 IconElement 默认前景（主题画刷），深浅色都自动对。
+                    _pinIcon.ClearValue(FontIcon.ForegroundProperty);
+                }
             }
 
             if (PinButton is not null)
@@ -1139,13 +1214,8 @@ public sealed partial class ToolSidebarWindow : Window
 
         _pressed = true;
         _loggedSource = false;
-        _haveLastSample = false;
-        _winTargetX = _dragOrigin.X;
-        _winTargetY = _dragOrigin.Y;
-        _issuedX = _dragOrigin.X;
-        _issuedY = _dragOrigin.Y;
-        _lastIssuedDeltaX = 0;
-        _lastIssuedDeltaY = 0;
+        _lastTargetX = _dragOrigin.X;
+        _lastTargetY = _dragOrigin.Y;
         _dragSamples = 0;
         _idle.Stop();
         Log($"按下: device={e.Pointer.PointerDeviceType} pointerId={e.Pointer.PointerId} 算法={(_useSnapToFinger ? "跟随手指" : "绝对位移")} 屏幕点=({_dragStart.X},{_dragStart.Y}) 窗口=({_dragOrigin.X},{_dragOrigin.Y})");
@@ -1172,42 +1242,22 @@ public sealed partial class ToolSidebarWindow : Window
             }
             else
             {
-                // 拿不到绝对坐标（这台机器上 GetPointerInfo 不认 WinUI 的 PointerId）→ 用**增量累加**。
-                // 关键：手指相对窗口的读数里混着"窗口自己挪的那部分"，把它减掉，只累加手指的真实屏幕位移，
-                //      然后**只按累加值走**，不再拿这个读数逐帧纠偏 —— 逐帧纠偏就是抖的根源（一帧滞后→来回过冲）。
-                LogSource("窗口相对·增量累加");
+                // 拿不到绝对坐标（这台机器上 GetPointerInfo 不认 WinUI 的 PointerId）→
+                // 用「**真实窗口位置 + 手指相对读数**」做绝对推算：
+                //     目标 = 当前窗口真实位置(GetWindowRect) + (当前读数 − 按下读数)
+                // 手指按在原位 → 窗口不动；手指挪 N px → 窗口挪 N px。读数里混着的"窗口自己挪的那部分"
+                // 正好被"当前真实位置"加回来，两项都是**当下**的绝对量。
+                // ⚠️ 别再用"增量累加 + 上次移动量补偿"：AppWindow.Move 是异步落地的，读数滞后一帧时
+                //    补偿会被重复计入（一次挪算两次），下一帧又往回找 —— 来回过冲，就是"拖起来癫痫"的根源。
+                //    绝对推算不进累加器，一帧滞后只造成一次性的小偏差、下一帧自愈，不会震荡。
+                LogSource("窗口相对·绝对推算");
                 var scale = DpiScaleOf();
                 var cur = e.GetCurrentPoint(Root).Position;
+                var real = WindowRectNow();
 
-                if (!_haveLastSample)
-                {
-                    _lastCurDipX = cur.X;
-                    _lastCurDipY = cur.Y;
-                    _lastIssuedDeltaX = 0;
-                    _lastIssuedDeltaY = 0;
-                    _haveLastSample = true;
-                    e.Handled = true;
-                    return;                                  // 第一次只记基准
-                }
-
-                // 「窗口自己挪了多少」= **上一次我们自己发出去的移动量**。
-                // ⚠️ 别去读 AppWindow.Position / 也别信"读回来就是新的"：读回来的可能是旧的，
-                //    拿旧值当基准就会把「窗口没挪」当成「手指没动」，来回过冲 → 速度越快抖得越狠。
-                var dxFinger = (cur.X - _lastCurDipX) * scale + _lastIssuedDeltaX;
-                var dyFinger = (cur.Y - _lastCurDipY) * scale + _lastIssuedDeltaY;
-
-                _lastCurDipX = cur.X;
-                _lastCurDipY = cur.Y;
-
-                // 死区：亚像素噪声不累加（否则会慢慢飘）
-                if (Math.Abs(dxFinger) < 1.0 && Math.Abs(dyFinger) < 1.0) { e.Handled = true; return; }
-
-                _winTargetX += dxFinger;
-                _winTargetY += dyFinger;
-
-                targetX = (int)Math.Round(_winTargetX);
-                targetY = (int)Math.Round(_winTargetY);
-                LogDrag(cur.X, cur.Y, dxFinger, dyFinger, targetX, targetY);
+                targetX = real.X + (int)Math.Round(cur.X * scale) - _pressOffsetPx;
+                targetY = real.Y + (int)Math.Round(cur.Y * scale) - _pressOffsetPy;
+                LogDrag(cur.X, cur.Y, targetX - real.X, targetY - real.Y, targetX, targetY);
             }
         }
         else
@@ -1219,8 +1269,6 @@ public sealed partial class ToolSidebarWindow : Window
 
         if (!_dragging && Math.Abs(targetX - _dragOrigin.X) + Math.Abs(targetY - _dragOrigin.Y) < 8)
         {
-            _lastIssuedDeltaX = 0;                       // 没挪窗
-            _lastIssuedDeltaY = 0;
             return;                                      // 手还没动够，先当点击
         }
 
@@ -1230,11 +1278,9 @@ public sealed partial class ToolSidebarWindow : Window
         //    上下方向由下面每帧 Move 之后的 FollowPartner 带给对面那条。
         if (IsDual) targetX = _dragOrigin.X;
 
-        _lastIssuedDeltaX = targetX - _issuedX;          // 这一下我们自己要挪多少（下一步算 ΔF 要用）
-        _lastIssuedDeltaY = targetY - _issuedY;
-        if (_lastIssuedDeltaX == 0 && _lastIssuedDeltaY == 0) { e.Handled = true; return; }
-        _issuedX = targetX;
-        _issuedY = targetY;
+        if (targetX == _lastTargetX && targetY == _lastTargetY) { e.Handled = true; return; }
+        _lastTargetX = targetX;
+        _lastTargetY = targetY;
 
         _appWindow.Move(new PointInt32(targetX, targetY));
 
@@ -1303,7 +1349,7 @@ public sealed partial class ToolSidebarWindow : Window
         {
             var real = WindowRectNow();
             var said = _appWindow?.Position ?? new PointInt32(-1, -1);
-            Log($"样本{_dragSamples}: 读数=({curDipX:0.0},{curDipY:0.0}) ΔF=({dxF:0.0},{dyF:0.0}) 目标=({tx},{ty}) 实读=({real.X},{real.Y}) 自称=({said.X},{said.Y}) 上一步挪=({_lastIssuedDeltaX},{_lastIssuedDeltaY})");
+            Log($"样本{_dragSamples}: 读数=({curDipX:0.0},{curDipY:0.0}) 手偏=({dxF:0.0},{dyF:0.0}) 目标=({tx},{ty}) 实读=({real.X},{real.Y}) 自称=({said.X},{said.Y})");
         }
         catch { }
     }
@@ -1491,6 +1537,7 @@ public sealed partial class ToolSidebarWindow : Window
 
         var size = PlannedSize();                        // 展开尺寸（此处 _expanded 已经置为 true）
         var finalPos = EdgePosition(size.Width, size.Height);
+        _restRect = new Windows.Graphics.RectInt32(finalPos.X, finalPos.Y, size.Width, size.Height);   // 滑动期间 CurrentRect 返回它
 
         // 起步只推"半块"：保证窗口还有一半留在屏幕里。整块挪到屏幕外的窗口
         // DWM 常常不给它刷帧，那滑进来的第一帧会发虚（见方法注释）。
@@ -1504,7 +1551,14 @@ public sealed partial class ToolSidebarWindow : Window
         TweenWindow(start, finalPos, 220);
     }
 
-    /// <summary>按帧把窗口从 from 挪到 to（缓出）。⚠️ 状态一变（收起/拖动/再展开）这一波就作废，绝不许它回头改窗口。</summary>
+    /// <summary>
+    /// 按帧把窗口从 from 挪到 to（缓出）。⚠️ 状态一变（收起/拖动/再展开）这一波就作废，绝不许它回头改窗口。
+    ///
+    /// ⚠️ 驱动方式（2026-10-01 修"展开/收起卡顿掉帧"）：**渲染循环（CompositionTarget.Rendering）**
+    ///    而不是 16ms 的 DispatcherQueueTimer —— 那个计时器精度低、忙时会合并 tick，实测一合并就是
+    ///    30fps 甚至更低，肉眼全是掉帧感。渲染回调每个 vsync 准时一帧，和 DWM 上屏节奏对齐。
+    ///    挪窗口也换成直接 SetWindowPos（NOACTIVATE|NOZORDER|NOSIZE），比 AppWindow.Move 轻得多。
+    /// </summary>
     private void TweenWindow(PointInt32 from, PointInt32 to, double ms, Action? done = null)
     {
         if (_appWindow is null) return;
@@ -1512,31 +1566,41 @@ public sealed partial class ToolSidebarWindow : Window
 
         var epoch = ++_slideEpoch;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(16);
-        timer.IsRepeating = true;
-        timer.Tick += (_, _) =>
+        var hwnd = WindowNative.GetWindowHandle(this);
+
+        EventHandler<object> onFrame = (_, _) =>
         {
-            if (epoch != _slideEpoch)                        // 状态已经变了：这一波到此为止
-            {
-                timer.Stop();
-                return;
-            }
+            if (epoch != _slideEpoch) return;                // 状态已经变了：这一波到此为止
 
             var t = Math.Clamp(sw.Elapsed.TotalMilliseconds / ms, 0, 1);
             var e = 1 - Math.Pow(1 - t, 3);              // ease-out cubic
-            _appWindow.Move(new PointInt32(
-                (int)Math.Round(from.X + (to.X - from.X) * e),
-                (int)Math.Round(from.Y + (to.Y - from.Y) * e)));
+            var x = (int)Math.Round(from.X + (to.X - from.X) * e);
+            var y = (int)Math.Round(from.Y + (to.Y - from.Y) * e);
+            _ = SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0, SwpNoSizeFlag | SwpNoZOrderFlag | SwpNoActivateFlag);
 
             if (t < 1) return;
             StopSlide();
-            _appWindow.Move(to);                          // 最后一帧对到准确位置
-            if (done is not null) done();                 // 滑完了再收尾（收起就是靠它）
+            _ = SetWindowPos(hwnd, IntPtr.Zero, to.X, to.Y, 0, 0, SwpNoSizeFlag | SwpNoZOrderFlag | SwpNoActivateFlag);
+            try { _restRect = new Windows.Graphics.RectInt32(to.X, to.Y, _appWindow.Size.Width, _appWindow.Size.Height); } catch { }
+            done?.Invoke();                                  // 滑完了再收尾（收起就是靠它）
         };
+        _slideFrame = onFrame;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += onFrame;
 
-        _slideTimer = timer;
-        timer.Start();
+        // 兜底：万一渲染回调停摆（窗口被藏、island 暂停渲染），动画不能卡死不收尾
+        var watchdog = DispatcherQueue.CreateTimer();
+        watchdog.Interval = TimeSpan.FromMilliseconds(ms + 400);
+        watchdog.IsRepeating = false;
+        watchdog.Tick += (_, _) =>
+        {
+            if (epoch != _slideEpoch) return;
+            StopSlide();
+            _ = SetWindowPos(hwnd, IntPtr.Zero, to.X, to.Y, 0, 0, SwpNoSizeFlag | SwpNoZOrderFlag | SwpNoActivateFlag);
+            try { _restRect = new Windows.Graphics.RectInt32(to.X, to.Y, _appWindow.Size.Width, _appWindow.Size.Height); } catch { }
+            done?.Invoke();
+        };
+        _slideWatchdog = watchdog;
+        watchdog.Start();
     }
 
     /// <summary>收起：整个窗口往贴着的那条边**滑出去**（跟展开滑进来同一条路子，方向相反），滑完再真收。</summary>
@@ -1562,8 +1626,13 @@ public sealed partial class ToolSidebarWindow : Window
     private void StopSlide()
     {
         _slideEpoch++;                                    // 让在跑的那一波作废（关键：竞态的根治）
-        _slideTimer?.Stop();
-        _slideTimer = null;
+        if (_slideFrame is not null)
+        {
+            try { Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= _slideFrame; } catch { }
+            _slideFrame = null;
+        }
+        _slideWatchdog?.Stop();
+        _slideWatchdog = null;
     }
 
     /// <summary>旧的内容滑入（只动 Panel 里的东西，窗口先铺开）——现在不用了，留着备用。</summary>
@@ -2096,6 +2165,14 @@ public sealed partial class ToolSidebarWindow : Window
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    // ── 滑动动画用的窗口移动（比 AppWindow.Move 轻，见 TweenWindow）──
+    private const uint SwpNoSizeFlag = 0x0001;
+    private const uint SwpNoZOrderFlag = 0x0004;
+    private const uint SwpNoActivateFlag = 0x0010;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     private static string LogPath => System.IO.Path.Combine(SettingsStore.Dir, "sidebar.log");
 

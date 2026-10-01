@@ -33,8 +33,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="随机抽号" FontSize="24" FontWeight="Bold" />
-                <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                <TextBlock Text="随机抽号" FontSize="28" FontWeight="Bold" />
+                <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                            Text="随机抽取学号或学生姓名，也可一键随机分组。号码取自系统加密随机数，结果公平可靠。" />
             </StackPanel>
             <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
@@ -50,7 +50,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="功能" FontSize="12.5" Opacity="0.6" VerticalAlignment="Center"
+            <TextBlock Text="功能" FontSize="12" Opacity="0.6" VerticalAlignment="Center"
                        HorizontalAlignment="Right" Margin="0,0,12,0" />
 
             <RadioButton x:Name="TaskDrawRadio" Grid.Column="1" GroupName="TaskMode"
@@ -75,7 +75,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="抽取对象" FontSize="12.5" Opacity="0.6" VerticalAlignment="Center"
+            <TextBlock Text="抽取对象" FontSize="12" Opacity="0.6" VerticalAlignment="Center"
                        HorizontalAlignment="Right" Margin="0,0,12,0" />
 
             <RadioButton x:Name="ModeRangeRadio" Grid.Column="1" GroupName="PoolMode"
@@ -91,11 +91,11 @@
                             VerticalAlignment="Center"
                             Background="{ThemeResource ControlFillColorSecondaryBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                        <TextBlock Text="1 ~ 50" FontSize="11.5" FontWeight="Bold"
+                        <TextBlock Text="1 ~ 50" FontSize="12" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="按号码抽取" FontSize="15" FontWeight="Bold" />
+                        <TextBlock Text="按号码抽取" FontSize="14" FontWeight="Bold" />
                         <TextBlock Text="在学号范围里抽号（如 1 ~ 50），打开即可直接使用。" FontSize="12"
                                    Opacity="0.65" TextWrapping="Wrap" />
                     </StackPanel>
@@ -115,11 +115,11 @@
                             VerticalAlignment="Center"
                             Background="{ThemeResource ControlFillColorSecondaryBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                        <TextBlock Text="姓名" FontSize="13" FontWeight="Bold"
+                        <TextBlock Text="姓名" FontSize="14" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="按名单抽取" FontSize="15" FontWeight="Bold" />
+                        <TextBlock Text="按名单抽取" FontSize="14" FontWeight="Bold" />
                         <TextBlock Text="导入 Excel 或 txt 名单，直接抽学生姓名。" FontSize="12"
                                    Opacity="0.65" TextWrapping="Wrap" />
                     </StackPanel>
@@ -143,7 +143,7 @@
                     <!-- 号码：起止范围 -->
                     <StackPanel x:Name="RangePanel" Orientation="Horizontal" Spacing="10"
                                 VerticalAlignment="Center">
-                        <TextBlock Text="号码范围" FontSize="12.5" FontWeight="SemiBold"
+                        <TextBlock Text="号码范围" FontSize="12" FontWeight="SemiBold"
                                    VerticalAlignment="Center" Margin="0,0,4,0" />
                         <!-- ⚠️ NumberBox 的 Maximum 必须填：不填的话在框里粘一个大数字（比如一亿），
                              后面 Enumerable.Range(Lo, size) 会瞬间申请几 GB → 界面冻死或直接 OOM。
@@ -168,7 +168,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="名单文件" FontSize="12.5" FontWeight="SemiBold"
+                        <TextBlock Text="名单文件" FontSize="12" FontWeight="SemiBold"
                                    VerticalAlignment="Center" Margin="0,0,4,0" />
                         <Button Grid.Column="1" Content="导入名单" Click="ImportRoster_Click" />
                         <!-- 导入之前先让人看见"名单文件该长什么样"（图 + 可下载的示例） -->
@@ -204,7 +204,7 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="14">
-                            <TextBlock Text="抽号设置" FontSize="13" FontWeight="Bold" />
+                            <TextBlock Text="抽号设置" FontSize="14" FontWeight="Bold" />
 
                             <NumberBox x:Name="CountBox" Header="抽取数量" Value="1" Minimum="1" Maximum="50"
                                        SmallChange="1" SpinButtonPlacementMode="Compact"
@@ -217,7 +217,7 @@
                                     HorizontalAlignment="Stretch" Height="40" />
 
                             <!-- 出错提示紧贴按钮：原来是甩在结果区下面，用户点完不知道哪儿不对 -->
-                            <TextBlock x:Name="ErrorText" FontSize="12.5"
+                            <TextBlock x:Name="ErrorText" FontSize="12"
                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                        TextWrapping="Wrap" Visibility="Collapsed" />
 
@@ -226,7 +226,7 @@
 
                             <!-- 状态区：当前抽什么、怎么抽 —— "还剩多少"已经挪到上面参数行里了
                                  （那属于"池子"的信息，紧挨着定义池子的控件） -->
-                            <TextBlock x:Name="SummaryText" FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" />
+                            <TextBlock x:Name="SummaryText" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
 
                             <!-- 公平性自检：低频的排查工具（实抽 2 万次看分布）。
                                  做成"一行链接 + 浮出面板"：以前是折叠区，标题被挤到可视区外面
@@ -248,7 +248,7 @@
                                 BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Grid>
-                                <TextBlock x:Name="ResultHint" Text="单击左侧「开始抽号」" FontSize="13" Opacity="0.55"
+                                <TextBlock x:Name="ResultHint" Text="单击左侧「开始抽号」" FontSize="12" Opacity="0.55"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 <VariableSizedWrapGrid x:Name="ResultHost" Orientation="Horizontal"
                                                        ItemWidth="150" ItemHeight="92"
@@ -284,7 +284,7 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="14">
-                            <TextBlock Text="分组设置" FontSize="13" FontWeight="Bold" />
+                            <TextBlock Text="分组设置" FontSize="14" FontWeight="Bold" />
 
                             <ComboBox x:Name="GroupModeBox" Header="分组方式" HorizontalAlignment="Stretch" />
                             <NumberBox x:Name="GroupValueBox" Header="组数" Value="4" Minimum="1"
@@ -301,7 +301,7 @@
                             <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Margin="0,2,0,2" />
 
-                            <TextBlock x:Name="GroupRangeHint" FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" />
+                            <TextBlock x:Name="GroupRangeHint" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
                             <!-- 用户最常问的就是"能分几次" —— 直接写在设置区里 -->
                             <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                        Text="每次单击「开始分组」都会重新打散一次，可反复使用、没有次数限制，也不影响抽号那边的「不重复」记录。" />
@@ -310,7 +310,7 @@
 
                     <StackPanel Grid.Column="1" Spacing="10">
                         <TextBlock x:Name="GroupHint" Text="单击左侧「开始分组」后，各组名单按行列出。"
-                                   FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
+                                   FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                         <StackPanel x:Name="GroupsHost" Spacing="10" />
                     </StackPanel>
                 </Grid>

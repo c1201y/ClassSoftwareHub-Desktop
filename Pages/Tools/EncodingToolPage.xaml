@@ -24,8 +24,8 @@
         </Grid.RowDefinitions>
 
         <StackPanel Spacing="2">
-            <TextBlock Text="编码 / 哈希工具" FontSize="24" FontWeight="Bold" />
-            <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+            <TextBlock Text="编码 / 哈希工具" FontSize="28" FontWeight="Bold" />
+            <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                        Text="校验文件：拖入文件即得四种哈希值，粘贴官方提供的哈希值会立即给出核对结论。也可对文本做 Base64 / URL 编解码。全部在本机完成。" />
         </StackPanel>
 
@@ -39,7 +39,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="用途" FontSize="12.5" Opacity="0.6" VerticalAlignment="Center"
+            <TextBlock Text="用途" FontSize="12" Opacity="0.6" VerticalAlignment="Center"
                        HorizontalAlignment="Right" Margin="0,0,12,0" />
 
             <RadioButton x:Name="FileTab" Grid.Column="1" GroupName="EncMode"
@@ -55,11 +55,11 @@
                             VerticalAlignment="Center"
                             Background="{ThemeResource ControlFillColorSecondaryBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                        <TextBlock Text="文件" FontSize="13" FontWeight="Bold"
+                        <TextBlock Text="文件" FontSize="14" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="校验文件" FontSize="15" FontWeight="Bold" />
+                        <TextBlock Text="校验文件" FontSize="14" FontWeight="Bold" />
                         <TextBlock Text="拖入文件即得 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴官方值会自动给结论。"
                                    FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
                     </StackPanel>
@@ -79,11 +79,11 @@
                             VerticalAlignment="Center"
                             Background="{ThemeResource ControlFillColorSecondaryBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                        <TextBlock Text="文本" FontSize="13" FontWeight="Bold"
+                        <TextBlock Text="文本" FontSize="14" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="文本编解码" FontSize="15" FontWeight="Bold" />
+                        <TextBlock Text="文本编解码" FontSize="14" FontWeight="Bold" />
                         <TextBlock Text="Base64 / URL 编码与解码，并实时计算这段文本的哈希值。"
                                    FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
                     </StackPanel>
@@ -97,7 +97,7 @@
                 <StackPanel Spacing="12">
 
                     <!-- 从软件详情页的「校验」键跳进来时才有：说明校验值是从哪来的 -->
-                    <TextBlock x:Name="FromAppHint" Visibility="Collapsed" FontSize="12.5"
+                    <TextBlock x:Name="FromAppHint" Visibility="Collapsed" FontSize="12"
                                TextWrapping="Wrap" Opacity="0.85" />
 
                     <!-- ① 选文件：一条横条，整条都能拖、能点 ——
@@ -120,7 +120,7 @@
                             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                 <TextBlock x:Name="DropHintText" Text="把文件拖到这里，或单击选择"
                                            FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock x:Name="SourceText" FontSize="11.5" Opacity="0.6"
+                                <TextBlock x:Name="SourceText" FontSize="12" Opacity="0.6"
                                            TextTrimming="CharacterEllipsis"
                                            Text="支持任意文件类型，大文件流式读取" />
                             </StackPanel>
@@ -147,12 +147,12 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="核对官方哈希值" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="核对官方哈希值" FontSize="12" FontWeight="SemiBold"
                                        VerticalAlignment="Center" />
                             <TextBox x:Name="ExpectedBox" Grid.Column="1"
                                      PlaceholderText="在此粘贴官网给出的 MD5 / SHA-1 / SHA-256 / SHA-512 值（空格、大小写、冒号均可忽略）"
-                                     FontFamily="Consolas" FontSize="12.5" TextChanged="Expected_TextChanged" />
-                            <TextBlock x:Name="MatchText" Grid.Column="2" FontSize="15" FontWeight="Bold"
+                                     FontFamily="Consolas" FontSize="12" TextChanged="Expected_TextChanged" />
+                            <TextBlock x:Name="MatchText" Grid.Column="2" FontSize="14" FontWeight="Bold"
                                        VerticalAlignment="Center" MaxWidth="300" TextWrapping="Wrap" />
                         </Grid>
                     </Border>
@@ -162,7 +162,7 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="文件哈希值" FontSize="13" FontWeight="Bold" Margin="0,0,0,2" />
+                            <TextBlock Text="文件哈希值" FontSize="14" FontWeight="Bold" Margin="0,0,0,2" />
                             <!-- 四行由 BuildHashRows 铺出来：算法名 · 值 · 复制，行与行之间一条分隔线 -->
                             <StackPanel x:Name="HashPanel" Spacing="0" />
                         </StackPanel>
@@ -188,14 +188,14 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="输入文本" FontSize="13" FontWeight="Bold"
+                                    <TextBlock Text="输入文本" FontSize="14" FontWeight="Bold"
                                                VerticalAlignment="Center" />
                                     <!-- 清空：原来只能全选删掉，贴一大段文本后想重来很别扭 -->
                                     <Button Grid.Column="1" Content="清空" Click="ClearInput_Click"
-                                            Padding="10,2,10,2" FontSize="12.5" />
+                                            Padding="10,2,10,2" FontSize="12" />
                                 </Grid>
                                 <TextBox x:Name="InputBox" AcceptsReturn="True" TextWrapping="Wrap" Height="168"
-                                         PlaceholderText="输入文本（支持中文）" FontFamily="Consolas" FontSize="13"
+                                         PlaceholderText="输入文本（支持中文）" FontFamily="Consolas" FontSize="12"
                                          TextChanged="Input_TextChanged" />
 
                                 <!-- 四个按钮平铺分不清哪个是哪种编码 → 改成"左边给算法、右边给方向"的表格型排布，
@@ -213,16 +213,16 @@
 
                                     <TextBlock Text="Base64" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
                                     <Button Grid.Column="1" Content="编码" Click="B64Enc_Click"
-                                            HorizontalAlignment="Stretch" FontSize="13" />
+                                            HorizontalAlignment="Stretch" FontSize="12" />
                                     <Button Grid.Column="2" Content="解码" Click="B64Dec_Click"
-                                            HorizontalAlignment="Stretch" FontSize="13" />
+                                            HorizontalAlignment="Stretch" FontSize="12" />
 
                                     <TextBlock Grid.Row="1" Text="URL" FontSize="12" Opacity="0.7"
                                                VerticalAlignment="Center" />
                                     <Button Grid.Row="1" Grid.Column="1" Content="编码" Click="UrlEnc_Click"
-                                            HorizontalAlignment="Stretch" FontSize="13" />
+                                            HorizontalAlignment="Stretch" FontSize="12" />
                                     <Button Grid.Row="1" Grid.Column="2" Content="解码" Click="UrlDec_Click"
-                                            HorizontalAlignment="Stretch" FontSize="13" />
+                                            HorizontalAlignment="Stretch" FontSize="12" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -231,17 +231,17 @@
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <StackPanel Spacing="10">
-                                <TextBlock Text="输出结果" FontSize="13" FontWeight="Bold" />
+                                <TextBlock Text="输出结果" FontSize="14" FontWeight="Bold" />
                                 <TextBox x:Name="OutputBox" AcceptsReturn="True" TextWrapping="Wrap" Height="168"
-                                         PlaceholderText="转换结果" FontFamily="Consolas" FontSize="13"
+                                         PlaceholderText="转换结果" FontFamily="Consolas" FontSize="12"
                                          TextChanged="Output_TextChanged" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="CopyOutButton" Content="复制结果" Click="CopyOut_Click"
-                                            IsEnabled="False" Padding="10,0,10,0" FontSize="13" />
+                                            IsEnabled="False" Padding="10,0,10,0" FontSize="12" />
                                     <Button x:Name="UseOutputButton" Content="替换输入" Click="UseOutput_Click"
-                                            IsEnabled="False" Padding="10,0,10,0" FontSize="13" />
+                                            IsEnabled="False" Padding="10,0,10,0" FontSize="12" />
                                 </StackPanel>
-                                <TextBlock x:Name="StatusText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
+                                <TextBlock x:Name="StatusText" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -251,7 +251,7 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="这段文本的哈希值" FontSize="13" FontWeight="Bold" />
+                            <TextBlock Text="这段文本的哈希值" FontSize="14" FontWeight="Bold" />
                             <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                        Text="随上方输入框的内容实时计算，无需单击任何按钮。" Margin="0,0,0,2" />
                             <StackPanel x:Name="TextHashPanel" Spacing="0" />

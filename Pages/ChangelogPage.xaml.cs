@@ -289,7 +289,7 @@ public sealed partial class ChangelogPage : Page
             {
                 var t = Inline(line.TrimStart('#').Trim());
                 if (t.Length == 0) continue;
-                lines.Add(new NoteLine(t, 15, bold, new Thickness(0, 8, 0, 2)));
+                lines.Add(new NoteLine(t, 14, bold, new Thickness(0, 8, 0, 2)));
                 continue;
             }
 
@@ -297,11 +297,11 @@ public sealed partial class ChangelogPage : Page
             {
                 var t = Inline(line[2..].Trim());
                 if (t.Length == 0) continue;
-                lines.Add(new NoteLine("· " + t, 13, normal, new Thickness(6, 0, 0, 0)));
+                lines.Add(new NoteLine("· " + t, 12, normal, new Thickness(6, 0, 0, 0)));
                 continue;
             }
 
-            lines.Add(new NoteLine(Inline(line), 13, normal, new Thickness(0, 2, 0, 0)));
+            lines.Add(new NoteLine(Inline(line), 12, normal, new Thickness(0, 2, 0, 0)));
         }
 
         return lines;

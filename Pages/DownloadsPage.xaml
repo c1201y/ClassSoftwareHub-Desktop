@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="ClassSoftwareHub.Desktop.Pages.DownloadsPage"
-    NavigationCacheMode="Disabled"
+    NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:svc="using:ClassSoftwareHub.Desktop.Services">
@@ -22,8 +22,8 @@
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="任务进行" FontSize="30" FontWeight="Bold" />
-                <TextBlock x:Name="SummaryText" FontSize="12.5" Opacity="0.65" TextWrapping="Wrap" />
+                <TextBlock Text="任务进行" FontSize="28" FontWeight="Bold" />
+                <TextBlock x:Name="SummaryText" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- 任务列表：不用 ListView —— 这里不需要选中，用 ItemsControl 省掉一整套容器 chrome -->
@@ -50,7 +50,7 @@
                                               VerticalAlignment="Center" />
 
                                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Title}"
-                                               FontSize="15" FontWeight="Bold" VerticalAlignment="Center"
+                                               FontSize="14" FontWeight="Bold" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
 
                                     <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8"
@@ -88,10 +88,10 @@
             <!-- 空状态：一条任务都没有的时候 -->
             <StackPanel x:Name="EmptyPanel" Grid.Row="1" Spacing="12" Visibility="Collapsed"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE896;" FontSize="34" Opacity="0.45" HorizontalAlignment="Center" />
-                <TextBlock Text="当前无下载任务" FontSize="15" FontWeight="SemiBold" Opacity="0.75"
+                <FontIcon Glyph="&#xE896;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
+                <TextBlock Text="当前无下载任务" FontSize="14" FontWeight="SemiBold" Opacity="0.75"
                            HorizontalAlignment="Center" />
-                <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12.5" Opacity="0.6"
+                <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Opacity="0.6"
                            Text="在「软件下载」中打开任意软件并单击「下载」，任务将显示在此处。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
             </StackPanel>
 

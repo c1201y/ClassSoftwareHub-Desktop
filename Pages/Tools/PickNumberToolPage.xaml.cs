@@ -549,7 +549,7 @@ public sealed partial class PickNumberToolPage : Page
             Text = $"实抽 {FairTotal:N0} 次，分成 {buckets} 格，每格理论约 {Math.Round(expect)} 次；" +
                    $"实际 {counts.Min()} ~ {counts.Max()} 次（卡方 {chi:0.0}，" +
                    (normal ? "分布正常" : "本次分布略有偏差，可再次抽取") + "）",
-            FontSize = 12.5,
+            FontSize = 12,
             Opacity = 0.75,
             MaxWidth = 420,
             TextWrapping = TextWrapping.Wrap,
@@ -663,7 +663,7 @@ public sealed partial class PickNumberToolPage : Page
             row.Children.Add(new TextBlock
             {
                 Text = $"第 {i + 1} 组 · {members.Count} {unit}",
-                FontSize = 12.5,
+                FontSize = 12,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Opacity = 0.7,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -685,7 +685,7 @@ public sealed partial class PickNumberToolPage : Page
                     Child = new TextBlock
                     {
                         Text = m,
-                        FontSize = 13,
+                        FontSize = 12,
                         TextTrimming = TextTrimming.CharacterEllipsis,
                     },
                 });

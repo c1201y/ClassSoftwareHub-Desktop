@@ -20,3 +20,6 @@ crash.log
 Thumbs.db
 desktop.ini
 .DS_Store
+
+## AI 协作工具的工作目录（本地备份等，不入库）
+.workbuddy/

@@ -19,10 +19,55 @@ public sealed partial class WelcomePage : Page
     public WelcomePage()
     {
         InitializeComponent();
-        Loaded += (_, _) => Populate();
+        Loaded += (_, _) => { Populate(); RefreshUpdateReadyBar(); };
     }
 
-    private void Populate()
+    // ── 更新待装横幅 ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 后台下载完成 → 存档里有待装标记 → 顶部 InfoBar 提醒（用户选了「稍后安装」或没点通知都算）。
+    /// 装上新版本再进来时，待装 tag 与当前版本一致 → 自检清档；安装包被清理了也顺手清，不摆死横幅。
+    /// </summary>
+    private void RefreshUpdateReadyBar()
+    {
+        var s = App.Settings.Current;
+        var path = s.UpdatePendingPath ?? "";
+
+        if (path.Length == 0 || !System.IO.File.Exists(path))
+        {
+            // 标记悬空（包被清了 / 档是手抄的）：清掉别让它永久挂着
+            if (path.Length > 0)
+            {
+                s.UpdatePendingPath = "";
+                s.UpdatePendingTag = "";
+                App.Settings.Save();
+            }
+            UpdateReadyBar.IsOpen = false;
+            return;
+        }
+
+        // 待装 tag == 当前版本（VersionPrefix + ShellVersion）= 已经装上了，待装周期结束
+        if (s.UpdatePendingTag == ShellConfig.VersionPrefix + ShellConfig.ShellVersion)
+        {
+            s.UpdatePendingPath = "";
+            s.UpdatePendingTag = "";
+            App.Settings.Save();
+            UpdateReadyBar.IsOpen = false;
+            return;
+        }
+
+        UpdateReadyBar.Title = $"{(s.UpdatePendingTag.Length > 0 ? s.UpdatePendingTag : "新版本")} 已下载就绪";
+        UpdateReadyBar.IsOpen = true;
+    }
+
+    private async void InstallPending_Click(object sender, RoutedEventArgs e)
+    {
+        // 防连点：安装会退出应用，多点只会并发起安装器
+        if (sender is Button b) b.IsEnabled = false;
+        await Services.Updating.UpdateFlow.InstallPendingNowAsync();
+    }
+
+    private async void Populate()
     {
         var ui = App.Content.Ui;
 
@@ -33,8 +78,21 @@ public sealed partial class WelcomePage : Page
         ShellVersionText.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
 
         LoadBanner();
-        BuildQuickInfo();
         BuildQuickLinks();
+
+        // 「硬件信息 / 系统信息」：注册表 + SMBIOS 表 + 显示适配器一串读取，全压在 UI 线程上
+        // 会让首页刚出来先僵一下。挪到后台线程算，算完再填 —— 这块内容不参与首屏关键渲染。
+        try
+        {
+            var q = await System.Threading.Tasks.Task.Run(Core.SystemInfo.Gather);
+            FillRows(HardwareList, q.Hardware);
+            FillRows(SystemList, q.System);
+        }
+        catch (Exception ex)
+        {
+            // 读不到就不填，别把首页搞崩
+            PerfLog.Mark("首页系统信息读取失败：" + ex.Message);
+        }
     }
 
     /// <summary>一行快捷入口：项目仓库 / 作者主页 / 赞助作者 / 加入Q群 / 更新日志。</summary>
@@ -55,14 +113,7 @@ public sealed partial class WelcomePage : Page
             App.MainWindow?.OpenExternal(link.Url);
     }
 
-    /// <summary>「硬件信息 / 系统信息」：一行一项的列表（图标 + 标签 + 值），不用卡片。</summary>
-    private void BuildQuickInfo()
-    {
-        var q = SystemInfo.Gather();
-        FillRows(HardwareList, q.Hardware);
-        FillRows(SystemList, q.System);
-    }
-
+    /// <summary>把一行行「图标 + 标签 + 值」填进列表（行间用 <c>InfoRowDivider</c> 那条分隔线）。</summary>
     private void FillRows(StackPanel panel, IReadOnlyList<SystemInfo.InfoLine> lines)
     {
         panel.Children.Clear();
@@ -94,7 +145,7 @@ public sealed partial class WelcomePage : Page
         var label = new TextBlock
         {
             Text = line.Label,
-            FontSize = 13,
+            FontSize = 12,
             Opacity = 0.65,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -146,7 +197,11 @@ public sealed partial class WelcomePage : Page
             //    万一同尺寸换图会被判成没过期，带上版本号就不会串图。
             var path = EmbeddedAssets.ExtractToCache("dv1.1.png", "banner-dv1.1.png");
             if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                Banner.Source = new BitmapImage(new Uri(path));
+            {
+                // DecodePixelHeight：图是 1512×720，实际只按高度 140 显示。
+                // 不设的话会整张全尺寸解码（≈4MB 位图）再缩下去；按 140 × 2 倍高 DPI 解就够了。
+                Banner.Source = new BitmapImage(new Uri(path)) { DecodePixelHeight = 280 };
+            }
         }
         catch { /* 图片读不到就不显示 */ }
     }

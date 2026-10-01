@@ -21,7 +21,15 @@ public static class SidebarFooterKeys
 /// <summary>可持久化的用户设置。</summary>
 public sealed class AppSettings
 {
-    public string Backdrop { get; set; } = "acrylic";          // acrylic | mica | solid
+    /// <summary>
+    /// 窗口背景材质：<c>mica</c> | <c>acrylic</c> | <c>solid</c>。
+    /// 2026-10-01 默认从 acrylic 改成 mica：Mica 只采样一次壁纸、几乎零每帧成本，
+    /// 而亚克力要实时模糊窗口背后，滚动/拖动时是白交的 GPU 税；且 Mica 本就是
+    /// Windows 11 系统窗口（设置、资源管理器）用的材质，更贴"要 Windows 原生"这条铁律。
+    /// Windows 10 上 Mica 不可用，ApplyBackdrop 会自动退到亚克力，不用在这儿判。
+    /// ⚠️ 这只影响<B>没存过设置</B>的新用户；老用户存档里存的是自己的选择，不会被动改。
+    /// </summary>
+    public string Backdrop { get; set; } = "mica";         // mica | acrylic | solid
     public string Theme { get; set; } = "system";              // system | light | dark
     /// <summary>分体：外部组件（侧边栏 / 常用工具浮窗 / 截图编辑窗）用**单独**的外观设置。</summary>
     public bool SplitTheme { get; set; }
@@ -87,6 +95,17 @@ public sealed class AppSettings
     /// ⚠️ 认不出的值一律当 <c>dock</c>（见 <c>ToolSidebarWindow.IsFreeMode</c>）。
     /// </summary>
     public string SidebarMode { get; set; } = "dock";
+
+    /// <summary>
+    /// 侧边布局页里拖放卡片的**落位收尾**效果（2026-10-01 Nick：两种手感都挺好，索性都给用户自己挑）：
+    /// <list type="bullet">
+    ///   <item><c>plain</c> = 平滑收势：落位后直接把"提起来"的装饰（蓝描边 / 投影 / 0.95 透明度）收掉就完事。</item>
+    ///   <item><c>dip</c>（默认）= 轻落一下：收势之前替身先轻微下沉一次再复位，落地感更实。</item>
+    /// </list>
+    /// ⚠️ 认不出的值一律当 <c>dip</c>（见 <c>SidebarLayoutPage.DropDipScale</c>）。
+    /// ⚠️ 只管**侧边布局页里拖放动画**的手感，跟真侧边栏的行为无关，改了不用通知任何窗口。
+    /// </summary>
+    public string SidebarDropAnim { get; set; } = "dip";
 
     /// <summary>侧边栏沿边位置（0~1）；-1 = 居中（默认）。拖动收起状态的抓手时记下来。两种模式共用。</summary>
     public double SidebarPosRatio { get; set; } = -1;
@@ -197,6 +216,22 @@ public sealed class AppSettings
 
     /// <summary>自动检查更新（启动时静默查一次，默认开）。</summary>
     public bool AutoCheckUpdate { get; set; } = true;
+
+    /// <summary>
+    /// 本地安装包保留数量（1~10，默认 3）：启动时自动清理 <c>updates</c> 目录，
+    /// 按修改时间从新到旧留 N 个、其余删掉。留着的包给「装回旧版本」用 —— 本地有就不再下载。
+    /// 使用处会自行夹取（见 InstallerCleanup.Clean），存档里不夹是为了老档里出现怪值时也不至于越界。
+    /// </summary>
+    public int InstallerKeepCount { get; set; } = 3;
+
+    /// <summary>
+    /// 后台下载完成的更新安装包绝对路径（空 = 没有）。下载校验通过就记下，
+    /// 通知里的「稍后安装」和首页横幅都认它；装好新版本启动后由首页自检清掉。
+    /// </summary>
+    public string UpdatePendingPath { get; set; } = "";
+
+    /// <summary>后台下载完成的版本号（配 UpdatePendingPath，仅供展示）。</summary>
+    public string UpdatePendingTag { get; set; } = "";
 
     /// <summary>软件下载页的卡片视图：tile（磁贴，3 列带简介）| grid（网格，5 列紧凑）。</summary>
     public string AppCardView { get; set; } = "tile";

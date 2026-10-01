@@ -119,15 +119,22 @@ public sealed partial class VolumeWindow : Window
 
     /// <summary>
     /// 侧边栏贴哪条边（跟侧边栏同一个设置）。竖/横版、滑入方向、合成器排哪儿全靠它。
-    /// ⚠️ 侧边栏选「左右两边」（= "both"）时这里**落到 right** —— 音量浮窗固定挂右边那条，
-    ///    锚点也是右边的 <c>ToolSidebarWindow.CurrentRect</c>（见那边的 AnchorInstance）。
+    /// ⚠️ 一律问边条**当前实际**贴的边（<see cref="ToolSidebarWindow.CurrentEdge"/>），
+    ///    别读死 <c>App.Settings.SidebarEdge</c>：自由模式下那条可能是旧值、用户还能把边条拖到任意一边。
+    ///    读错方向 = 浮窗排到边条另一侧（屏幕外）→ 夹回屏幕边 → 压住边条（2026-10-01 修）。
     /// </summary>
-    public static string Edge => App.Settings.Current.SidebarEdge is "left" or "top" or "bottom"
-        ? App.Settings.Current.SidebarEdge
-        : "right";
+    public static string Edge => ToolSidebarWindow.CurrentEdge;
 
     /// <summary>主音量浮窗当前在屏幕上的矩形（给合成器浮窗「贴着它排」用）。</summary>
     public static RectInt32? CurrentRect => _instance?._chrome.CurrentRect;
+
+    /// <summary>主音量浮窗本次落定的**最终**矩形（滑入动画的目标位置，不是半路上的实时位置）。
+    /// ⚠️ 合成器必须锚这里：锚实时位置的话，主音量还在滑入时点「展开」，
+    ///    合成器就按半路位置落座，主音量随后滑到位正好压进合成器（2026-10-01 修「三个窗叠一起」）。</summary>
+    public static RectInt32? AnchorRect => _instance?._finalRect ?? CurrentRect;
+
+    /// <summary>ShowSelf/Reposition 里算出的最终落点（滑入动画的目标）。</summary>
+    private RectInt32? _finalRect;
 
     private void Configure()
     {
@@ -266,6 +273,7 @@ public sealed partial class VolumeWindow : Window
             // 锚点 = 边条（挨着它长）；边条拿不到就当成贴屏幕边
             var anchor = ToolSidebarWindow.CurrentRect ?? EdgeGeometry.EdgeBar(Edge, work);
             var (start, final) = EdgeGeometry.BesideAnchor(Edge, anchor, work, w, h, scale);
+            _finalRect = new RectInt32(final.X, final.Y, w, h);   // 给合成器当锚（别让它锚半路上的实时位置）
 
             _chrome.Present(start, w, h);
             _visible = true;
@@ -328,6 +336,7 @@ public sealed partial class VolumeWindow : Window
 
             var anchor = ToolSidebarWindow.CurrentRect ?? EdgeGeometry.EdgeBar(Edge, work);
             var (_, final) = EdgeGeometry.BesideAnchor(Edge, anchor, work, w, h, scale);
+            _finalRect = new RectInt32(final.X, final.Y, w, h);
 
             _chrome.Present(final, w, h);
         }

@@ -152,8 +152,11 @@ public sealed partial class MainWindow : Window
             if (root is null) return;
 
             // 让用户自己决定；选「稍后」就安静放过，下次启动还会再问一次
-            if (!await Services.Updating.UpdateFlow.AskAsync(root, release)) return;
-            await Services.Updating.UpdateFlow.RunAsync(root, service, release);
+            var choice = await Services.Updating.UpdateFlow.AskAsync(root, release);
+            if (choice == Services.Updating.UpdateFlow.UpdateChoice.Now)
+                await Services.Updating.UpdateFlow.RunAsync(root, service, release);
+            else if (choice == Services.Updating.UpdateFlow.UpdateChoice.Background)
+                Services.Updating.UpdateFlow.StartBackgroundDownload(service, release);
         }
         catch
         {
@@ -196,6 +199,69 @@ public sealed partial class MainWindow : Window
         _balloonAction = onClick;
         try { _tray?.ShowBalloon(title, text); }
         catch { }
+    }
+
+    // ── 更新后台下载完成的通知 ──────────────────────────────────────
+
+    private bool _updateToastWired;
+
+    /// <summary>
+    /// 更新包下载完成：优先发系统 Toast（唯一能带「现在安装 / 稍后安装」按钮的通知形态），
+    /// 注册失败（免安装形态下的个别系统限制）自动退回托盘气泡。
+    /// 按钮语义：现在安装 = 马上进安装器并退出应用；稍后安装 = 什么都不做 —— 待装标记已在存档里，
+    /// 下次启动首页顶部横幅会接着提醒，直到装上为止。
+    /// </summary>
+    public void NotifyUpdateReady(string tag)
+    {
+        ShowUpdateReadyToast(tag);
+    }
+
+    private void ShowUpdateReadyToast(string tag)
+    {
+        try
+        {
+            var manager = Microsoft.Windows.AppNotifications.AppNotificationManager.Default;
+            if (!_updateToastWired)
+            {
+                manager.NotificationInvoked += OnUpdateToastInvoked;
+                manager.Register();
+                _updateToastWired = true;
+            }
+
+            var note = new Microsoft.Windows.AppNotifications.Builder.AppNotificationBuilder()
+                .AddText($"ClassSoftwareHub {tag} 下载完成")
+                .AddText("安装包已通过校验，随时可以安装。")
+                .AddButton(new Microsoft.Windows.AppNotifications.Builder.AppNotificationButton("现在安装")
+                    .AddArgument("updateAction", "install"))
+                .AddButton(new Microsoft.Windows.AppNotifications.Builder.AppNotificationButton("稍后安装")
+                    .AddArgument("updateAction", "defer"))
+                .BuildNotification();
+            manager.Show(note);
+            return;
+        }
+        catch
+        {
+            // Toast 起不来（注册被策略挡了之类）：托盘气泡兜底，点气泡打开应用看首页横幅
+        }
+
+        ShowBalloon($"ClassSoftwareHub {tag} 下载完成", "安装包已通过校验，打开应用即可安装。",
+            () => { ShowFromTray(); Shell.NavigateTo("home"); });
+    }
+
+    private void OnUpdateToastInvoked(Microsoft.Windows.AppNotifications.AppNotificationManager sender,
+        Microsoft.Windows.AppNotifications.AppNotificationActivatedEventArgs args)
+    {
+        args.Arguments.TryGetValue("updateAction", out var action);
+        if (action != "install") return;    // 稍后安装 / 点正文：待装标记已就位，不做动作
+
+        // 事件回调不保证在 UI 线程上；安装要动 Application.Current，必须回去
+        DispatcherQueue?.TryEnqueue(() => _ = Services.Updating.UpdateFlow.InstallPendingNowAsync());
+    }
+
+    /// <summary>后台更新下载失败：报一声，别让人干等（Toast 注册没成也一样，直接走气泡）。</summary>
+    public void NotifyBackgroundDownloadFailed(string tag, string reason)
+    {
+        ShowBalloon($"ClassSoftwareHub {tag} 下载失败", $"{reason}\n可稍后在应用内重试。", null);
     }
 
     /// <summary>
@@ -393,7 +459,14 @@ public sealed partial class MainWindow : Window
                 RequestTitlebarRegions();
                 ApplyWindowRounding();   // 最大化 / 还原 → 圆角跟着切换（最大化必须直角）
             }
+
+            // 最小化 = 用户看不见窗口了，这时候才值得把内存还给系统（教学机 8G）。
+            // ⚠️ 不要挪到切页时做 —— 那条路会把 GC 卡在用户正要滚动的瞬间（见 Services/MemoryTrimmer.cs）。
+            if (args.DidPresenterChange && IsMinimized()) Services.MemoryTrimmer.TrimLater(2500);
         };
+
+        // 让内存回收知道"用户此刻看不看得见窗口"：藏进托盘、最小化 → 可以收；否则一律不收。
+        Services.MemoryTrimmer.IsIdle = () => !IsWindowVisible(WindowNative.GetWindowHandle(this)) || IsMinimized();
     }
 
     /// <summary>
@@ -681,7 +754,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void ApplyBackdrop(string kind)
     {
-        kind = string.IsNullOrWhiteSpace(kind) ? "acrylic" : kind.Trim().ToLowerInvariant();
+        kind = string.IsNullOrWhiteSpace(kind) ? "mica" : kind.Trim().ToLowerInvariant();
         var applied = false;
 
         try
@@ -1246,6 +1319,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>窗口此刻是不是最小化状态（托盘隐藏走的另一条路，见 <see cref="HideToTray"/>）。</summary>
+    private bool IsMinimized()
+        => _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Minimized;
+
     /// <summary>主窗口藏进托盘（任务栏上不留最小化按钮）。</summary>
     public void HideToTray()
     {
@@ -1336,8 +1413,11 @@ public sealed partial class MainWindow : Window
             if (result is { HasUpdate: true, Release: { } release })
             {
                 // 一样先问，绝不替用户做主
-                if (!await Services.Updating.UpdateFlow.AskAsync(root, release)) return;
-                await Services.Updating.UpdateFlow.RunAsync(root, service, release);
+                var choice = await Services.Updating.UpdateFlow.AskAsync(root, release);
+                if (choice == Services.Updating.UpdateFlow.UpdateChoice.Now)
+                    await Services.Updating.UpdateFlow.RunAsync(root, service, release);
+                else if (choice == Services.Updating.UpdateFlow.UpdateChoice.Background)
+                    Services.Updating.UpdateFlow.StartBackgroundDownload(service, release);
                 return;
             }
 

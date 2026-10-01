@@ -60,8 +60,12 @@ public static class WindowChrome
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
     private static extern int SetWindowLong32(IntPtr hwnd, int index, int value);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     private static extern IntPtr GetWindowLongPtr64(IntPtr hwnd, int index);
+    // ⚠️ 上面的 EntryPoint 是 2026-10-01 补的：之前漏写，user32 里根本没有名为
+    //    "GetWindowLongPtr64" 的导出 → x64 上第一次调用就 EntryPointNotFoundException，
+    //    被 MakeBorderless 的 catch 吞掉 → **无边框化从未生效过**，浮窗一直带 ~2px 幻影框架
+    //    （Nick 截图里那圈"没填充完的边框"的真正根源）。
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLong32(IntPtr hwnd, int index);
@@ -69,13 +73,76 @@ public static class WindowChrome
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
 
+    // ── WM_NCCALCSIZE：干掉"幻影框架"的最后一刀（2026-10-01）──────────────
+    // 实测（2026-10-01，屏幕实拍 + FrameBounds 对账）：即便 WS_POPUP 化成功，
+    // DWM 仍给窗口保留 ~2px（左/右/下）非客户区 —— GetWindowRect 比 DWM 实际可视范围
+    // 大出一圈，XAML 内容被迫往里缩，那一圈露出没压薄纱的裸亚克力/系统框，
+    // 在壁纸上就是一圈"没填充完"的灰环。关 NC 渲染、设边框色都治不了它。
+    // 标准解法：子类化窗口，WM_NCCALCSIZE(wParam=TRUE) 直接返回 0 —— 客户区=整个窗口，
+    // 非客户区彻底归零，内容铺满到边。无边框 Win32/WinUI 应用的通用做法。
+
+    private const uint WmNcCalcSize = 0x0083;
+
+    private delegate IntPtr SubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
+        uint uIdSubclass, IntPtr dwRefData);
+
+    [DllImport("comctl32.dll")]
+    private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, uint uIdSubclass, IntPtr dwRefData);
+
+    private const uint NcCalcSizeSubclassId = 0x43534842;   // "CSHB"
+
+    [DllImport("comctl32.dll")]
+    private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>给窗口装上 WM_NCCALCSIZE 处理（幂等：同 ID 重复装会替换，不会叠加）。
+    /// 必须在**拥有该窗口的线程**上调用（RemoveBorder 的调用方都在 UI 线程）。</summary>
+    private static void InstallNcCalcSizeHook(IntPtr hwnd)
+    {
+        var ok = SetWindowSubclass(hwnd, NcCalcSizeProc, NcCalcSizeSubclassId, IntPtr.Zero);
+        ChromeLog($"subclass hwnd={hwnd} ok={ok}");
+    }
+
+    private static bool _ncProcLogged;
+
+    private static IntPtr NcCalcSizeProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
+        uint uIdSubclass, IntPtr dwRefData)
+    {
+        if (uMsg == WmNcCalcSize && wParam != IntPtr.Zero)
+        {
+            if (!_ncProcLogged)
+            {
+                _ncProcLogged = true;
+                ChromeLog($"NCCALCSIZE fired hwnd={hWnd} → 返回0（客户区=整个窗口）");
+            }
+            return IntPtr.Zero;                            // 客户区 = 整个窗口，别给我留框
+        }
+
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    private static long ReadStyle(IntPtr hwnd) =>
+        IntPtr.Size == 8 ? GetWindowLongPtr64(hwnd, GwlStyle).ToInt64() : GetWindowLong32(hwnd, GwlStyle);
+
+    /// <summary>诊断日志（排查"幻影框架"用，只在出错/首次时写）。</summary>
+    private static void ChromeLog(string message)
+    {
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(Services.SettingsStore.Dir, "chrome.log"),
+                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+        }
+        catch { }
+    }
+
     /// <summary>
     /// 把窗口做成真正的无边框 popup：去掉标题栏/粗边框/系统菜单，加上 WS_POPUP，
     /// 再让系统重算一次框架。做完窗口就"贴边"了，系统不再在外面画那圈线。
     /// </summary>
-    public static void MakeBorderless(IntPtr hwnd)
+    /// <returns>样式改成功与否。失败（极少）时调用方走"关 NC 渲染"的老路兜底。</returns>
+    public static bool MakeBorderless(IntPtr hwnd)
     {
-        if (hwnd == IntPtr.Zero) return;
+        if (hwnd == IntPtr.Zero) return false;
 
         try
         {
@@ -97,10 +164,12 @@ public static class WindowChrome
 
             _ = SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+            return true;
         }
         catch
         {
             // 改不动就算了，顶多还留一圈线，不影响用
+            return false;
         }
     }
 
@@ -113,29 +182,50 @@ public static class WindowChrome
     {
         if (hwnd == IntPtr.Zero) return;
 
+        ChromeLog($"RemoveBorder begin hwnd={hwnd}");
         try
         {
-            MakeBorderless(hwnd);        // 先把系统框架整个去掉，这是"白边"的根
+            var styleBefore = ReadStyle(hwnd);
+            var borderless = MakeBorderless(hwnd);   // 先把系统框架整个去掉，这是"白边"的根
+            ChromeLog($"  MakeBorderless={borderless} styleAfter=0x{ReadStyle(hwnd):X}");
+
+            // 客户区=整个窗口，杀掉幻影框架（见 WM_NCCALCSIZE 段注释）。单独兜异常：
+            // 它要是炸了不能连累后面的边框色/圆角（更不能悄悄吞掉整段流程）。
+            try { InstallNcCalcSizeHook(hwnd); }
+            catch (Exception ex) { ChromeLog("  subclass FAILED: " + ex.GetType().Name + " " + ex.Message); }
+
             SetDarkMode(hwnd, dark);
 
-            // ⚠️ **白边（那圈细白线）的真正元凶**：DWM 给窗口画的非客户区（1px 边框 + 2px 亮光）。
-            //    实测：DWMWA_BORDER_COLOR 设成"无色"它不认（回值一直是 0）；改成红色倒是会变红 —— 说明那 1px 是边框、
-            //    紧挨着的 2px 是 DWM 的框架亮光。只有把非客户区渲染整个关掉，这条线才真的没了。
-            //    代价：窗口没有系统阴影、圆角和那 3px 会变透明（所以内容看起来会往里缩 3px，但不会再看到白线）。
-            var disabled = NcRenderingDisabled;
-            if (DwmSetWindowAttribute(hwnd, DwmwaNcRenderingPolicy, ref disabled, sizeof(int)) != 0)
+            if (borderless)
             {
-                // Win10 有些版本不认这个属性，那就退回"把边框设成无色"
+                // ⚠️ **WS_POPUP 成功就别再关 NC 渲染了**（2026-10-01 修"没填充完的一圈边"）：
+                //    关掉后窗口还留着 ~2px 的"幻影框架"——窗口矩形比 DWM 实际可视范围大出一圈，
+                //    内容被迫往里缩，那一圈露出的是没压薄纱的裸亚克力，在浅色壁纸上就是一圈灰环。
+                //    WS_POPUP + NCCALCSIZE 归零后已经没有非客户区可画，不再需要这个老兜底。
+                //    边框色设成"无色"防止个别系统还在外圈画 1px 线（Win11 生效，老系统自动忽略）。
                 var none = unchecked((int)ColorNone);
                 _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref none, sizeof(int));
+            }
+            else
+            {
+                // 老路兜底：样式改不动（或 Win10 个别版本），只好关掉 DWM 的非客户区渲染。
+                // 代价是内容往里缩 ~3px，但至少没有白线。
+                var disabled = NcRenderingDisabled;
+                if (DwmSetWindowAttribute(hwnd, DwmwaNcRenderingPolicy, ref disabled, sizeof(int)) != 0)
+                {
+                    var none2 = unchecked((int)ColorNone);
+                    _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref none2, sizeof(int));
+                }
             }
 
             var corner = rounded ? CornerRound : CornerDoNotRound;
             _ = DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref corner, sizeof(int));
+
+            ChromeLog($"  done style=0x{ReadStyle(hwnd):X} corner={(rounded ? "round" : "square")}");
         }
-        catch
+        catch (Exception ex)
         {
-            // Win10 或 DWM 不给面子：保持系统默认就行，别影响功能
+            ChromeLog("EXCEPTION: " + ex.GetType().Name + " " + ex.Message);
         }
     }
 

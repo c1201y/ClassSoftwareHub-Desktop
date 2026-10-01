@@ -440,7 +440,7 @@ public sealed partial class ClockToolPage : Page
         content.Children.Add(new TextBlock
         {
             Text = preset.Name,
-            FontSize = 12.5,
+            FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
@@ -478,7 +478,7 @@ public sealed partial class ClockToolPage : Page
             Tag = preset,
             MinWidth = 0,
             Padding = new Thickness(10, 4, 10, 4),
-            FontSize = 12.5,
+            FontSize = 12,
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, automationName);
         b.Click += handler;

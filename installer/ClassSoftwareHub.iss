@@ -3,7 +3,7 @@
 ;
 ;  编译（在工程根目录）：
 ;    & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
-;    （版本号默认取下面的 DesktopVersion；临时覆盖就加 /DDesktopVersion=1.1.0-insider1.2）
+;    （版本号默认取下面的 DesktopVersion；临时覆盖就加 /DDesktopVersion=1.1.0-insider1.3）
 ;
 ;  产物：dist\installer\ClassSoftwareHub-Setup-dv<DesktopVersion>.exe
 ;        内测例：ClassSoftwareHub-Setup-dv1.1.0-insider1.0.exe
@@ -23,7 +23,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.1.0-insider1.2"
+  #define DesktopVersion "1.1.0-insider1.3"
 #endif
 
 #define AppName "ClassSoftwareHub"
@@ -98,13 +98,35 @@ const
   // WebView2 运行时在注册表里的固定 GUID
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
 
+/// <summary>NT 内核号 → 用户认识的商品名（6.1 = Win7 这种对应关系别让用户自己翻译）。</summary>
+function WindowsName(V: TWindowsVersion): String;
+begin
+  if (V.Major = 10) and (V.Build >= 22000) then
+    Result := 'Windows 11'
+  else if V.Major = 10 then
+    Result := 'Windows 10'
+  else if (V.Major = 6) and (V.Minor = 3) then
+    Result := 'Windows 8.1'
+  else if (V.Major = 6) and (V.Minor = 2) then
+    Result := 'Windows 8'
+  else if (V.Major = 6) and (V.Minor = 1) then
+    Result := 'Windows 7'
+  else if (V.Major = 6) and (V.Minor = 0) then
+    Result := 'Windows Vista'
+  else
+    Result := Format('Windows %d.%d', [V.Major, V.Minor]);
+
+  if V.ServicePackMajor > 0 then
+    Result := Result + Format(' SP%d', [V.ServicePackMajor]);
+end;
+
 /// <summary>系统够不够跑 .NET 10 + WinUI3：要求 Windows 10 1809 及以上（build >= 17763）。</summary>
 function SystemVersionOk(var Why: String): Boolean;
 var
   V: TWindowsVersion;
 begin
   GetWindowsVersionEx(V);
-  Why := Format('Windows %d.%d (Build %d)', [V.Major, V.Minor, V.Build]);
+  Why := Format('%s（Build %d）', [WindowsName(V), V.Build]);
 
   if V.Major < 10 then
   begin

@@ -26,8 +26,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="全屏时钟" FontSize="24" FontWeight="Bold" />
-                <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
+                <TextBlock Text="全屏时钟" FontSize="28" FontWeight="Bold" />
+                <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                            Text="将屏幕变为大型时钟，便于考试、自习时查看时间。默认使用跟随主题的黑白配色，也可设置背景图片并叠加蒙版、亚克力或云母材质。" />
             </StackPanel>
             <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
@@ -49,7 +49,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="预览" FontSize="13" FontWeight="Bold" />
+                        <TextBlock Text="预览" FontSize="14" FontWeight="Bold" />
 
                         <Border x:Name="StageHost" Height="248" CornerRadius="8" BorderThickness="1"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -67,8 +67,10 @@
                                     <TextBlock x:Name="DateText" FontSize="14" Opacity="0.85"
                                                HorizontalAlignment="Center" />
                                 </StackPanel>
+                                <!-- #33000000 是压在用户自选背景图上的暗化遮罩，与主题无关，刻意不取主题画刷 -->
                                 <Border x:Name="DropHint" Visibility="Collapsed"
-                                        Background="#33000000" BorderThickness="2" BorderBrush="#0078D4"
+                                        Background="#33000000" BorderThickness="2"
+                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                         CornerRadius="8" Margin="4">
                                     <TextBlock Text="松开鼠标即设为背景图" FontSize="14" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -107,7 +109,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel>
-                        <TextBlock Text="外观设置" FontSize="13" FontWeight="Bold" />
+                        <TextBlock Text="外观设置" FontSize="14" FontWeight="Bold" />
 
                         <!-- ── ① 显示与字号（最常调，排最前）──
                              ⚠️ 组标题一律用这个「标题 + 右侧横线」的行结构（见 #GroupHeader 注释），
@@ -117,7 +119,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="显示与字号" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="显示与字号" FontSize="12" FontWeight="SemiBold"
                                        Opacity="0.65" VerticalAlignment="Center" />
                             <!-- ⚠️ 这里必须用 DividerStrokeColorDefaultBrush：卡片描边那支
                                  （CardStrokeColorDefaultBrush）在深色主题下是「黑 10%」，压在卡片底上
@@ -139,7 +141,7 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="ScaleLabel" FontSize="12.5" VerticalAlignment="Center" />
+                                <TextBlock x:Name="ScaleLabel" FontSize="12" VerticalAlignment="Center" />
                                 <Slider x:Name="ScaleSlider" Grid.Column="1"
                                         Minimum="0.6" Maximum="1.3" StepFrequency="0.05" />
                             </Grid>
@@ -153,7 +155,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="配色 · 字体 · 材质" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="配色 · 字体 · 材质" FontSize="12" FontWeight="SemiBold"
                                        Opacity="0.65" VerticalAlignment="Center" />
                             <!-- ⚠️ 这里必须用 DividerStrokeColorDefaultBrush：卡片描边那支
                                  （CardStrokeColorDefaultBrush）在深色主题下是「黑 10%」，压在卡片底上
@@ -186,7 +188,7 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="VeilStrengthLabel" FontSize="12.5" VerticalAlignment="Center" />
+                                <TextBlock x:Name="VeilStrengthLabel" FontSize="12" VerticalAlignment="Center" />
                                 <Slider x:Name="VeilSlider" Grid.Column="1"
                                         Minimum="0" Maximum="100" StepFrequency="1" />
                             </Grid>
@@ -198,7 +200,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="背景图片" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="背景图片" FontSize="12" FontWeight="SemiBold"
                                        Opacity="0.65" VerticalAlignment="Center" />
                             <!-- ⚠️ 这里必须用 DividerStrokeColorDefaultBrush：卡片描边那支
                                  （CardStrokeColorDefaultBrush）在深色主题下是「黑 10%」，压在卡片底上
@@ -239,7 +241,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="2" VerticalAlignment="Center">
-                            <TextBlock Text="外观预设" FontSize="13" FontWeight="Bold" />
+                            <TextBlock Text="外观预设" FontSize="14" FontWeight="Bold" />
                             <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                        Text="把当前外观整体存下来，下次一键套用。下面每张卡片就是该预设的实际效果。" />
                         </StackPanel>

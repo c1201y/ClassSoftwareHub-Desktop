@@ -27,10 +27,13 @@
             </StackPanel>
         </Grid>
 
+        <!-- 2026-10-01 Nick 反馈「页面还够宽导航栏就自动收进去了，阈值太大」：
+             CompactModeThresholdWidth 820→700、ExpandedModeThresholdWidth 1180→1008
+             （1008 = WinUI 系统默认，与 Gallery 同款）：≥1008 展开、700~1008 图标条、<700 全隐 -->
         <NavigationView x:Name="Nav" Grid.Row="1" Background="{x:Null}"
                         IsBackButtonVisible="Visible" IsSettingsVisible="False"
                         PaneDisplayMode="Auto" OpenPaneLength="252"
-                        CompactModeThresholdWidth="820" ExpandedModeThresholdWidth="1180"
+                        CompactModeThresholdWidth="700" ExpandedModeThresholdWidth="1008"
                         BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">
 
@@ -65,12 +68,15 @@
                  同类的还有 `NavigationViewContentGridBorderBrush` / `...GridBorderThickness`
                  （内容区那一圈边框），一并交回系统。
 
-              → 结论：**这里只留 `NavigationViewContentBackground` 一条透明**。
-                 面板自然有"一整块"的底，那条分隔线也还在。
+              → 结论（2026-10-01 修订，Nick 对标 WinUI Gallery）：
+                 **一个键都不刷，NavigationView.Resources 整段删掉**。
+                 Gallery 的分层 = 系统默认模板：标题栏 + 导航栏露窗口 Mica 材质，
+                 内容区默认取 LayerFillColorDefaultBrush（设计规范「内容层色」，
+                 "Used on background colors of any material to create layering"）+ 顶部 1px 分隔线。
+                 09-28 刷透明治的「死灰盖材质」根因是当时的背板组合；现在默认背板已是 Mica，
+                 与 Gallery 同构，恢复系统默认即 Gallery 观感，不会复发。
+                 ⚠️ 若再遇内容区盖材质，先查背板设置，⛔ 别再刷 Transparent 抹掉分层。
             -->
-            <NavigationView.Resources>
-                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
-            </NavigationView.Resources>
             <!-- 上半区：首页 / 软件下载 / 内置工具 / 侧边布局 / 实验性功能（实验性功能永远排最后）
                  ⚠️ 图标别撞脸：E719（购物袋）＝软件商店，E896（下载箭头）留给「任务进行」，
                     E7F4（显示器）＝本机核实，EA80（灯泡）＝实验性功能。
@@ -197,8 +203,25 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <!-- CacheSize=0：页面不留在内存里（教学机内存小，切页就回收，别一路涨上去） -->
-            <Frame x:Name="ContentFrame" CacheSize="0" />
+            <!--
+                CacheSize：原本是 0（页面一切走就丢），但那样每次回来都要重新解析 XAML + 重建整棵树，
+                切页能明显看出顿一下。现在留 12 个（页面用 NavigationCacheMode="Enabled" 的才真进缓存，
+                其余仍旧走完就丢）。内存账：常在的几页都是轻量可视化，合计约 10~30MB；
+                真正的"内存还给系统"改由 MemoryTrimmer 在窗口不可见时做（见 Services/MemoryTrimmer.cs）。
+
+                ContentTransitions：WinUI 原生的切页过渡（淡入 + 轻微上移），不是自绘动画。
+            -->
+            <Frame x:Name="ContentFrame" CacheSize="12">
+                <Frame.ContentTransitions>
+                    <TransitionCollection>
+                        <NavigationThemeTransition>
+                            <NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                                <EntranceNavigationTransitionInfo />
+                            </NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                        </NavigationThemeTransition>
+                    </TransitionCollection>
+                </Frame.ContentTransitions>
+            </Frame>
         </NavigationView>
     </Grid>
 </UserControl>

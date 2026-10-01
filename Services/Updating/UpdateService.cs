@@ -172,7 +172,7 @@ public sealed class UpdateService
     }
 
     /// <summary>把 package.Md5 里的 "asset:URL" 解析成真正的 32 位十六进制 MD5。</summary>
-    private static async Task<string> ResolveMd5Async(UpdatePackage package, CancellationToken ct)
+    public static async Task<string> ResolveMd5Async(UpdatePackage package, CancellationToken ct)
     {
         var raw = package.Md5 ?? "";
         if (raw.Length == 0) return "";
@@ -210,6 +210,28 @@ public sealed class UpdateService
     {
         var m = Regex.Match(text, @"\b[0-9a-fA-F]{32}\b");
         return m.Success ? m.Value.ToLowerInvariant() : "";
+    }
+
+    /// <summary>
+    /// 给「本地已有安装包，复用前校验」用的：整文件流式算 MD5（+可选 SHA256）。
+    /// 与下载路径同一套算法，保证校验口径一致。
+    /// </summary>
+    public static async Task<(string Md5, string Sha256)> HashFileAsync(string path, bool withSha256, CancellationToken ct)
+    {
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        using var sha = withSha256 ? IncrementalHash.CreateHash(HashAlgorithmName.SHA256) : null;
+
+        await using var fs = File.OpenRead(path);
+        var buffer = new byte[128 * 1024];
+        int read;
+        while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+        {
+            md5.AppendData(buffer, 0, read);
+            sha?.AppendData(buffer, 0, read);
+        }
+
+        return (Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant(),
+                sha is null ? "" : Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant());
     }
 
     private static void TryDelete(string path)

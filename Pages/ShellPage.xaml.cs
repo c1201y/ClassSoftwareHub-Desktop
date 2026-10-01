@@ -35,10 +35,13 @@ public sealed partial class ShellPage : UserControl
         Nav.DisplayModeChanged += (_, _) => ApplyPaneInset();
         ApplyPaneInset();
 
-        // 每次切页停稳之后收一次内存（页面本身不缓存，这里再把工作集还给系统）
+        // 切页计时（Debug / CSH_PERF=1 才有输出，见 Core/PerfLog.cs）。
+        // ⚠️ 这里**不再**顺手调 MemoryTrimmer —— 切页之后 3 秒在 UI 线程上来一次全量 GC + WaitForPendingFinalizers，
+        //    正好落在用户开始滚动/点击的时候，是"切过去先顿一下"的主因之一。回收改在窗口不可见时做。
+        ContentFrame.Navigating += (_, e) => PerfLog.NavBegin(CurrentTag);
         ContentFrame.Navigated += (_, _) =>
         {
-            Services.MemoryTrimmer.TrimLater(3000);
+            PerfLog.NavEnd(ContentFrame.Content);
             UpdateBackButton();
         };
     }

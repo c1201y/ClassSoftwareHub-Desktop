@@ -127,14 +127,14 @@ public sealed partial class EncodingToolPage : Page
             {
                 Text = EmptyMark,
                 FontFamily = new FontFamily("Consolas"),
-                FontSize = 12.5,
+                FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 IsTextSelectionEnabled = true,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             table[name] = value;
 
-            var copy = new Button { Content = "复制", Padding = new Thickness(10, 0, 10, 0), FontSize = 12.5 };
+            var copy = new Button { Content = "复制", Padding = new Thickness(10, 0, 10, 0), FontSize = 12 };
             var captured = name;
             copy.Click += (_, _) => Copy(table[captured].Text, captured);
 
@@ -146,7 +146,7 @@ public sealed partial class EncodingToolPage : Page
             row.Children.Add(new TextBlock
             {
                 Text = name,
-                FontSize = 12.5,
+                FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
             });
