@@ -1881,7 +1881,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ExitApp()
+    /// <summary>
+    /// 真正退出应用（托盘菜单「退出」/ 其它需要走人的地方）。
+    /// ⚠️⚠️ 这里的 <c>_exitRequested = true</c> 是**必需**的，不是可选优化：
+    ///    见 <c>ConfigureWindow</c> 里挂的 AppWindow.Closing —— 它按 <see cref="_exitRequested"/> 判断
+    ///    这次关闭是"用户点了 ×"（收进托盘）还是"真的要走"。少了这一行，退出请求会被当成点 × 处理，
+    ///    变成 <c>SW_HIDE</c> 躲进托盘、**进程不退**。
+    ///    2026-10-01 的「1.2 升不到 1.3」就是更新流程绕过了本方法、直接调
+    ///    <c>Application.Current.Exit()</c> 造成的：应用没退 → 安装程序查到 AppMutex 占用 →
+    ///    静默模式自动取消 → 安装悄悄失败。
+    /// </summary>
+    public void ExitApp()
     {
         _exitRequested = true;
         try { _settings.Save(); } catch { }

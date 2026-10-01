@@ -244,26 +244,43 @@ public sealed class UpdateService
     /// <summary>
     /// 静默跑安装包（Inno Setup 的 /SILENT 那套；.msi 走 msiexec）。
     /// Inno 会按同一个 AppId 识别出已安装 → 原地升级，**保留用户当初选的安装目录**。
-    /// 调用方（一般是设置页）随后应该让应用自己退出，别跟安装程序抢文件。
+    ///
+    /// ⚠️⚠️ 对 .exe（Inno）**必须延迟启动**，不能直接拉起来：
+    ///    Inno 一启动（实测 16 毫秒内）就检查 .iss 里的 <c>AppMutex</c>，那正是本应用的单实例 Mutex。
+    ///    查到应用还在跑 → 弹「安装程序检测到 ClassSoftwareHub 当前正在运行，请先关闭…」，
+    ///    而这个框会被 /SUPPRESSMSGBOXES **自动按「取消」处理** → 安装静默失败（退出码 1），
+    ///    用户端看不到任何提示，只表现为"版本没变"。
+    ///    2026-10-01 实测结论：应用在跑时安装 **100% 失败**；关掉应用再装，11 秒成功。
+    ///    所以这里借 cmd 的 ping 拖约 3 秒，给调用方留出"先退出应用"的窗口。
+    ///    调用方随后应**立即**退出，不要等（见 UpdateFlow.RunAsync / InstallPendingNowAsync）。
     /// </summary>
     public static void RunInstaller(string installerPath)
     {
         var ext = Path.GetExtension(installerPath).ToLowerInvariant();
-        ProcessStartInfo psi;
         if (ext == ".msi")
         {
-            psi = new ProcessStartInfo("msiexec.exe", $"/i \"{installerPath}\" /qb /norestart");
-        }
-        else
-        {
-            // Inno Setup 静默参数：/SP- 不显示"准备安装"提示，/CLOSEAPPLICATIONS 自动关掉占用的应用，
-            // /TASKS="desktopicon" 保证升级后桌面快捷方式还在
-            psi = new ProcessStartInfo(installerPath)
+            var msi = new ProcessStartInfo("msiexec.exe", $"/i \"{installerPath}\" /qb /norestart")
             {
-                Arguments = "/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES /TASKS=\"desktopicon\"",
+                UseShellExecute = true,
             };
+            Process.Start(msi);
+            return;
         }
-        psi.UseShellExecute = true;
+
+        // Inno Setup 静默参数：/SP- 不显示"准备安装"提示，/CLOSEAPPLICATIONS 自动关掉占用的应用，
+        // /TASKS="desktopicon" 保证升级后桌面快捷方式还在
+        const string installerArgs =
+            "/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES /TASKS=\"desktopicon\"";
+
+        // ⚠️ 计时用 ping 而不是 timeout：timeout 在没有控制台（CreateNoWindow=true）时会报
+        //    "输入重定向不受支持，立即退出"，等于根本没等。
+        //    ping -n 4 = 3 次间隔 ≈ 3 秒。
+        var psi = new ProcessStartInfo("cmd.exe")
+        {
+            Arguments = $"/c ping -n 4 127.0.0.1 >nul & \"{installerPath}\" {installerArgs}",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
         Process.Start(psi);
     }
 

@@ -181,11 +181,14 @@ public static class UpdateFlow
             bar.Value = 100;
             status.Text = $"下载完成（{downloaded.VerifyNote}），正在安装：安装完成后应用将自动重新打开。";
 
+            // ⚠️⚠️ RunInstaller 只是"安排"（它内部会先等约 3 秒才拉起安装程序），
+            //    随后必须**立刻真的退出应用**：Inno 一启动就查 AppMutex，
+            //    这时应用还在的话安装会被静默取消（详见 UpdateService.RunInstaller 注释）。
+            //    顺序反了（先装后退 / 不退）就是 2026-10-01「1.2 升不到 1.3」的根因。
             UpdateService.RunInstaller(downloaded.FilePath);
-            await Task.Delay(1200);      // 让安装程序先起来，别跟自己抢文件
-
             allowClose = true;
-            Application.Current.Exit();
+            await Task.Delay(400);       // 让 cmd 来得及把延迟启动安排下去，再走
+            ExitAppNow();
             return true;
         }
         catch (OperationCanceledException)
@@ -277,8 +280,29 @@ public static class UpdateFlow
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
 
         UpdateService.RunInstaller(path);
-        await Task.Delay(1200);      // 让安装程序先起来，别跟自己抢文件
-        Application.Current.Exit();
+        await Task.Delay(400);       // 让 cmd 来得及把延迟启动安排下去，再走
+        ExitAppNow();
+    }
+
+    /// <summary>
+    /// 真正把应用退掉，给随后的安装程序腾位置。
+    ///
+    /// ⚠️⚠️ 必须走 <see cref="MainWindow.ExitApp"/>（它会先置 <c>_exitRequested</c>）。
+    ///    直接调 <c>Application.Current.Exit()</c> 会被 MainWindow 里 AppWindow.Closing 的托盘逻辑
+    ///    拦成"用户点了 ×" → <c>SW_HIDE</c> 躲进托盘，**进程不退** → 安装程序查到 AppMutex 占用 →
+    ///    静默模式自动取消 → 安装失败且无任何提示。这就是 2026-10-01「1.2 无法更新到 1.3」的根因。
+    /// </summary>
+    private static void ExitAppNow()
+    {
+        if (App.MainWindow is { } win)
+        {
+            win.ExitApp();
+            return;
+        }
+
+        // 主窗口已经没了（理论上到不了这儿）：退而求其次
+        try { Application.Current.Exit(); }
+        catch { Environment.Exit(0); }
     }
 
     private static void RunOnUi(Action action)
