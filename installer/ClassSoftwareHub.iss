@@ -55,7 +55,11 @@ UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName} dv{#DesktopVersion}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-AppMutex={#AppName}.Desktop.SingleInstance
+; ⚠️⚠️ 这里**故意不设 AppMutex**（原值 `{#AppName}.Desktop.SingleInstance`）：
+;     Inno 一启动就会查这个 Mutex，查到应用还在跑就直接拒装，而那个框又会被
+;     /SUPPRESSMSGBOXES 自动按「取消」→ 静默失败、用户零提示。
+;     旧版本客户端（≤ insider1.3）的更新流程本来就退不干净，正好被这一条卡死。
+;     改由 [Code] PrepareToInstall 自己把旧应用关掉，见那段注释。
 CloseApplications=yes
 RestartApplications=no
 ; ⚠️ 故意留 6.1（Inno 允许的最低值）：系统版本我们自己用 [Code] 检查，这样能弹出「打开网页版」的按钮
@@ -97,6 +101,59 @@ const
   WebView2Bootstrapper = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703';
   // WebView2 运行时在注册表里的固定 GUID
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+/// <summary>应用的单实例 Mutex 还在不在（在 = 旧版本还跑着）。</summary>
+function AppIsRunning(): Boolean;
+begin
+  Result := CheckForMutexes('{#AppName}.Desktop.SingleInstance');
+end;
+
+/// <summary>
+/// 安装前把还在运行的旧版本关掉。
+///
+/// ⚠️⚠️ 为什么非自己动手不可（2026-10-01 实测）：
+///   ① 旧版本（≤ insider1.3）的更新流程调 `Application.Current.Exit()`，漏了应用自己的
+///      「真要退出」标志 → 被托盘逻辑当成「用户点了 ×」→ 只把窗口藏起来，**进程不退**；
+///   ② 这一段客户端代码**早就发到用户机器上了，改不了**。能改的只有这份安装脚本，
+///      而它偏偏永远是「新」的（每次更新都从 GitHub 现拉）→ 所以只能在这儿兜底。
+///   ③ 原先靠 `AppMutex` 拦（已从 [Setup] 移除）：Inno 启动 16 毫秒就查 Mutex，
+///      查到应用还在 → 弹框 → 被 `/SUPPRESSMSGBOXES` 自动按「取消」→ 静默失败。
+///   ④ 也不能指望 Inno 的 `/CLOSEAPPLICATIONS`：它走 Restart Manager，RM 关应用是发
+///      **WM_CLOSE**，而本应用的 WM_CLOSE 被 close-to-tray 逻辑吞掉了（正是 ① 那个毛病）
+///      → RM 永远关不掉它，这条参数对本项目等于没用。
+///   ⑤ 所以只能 `taskkill`：先礼貌请一次（不带 `/F`），等一会儿还不退就强杀。
+///      应用无未保存状态、设置即时落盘，被杀不丢数据；`.iss` 的 `[Run]` 段随后会把它拉起来。
+/// </summary>
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  R: Integer;
+begin
+  Result := '';
+  if not AppIsRunning() then
+    Exit;
+
+  // 交互式安装时问一声；应用内更新的静默安装不打扰，直接关
+  if not WizardSilent() then
+  begin
+    if MsgBox('检测到 {#AppName} 正在运行，安装前需要先关闭它。' + #13#10 + #13#10 +
+              '是否继续？', mbConfirmation, MB_YESNO) = IDNO then
+    begin
+      Result := '安装已取消：请先关闭 {#AppName} 再运行安装程序。';
+      Exit;
+    end;
+  end;
+
+  // ① 先好好请一次（用户若关掉了「关闭时收进托盘」，这一步它就自己退了）
+  Exec('cmd.exe', '/c taskkill /IM {#AppExeName}', '', SW_HIDE, ewWaitUntilTerminated, R);
+  Sleep(1500);
+
+  // ② 还不退就强杀
+  if AppIsRunning() then
+  begin
+    Exec('cmd.exe', '/c taskkill /F /IM {#AppExeName}', '', SW_HIDE, ewWaitUntilTerminated, R);
+    Sleep(600);
+  end;
+end;
 
 /// <summary>NT 内核号 → 用户认识的商品名（6.1 = Win7 这种对应关系别让用户自己翻译）。</summary>
 function WindowsName(V: TWindowsVersion): String;
