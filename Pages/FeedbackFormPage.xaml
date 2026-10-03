@@ -22,7 +22,9 @@
     -->
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
-            <StackPanel MaxWidth="1064" Padding="24,32,24,44">
+            <!-- 1008 = 全站统一的内容列 960 + 左右各 24 Padding（与其它页 `1*/998*(Max960)/1*` 等效）。
+                 原来是 1064（内容 1016），比全站宽 56 —— 2026-10-02 收口。 -->
+            <StackPanel MaxWidth="1008" Padding="24,32,24,44">
 
                 <!-- 页头 = 类型图标 + 名称（跟网页版的表单头一致：图标 30、名称 28pt） -->
                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -38,7 +40,7 @@
                          Message="提交后，所填内容将公开显示于本站仓库的议题列表中，任何人均可查看。请勿填写密码、手机号等敏感信息。" />
 
                 <!-- 基本信息 + 联系方式（跟网页版一样，同一张卡里用一条分隔线切开） -->
-                <Border Margin="0,24,0,0" CornerRadius="8" BorderThickness="1"
+                <Border Margin="0,24,0,0" CornerRadius="4" BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         Padding="22,20,22,24">
@@ -93,7 +95,7 @@
                         <StackPanel Spacing="6">
                             <TextBox x:Name="ContactBox" Header="联系方式" PlaceholderText="QQ / 微信 / 邮箱"
                                      HorizontalAlignment="Stretch" />
-                            <TextBlock Text="选填。填写后将公开展示，便于维护者联系确认。"
+                            <TextBlock Text="选填。您的联系方式将在本地加密后提交，仅维护者可解密查看。"
                                        FontSize="12" TextWrapping="Wrap"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
@@ -101,7 +103,7 @@
                 </Border>
 
                 <!-- 本机信息（桌面版独有，网页版给不了，所以单独一张卡） -->
-                <Border Margin="0,24,0,0" CornerRadius="8" BorderThickness="1"
+                <Border Margin="0,24,0,0" CornerRadius="4" BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         Padding="22,20,22,24">

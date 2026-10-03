@@ -230,7 +230,8 @@ public sealed partial class WelcomePage : Page
                 App.MainWindow?.Shell.NavigateTo("apps");
                 break;
             case "tools":
-                App.MainWindow?.Shell.NavigateTo("tools");
+                // 走专用入口：除了切到工具索引页，还要把导航里的分组展开（从外面跳进来时看不出里面有子项）
+                App.MainWindow?.Shell.NavigateToTools();
                 break;
             case "sidebar":
                 App.MainWindow?.Shell.NavigateTo("sidebar");

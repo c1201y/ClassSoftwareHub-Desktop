@@ -32,7 +32,7 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.1.0-insider1.4";
+    public const string ShellVersion = "1.1.0-insider1.5";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -47,7 +47,7 @@ public static class ShellConfig
     //   · 预览版（insider）→ 预发布 Release ＋ 非预发布（预览用户也能跟上正式版）
     //
     // 发版时按这套约定起名，才能被自动识别（别乱起）：
-    //   tag  ：正式版 `dv1.0.0`      预发布 `dv1.0.0-insider1.4`（发布时勾 Pre-release）
+    //   tag  ：正式版 `dv1.0.0`      预发布 `dv1.0.0-insider1.5`（发布时勾 Pre-release）
     //   资产 ：`ClassSoftwareHub-Setup-<tag>.exe`（名字带 setup 才认）＋ 同名 `.md5`
     //   正文 ：会原样显示在更新对话框里 → 写本次更新内容
     // ════════════════════════════════════════════════════════════════
@@ -67,8 +67,8 @@ public static class ShellConfig
     /// </summary>
     public static string DefaultUpdateChannel => IsInsider ? "insider" : "stable";
 
-    /// <summary>与站点 v2.3.3 对齐的适配版本号（内容包里读不到 app.version 时的兜底）。</summary>
-    public const string SiteVersionTarget = "v2.3.3";
+    /// <summary>与站点 v2.3.4 对齐的适配版本号（内容包里读不到 app.version 时的兜底）。</summary>
+    public const string SiteVersionTarget = "v2.3.4";
 
     public const string WebView2DownloadUrl = "https://developer.microsoft.com/microsoft-edge/webview2/";
 
@@ -108,6 +108,60 @@ public static class ShellConfig
 
     /// <summary>仓库里软件数据所在目录（子目录 apps/ 一个软件一个 json，根上还有 categories.json）。</summary>
     public const string SiteRepoDataDir = "软件数据";
+
+    // ════════════════════════════════════════════════════════════════
+    // 自建提交服务 —— 「提交软件」与「回声洞投稿」共用
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 提交服务入口（自建 Worker，令牌在服务端，客户端只发内容）。
+    /// 提交软件走 <c>{入口}/api/submit</c>；回声洞投稿走 <c>{入口}/api/echocave</c>。
+    /// 两个域名指向同一套服务，按顺序试；成功的那个记进 <see cref="SubmitEndpointFile"/>。
+    /// </summary>
+    public static readonly string[] SubmitEndpoints =
+    {
+        "https://cshapi.132614.xyz",
+        "https://submit.132614.xyz",
+    };
+
+    /// <summary>「上次可用的提交入口」记忆文件（与提交软件共用同一个）。</summary>
+    public const string SubmitEndpointFile = "submit-endpoint.txt";
+
+    /// <summary>提交请求超时（毫秒）。</summary>
+    public const int SubmitTimeoutMs = 10000;
+
+    /// <summary>提交入口的完整地址（按"上次成功优先"排好序）。</summary>
+    public static System.Collections.Generic.List<string> OrderedSubmitEndpoints()
+    {
+        var list = new System.Collections.Generic.List<string>();
+        try
+        {
+            var file = System.IO.Path.Combine(AppPaths.DataDir, SubmitEndpointFile);
+            if (System.IO.File.Exists(file))
+            {
+                var remembered = System.IO.File.ReadAllText(file).Trim();
+                if (System.Array.IndexOf(SubmitEndpoints, remembered) >= 0) list.Add(remembered);
+            }
+        }
+        catch { /* 读不到就用默认顺序 */ }
+
+        foreach (var endpoint in SubmitEndpoints)
+            if (!list.Contains(endpoint)) list.Add(endpoint);
+
+        return list;
+    }
+
+    /// <summary>记下这次成功的入口，下次先试它。</summary>
+    public static void RememberSubmitEndpoint(string baseUrl)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(AppPaths.DataDir);
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(AppPaths.DataDir, SubmitEndpointFile), baseUrl);
+        }
+        catch { /* 记不住不影响功能 */ }
+    }
 
     /// <summary>
     /// 正式来源：站点上的内容清单（route 2 的产物，跟站点一起发布）。

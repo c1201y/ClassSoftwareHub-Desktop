@@ -92,7 +92,14 @@
                         <FontIcon Glyph="&#xE719;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="内置工具" Tag="tools">
+                <!--
+                  内置工具：和「实验性功能」一样是分组父项 —— 点它 = 进工具索引页 + 展开/收起分组，
+                  子项（图片取色 / 随机抽号 / 课堂计时器 / 全屏时钟 / 编码哈希 / 系统镜像）直达各自页面。
+                  子项由 ShellPage 构造时按 ToolCatalog.All 动态生成（tag = ToolDef.Id），
+                  ⛔ 别在 XAML 里手写 —— 工具清单只有 ToolCatalog 一份，手写会变成两处维护。
+                  父项自己也是入口（进 ToolsPage），不进 NavigationView 的选中体系（原因同实验性功能）。
+                -->
+                <NavigationViewItem x:Name="ToolsNav" Content="内置工具" Tag="tools">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
                     </NavigationViewItem.Icon>
@@ -164,6 +171,11 @@
                                 <FontIcon Glyph="&#xE765;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
+                        <!--
+                          日志查看：Nick 2026-10-02 拍板「不要实验性」，入口挪到 设置 → 诊断
+                          （Pages/SettingsPage.xaml）。NavigateTagCore 的 "logs" case 保留，
+                          供设置页跳转（含 page=logs 启动参数）用。
+                        -->
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

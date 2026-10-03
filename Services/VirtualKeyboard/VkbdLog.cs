@@ -25,10 +25,7 @@ internal static class VkbdLog
         {
             lock (Gate)
             {
-                File.AppendAllText(
-                    Path.Combine(SettingsStore.Dir, "vkbd.log"),
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\r\n",
-                    System.Text.Encoding.UTF8);
+                Core.AppLog.Write("vkbd", Core.LogLevel.Info, message);
             }
         }
         catch

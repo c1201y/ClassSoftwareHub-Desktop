@@ -499,9 +499,7 @@ public sealed class SettingsStore
     {
         try
         {
-            Directory.CreateDirectory(Dir);
-            File.AppendAllText(Path.Combine(Dir, "settings.log"),
-                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            Core.AppLog.Info("settings", message);
         }
         catch
         {

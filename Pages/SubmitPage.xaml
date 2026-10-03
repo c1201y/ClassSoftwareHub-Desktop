@@ -10,30 +10,23 @@
       ⚠️ 标题必须在 960 列**里面** —— 曾经它横跨整宽、卡片居中，
          宽窗口下标题贴最左、卡片在中间，两套左缘对不齐。
     -->
-    <Grid Padding="24,36,24,44">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
-        </Grid.ColumnDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,36,24,44">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
+            </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="提交软件" FontSize="30" FontWeight="Bold" />
-                <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                           Text="提交内容先以草稿形式存入仓库（submissions/），审核通过后上架。带 * 的为必填项。" />
-            </StackPanel>
-
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="14">
+            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
+                <StackPanel Spacing="4" Margin="0,0,0,20">
+                    <TextBlock Text="提交软件" FontSize="28" FontWeight="Bold" />
+                    <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
+                               Text="提交内容先以草稿形式存入仓库（submissions/），审核通过后上架。带 * 的为必填项。" />
+                </StackPanel>
 
                     <!-- ═══ 从 GitHub 一键读取 ═══ -->
-                    <Border CornerRadius="8" Padding="20" BorderThickness="1"
+                    <Border CornerRadius="4" Padding="20" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="12">
@@ -61,7 +54,7 @@
                                      Title="读取失败" />
                             <InfoBar x:Name="ImportOkBar" IsOpen="False" IsClosable="False" Severity="Success"
                                      Title="读取完成" />
-                            <Border x:Name="ImportReport" Visibility="Collapsed" CornerRadius="8" Padding="12"
+                            <Border x:Name="ImportReport" Visibility="Collapsed" CornerRadius="4" Padding="12"
                                     BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}">
@@ -71,7 +64,7 @@
                     </Border>
 
                     <!-- ═══ 基本信息 ═══ -->
-                    <Border CornerRadius="8" Padding="20" BorderThickness="1"
+                    <Border CornerRadius="4" Padding="20" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="14">
@@ -115,7 +108,7 @@
                             </TextBox>
 
                             <TextBox x:Name="ContactBox" PlaceholderText="如 QQ / 邮箱 / 站内留言方式"
-                                     Description="仅写入审核工单供管理员查看，不会显示在网站上">
+                                     Description="您的联系方式将在本地加密后提交，仅管理员可解密查看">
                                 <TextBox.Header>
                                     <TextBlock><Run Text="联系方式" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
@@ -124,7 +117,7 @@
                     </Border>
 
                     <!-- ═══ 补充信息 ═══ -->
-                    <Border CornerRadius="8" Padding="20" BorderThickness="1"
+                    <Border CornerRadius="4" Padding="20" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel Spacing="14">
@@ -191,7 +184,6 @@
 
                     <TextBlock x:Name="Toast" FontSize="12" Opacity="0.75" Margin="0,4,0,10" />
                 </StackPanel>
-            </ScrollViewer>
         </Grid>
-    </Grid>
+    </ScrollViewer>
 </Page>

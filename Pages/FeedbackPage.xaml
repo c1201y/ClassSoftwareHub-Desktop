@@ -24,7 +24,9 @@
     -->
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
-            <StackPanel MaxWidth="1064" Padding="24,32,24,44">
+            <!-- 1008 = 全站统一的内容列 960 + 左右各 24 Padding（与其它页 `1*/998*(Max960)/1*` 等效）。
+                 原来是 1064（内容 1016），比全站宽 56 —— 2026-10-02 收口。 -->
+            <StackPanel MaxWidth="1008" Padding="24,32,24,44">
 
                 <!-- 页头 -->
                 <TextBlock Text="反馈中心" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,16" />
@@ -33,7 +35,7 @@
                 <StackPanel x:Name="ChooseView" Spacing="0">
 
                     <!-- 主视觉横幅：主题色 → 面色 的 100° 渐变，跟网页版的 .feedback-hero 一个意思 -->
-                    <Border x:Name="HeroBanner" CornerRadius="8" BorderThickness="1"
+                    <Border x:Name="HeroBanner" CornerRadius="4" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Padding="28,36,28,40">
                         <StackPanel MaxWidth="680" HorizontalAlignment="Left" Spacing="0">
@@ -52,12 +54,12 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0" CornerRadius="8" BorderThickness="1"
+                        <Border Grid.Column="0" CornerRadius="4" BorderThickness="1"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Button Click="KindCard_Click" Tag="report"
                                     Background="Transparent" BorderThickness="0" Padding="22,24,22,24"
-                                    CornerRadius="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                    CornerRadius="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                     HorizontalContentAlignment="Stretch">
                                 <Grid ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
@@ -82,12 +84,12 @@
                             </Button>
                         </Border>
 
-                        <Border Grid.Column="1" CornerRadius="8" BorderThickness="1"
+                        <Border Grid.Column="1" CornerRadius="4" BorderThickness="1"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Button Click="KindCard_Click" Tag="suggestion"
                                     Background="Transparent" BorderThickness="0" Padding="22,24,22,24"
-                                    CornerRadius="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                    CornerRadius="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                     HorizontalContentAlignment="Stretch">
                                 <Grid ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
@@ -123,7 +125,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <Border Grid.Column="0" CornerRadius="8" BorderThickness="1"
+                            <Border Grid.Column="0" CornerRadius="4" BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     Padding="18,18,18,20">
@@ -157,7 +159,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border Grid.Column="1" CornerRadius="8" BorderThickness="1"
+                            <Border Grid.Column="1" CornerRadius="4" BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     Padding="18,18,18,20">
@@ -185,7 +187,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border Grid.Column="2" CornerRadius="8" BorderThickness="1"
+                            <Border Grid.Column="2" CornerRadius="4" BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     Padding="18,18,18,20">
@@ -216,7 +218,7 @@
                     </StackPanel>
 
                     <!-- 请先查阅已有反馈 -->
-                    <Border Margin="0,20,0,0" CornerRadius="8" BorderThickness="1"
+                    <Border Margin="0,20,0,0" CornerRadius="4" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                             Padding="20,16,20,16">

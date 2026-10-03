@@ -34,8 +34,15 @@ public sealed partial class TimerToolPage : Page
     {
         InitializeComponent();
         ActualThemeChanged += (_, _) => SyncInputs();   // 主题换了重刷大号数字颜色
-        MinBox.ValueChanged += Time_ValueChanged;
-        SecBox.ValueChanged += Time_ValueChanged;
+        // 2026-10-03（Nick）：分/秒两个 NumberBox → 原生 TimePicker，多出「小时」单位。
+        // ⚠️ 事件参数类型在 WinUI 3 里名字对不上，用 lambda 挂最稳。
+        DurationPicker.TimeChanged += (_, args) =>
+        {
+            var np = args?.NewTime ?? DurationPicker.Time;
+            var op = args?.OldTime ?? DurationPicker.Time;
+            if (np == op) return;
+            ApplyTime();
+        };
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(100);
         _timer.IsRepeating = true;
@@ -58,9 +65,17 @@ public sealed partial class TimerToolPage : Page
         ApplyTime();
         UpdateDisplay();
 
+        // 初始时长 5 分钟（TimePicker 的 Time 一律在代码里赋）
+        _syncingTime = true;
+        DurationPicker.Time = new TimeSpan(0, 5, 0);
+        _syncingTime = false;
+        ApplyTime();
+
         // 初始模式：倒计时（卡片初值一律在代码里赋，不能写在 XAML 上）
         SetMode(Mode.Countdown);
     }
+
+    private bool _syncingTime;       // 程序里改 TimePicker 时挡一下事件
 
     private Microsoft.UI.Xaml.Media.Brush Res(string key, Windows.UI.Color fallback) => Services.ThemeBrush.Get(this, key);
 
@@ -97,6 +112,10 @@ public sealed partial class TimerToolPage : Page
         SetupTitle.Text = countdown ? "设定时长" : "秒表模式";
         SetRow.Visibility = countdown ? Visibility.Visible : Visibility.Collapsed;
         StopwatchHint.Visibility = countdown ? Visibility.Collapsed : Visibility.Visible;
+
+        // 全屏按钮两种模式都显示，文案与动作跟着模式走
+        FullscreenButton.Content = countdown ? "全屏倒计时" : "全屏秒表";
+        ToolTipService.SetToolTip(FullscreenButton, countdown ? "把倒计时铺满整块屏幕，适合投影" : "把秒表铺满整块屏幕，适合投影或比赛计时");
 
         _blink.Stop();
         UpdateDisplay();
@@ -151,18 +170,27 @@ public sealed partial class TimerToolPage : Page
     {
         if (sender is not Button b || b.Tag is not string tag || !int.TryParse(tag, out var minutes)) return;
         SetMode(Mode.Countdown);
-        MinBox.Value = minutes;
-        SecBox.Value = 0;
+        _syncingTime = true;
+        DurationPicker.Time = TimeSpan.FromMinutes(minutes);
+        _syncingTime = false;
         ApplyTime();
     }
 
-    private void Time_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args) => ApplyTime();
+    /// <summary>全屏投影：倒计时开全屏倒计时、秒表开全屏秒表（都是只读投影，跟着本页一起走）。</summary>
+    private void Fullscreen_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mode == Mode.Countdown)
+            Views.TimerFullscreenWindow.Show(() => _remainMs, () => _totalMs, () => _running);
+        else
+            Views.StopwatchFullscreenWindow.Show(() => StopwatchElapsedMs, () => _running);
+    }
 
     private void ApplyTime()
     {
-        var m = double.IsNaN(MinBox.Value) ? 0 : Math.Max(0, MinBox.Value);
-        var s = double.IsNaN(SecBox.Value) ? 0 : Math.Clamp(SecBox.Value, 0, 59);
-        _totalMs = (long)((m * 60 + s) * 1000);
+        if (_syncingTime) return;
+
+        var span = DurationPicker.Time;
+        _totalMs = (long)Math.Max(0, span.TotalMilliseconds);
         if (_totalMs <= 0) _totalMs = 1000;
         if (!_running)
         {
@@ -171,6 +199,9 @@ public sealed partial class TimerToolPage : Page
             UpdateDisplay();
         }
     }
+
+    /// <summary>秒表已计毫秒（全屏窗口读的就是这个）。</summary>
+    private long StopwatchElapsedMs => _baseMs + (_running ? _sw.ElapsedMilliseconds : 0);
 
     private void OnTick()
     {
@@ -208,8 +239,7 @@ public sealed partial class TimerToolPage : Page
     /// <summary>运行时锁定时长设置与预设（对齐网页版），并同步"到点"的配色。</summary>
     private void SyncInputs()
     {
-        MinBox.IsEnabled = !_running;
-        SecBox.IsEnabled = !_running;
+        DurationPicker.IsEnabled = !_running;
         foreach (var child in SetRow.Children)
             if (child is Button b) b.IsEnabled = !_running;
 

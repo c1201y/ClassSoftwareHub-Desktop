@@ -42,31 +42,44 @@ public sealed partial class MiniPickNumber : UserControl
         _roll.IsRepeating = true;
         _roll.Tick += (_, _) => RollTick();
 
-        // 模式切换：事件先挂（此刻 _ready 仍是 false，不会回调），选中在 Reload 里按存档设
-        ModeRangeRadio.Checked += (_, _) => OnPoolModeChanged();
-        ModeRosterRadio.Checked += (_, _) => OnPoolModeChanged();
+        // 座号 / 名单：事件在 XAML 上挂；选中在 Reload 里按存档拨
+        // ⚠️ SelectorBar 在 Loaded 时会**自动选中第一项**，构造函数里拨的选中会被它盖乱
+        //    （高亮一个、下划线在另一个上，Nick 截图骂的就是这个脱节）。
+        //    所以加载后先等它挑完，再排一次队把存档的模式拨回去。
+        PoolSelector.Loaded += (_, _) => DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            _ready = false;
+            PoolSelector.SelectedItem = _pendingRoster ? ModeRosterItem : ModeRangeItem;
+            _ready = true;
+        });
 
-        FromStepper.ValueChanged += (_, _) => OnSettingChanged();
-        ToStepper.ValueChanged += (_, _) => OnSettingChanged();
-        CountStepper.ValueChanged += (_, _) => OnSettingChanged();
-        NoRepeatBox.Checked += (_, _) => OnSettingChanged();
-        NoRepeatBox.Unchecked += (_, _) => OnSettingChanged();
+        ToNumberBox.ValueChanged += (_, _) => OnSettingChanged();
+        CountNumberBox.ValueChanged += (_, _) => OnSettingChanged();
+        NoRepeatBox.Toggled += (_, _) => OnSettingChanged();
 
         _ready = true;
         Reload();
     }
 
-    // 数字输入用 NumberStepper（大按钮、能长按连发、触屏不会全选弹复制）
-    private int From => FromStepper.Value;
-    private int To => ToStepper.Value;
-    private int Lo => Math.Min(From, To);
-    private int Hi => Math.Max(From, To);
+    private void PoolSelector_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        OnPoolModeChanged();
+    }
+
+    // 数字输入用 NumberBox（Inline 自增钮，触屏点得到；Nick 2026-10-03 换掉原来的小号自增钮）。
+    // 起始座号已砍：座号固定从 1 号开始，只留「终止范围」。
+    private const int Lo = 1;
+    private int To => double.IsNaN(ToNumberBox.Value) ? 0 : (int)Math.Floor(ToNumberBox.Value);
+    private int Hi => Math.Max(Lo, To);
     private int PoolSize => Hi - Lo + 1;
 
-    private int WantCount => Math.Max(1, CountStepper.Value);
-    private bool NoRepeat => NoRepeatBox.IsChecked == true;
+    private int WantCount => double.IsNaN(CountNumberBox.Value) ? 1 : Math.Max(1, (int)Math.Floor(CountNumberBox.Value));
+    private bool NoRepeat => NoRepeatBox.IsOn;
 
-    private bool UseRoster => ModeRosterRadio.IsChecked == true;
+    private bool UseRoster => ReferenceEquals(PoolSelector.SelectedItem, ModeRosterItem);
+
+    private bool? _lastRoster;   // 上一次的模式（null=刚加载）：真换了模式才清上一把的结果
+    private bool _pendingRoster; // 想要的模式：SelectorBar 加载完成后的排队回调按它拨
 
     private int UsedInRange => _used.Where(n => n >= Lo && n <= Hi).Distinct().Count();
 
@@ -76,12 +89,13 @@ public sealed partial class MiniPickNumber : UserControl
         var cfg = PickNumberConfig.Load();
 
         _ready = false;
-        FromStepper.Value = cfg.From;
-        ToStepper.Value = cfg.To;
-        CountStepper.Value = Math.Clamp(cfg.Count, 1, 50);
-        NoRepeatBox.IsChecked = cfg.NoRepeat;
-        if (cfg.Mode == 1) ModeRosterRadio.IsChecked = true;
-        else ModeRangeRadio.IsChecked = true;
+        ToNumberBox.Value = cfg.To;                                   // 终止范围
+        CountNumberBox.Value = Math.Clamp(cfg.Count, 1, 9999);        // 先给个宽上限，精确上限交给 RefreshHints 按模式夹
+        NoRepeatBox.IsOn = cfg.NoRepeat;
+        // ⚠️ 拨选中一律走 SelectedItem 这个官方入口。之前直接摆弄 SelectorBarItem.IsSelected
+        //    （"先清两个再选一个"），结果高亮和下划线会分家 —— 看着像座号、实际选的是名单。
+        _pendingRoster = cfg.Mode == 1;
+        PoolSelector.SelectedItem = _pendingRoster ? ModeRosterItem : ModeRangeItem;
         _ready = true;
 
         _used.Clear();
@@ -100,26 +114,30 @@ public sealed partial class MiniPickNumber : UserControl
     {
         if (!_ready) return;
         SyncPoolMode();
+        RefreshHints();   // 先按模式把「抽取个数」的上限夹好（超了会顺手把 Value 夹进去），再存
         Save();
-        RefreshHints();
     }
 
-    /// <summary>按当前模式收起 / 放出对应的输入行。</summary>
+    /// <summary>按当前模式收起 / 放出对应的输入项。</summary>
     private void SyncPoolMode()
     {
         var roster = UseRoster;
-        RangeRow.Visibility = roster ? Visibility.Collapsed : Visibility.Visible;
-        RosterRow.Visibility = roster ? Visibility.Visible : Visibility.Collapsed;
+        ToNumberBox.Visibility = roster ? Visibility.Collapsed : Visibility.Visible;
+        RosterInfoText.Visibility = roster ? Visibility.Visible : Visibility.Collapsed;
+        // 抽取个数两种模式共用同一个框，只是上限不同（RefreshHints 里按模式夹）
 
         if (roster)
             RosterInfoText.Text = _roster.Count > 0 ? $"名单：{_roster.Count} 人" : "未导入名单";
-    }
 
-    /// <summary>「去导入」：名单在工具页导入，把人送过去（顺手收起浮窗）。</summary>
-    private void OpenRosterTool_Click(object sender, RoutedEventArgs e)
-    {
-        Views.ToolPaletteWindow.HidePalette();
-        App.MainWindow?.OpenToolSettings(typeof(Pages.Tools.PickNumberToolPage));
+        // 真换了模式才清上一把的结果 —— 座号页面挂着个"李伟"会让人以为语义串了。
+        // 刚加载（_lastRoster 为 null）不清：浮窗收起再打开，上次抽的结果还在。
+        if (_lastRoster is bool prev && prev != roster)
+        {
+            ResultText.Text = "—";
+            ResultText.FontSize = 64;
+            ResultText.Opacity = 1;
+        }
+        _lastRoster = roster;
     }
 
     private void OnSettingChanged()
@@ -150,53 +168,35 @@ public sealed partial class MiniPickNumber : UserControl
         if (UseRoster)
         {
             var total = _roster.Count;
-            CountStepper.Maximum = Math.Max(1, total);
+            CountNumberBox.Maximum = Math.Max(1, total);
 
             if (total == 0)
             {
-                HintText.Text = "尚未导入名单。在随机抽号页中选择「导入名单」，导入 Excel 或 txt 文件。";
-                UsedText.Text = "";
+                HintText.Text = "尚未导入名单。在「内置工具 → 随机抽号」里导入 Excel 或 txt 文件。";
                 return;
             }
 
-            if (NoRepeat)
-            {
-                var remain = Math.Max(0, total - _usedNames.Count);
-                HintText.Text = remain > 0
-                    ? $"名单共 {total} 人，剩余 {remain} 人未抽取"
-                    : "名单人员已全部抽取，可单击「重置」重新抽取";
-                UsedText.Text = _usedNames.Count > 0 ? $"已抽取 {_usedNames.Count}" : "";
-            }
-            else
-            {
-                HintText.Text = $"名单共 {total} 人（允许重复）";
-                UsedText.Text = _usedNames.Count > 0 ? $"已抽取 {_usedNames.Count}" : "";
-            }
+            HintText.Text = NoRepeat
+                ? (total - _usedNames.Count > 0
+                    ? $"名单共 {total} 人，剩余 {total - _usedNames.Count} 人未抽取"
+                    : "名单人员已全部抽取，可点「重置」重新抽取")
+                : $"名单共 {total} 人（允许重复）";
             return;
         }
 
-        CountStepper.Maximum = Math.Max(1, PoolSize);
+        CountNumberBox.Maximum = Math.Max(1, PoolSize);
 
         if (PoolSize <= 1)
         {
-            HintText.Text = "请设置号码范围，例如 1 ~ 50";
-            UsedText.Text = "";
+            HintText.Text = "请设置座号范围，例如 1 ~ 50";
             return;
         }
 
-        if (NoRepeat)
-        {
-            var remain = Math.Max(0, PoolSize - UsedInRange);
-            HintText.Text = remain > 0
-                ? $"范围 {Lo} ~ {Hi}，剩余 {remain} 个未抽取"
-                : $"范围 {Lo} ~ {Hi} 已全部抽取，可单击「重置」重新抽取";
-            UsedText.Text = UsedInRange > 0 ? $"已抽取 {UsedInRange}" : "";
-        }
-        else
-        {
-            HintText.Text = $"范围 {Lo} ~ {Hi}（允许重复）";
-            UsedText.Text = _used.Count > 0 ? $"已抽取 {_used.Count}" : "";
-        }
+        HintText.Text = NoRepeat
+            ? (PoolSize - UsedInRange > 0
+                ? $"座号 {Lo} ~ {Hi}，剩余 {PoolSize - UsedInRange} 个未抽取"
+                : $"座号 {Lo} ~ {Hi} 已全部抽取，可点「重置」重新抽取")
+            : $"座号 {Lo} ~ {Hi}（允许重复）";
     }
 
     private static int RandInt(int n) => n <= 1 ? 0 : RandomNumberGenerator.GetInt32(n);
@@ -251,6 +251,8 @@ public sealed partial class MiniPickNumber : UserControl
         }
         return available.Take(k).ToList();
     }
+
+    private void NoRepeat_Toggled(object sender, RoutedEventArgs e) => OnSettingChanged();
 
     private void Draw_Click(object sender, RoutedEventArgs e)
     {
@@ -397,7 +399,7 @@ public sealed partial class MiniPickNumber : UserControl
     {
         new PickNumberConfig
         {
-            From = From,
+            From = Lo,        // 起始固定 1 号（座号从 1 开始）
             To = To,
             Count = WantCount,
             NoRepeat = NoRepeat,

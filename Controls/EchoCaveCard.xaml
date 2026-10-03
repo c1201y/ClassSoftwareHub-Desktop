@@ -5,75 +5,39 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      回声洞卡片 —— 对应网页版的 src/gallery/EchoCaveCard.vue，
-      嵌在设置页「软件内容」与「更新」之间，不另开页面。
+      回声洞「正文区」—— 只管一句话（+ 取数时的转圈），**自己不带卡片、不带边框、不带悬停底色**。
 
-      交互照 ClassIsland 的回声洞（2026-10-03 按 Nick 要求改，见 _refs/ClassIsland）：
-        · **点击换一条 + 打字机逐字**，不再 5 秒自动轮播（原来的走动条一并去掉）；
-        · 进页面先静静显示一条，不打扰；点一下才动；
-        · 打字期间再点无效（不打断正在打的这一遍）；
-        · 一轮之内不重复：整份数据洗成队列逐条出队，抽完才重洗。
+      2026-10-03 三次改版（Nick：正文外面有一圈很明显的框，别弄框，整张卡片可点，照 ClassIsland）：
+        · 原来正文是个压平的 Button（借它的悬停/键盘可达性）—— 悬停底色在文字外圈画了个方框，
+          正是他说的「一圈很明显的框」。撤掉，正文退回**纯 TextBlock**；
+        · 「点一下换一条」改由**外面那张 SettingsCard 整卡承接**
+          （Pages/SettingsPage.xaml 里 IsClickEnabled="True" + Click="EchoCave_Click"），
+          悬停底色铺满整行 —— ClassIsland 也是这个做法（SettingsExpanderItem IsClickEnabled）。
+        · 字号不写，跟卡片走标准正文（14px 主色）。ClassIsland 的 TypingControl 同样不设字号。
 
-      数据源：站点仓库根目录「回声洞/messages/」——**一条一个文件**
-      （message1.json、message2.json……，文件里只有 text 一个字段），
-      与网页版、CSHcontroller 控制台读的是同一套文件（见 Services/EchoCaveService.cs）。
+      2026-10-03 四次改版（Nick：把状态那行删了、永远不要显示，要最纯粹的回声洞）：
+        · 原来正文下面还有一行 12px 小字（「共 N 条」/「先显示上次取到的内容」/「读取失败…」）——
+          整块撤掉。这里**除了字条本身不许有任何文字**：取数状态、条数、报错一律不上界面
+          （失败只写 `ScreenCapture.Log`），投稿回执改在「投稿」弹层里就地显示。
+        · ⛔ 别再往这里加第二行字（包括"点击换一条"之类的提示）。
 
-      卡面只有正文 + 页脚两个链接：不放"点击换一条"之类的提示文字，
-      能点这件事靠悬停底色 + 鼠标手型 + ToolTip 表达（ClassIsland 原版也没有提示行）。
+      2026-10-03 五次改版（Nick：再加个「正在加载」的转圈）：取数期间显示一枚 20px 的
+        ProgressRing（纯图形，不算"文字"，不违反上面那条）。放 Grid 第一列而不是
+        StackPanel(Orientation=Horizontal) —— 后者给 TextBlock 传无限宽，长字条就不换行了。
     -->
 
-    <UserControl.Resources>
-        <!--
-          可点击舞台：把内容区整块做成 Button。
-          用系统按钮而不是自己叠 Tapped —— 悬停 / 按下 / 键盘可达性都由系统给，
-          外观压平（透明底、无描边）只借它的交互态。
-          ⚠️ Background 设 Transparent 不会吃掉悬停反馈：WinUI 的 Button 模板在
-             PointerOver 状态下由 VisualState 直接改 ContentPresenter.Background。
-        -->
-        <Style x:Key="EchoStageButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0,6" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-    <Border x:Name="CardHost" Style="{StaticResource CshCardStyle}">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />  <!-- 0 舞台：点一下换一条 -->
-                <RowDefinition Height="Auto" />  <!-- 1 页脚链接 -->
-            </Grid.RowDefinitions>
+        <!-- 取数中：细一圈的进度环，跟首行对齐；取到东西就收起 -->
+        <ProgressRing x:Name="LoadingRing" Grid.Column="0"
+                      Width="20" Height="20" Margin="0,1,8,0"
+                      VerticalAlignment="Top" IsActive="True" />
 
-            <!-- ===== 0 舞台（整块可点） ===== -->
-            <Button x:Name="StageButton" Grid.Row="0"
-                    Style="{StaticResource EchoStageButtonStyle}"
-                    Click="Stage_Click"
-                    ToolTipService.ToolTip="点击换一条">
-                <Grid MinHeight="52">
-                    <StackPanel x:Name="MessagePanel" VerticalAlignment="Center">
-                        <TextBlock x:Name="MessageText" FontSize="17" LineHeight="26"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <TextBlock x:Name="EmptyText" VerticalAlignment="Center" TextWrapping="Wrap"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </Grid>
-            </Button>
-
-            <!-- ===== 1 页脚 ===== -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="14" Margin="0,8,0,0">
-                <HyperlinkButton x:Name="SubmitLink" Content="投稿一条" Padding="0" MinWidth="0"
-                                 Click="Submit_Click" />
-                <HyperlinkButton x:Name="RefreshLink" Content="刷新" Padding="0" MinWidth="0"
-                                 Click="Refresh_Click" />
-                <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-        </Grid>
-    </Border>
+        <!-- 正文：整句就是一段普通文本，点击由外层卡片接 -->
+        <TextBlock x:Name="MessageText" Grid.Column="1" TextWrapping="Wrap" />
+    </Grid>
 </UserControl>

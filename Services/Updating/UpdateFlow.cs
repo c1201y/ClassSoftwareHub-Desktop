@@ -285,6 +285,23 @@ public static class UpdateFlow
     }
 
     /// <summary>
+    /// 用本地已有的安装包覆盖安装（设置页「本地安装包 → 覆盖安装」）。
+    /// 「本地保留最近 N 个安装包」的意义就在这儿：想重装 / 装回旧版时不必再下一遍。
+    ///
+    /// ⚠️⚠️ 顺序与在线更新完全一致：<see cref="UpdateService.RunInstaller"/> 只是"安排"
+    ///    （它自己会先等约 3 秒），随后必须**立刻真的退出应用** —— Inno 一启动就查 AppMutex，
+    ///    应用还在跑的话安装会被静默取消、用户端只表现为"版本没变"（2026-10-01 的根因）。
+    /// </summary>
+    public static async Task InstallLocalAsync(string installerPath)
+    {
+        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath)) return;
+
+        UpdateService.RunInstaller(installerPath);
+        await Task.Delay(400);       // 让 cmd 来得及把延迟启动安排下去，再走
+        ExitAppNow();
+    }
+
+    /// <summary>
     /// 真正把应用退掉，给随后的安装程序腾位置。
     ///
     /// ⚠️⚠️ 必须走 <see cref="MainWindow.ExitApp"/>（它会先置 <c>_exitRequested</c>）。

@@ -95,9 +95,7 @@ public static class ThemeBrush
             sb.Append(" text=#").Append(b.Color.A.ToString("X2")).Append(b.Color.R.ToString("X2")).Append(b.Color.G.ToString("X2")).Append(b.Color.B.ToString("X2"));
             var c = (SolidColorBrush)Get(el, "CardBackgroundFillColorDefaultBrush");
             sb.Append(" card=#").Append(c.Color.A.ToString("X2")).Append(c.Color.R.ToString("X2")).Append(c.Color.G.ToString("X2")).Append(c.Color.B.ToString("X2"));
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassSoftwareHub");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "theme.log"), sb.AppendLine().ToString());
+            Core.AppLog.Info("theme", sb.ToString());
         }
         catch { }
     }

@@ -60,12 +60,12 @@
         <!-- 和首页同一套版式：三列 Grid 把内容钉在中间 960 宽，导航展开/收起都不动 -->
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" MinWidth="24" />
-                <ColumnDefinition Width="998*" MaxWidth="960" />
-                <ColumnDefinition Width="1*" MinWidth="24" />
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="1">
+            <StackPanel Grid.Column="1" MaxWidth="960">
 
                 <TextBlock Text="设置" FontSize="28" FontWeight="Bold" />
 
@@ -252,17 +252,62 @@
                 </StackPanel>
 
                 <!-- ================= 回声洞 ================= -->
-                <!-- 2026-10-03：位置由 Nick 指定 —— 软件内容之后、更新之前。
-                     形态照搬网页版：**就地在设置页里内嵌一张卡片**（对应组件 EchoCaveCard.vue），
-                     不另开独立页面。数据在站点仓库根目录「回声洞/messages/」——一条一个文件
-                     （message1.json、message2.json……，只有一句话），与网页版、控制台同一套。
-                     交互照 ClassIsland 的回声洞：**点击换一条 + 打字机逐字**（不是自动轮播）。
-                     ⚠️ 卡片自己是自包含控件（加载 / 换条 / 打字 / 投稿都在 Controls/EchoCaveCard.* 里），
-                        这里只负责摆位置 —— 设置页的 code-behind 不掺和它的逻辑。 -->
+                <!-- 2026-10-03 三次改版（Nick）：**单独一块、单独一个「回声洞」标题**（不并进「软件内容」）；
+                     标题与下面展开项的名字重复没关系，他明确说「冲突了也没事」。
+                     形态对齐 ClassIsland 的「关于 → 回声洞」：一个 SettingsExpander，
+                     展开区里**只有一张卡片**，里面**只有字条本身**（Controls/EchoCaveCard，
+                     标准正文字号、自己不带边框、不写任何状态文字 —— 上一版"卡片套卡片"就是这么来的）；
+                     「投稿」按钮在卡片右侧（SettingsCard 的 Content 位 = 系统右对齐），
+                     点开是个 Flyout：一个输入框 + 一个提交按钮，不跳浏览器；回执也留在这个弹层里。 -->
                 <TextBlock Text="回声洞" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
-                    <ui:EchoCaveCard />
+                    <controls:SettingsExpander x:Name="EchoCaveExpander" Header="回声洞"
+                                               Description="请点击这里收看 ClassSoftwareHub 群友的逆天发言！"
+                                               IsExpanded="False">
+                        <controls:SettingsExpander.HeaderIcon>
+                            <FontIcon Glyph="&#xE8BD;" />
+                        </controls:SettingsExpander.HeaderIcon>
+                        <controls:SettingsExpander.Items>
+
+                            <!-- 展开区唯一的一张卡片：整卡可点＝换一条（ClassIsland 的做法，
+                                 悬停底色铺满整行，正文自己不带框）；右边一颗「投稿」 -->
+                            <controls:SettingsCard IsClickEnabled="True" Click="EchoCave_Click"
+                                                   IsActionIconVisible="False"
+                                                   ToolTipService.ToolTip="点击换一条">
+                                <controls:SettingsCard.Header>
+                                    <ui:EchoCaveCard x:Name="EchoCave" />
+                                </controls:SettingsCard.Header>
+                                <Button Content="投稿" VerticalAlignment="Center">
+                                    <Button.Flyout>
+                                        <Flyout x:Name="EchoSubmitFlyout" Placement="Bottom">
+                                            <StackPanel Width="320" Spacing="10">
+                                                <TextBlock Text="投稿到回声洞"
+                                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                <TextBox x:Name="EchoSubmitBox"
+                                                         PlaceholderText="写一句让人笑出声的话"
+                                                         AcceptsReturn="True" TextWrapping="Wrap"
+                                                         MinHeight="76" MaxLength="200" />
+                                                <TextBlock x:Name="EchoSubmitStatus" TextWrapping="Wrap"
+                                                           Visibility="Collapsed"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <HyperlinkButton x:Name="EchoSubmitFallback"
+                                                                 Content="改用 GitHub 网页投稿"
+                                                                 Padding="0" MinWidth="0" Visibility="Collapsed"
+                                                                 Click="SubmitEchoCaveFallback_Click" />
+                                                <Button x:Name="EchoSubmitButton" Content="提交"
+                                                        HorizontalAlignment="Right"
+                                                        Style="{ThemeResource AccentButtonStyle}"
+                                                        Click="SubmitEchoCave_Click" />
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </controls:SettingsCard>
+
+                        </controls:SettingsExpander.Items>
+                    </controls:SettingsExpander>
 
                 </StackPanel>
 
@@ -345,7 +390,7 @@
                     <!-- 本地安装包：列表在展开时现读（平时折叠，不占加载时间）。
                          ⚠️ 内容走 Items / Description —— ContentAlignment="Vertical" 实测无效（§K.6） -->
                     <controls:SettingsExpander x:Name="InstallerExpander" Header="本地安装包"
-                                               Description="更新时下载的安装包存放在此，可单独删除；删除后装回该版本需重新下载。"
+                                               Description="更新时下载的安装包存放在此，可直接用来覆盖安装当前（或更旧）版本，也可单独删除。"
                                                IsExpanded="False"
                                                Expanded="Installer_Expanded">
                         <controls:SettingsExpander.HeaderIcon>

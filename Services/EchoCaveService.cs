@@ -60,14 +60,24 @@ public static class EchoCaveService
         "https://gh-proxy.com/https://raw.githubusercontent.com/{0}/{1}/{2}/{3}",
     };
 
-    /// <summary>目录清单入口（{0}=owner {1}=repo {2}=分支 {3}=转义后的目录路径）。</summary>
+    /// <summary>
+    /// 目录清单入口（{0}=owner {1}=repo {2}=分支 {3}=转义后的目录路径）。
+    /// <see cref="ContentsEntry"/> 那一项的 HTTP 404 / GitHub 错误体都算**权威答案**（＝目录里没字条），
+    /// 其余入口只当"有就用"，解析不出就继续往下试 —— 判据见 <see cref="ListAsync"/>。
+    /// </summary>
     private static readonly string[] ListTemplates =
     {
-        // ① jsDelivr 的文件清单：匿名、无 GitHub 配额、一次拿到全仓库文件表
-        "https://data.jsdelivr.com/v1/packages/gh/{0}/{1}@{2}?structure=flat",
-        // ② 兜底：gh-proxy 代理的 GitHub contents 接口（走镜像，不直连本尊）
+        // ① gh-proxy 代理的 GitHub contents：一次拿到该目录的**权威**清单，空目录也如实返回空数组。
+        //    走镜像转发，不消耗本机的 GitHub 匿名配额。
         "https://gh-proxy.com/https://api.github.com/repos/{0}/{1}/contents/{3}?ref={2}",
+        // ② jsDelivr 的文件清单：匿名、无配额，但它的**包索引可能整个目录漏掉**
+        //    （2026-10-03 实测：仓库里的 `回声洞/` 不在清单里，而同一路径走 CDN 直读是 200）
+        //    ⇒ 只当补充，解析不出字条就继续往下走。
+        "https://data.jsdelivr.com/v1/packages/gh/{0}/{1}@{2}?structure=flat",
     };
+
+    /// <summary><see cref="ListTemplates"/> 里"权威"的那一项（它说没有就是真没有）。</summary>
+    private const int ContentsEntry = 0;
 
     private static readonly HttpClient Http = CreateClient();
     private static readonly SemaphoreSlim Gate = new(1, 1);
@@ -90,6 +100,66 @@ public static class EchoCaveService
     /// <summary>投稿入口：GitHub 上给字条目录「新建文件」（与网页版指向同一处）。</summary>
     public static string SubmitUrl =>
         $"{RepoUrl}/new/{ShellConfig.SiteRepoBranch}/{Escape(RepoDir)}";
+
+    /// <summary>
+    /// 投稿一条字条 —— **走「提交软件」同一套自建服务**（令牌在服务端，客户端只发内容）：
+    /// <c>POST {入口}/api/echocave</c>，请求体 <c>{ "text": "…" }</c>，
+    /// 服务端负责写进仓库 <c>回声洞/messages/messageN.json</c> 并开审核。
+    /// 入口顺序、超时、出错体解析都与提交软件一致（{success,message,error}）。
+    ///
+    /// 不抛异常：连不上 / 服务端还没这条路由，都返回 (false, 人话)，界面上照说照显示。
+    /// </summary>
+    public static async Task<(bool Ok, string Message)> SubmitAsync(string text, CancellationToken ct = default)
+    {
+        text = (text ?? "").Trim();
+        if (text.Length == 0) return (false, "还没写内容。");
+
+        var payload = JsonSerializer.Serialize(new { text });
+
+        foreach (var baseUrl in ShellConfig.OrderedSubmitEndpoints())
+        {
+            try
+            {
+                using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                budget.CancelAfter(TimeSpan.FromMilliseconds(ShellConfig.SubmitTimeoutMs));
+
+                using var content = new StringContent(payload, Utf8NoBom, "application/json");
+                using var response = await Http
+                    .PostAsync(baseUrl + "/api/echocave", content, budget.Token)
+                    .ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
+
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                var ok = root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True;
+                var hasError = root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String;
+                if (!ok && !hasError) continue;   // 不是这个接口的响应（回源还没生效时会返回 nginx 错误页）
+
+                ShellConfig.RememberSubmitEndpoint(baseUrl);
+
+                if (ok)
+                {
+                    var message = root.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.String
+                        ? msg.GetString()
+                        : null;
+                    return (true, string.IsNullOrWhiteSpace(message)
+                        ? "已提交，审核通过后就会出现在回声洞里。"
+                        : message!);
+                }
+                return (false, (hasError ? err.GetString() : null) ?? "服务端没有接受这条内容。");
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // 连不上 / 超时 / 响应不是 JSON（路由还没有）→ 换下一个入口
+            }
+        }
+
+        return (false, "连不上投稿服务（网络或地区限制），可以改用下方入口在 GitHub 网页上投稿。");
+    }
 
     /// <summary>本机缓存（网络不通时显示上次取到的内容）。</summary>
     private static string CacheFile => Path.Combine(AppPaths.DataDir, "echo-cave.json");
@@ -117,12 +187,18 @@ public static class EchoCaveService
     public static async Task<EchoCaveResult> LoadAsync(bool force, CancellationToken ct = default)
     {
         if (!force && _memory is not null && DateTime.UtcNow - _memoryAt < MemoryTtl)
-            return new EchoCaveResult(true, _memory, "memory", Summarize(_memory, "本机缓存"));
+            return new EchoCaveResult(true, _memory, "memory", Summarize(_memory, ""));
 
         await Gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var paths = await ListAsync(ct).ConfigureAwait(false);
+            var (listed, paths) = await ListAsync(ct).ConfigureAwait(false);
+            if (!listed)
+            {
+                // 列目录的入口全不通 → 干脆不靠"列目录"，按编号把 message1…N 直接探一遍
+                (listed, paths) = await ProbeAsync(ct).ConfigureAwait(false);
+            }
+
             if (paths.Count > 0)
             {
                 var list = await FetchAllAsync(paths, ct).ConfigureAwait(false);
@@ -131,12 +207,29 @@ public static class EchoCaveService
                     _memory = list;
                     _memoryAt = DateTime.UtcNow;
                     TrySaveCache(list);
-                    return new EchoCaveResult(true, list, "network", Summarize(list, "已同步"));
+                    return new EchoCaveResult(true, list, "network", Summarize(list, ""));
                 }
             }
 
-            // 网络不通 → 退回本机缓存
             var cached = TryLoadCache();
+
+            if (listed)
+            {
+                // 取数链路是通的，只是这条目录里眼下没有字条（或 CDN / jsDelivr 还没刷出来）。
+                // 手上还有上次的内容就先接着显示 —— 别让卡片在某次刷新后突然空掉。
+                if (cached.Count > 0)
+                {
+                    _memory = cached;
+                    _memoryAt = DateTime.UtcNow;
+                    return new EchoCaveResult(false, cached, "cache",
+                        "还没取到最新的字条，先显示上次取到的内容。");
+                }
+
+                return new EchoCaveResult(true, Array.Empty<EchoMessage>(), "",
+                    "回声洞里还没有字条。");
+            }
+
+            // 网络不通 → 退回本机缓存
             if (cached.Count > 0)
             {
                 _memory = cached;
@@ -163,16 +256,28 @@ public static class EchoCaveService
         }
     }
 
+    /// <summary>
+    /// 卡面那行小字。<paramref name="suffix"/> 只在有额外信息时给（例如走本机缓存），
+    /// 正常从网上取到时就是干干净净一句「共 N 条」。
+    /// </summary>
     private static string Summarize(IReadOnlyList<EchoMessage> list, string suffix)
-        => list.Count == 0 ? $"暂时还没人说话（{suffix}）" : $"共 {list.Count} 条　·　{suffix}";
+    {
+        if (list.Count == 0) return suffix.Length > 0 ? $"暂时还没人说话（{suffix}）" : "暂时还没人说话";
+        return suffix.Length > 0 ? $"共 {list.Count} 条　·　{suffix}" : $"共 {list.Count} 条";
+    }
 
     // ── 列目录（带入口回退） ─────────────────────────────────────────
 
     private static string Escape(string path)
         => string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
 
-    /// <summary>逐个入口试，返回字条文件的路径清单（按编号排好）；全不通返回空表。</summary>
-    private static async Task<List<string>> ListAsync(CancellationToken ct)
+    /// <summary>
+    /// 逐个入口试拿「字条文件清单」（按编号排好）。
+    /// <c>Listed=false</c> ＝ **所有入口都没答话**（网络问题）；
+    /// <c>Listed=true</c> 且清单为空 ＝ **链路是通的、但目录里确实没有字条**。
+    /// 这两种必须分开，否则"目录空"会被当成"请检查网络"报给用户（2026-10-03 修）。
+    /// </summary>
+    private static async Task<(bool Listed, List<string> Paths)> ListAsync(CancellationToken ct)
     {
         var escapedDir = Escape(RepoDir);
         foreach (var index in PreferredOrder(ListTemplates.Length, ListBaseFile))
@@ -188,10 +293,22 @@ public static class EchoCaveService
                 if (text.Trim().Length == 0) continue;
 
                 var paths = ParseListing(text, index);
-                if (paths.Count == 0) continue;   // 入口通但目录为空/格式不对 → 换下一个再确认
+                if (paths is null) continue;   // 响应不是一份合格清单（HTML / 限流提示）→ 换下一个入口
+
+                // 权威入口的空数组就是答案；其余入口只说明"它那儿没有"，继续往下问
+                if (paths.Count == 0 && index != ContentsEntry) continue;
 
                 Remember(index, ListBaseFile);
-                return paths;
+                return (true, paths);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // 权威入口 404 ＝ 目录还没建，这也是答案（＝里面没有字条）
+                if (index == ContentsEntry)
+                {
+                    Remember(index, ListBaseFile);
+                    return (true, new List<string>());
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -199,14 +316,55 @@ public static class EchoCaveService
             }
             catch
             {
-                // 单入口超时 / 连不上 / 404 / 内容不是文本 → 换下一个入口
+                // 单入口超时 / 连不上 / 内容不是文本 → 换下一个入口
             }
         }
-        return new List<string>();
+        return (false, new List<string>());
     }
 
-    /// <summary>把两种清单格式都解成「字条文件路径」并排序。</summary>
-    private static List<string> ParseListing(string text, int entry)
+    /// <summary>
+    /// 末路兜底：完全不依赖"列目录"服务，直接按编号探
+    /// <c>message1.json</c>、<c>message2.json</c>……（编号是连续的，中途不会断档）。
+    /// 一批并发探 8 个，某一批**一个都没有**就认为到末尾了。
+    /// <c>Reached=false</c> ＝ 连"文件不存在"这种答复都拿不到 ⇒ 网络不通（而不是没数据）。
+    /// </summary>
+    private static async Task<(bool Reached, List<string> Paths)> ProbeAsync(CancellationToken ct)
+    {
+        const int BatchSize = 8;     // 一批并发探几个编号
+        const int MaxNumber = 400;   // 防呆上限：探到这儿还没到末尾就不再往下探
+
+        var found = new List<(int Number, string Path)>();
+        var reached = false;
+
+        for (var start = 1; start <= MaxNumber; start += BatchSize)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var batch = Enumerable.Range(start, BatchSize).ToArray();
+            var results = await Task.WhenAll(batch.Select(async number =>
+            {
+                var path = $"{RepoDir}/{FilePrefix}{number}.json";
+                var (answered, text) = await FetchExAsync(path, ct).ConfigureAwait(false);
+                return (Number: number, Answered: answered, Text: text, Path: path);
+            })).ConfigureAwait(false);
+
+            if (results.Any(r => r.Answered)) reached = true;
+
+            var hits = results.Where(r => r.Text.Length > 0).ToList();
+            foreach (var hit in hits) found.Add((hit.Number, hit.Path));
+
+            if (hits.Count == 0) break;   // 这一批一个都没探到 ⇒ 后面不会再有更靠后的编号
+        }
+
+        return (reached, found.OrderBy(f => f.Number).Select(f => f.Path).ToList());
+    }
+
+    /// <summary>
+    /// 把两种清单格式都解成「字条文件路径」并排序。
+    /// 返回 <c>null</c> ＝ 这份响应压根不是清单（HTML 错误页、限流提示等），外层应换下一个入口；
+    /// 返回空表 ＝ 确实是一份"里面没有字条"的清单（只有权威入口允许这么答）。
+    /// </summary>
+    private static List<string>? ParseListing(string text, int entry)
     {
         var paths = new List<string>();
         try
@@ -214,13 +372,31 @@ public static class EchoCaveService
             using var doc = JsonDocument.Parse(text);
             var root = doc.RootElement;
 
-            if (entry == 0)
+            if (entry == ContentsEntry)
+            {
+                // GitHub contents 的错误体：{ "message": "Not Found", ... } ⇒ 目录不存在＝没有字条
+                if (root.ValueKind == JsonValueKind.Object
+                    && root.TryGetProperty("message", out _))
+                    return paths;
+
+                // 正常：[ { "name": "message1.json", "path": "...", "type": "file" }, ... ]
+                if (root.ValueKind != JsonValueKind.Array) return null;
+                foreach (var file in root.EnumerateArray())
+                {
+                    if (file.ValueKind != JsonValueKind.Object) continue;
+                    if (Str(file, "type") != "file") continue;
+                    if (!IsMessageFile(Str(file, "name"))) continue;
+                    var path = Str(file, "path");
+                    if (path.Length > 0) paths.Add(path);
+                }
+            }
+            else
             {
                 // jsDelivr：{ "files": [ { "name": "/回声洞/messages/message1.json" }, ... ] }
                 if (root.ValueKind != JsonValueKind.Object
                     || !root.TryGetProperty("files", out var files)
                     || files.ValueKind != JsonValueKind.Array)
-                    return paths;
+                    return null;
 
                 var prefix = RepoDir + "/";
                 foreach (var file in files.EnumerateArray())
@@ -233,21 +409,8 @@ public static class EchoCaveService
                     if (IsMessageFile(leaf)) paths.Add(name);
                 }
             }
-            else
-            {
-                // GitHub contents：[ { "name": "message1.json", "path": "...", "type": "file" }, ... ]
-                if (root.ValueKind != JsonValueKind.Array) return paths;
-                foreach (var file in root.EnumerateArray())
-                {
-                    if (file.ValueKind != JsonValueKind.Object) continue;
-                    if (Str(file, "type") != "file") continue;
-                    if (!IsMessageFile(Str(file, "name"))) continue;
-                    var path = Str(file, "path");
-                    if (path.Length > 0) paths.Add(path);
-                }
-            }
         }
-        catch { /* 语法坏了就当没有 */ }
+        catch { return null; }   // 语法坏了 ＝ 不是清单
 
         return paths.OrderBy(NumberOf).ToList();
     }
@@ -298,6 +461,14 @@ public static class EchoCaveService
 
     /// <summary>逐个入口试一个文件，返回第一个拿到的内容；全不通返回空串。</summary>
     private static async Task<string> FetchAsync(string path, CancellationToken ct)
+        => (await FetchExAsync(path, ct).ConfigureAwait(false)).Text;
+
+    /// <summary>
+    /// 逐个入口试一个文件。<c>Answered</c> ＝ 是否**得到了服务器明确的答复**
+    /// （拿到了内容，或明确的 404 —— 两者都说明网络这一段是通的），<c>Text</c> ＝ 文件内容。
+    /// 编号探测靠 <c>Answered</c> 把"目录里没有这条"和"网断了"分开。
+    /// </summary>
+    private static async Task<(bool Answered, string Text)> FetchExAsync(string path, CancellationToken ct)
     {
         var escaped = Escape(path);
         foreach (var index in PreferredOrder(RawTemplates.Length, RawBaseFile))
@@ -312,7 +483,11 @@ public static class EchoCaveService
                 var text = await Http.GetStringAsync(url, budget.Token).ConfigureAwait(false);
                 if (text.Trim().Length == 0) continue;
                 Remember(index, RawBaseFile);
-                return text;
+                return (true, text);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return (true, "");   // 服务器答话了、但这条不存在 —— 网络是通的
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -323,7 +498,7 @@ public static class EchoCaveService
                 // 换下一个入口
             }
         }
-        return "";
+        return (false, "");
     }
 
     /// <summary>字条文件只有一个 text 字段。</summary>

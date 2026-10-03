@@ -2,78 +2,74 @@
 <UserControl
     x:Class="ClassSoftwareHub.Desktop.Views.Palette.MiniPickNumber"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:palette="using:ClassSoftwareHub.Desktop.Views.Palette">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      浮窗版随机抽号：抽什么（号码 / 名单）+ 个数 + 是否重复 + 大号结果 + 抽号/重置。
-      数据和「内置工具 → 随机抽号」共用同一个存档（%LOCALAPPDATA%\ClassSoftwareHub\pick-number.json），
-      名单也是同一份 —— 在工具页导入，浮窗这边直接抽。
-      数字输入用的是自己写的 NumberStepper（大按钮、可长按连发、触屏不会弹复制粘贴）。
+      浮窗版随机抽号：抽什么（座号 / 名单）+ 基本设置 + 大号结果 + 重置/抽取/不重复。
 
-      ⚠️ RadioButton 的 IsChecked / 事件一律放 code-behind：XAML 里写 IsChecked="True"
-      会在运行时抛 Failed to assign to property（见 MEMORY §8 的 CheckBox 坑）。
+      2026-10-03（Nick 三轮定版）：
+        · 「抽取座号」= 抽数字，「使用名单」= 抽名字。
+        · **起始座号砍掉**：座号固定从 1 号开始，只留一个「终止范围」（＝原来那个"结束座号"）。
+        · 「终止范围」和「抽取个数」改用 **NumberBox（Inline 自增钮）**——原来的小号上下箭头
+          鼠标能点到、触屏点不到，Inline 版的上/下按钮整高、够大。
+        · **不重复**挪到「重置 / 抽取」那一行的右边。
     -->
-    <Grid RowSpacing="8">
+    <Grid RowSpacing="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 抽什么：号码 / 名单（2026-09-27 Nick 提：浮窗里也能按名单抽） -->
-        <StackPanel Orientation="Horizontal" Spacing="14" HorizontalAlignment="Center">
-            <RadioButton x:Name="ModeRangeRadio" Content="按号码" GroupName="MiniPoolMode"
-                         MinWidth="0" Padding="6,0,0,0" />
-            <RadioButton x:Name="ModeRosterRadio" Content="按名单" GroupName="MiniPoolMode"
-                         MinWidth="0" Padding="6,0,0,0" />
+        <!-- 抽什么：座号（数字）/ 名单（名字） -->
+        <SelectorBar x:Name="PoolSelector" Grid.Row="0" HorizontalAlignment="Center"
+                     SelectionChanged="PoolSelector_SelectionChanged">
+            <SelectorBarItem x:Name="ModeRangeItem" Tag="range" Text="抽取座号" />
+            <SelectorBarItem x:Name="ModeRosterItem" Tag="roster" Text="使用名单" />
+        </SelectorBar>
+
+        <!-- 基本设置一行：(终止范围 | 名单信息) + 抽取个数 -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="16"
+                    HorizontalAlignment="Center" VerticalAlignment="Top">
+            <!-- 座号模式：终止范围（从 1 号抽到 N 号） -->
+            <NumberBox x:Name="ToNumberBox" Header="终止范围" Value="50" Minimum="1" Maximum="9999"
+                       SmallChange="1" SpinButtonPlacementMode="Inline" Width="150"
+                       AutomationProperties.Name="终止范围" />
+
+            <!-- 名单模式：池子信息（跟 NumberBox 的输入框本体育对齐） -->
+            <TextBlock x:Name="RosterInfoText" FontSize="12.5" Opacity="0.7"
+                       VerticalAlignment="Center" Margin="0,16,0,0"
+                       Text="名单：—" TextWrapping="NoWrap" MaxWidth="150" />
+
+            <!-- 抽取个数：两种模式共用（上限在代码里按模式夹） -->
+            <NumberBox x:Name="CountNumberBox" Header="抽取个数" Value="1" Minimum="1" Maximum="9999"
+                       SmallChange="1" SpinButtonPlacementMode="Inline" Width="150"
+                       AutomationProperties.Name="抽取个数" />
         </StackPanel>
 
-        <!-- 号码范围 -->
-        <StackPanel x:Name="RangeRow" Grid.Row="1" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
-            <palette:NumberStepper x:Name="FromStepper" Label="范围" Minimum="0" Maximum="9999" Step="1" />
-            <TextBlock Text="~" FontSize="12.5" Opacity="0.7" VerticalAlignment="Center" />
-            <palette:NumberStepper x:Name="ToStepper" Minimum="0" Maximum="9999" Step="1" />
-        </StackPanel>
-
-        <!-- 名单（名单模式的显示；导入在工具页做，这边只读同一份存档） -->
-        <StackPanel x:Name="RosterRow" Grid.Row="1" Orientation="Horizontal" Spacing="8"
-                    HorizontalAlignment="Center" Visibility="Collapsed">
-            <TextBlock x:Name="RosterInfoText" FontSize="12" Opacity="0.7" VerticalAlignment="Center"
-                       Text="名单：—" TextWrapping="Wrap" />
-            <Button Content="导入名单" Click="OpenRosterTool_Click" Padding="8,3" FontSize="12" />
-        </StackPanel>
-
-        <!-- 抽几个 + 能不能重复（跟完整版页面对应，写回同一个存档） -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-            <palette:NumberStepper x:Name="CountStepper" Label="个数" Minimum="1" Maximum="50" Step="1" />
-            <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0" Padding="6,0,0,0"
-                      VerticalAlignment="Center" />
-            <TextBlock x:Name="UsedText" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
-        </StackPanel>
-
-        <!-- 大号结果（抽多个时自动缩小字号、换行） -->
-        <Grid Grid.Row="3">
+        <!-- 结果区：这一页的主角，吃掉中间剩下的全部高度 -->
+        <Grid Grid.Row="2" MinHeight="96">
             <TextBlock x:Name="ResultText" Text="—" FontSize="64" FontWeight="SemiBold"
                        FontFamily="Bahnschrift" HorizontalAlignment="Center" VerticalAlignment="Center"
                        TextAlignment="Center" TextWrapping="Wrap" />
+            <!-- 提示与池子状态：贴在大字底下，小字退成配角 -->
+            <TextBlock x:Name="HintText" FontSize="11.5" Opacity="0.6"
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap" IsHitTestVisible="False" Margin="0,6,0,0" />
         </Grid>
 
-        <TextBlock x:Name="HintText" Grid.Row="4" FontSize="12" Opacity="0.6"
-                   TextAlignment="Center" TextWrapping="Wrap" />
-
-        <!-- 按钮 -->
-        <Grid Grid.Row="5" ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <!-- 重置 + 抽取 + 不重复：同一行、居中 -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+            <Button x:Name="ResetButton" Content="重置" Padding="26,7"
+                    Click="Reset_Click"
+                    ToolTipService.ToolTip="清空已抽取的记录，重新开始" />
             <Button x:Name="DrawButton" Content="抽取" Style="{StaticResource AccentButtonStyle}"
-                    HorizontalAlignment="Stretch" Click="Draw_Click" />
-            <Button Grid.Row="0" Grid.Column="1" Content="重置" Click="Reset_Click" />
-        </Grid>
+                    Padding="44,7" FontSize="15"
+                    Click="Draw_Click" />
+            <ToggleSwitch x:Name="NoRepeatBox" OnContent="不重复" OffContent="允许重复"
+                          MinWidth="0" Toggled="NoRepeat_Toggled" VerticalAlignment="Center" />
+        </StackPanel>
     </Grid>
 </UserControl>

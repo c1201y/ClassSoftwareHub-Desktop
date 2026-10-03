@@ -128,9 +128,7 @@ public static class WindowChrome
     {
         try
         {
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(Services.SettingsStore.Dir, "chrome.log"),
-                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            AppLog.Info("chrome", message);
         }
         catch { }
     }

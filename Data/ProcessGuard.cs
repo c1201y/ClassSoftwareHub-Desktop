@@ -118,10 +118,6 @@ public static class ProcessGuard
     /// <summary>巡检间隔（秒）。到点靠它命中「当前 HH:mm」，所以别设得比 60 秒还大。</summary>
     private const int TickSeconds = 20;
 
-    public static readonly string LogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ClassSoftwareHub", "procguard.log");
-
     // ── 扫描 ─────────────────────────────────────────────────
 
     /// <summary>一个命中规则的进程的现状。</summary>
@@ -355,8 +351,7 @@ public static class ProcessGuard
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-            File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}\n");
+            Core.AppLog.Info("procguard", msg);
         }
         catch { /* 记不上不影响功能 */ }
     }

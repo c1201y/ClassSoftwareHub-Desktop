@@ -7,16 +7,16 @@
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
     <!-- 和首页 / 设置页 / 软件下载页同一套版式：内容钉在中间 960 宽 -->
-    <Grid Padding="24,20,24,44">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <Grid Margin="24,20,24,44">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="14">
+        <Grid Grid.Column="1" MaxWidth="960">
+            <StackPanel Spacing="14">
 
                     <!-- ===== 头部：图标 + 名称 + 标语 + 分类徽标 ===== -->
                     <Grid ColumnSpacing="16">
@@ -53,10 +53,7 @@
 
                     <!-- ===== 详细信息（版本 / 体积 / 系统 / 官网 / GitHub） ===== -->
                     <TextBlock x:Name="InfoTitle" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
-                    <Border CornerRadius="8" Padding="16,14"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1">
+                    <Border Style="{StaticResource CshCardStyle}" Padding="16,14">
                         <StackPanel x:Name="InfoList" Spacing="10" />
                     </Border>
 
@@ -64,7 +61,7 @@
                     <TextBlock x:Name="DownloadsTitle" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
 
                     <!-- 应用商店入口（store 字段，或 downloads 里指向商店的那条） -->
-                    <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="8" Padding="16,14"
+                    <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="4" Padding="16,14"
                             Background="{ThemeResource AccentFillColorDefaultBrush}">
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
@@ -93,10 +90,7 @@
                     <ItemsControl x:Name="DownloadList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="data:DownloadItem">
-                                <Border CornerRadius="8" Padding="16,12" Margin="0,0,0,8"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1">
+                                <Border Style="{StaticResource CshCardStyle}" Padding="16,12" Margin="0,0,0,8">
                                     <Grid ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -148,7 +142,7 @@
                     <!-- 数据问题（该软件的 JSON 有问题时会提示） -->
                     <InfoBar x:Name="IssueBar" Severity="Warning" IsOpen="False" IsClosable="False" />
                 </StackPanel>
-            </ScrollViewer>
         </Grid>
     </Grid>
+    </ScrollViewer>
 </Page>

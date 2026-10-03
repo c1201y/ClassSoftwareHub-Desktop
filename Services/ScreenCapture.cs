@@ -334,15 +334,12 @@ public static class ScreenCapture
         return sb.ToString();
     }
 
-    /// <summary>「截屏贴图」的自报日志（跟其它模块一个目录）。</summary>
+    /// <summary>「截屏贴图」的自报日志（logs\snip.log）。</summary>
     public static void Log(string msg)
     {
         try
         {
-            File.AppendAllText(
-                Path.Combine(SettingsStore.Dir, "snip.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}\r\n",
-                System.Text.Encoding.UTF8);
+            Core.AppLog.Info("snip", msg);
         }
         catch { }
     }

@@ -14,21 +14,21 @@
          我就是要 windows 原生」「颜色就用主题色就行了」）。别退回自绘 Border 行 ——
          他自己举的正面例子就是设置页从自绘 Border 换成 SettingsCard 那次。
     -->
-    <Grid Padding="24,36,24,44">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
-        </Grid.ColumnDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,36,24,44">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
+            </Grid.ColumnDefinitions>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
-            <StackPanel>
+            <StackPanel Grid.Column="1" MaxWidth="960">
 
                 <!-- 标题 + 实验性标记 -->
                 <StackPanel Spacing="6">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="虚拟键盘" FontSize="30" FontWeight="Bold" />
-                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+                        <TextBlock Text="虚拟键盘" FontSize="28" FontWeight="Bold" />
+                        <Border CornerRadius="4" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
                                 BorderThickness="1"
                                 BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -191,6 +191,6 @@
                 </StackPanel>
 
             </StackPanel>
-        </ScrollViewer>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Page>

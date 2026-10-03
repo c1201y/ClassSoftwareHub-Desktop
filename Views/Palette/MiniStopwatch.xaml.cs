@@ -1,7 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
+using ClassSoftwareHub.Desktop.Views;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -9,17 +8,16 @@ using Microsoft.UI.Xaml.Controls;
 namespace ClassSoftwareHub.Desktop.Views.Palette;
 
 /// <summary>
-/// 浮窗版秒表（正计时 + 计次）：课堂上用「谁先举手 / 谁先做完」这类场景。
+/// 浮窗版秒表（正计时 + 全屏）：课堂上做限时活动、比赛计时用。
 /// 状态只在内存里，收起浮窗时暂停、再打开接着走（跟其它小工具一致）。
+///
+/// 2026-10-03（Nick）：**计次/分段取消**（原来最多记三次，实测教室里没人用，还占掉半屏）。
+/// 新增「全屏」—— 走 <see cref="StopwatchFullscreenWindow"/>，跟全屏时钟同一个套路。
 /// </summary>
 public sealed partial class MiniStopwatch : UserControl
 {
-    /// <summary>最多留几次计次（多了也没地方显示）。</summary>
-    private const int MaxLaps = 3;
-
     private readonly DispatcherQueueTimer _tick;
     private readonly Stopwatch _sw = new();
-    private readonly List<long> _laps = new();      // 每次计次时的累计毫秒
 
     private long _accMs;          // 暂停前累计的毫秒
     private bool _running;
@@ -34,7 +32,6 @@ public sealed partial class MiniStopwatch : UserControl
         _tick.IsRepeating = true;
         _tick.Tick += (_, _) => UpdateDisplay();
 
-        LapButton.IsEnabled = false;
         UpdateDisplay();
     }
 
@@ -54,7 +51,6 @@ public sealed partial class MiniStopwatch : UserControl
         _running = true;
         _tick.Start();
         StartButton.Content = "暂停";
-        LapButton.IsEnabled = true;
         UpdateDisplay();
     }
 
@@ -71,15 +67,6 @@ public sealed partial class MiniStopwatch : UserControl
         UpdateDisplay();
     }
 
-    private void Lap_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_running) return;
-
-        _laps.Add(ElapsedMs);
-        while (_laps.Count > MaxLaps) _laps.RemoveAt(0);
-        RefreshLaps();
-    }
-
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
         _tick.Stop();
@@ -87,12 +74,13 @@ public sealed partial class MiniStopwatch : UserControl
         _accMs = 0;
         _running = false;
         _pendingResume = false;
-        _laps.Clear();
         StartButton.Content = "开始";
-        LapButton.IsEnabled = false;
-        LapText.Text = "";
         UpdateDisplay();
     }
+
+    /// <summary>全屏：把当前秒表时间交给全屏窗口，跟着一起走（关闭全屏不影响这里的表）。</summary>
+    private void Fullscreen_Click(object sender, RoutedEventArgs e)
+        => StopwatchFullscreenWindow.Show(() => ElapsedMs, () => _running);
 
     // ── 收起 / 再打开（浮窗隐藏时别白烧 CPU） ──────────────────
 
@@ -132,32 +120,7 @@ public sealed partial class MiniStopwatch : UserControl
             ? $"{hours}:{minutes:00}:{seconds:00}"
             : $"{minutes:00}:{seconds:00}";
         CsText.Text = $".{hundredths:00}";
-    }
 
-    private void RefreshLaps()
-    {
-        if (_laps.Count == 0)
-        {
-            LapText.Text = "";
-            return;
-        }
-
-        // 从新到旧列出来，只留最近三次
-        var lines = new List<string>();
-        for (var i = _laps.Count - 1; i >= 0; i--)
-        {
-            var ms = _laps[i];
-            var index = _laps.Count - i;
-            lines.Add($"第 {index} 次  {Format(ms)}");
-        }
-        LapText.Text = string.Join("　·　", lines);
-    }
-
-    private static string Format(long ms)
-    {
-        var minutes = ms / 60_000;
-        var seconds = ms % 60_000 / 1000;
-        var hundredths = ms % 1000 / 10;
-        return minutes > 0 ? $"{minutes}:{seconds:00}.{hundredths:00}" : $"{seconds}.{hundredths:00}";
+        StateText.Text = _running ? "计时中" : (ElapsedMs > 0 ? "已暂停" : "未开始");
     }
 }

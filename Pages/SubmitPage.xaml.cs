@@ -451,13 +451,23 @@ public sealed partial class SubmitPage : Page
             ["store"] = StoreBox.Text.Trim(),
             ["downloads"] = downloads,
             // 下划线开头 = 只给审核工单看的元数据，合并时会被剥掉，不会发布到站点
-            ["_联系方式"] = ContactBox.Text.Trim(),
+            // 联系方式本地用 age 公钥加密后再提交，只传密文（私钥仅开发者持有，不在客户端）
+            ["_联系方式"] = EncryptContact(),
         };
 
         var sortText = SortBox.Text.Trim();
         if (sortText.Length > 0 && long.TryParse(sortText, out var sort)) payload["sort"] = sort;
 
         return payload;
+    }
+
+    /// <summary>联系方式字段：本地加密成 ASCII armor 密文；留空或加密失败返回空串，由必填校验兜底。</summary>
+    private string EncryptContact()
+    {
+        var contact = ContactBox.Text.Trim();
+        if (contact.Length == 0) return "";
+        try { return Services.AgeEncryption.EncryptToArmor(contact); }
+        catch { return ""; } // 公钥是编译期常量、已随实现验证，失败视同未填，走必填提示
     }
 
     /// <summary>必填校验 + 校验值格式检查；返回要显示的错误，null 表示没问题。</summary>
@@ -661,7 +671,9 @@ public sealed partial class SubmitPage : Page
         IconBox.Text = Text("icon");
         TaglineBox.Text = Text("tagline");
         DescBox.Text = Text("description");
-        ContactBox.Text = Text("_联系方式");
+        // 联系方式已加密提交，本地无法解密回填；旧版明文草稿仍按原样恢复
+        var contact = Text("_联系方式");
+        ContactBox.Text = contact.StartsWith("-----BEGIN AGE", StringComparison.Ordinal) ? "" : contact;
         VersionBox.Text = Text("version");
         SizeBox.Text = Text("size");
         SystemBox.Text = Text("system");
@@ -737,7 +749,6 @@ public sealed partial class SubmitPage : Page
             ["_提交时间"] = time,
             ["_原始ID冲突"] = App.Content.Apps.Any(app => app.Id == id) ? true : null,
         };
-
         var fileName = $"{id}-{now:yyyyMMdd-HHmmss}.json";
         return (fileName, JsonSerializer.Serialize(body, new JsonSerializerOptions { WriteIndented = true }));
     }

@@ -2002,16 +2002,12 @@ public sealed partial class SidebarLayoutPage : Page
         return false;
     }
 
-    /// <summary>拖拽过程的流水账（出问题看 %LOCALAPPDATA%\ClassSoftwareHub\layout.log）。</summary>
+    /// <summary>拖拽过程的流水账（出问题看 logs\layout.log）。</summary>
     private void Log(string text)
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassSoftwareHub");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "layout.log"),
-                $"[{DateTime.Now:HH:mm:ss.fff}] {text}{Environment.NewLine}");
+            Core.AppLog.Info("layout", text);
         }
         catch
         {

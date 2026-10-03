@@ -42,6 +42,7 @@ public sealed partial class ExperimentalPage : Page
             Desc = "自绘触屏键盘：手指点在输入框上自动弹出，外观全部使用系统控件与主题色",
             Glyph = "\uE765", Tag = "virtualkeyboard"
         },
+        // 日志查看已不算实验功能（Nick 2026-10-02）：入口挪到 设置 → 诊断。
     };
 
     public ExperimentalPage()

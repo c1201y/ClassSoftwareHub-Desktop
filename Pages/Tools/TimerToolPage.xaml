@@ -5,95 +5,102 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- ═══ 2026-09-29 三次调整 ═══
-         · 倒计时 / 秒表原来是一对普通按钮，靠"当前那个是强调色 + 名字前加个 ●"来提示选中状态，
-           未选中的那个看着跟"重置"没区别。现在换成两张并列的模式卡（App.xaml 的 CshModeCardStyle），
-           每张都写着自己干什么，选中的那张有强调色描边 + 淡底 + 对勾，三处同时变。
-         · 秒表模式下原来把「设定时长」整块收起来，页面底部留一大块空白，像加载失败。
-           现在改成在该位置显示一句说明，位置不跳、内容有解释。 -->
-    <Grid Padding="24,14,24,20" RowSpacing="14">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <!-- ═══ 2026-10-02 四次调整 ═══
+         · 倒计时 / 秒表原来是一对普通按钮，靠"当前那个是强调色 + 名字前加个 ●"提示选中状态；
+           后来升级成两张并列的大卡片 —— 但两张卡塞在计时盘内部，把主角位置挤扁了。
+           现在改成页顶一行**原生 RadioButton**：两个模式同时看得见，占地只有一行。
+         · 「设定时长」原来是一整张横贯全宽的卡片，内容却靠在左边，右边留出大片空白。
+           现在去掉卡片外壳，输入框与预设按钮**紧挨着排、整行居中**，落在大字正下方。
+         ⛔ 计时盘的大字是这一页唯一的主角，别往它左右两边再塞东西。 -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="1008" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="1" Margin="24,14,24,20" RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <Grid ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="课堂计时器" FontSize="24" FontWeight="Bold" />
-                <TextBlock Text="倒计时 / 秒表，大字号便于投影，到达设定时间响铃。" FontSize="12.5" Opacity="0.6" />
-            </StackPanel>
-            <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
-                    Click="OpenPalette_Click" ToolTipService.ToolTip="打开置顶小窗口，便于随时计时" />
-        </Grid>
-
-        <Border Grid.Row="1" CornerRadius="10" Padding="24" BorderThickness="1"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-            <StackPanel Spacing="20" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <!-- ⚠️ IsChecked 一律在代码里赋初值（见 App.xaml 的 CshModeCardStyle 注释） -->
-                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
-                    <RadioButton x:Name="BtnCountdown" GroupName="TimerMode" Width="252"
-                                 Style="{StaticResource CshModeCardStyle}" Checked="Mode_Changed">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="倒计时" FontSize="14" FontWeight="SemiBold" />
-                            <TextBlock Text="设定时长后倒数，到点响铃。" FontSize="12" Opacity="0.65" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="BtnStopwatch" GroupName="TimerMode" Width="252"
-                                 Style="{StaticResource CshModeCardStyle}" Checked="Mode_Changed">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="秒表" FontSize="14" FontWeight="SemiBold" />
-                            <TextBlock Text="从 0 开始正向计时，适合掐时间。" FontSize="12" Opacity="0.65" />
-                        </StackPanel>
-                    </RadioButton>
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="课堂计时器" FontSize="28" FontWeight="Bold" />
+                    <TextBlock Text="倒计时 / 秒表，大字号便于投影，到达设定时间响铃。" FontSize="12" Opacity="0.6" />
                 </StackPanel>
+                <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
+                        Click="OpenPalette_Click" ToolTipService.ToolTip="打开置顶小窗口，便于随时计时" />
+            </Grid>
 
-                <TextBlock x:Name="Display" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="05:00" FontSize="96" FontWeight="Bold"
-                           FontFamily="Consolas" HorizontalAlignment="Center" />
-
-                <Border Width="520" Height="6" CornerRadius="3"
-                        Background="{ThemeResource ControlFillColorSecondaryBrush}">
-                    <Border x:Name="ProgressFill" Width="520" Height="6" CornerRadius="3"
-                            HorizontalAlignment="Left"
-                            Background="{ThemeResource AccentFillColorDefaultBrush}" />
-                </Border>
-
-                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                    <Button x:Name="StartButton" Content="开始" Click="StartPause_Click" MinWidth="120" Height="40"
-                            FontSize="15" Style="{StaticResource AccentButtonStyle}" />
-                    <Button Content="重置" Click="Reset_Click" MinWidth="120" Height="40" FontSize="15" />
-                </StackPanel>
+            <!-- 模式选择：⚠️ MinWidth 必须清零（RadioButton 默认 120），IsChecked 一律在代码里赋初值 -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="模式" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,2,0" />
+                <RadioButton x:Name="BtnCountdown" GroupName="TimerMode" Content="倒计时" MinWidth="0"
+                             Checked="Mode_Changed" />
+                <RadioButton x:Name="BtnStopwatch" GroupName="TimerMode" Content="秒表" MinWidth="0"
+                             Checked="Mode_Changed" />
+                <TextBlock FontSize="12" Opacity="0.55" VerticalAlignment="Center" Margin="10,0,0,0"
+                           Text="倒计时设定时长后倒数，到点响铃；秒表从 0 开始正向计时。" />
             </StackPanel>
-        </Border>
 
-        <!-- 倒计时设定 / 秒表说明：同一个位置，两种模式各显示一半，尺寸不跳 -->
-        <Border x:Name="SetupPanel" Grid.Row="2" CornerRadius="10" Padding="16" BorderThickness="1"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-            <StackPanel Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
-                <TextBlock x:Name="SetupTitle" Text="设定时长" FontWeight="Bold" />
-                <StackPanel x:Name="SetRow" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <NumberBox x:Name="MinBox" Value="5" Minimum="0" Maximum="999" SpinButtonPlacementMode="Compact"
-                               Width="120" IsEnabled="True" />
-                    <TextBlock Text="分" VerticalAlignment="Center" />
-                    <NumberBox x:Name="SecBox" Value="0" Minimum="0" Maximum="59" SpinButtonPlacementMode="Compact"
-                               Width="120" />
-                    <TextBlock Text="秒" VerticalAlignment="Center" />
-                    <Button Content="1 分钟" Click="Preset_Click" Tag="1" Margin="16,0,0,0" />
+            <!-- ═══ 计时盘：这一页的主角 ═══
+                 只保留一块素净底，不给描边 —— 省掉"方块包方块"的厚重感，视线直接落在大字上。 -->
+            <Border Grid.Row="2" CornerRadius="4" BorderThickness="0"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="20" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock x:Name="Display" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="05:00" FontSize="96" FontWeight="Bold"
+                               FontFamily="Consolas" HorizontalAlignment="Center" />
+
+                    <Border Width="520" Height="6" CornerRadius="3"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                        <Border x:Name="ProgressFill" Width="520" Height="6" CornerRadius="3"
+                                HorizontalAlignment="Left"
+                                Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                        <Button x:Name="StartButton" Content="开始" Click="StartPause_Click" MinWidth="120" Height="40"
+                                FontSize="15" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="重置" Click="Reset_Click" MinWidth="120" Height="40" FontSize="15" />
+                        <!-- 全屏投影：倒计时开全屏倒计时、秒表开全屏秒表（2026-10-03 Nick：两端都要有） -->
+                        <Button x:Name="FullscreenButton" Content="全屏倒计时" Click="Fullscreen_Click" MinWidth="120" Height="40"
+                                FontSize="15"
+                                ToolTipService.ToolTip="把计时铺满整块屏幕，适合投影" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 倒计时设定 / 秒表说明：同一个位置，两种模式各显示一半，尺寸不跳。
+                 ⛔ 不要再给它套卡片 —— 这一行的内容本来就窄，套上外壳就只剩右边一大片空白。 -->
+            <StackPanel x:Name="SetupPanel" Grid.Row="3" Spacing="8" HorizontalAlignment="Center">
+                <TextBlock x:Name="SetupTitle" Text="设定时长" FontSize="12" Opacity="0.6"
+                           HorizontalAlignment="Center" />
+                <StackPanel x:Name="SetRow" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                    <!-- 2026-10-03（Nick）：分/秒两个框 → 原生 TimePicker，多出「小时」单位。
+                         长时段（公开课 90 分钟、晚自习）不用再先换算成多少分钟。 -->
+                    <TimePicker x:Name="DurationPicker" Width="200" MinuteIncrement="1"
+                                VerticalAlignment="Center" />
+                    <!-- 预设紧贴输入框：原来隔着 16 的距离、按钮之间又各留 10，一行拉出去老远 -->
+                    <Border Width="1" Height="20" Margin="10,0,4,0" VerticalAlignment="Center"
+                            Background="{ThemeResource CardStrokeColorDefaultBrush}" />
+                    <Button Content="1 分钟" Click="Preset_Click" Tag="1" />
                     <Button Content="3 分钟" Click="Preset_Click" Tag="3" />
                     <Button Content="5 分钟" Click="Preset_Click" Tag="5" />
                     <Button Content="10 分钟" Click="Preset_Click" Tag="10" />
                     <Button Content="15 分钟" Click="Preset_Click" Tag="15" />
+                    <Button Content="1 小时" Click="Preset_Click" Tag="60" />
                 </StackPanel>
-                <TextBlock x:Name="StopwatchHint" Visibility="Collapsed" FontSize="12.5" Opacity="0.65"
-                           TextWrapping="Wrap"
+                <TextBlock x:Name="StopwatchHint" Visibility="Collapsed" FontSize="12" Opacity="0.65"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
                            Text="秒表模式不需要设定时长：单击「开始」即开始计时，再次单击暂停，单击「重置」归零。" />
             </StackPanel>
-        </Border>
+        </Grid>
     </Grid>
 </Page>

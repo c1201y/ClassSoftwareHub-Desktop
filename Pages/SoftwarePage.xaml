@@ -12,14 +12,24 @@
       和首页 / 设置页同一套版式：三列 Grid 把内容钉在中间 960 宽（导航展开收起都不动）。
       ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
     -->
-    <Grid Padding="24,36,24,44">
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
+        <!-- 2026-10-02：间距从根 Grid.Padding 挪到这里（Margin）。Padding 在最外层会把高度约束
+             传坏 —— 实测 GridView 视口只剩 454 DIP、Extent=视口（VScrollable=False），
+             内容一超出就"底部截断且滚不动"。设置页（ScrollViewer 挂最外 + 内部 Margin）无此问题。
+
+             ⛔⛔ 2026-10-03：中间列底部间距分两种写法（别一刀切）。
+                 本页最后一行是**自滚容器**（GridView，`*` 高度、自带 Padding="0,2,0,44"）
+                 ⇒ 底部写 0，留白交给滚动内容自己。写 44 会把视口整体上提、GridView 又要
+                 自己再加一遍 44 —— 同一份留白算两遍，视口够不到窗口底边，底下空出一条
+                 页面底色带（Nick：「整个页面高度没用完，有个框给框起来了」）。
+                 反例：末行若是页脚 / 卡片等非自滚元素，必须写 44，否则怼到窗口下边框。 -->
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -53,14 +63,11 @@
             <Grid Grid.Row="2">
                 <!-- ===== 磁贴视图（3 列 = 302 + 16 间距，正好 960；带简介） ===== -->
                 <GridView x:Name="TileGrid" SelectionMode="None" IsItemClickEnabled="True"
-                          ItemClick="AppGrid_ItemClick" Padding="0,2,0,0"
+                          ItemClick="AppGrid_ItemClick" Padding="0,2,0,44"
                           ItemContainerStyle="{StaticResource CshCardItemStyle}">
                     <GridView.ItemTemplate>
                         <DataTemplate x:DataType="data:SoftwareApp">
-                            <Border Width="302" Height="120" CornerRadius="8" Padding="16,14" Margin="0,0,16,14"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
+                            <Border Style="{StaticResource CshCardStyle}" Width="302" Height="120" Padding="16,14" Margin="0,0,16,14"
                                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                                 <Grid RowSpacing="8" ColumnSpacing="12">
                                     <Grid.RowDefinitions>
@@ -107,14 +114,11 @@
 
                 <!-- ===== 网格视图（5 列 = 174 + 16 间距，正好 960；紧凑） ===== -->
                 <GridView x:Name="CompactGrid" Visibility="Collapsed" SelectionMode="None" IsItemClickEnabled="True"
-                          ItemClick="AppGrid_ItemClick" Padding="0,2,0,0"
+                          ItemClick="AppGrid_ItemClick" Padding="0,2,0,44"
                           ItemContainerStyle="{StaticResource CshCardItemStyle}">
                     <GridView.ItemTemplate>
                         <DataTemplate x:DataType="data:SoftwareApp">
-                            <Border Width="174" Height="112" CornerRadius="8" Padding="12,10" Margin="0,0,16,14"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
+                            <Border Style="{StaticResource CshCardStyle}" Width="174" Height="112" Padding="12,10" Margin="0,0,16,14"
                                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                                 <Grid RowSpacing="3">
                                     <Grid.RowDefinitions>

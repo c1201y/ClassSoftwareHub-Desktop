@@ -157,6 +157,43 @@
             </Style>
 
             <!--
+              卡片容器统一样式（2026-10-02 建；同日二改：圆角 8→4、补统一内边距 16,12）。
+              全站内容卡片统一走这一套「4px 圆角 + 系统卡片底 + 系统描边 + 16,12 内边距」，
+              别再每页手写 CornerRadius/Background/BorderBrush/BorderThickness 四件套。
+
+              ⛔⛔ 圆角必须是 4，不是 8（Nick 2026-10-02 抓的「劣质第三方绘制」根源）：
+                  - 4 = 系统 ControlCornerRadius —— 原生 SettingsCard / Button / ComboBox 全是 4；
+                  - 8 = OverlayCornerRadius —— 那是**浮层/弹窗**该用的值，不是卡片。
+                  手写卡片写 8 摆在原生控件旁边，一眼就能看出"两个来源"，即所谓劣质感。
+              ⛔ 别再往 Style 外手写卡片外壳；内边距要不同就在本地覆盖 Padding。
+            -->
+            <Style x:Key="CshCardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="Padding" Value="16,12" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+
+            <!--
+              只读结果行（编码 / 哈希工具的四条哈希值）。
+              2026-10-02 建（Nick：「用 Border 堆叠的表单表格，所有块都是方块包方块」）：
+              这类"一行一条结果"的内容改用 ListView 承载 —— 每一行自带系统悬停底色、
+              圆角走 ControlCornerRadius，不再需要外面再套一张大卡片。
+              ⛔ 配合 ListView 用：SelectionMode=None、IsItemClickEnabled=False、
+                 ScrollViewer.VerticalScrollBarVisibility=Disabled（它本来就待在外层滚动区里，
+                 不禁用会出现内外两层滚动条）。
+            -->
+            <Style x:Key="CshResultRowStyle" TargetType="ListViewItem">
+                <Setter Property="MinHeight" Value="0" />
+                <!-- 左右 14 = 与同页其它内容（拖拽区、核对行）同一条内缩线；
+                     ⛔ 别靠给 ListView 加负 Margin 去"让悬停铺满" —— 那会把行内容顶出 960 内容列，
+                        右侧的复制键会比页面里所有其它按钮都凸出来约 10px（实测过）。 -->
+                <Setter Property="Padding" Value="14,8" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            </Style>
+
+            <!--
               ═══════════════════════════════════════════════════════════════════════════════
               ⚠️⚠️ 弹窗圆角。2026-09-29 Nick 抓到的 bug：「名单」「示例名单」两个弹窗四角是**直角**，
               在 Win 11 上看着像 Win 10。

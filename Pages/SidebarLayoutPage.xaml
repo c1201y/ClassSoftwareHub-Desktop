@@ -6,19 +6,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <Grid x:Name="WorkspaceRoot" Padding="24,36,24,44">
+    <Grid x:Name="WorkspaceRoot">
 
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
         <!-- 整页可滚：内容长得超过窗口时靠它，别再用小滚动区裁掉东西（拖动时会误会"模块消失"）
              右边留 18 的空：不然页面滚动条会压在预览条上，很难看 -->
-        <ScrollViewer x:Name="PageScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer x:Name="PageScroll" Grid.Column="1" MaxWidth="960" VerticalScrollBarVisibility="Auto"
                       VerticalScrollMode="Auto">
-            <Grid RowSpacing="14" Margin="0,0,18,0">
+            <Grid RowSpacing="14" Margin="0,36,18,44">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -291,7 +291,7 @@
 
         <!-- 把预览里的模块拖到空白处时浮出来的提示 -->
         <Border x:Name="RemoveHint" Visibility="Collapsed" Grid.ColumnSpan="3"
-                CornerRadius="8" Padding="16,10"
+                CornerRadius="4" Padding="16,10"
                 HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -27,6 +28,9 @@ public sealed partial class ShellPage : UserControl
         InitializeComponent();
         ActualThemeChanged += (_, _) => UpdateThemeButton();
 
+        // 「内置工具」分组的子项从 ToolCatalog 动态生成（tag = ToolDef.Id，工具清单只有一份）
+        BuildToolNavItems();
+
         // 下载任务数变了 → 同步「任务进行」上的徽标（在下载就不占着界面，但得让人随时看见有几个在下）
         Services.DownloadManager.Current.Changed += UpdateDownloadBadge;
         UpdateDownloadBadge();
@@ -37,13 +41,31 @@ public sealed partial class ShellPage : UserControl
 
         // 切页计时（Debug / CSH_PERF=1 才有输出，见 Core/PerfLog.cs）。
         // ⚠️ 这里**不再**顺手调 MemoryTrimmer —— 切页之后 3 秒在 UI 线程上来一次全量 GC + WaitForPendingFinalizers，
-        //    正好落在用户开始滚动/点击的时候，是"切过去先顿一下"的主因之一。回收改在窗口不可见时做。
+        //    正好落在用户开始滚动/点击的时候，是"切过去先顿一下"的主因之一。
+        //    回收改由 MemoryTrimmer 自己判定：不可见时立刻收，可见时走"水位 + 停手"（见该文件）。
         ContentFrame.Navigating += (_, e) => PerfLog.NavBegin(CurrentTag);
         ContentFrame.Navigated += (_, _) =>
         {
             PerfLog.NavEnd(ContentFrame.Content);
             UpdateBackButton();
         };
+    }
+
+    /// <summary>
+    /// 「内置工具」分组的子项：按 <see cref="ToolCatalog.All"/> 动态生成（tag = <see cref="ToolDef.Id"/>）。
+    /// ⛔ 工具清单只有 ToolCatalog 一份 —— 导航子项、工具索引页卡片都从它来，别另写一份。
+    /// </summary>
+    private void BuildToolNavItems()
+    {
+        foreach (var def in ToolCatalog.All)
+        {
+            ToolsNav.MenuItems.Add(new NavigationViewItem
+            {
+                Content = def.Name,
+                Tag = def.Id,
+                Icon = new FontIcon { Glyph = def.Glyph },
+            });
+        }
     }
 
     /// <summary>「任务进行」上的 InfoBadge = 正在下载的任务数；一个都没有就把徽标整个摘掉。</summary>
@@ -169,6 +191,16 @@ public sealed partial class ShellPage : UserControl
     }
 
     /// <summary>
+    /// 从外部（首页卡片等）进「内置工具」：切到工具索引页，并把分组展开。
+    /// 与 <see cref="NavigateToExperimental"/> 对称 —— 从外面跳进来时看不出这一组还有子项。
+    /// </summary>
+    public void NavigateToTools()
+    {
+        NavigateTo("tools");
+        ToolsNav.IsExpanded = true;
+    }
+
+    /// <summary>
     /// 跳到「内置工具」里的某个工具页（浮窗里的「详细设置」用）。
     /// 先把工具列表页铺一层，这样工具页左上角的返回按钮能正常退回列表。
     /// </summary>
@@ -223,6 +255,16 @@ public sealed partial class ShellPage : UserControl
     private void NavigateTagCore(string tag)
     {
         CurrentTag = tag;   // 崩溃日志靠它记下"当时在哪一页"（见 App.OnUnhandledException）
+
+        // 内置工具子页：tag 就是 ToolCatalog 里的 Id（导航子项动态生成，见 BuildToolNavItems）。
+        // 按 Id 反查拿页面类型，工具清单只有一份，不用给每个工具单独写 case。
+        var toolDef = ToolCatalog.All.FirstOrDefault(t => t.Id == tag);
+        if (toolDef?.Page is not null)
+        {
+            ContentFrame.Navigate(toolDef.Page);
+            return;
+        }
+
         switch (tag)
         {
             case "submit":
@@ -251,6 +293,9 @@ public sealed partial class ShellPage : UserControl
                 return;
             case "virtualkeyboard":
                 ContentFrame.Navigate(typeof(VirtualKeyboardPage));
+                return;
+            case "logs":
+                ContentFrame.Navigate(typeof(LogViewerPage));
                 return;
             case "experimental":
                 // 「实验性功能」分组的父项**自己就是总览入口**：点它 = 展开/收起分组 + 进这一页。
@@ -286,11 +331,7 @@ public sealed partial class ShellPage : UserControl
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassSoftwareHub");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "crash.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 导航到「{tag}」失败: {ex}{Environment.NewLine}");
+            Core.AppLog.Error("crash", $"导航到「{tag}」失败: {ex}");
         }
         catch
         {
@@ -300,29 +341,36 @@ public sealed partial class ShellPage : UserControl
 
     private void SelectTag(string tag)
     {
-        // 「实验性功能」是个分组父项，它**不进 NavigationView 的选中体系**（原因见 ShellPage.xaml 的注释）——
+        // 分组父项（实验性功能 / 内置工具）**不进 NavigationView 的选中体系**（原因见 ShellPage.xaml 的注释）——
         // 高亮得手动打：先清掉别的选中项，再点亮父项自己。
         // ⚠️ 这里**不碰 IsExpanded**：点父项时 NavigationView 自己会 toggle 展开/收起，
         //    在这儿硬展开的话，分组就再也收不起来了（每次点都被撑开）。
-        //    需要"顺带展开"的入口（首页卡片那种）走 NavigateToExperimental。
-        if (tag == "experimental")
+        //    需要"顺带展开"的入口（首页卡片那种）走 NavigateToExperimental / NavigateToTools。
+        foreach (var top in AllTopItems())
         {
-            SelectExperimentalHighlight();
+            if ((top.Tag as string) != tag) continue;
+
+            if (top.MenuItems.Count > 0)
+            {
+                // 分组父项：手动点亮，不碰 SelectedItem（塞 group header 进去会顺着分组 Invoke 第一个子项）
+                Nav.SelectedItem = null;
+                foreach (var item in AllNavigationItems()) item.IsSelected = false;
+                top.IsSelected = true;
+            }
+            else
+            {
+                // 普通项：走 SelectedItem；同时把分组父项残留的手动高亮熄掉
+                foreach (var item in AllNavigationItems())
+                    if (item.MenuItems.Count > 0) item.IsSelected = false;
+                Nav.SelectedItem = top;
+            }
             return;
         }
 
-        ExperimentalNav.IsSelected = false;      // 走别的页时，手动把父项的高亮熄掉
-
+        // 没命中顶层 → 往下一层找（「内置工具 → 随机抽号」这种子项）。
+        // 找到子项时顺手把父项**展开** —— 否则高亮藏在折叠的组里，看着像点了没反应。
         foreach (var top in AllTopItems())
         {
-            if ((top.Tag as string) == tag)
-            {
-                Nav.SelectedItem = top;
-                return;
-            }
-
-            // 往下一层找（「实验性功能 → 本机核实」这种子项）。
-            // 找到子项时顺手把父项**展开** —— 否则高亮藏在折叠的组里，看着像点了没反应。
             foreach (var child in top.MenuItems.OfType<NavigationViewItem>())
             {
                 if ((child.Tag as string) != tag) continue;
@@ -332,20 +380,6 @@ public sealed partial class ShellPage : UserControl
                 return;
             }
         }
-    }
-
-    /// <summary>
-    /// 把导航高亮打在「实验性功能」父项上。
-    /// ⚠️ 父项**不能塞进 Nav.SelectedItem**：NavigationView 拿到一个"带子项的分组头"时会把选中
-    ///    转给第一个子项 —— 这正是当年"点实验性功能却跳到本机核实"的根因。所以只能手动点亮。
-    /// ⚠️ 也**不能只设 SelectedItem = null**：那样上一个选中的项还会留着选中底色
-    ///    （实测：进总览页后「首页」那块底色还在），得挨个熄掉。
-    /// </summary>
-    private void SelectExperimentalHighlight()
-    {
-        Nav.SelectedItem = null;
-        foreach (var item in AllNavigationItems()) item.IsSelected = false;
-        ExperimentalNav.IsSelected = true;
     }
 
     /// <summary>导航里的全部项（含一层子项）—— 手动改高亮时用。</summary>

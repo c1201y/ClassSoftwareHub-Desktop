@@ -6,35 +6,39 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:svc="using:ClassSoftwareHub.Desktop.Services">
 
-    <!-- 和首页 / 内置工具 / 软件下载同一套版式：内容钉在中间 960 宽 -->
-    <Grid Padding="24,36,24,44">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
-        </Grid.ColumnDefinitions>
+    <!-- 和首页 / 设置同一套版式：ScrollViewer 在外（滚动条贴窗口最右）+ 内容钉在中间 960 宽。
+         ⛔ 必须加 VerticalContentAlignment="Stretch"：ScrollViewer 的内容默认**不拉伸**，
+            内容矮的时候（空状态）整块只占内容自然高，下面的视口空间吃不到 ——
+            表现就是底部按钮行悬在半空（Nick 2026-10-03：「这个按钮位置为什么这么奇怪」）。
+            拉伸后 `*` 行才吸收得到剩余高度，按钮才会落在页面底部。 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
+        <Grid Margin="24,36,24,44">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
+            </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+            <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <!-- 列表 / 空状态：必须是 `*` —— 它吸收"标题与按钮行之间"的全部剩余高度，
+                         空状态才会竖直居中、按钮行才会落在页面底部。
+                         ⛔ 写 Auto 会让这块只有内容自然高，按钮行跟着浮在半空（2026-10-03）。 -->
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="任务进行" FontSize="28" FontWeight="Bold" />
-                <TextBlock x:Name="SummaryText" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
-            </StackPanel>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="任务进行" FontSize="28" FontWeight="Bold" />
+                    <TextBlock x:Name="SummaryText" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                </StackPanel>
 
-            <!-- 任务列表：不用 ListView —— 这里不需要选中，用 ItemsControl 省掉一整套容器 chrome -->
-            <ScrollViewer Grid.Row="1" Padding="0,2,0,0" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="TaskList">
+                <!-- 任务列表：不用 ListView —— 这里不需要选中，用 ItemsControl 省掉一整套容器 chrome -->
+                <ItemsControl x:Name="TaskList" Grid.Row="1" Padding="0,2,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="svc:DownloadTask">
-                            <Border CornerRadius="8" Padding="20,16" Margin="0,0,0,12"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1">
+                            <Border Style="{StaticResource CshCardStyle}" Padding="20,16" Margin="0,0,0,12">
                                 <Grid ColumnSpacing="16" RowSpacing="10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
@@ -83,22 +87,26 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </ScrollViewer>
 
-            <!-- 空状态：一条任务都没有的时候 -->
-            <StackPanel x:Name="EmptyPanel" Grid.Row="1" Spacing="12" Visibility="Collapsed"
-                        HorizontalAlignment="Center" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE896;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
-                <TextBlock Text="当前无下载任务" FontSize="14" FontWeight="SemiBold" Opacity="0.75"
-                           HorizontalAlignment="Center" />
-                <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Opacity="0.6"
-                           Text="在「软件下载」中打开任意软件并单击「下载」，任务将显示在此处。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
-            </StackPanel>
+                <!-- 空状态：一条任务都没有的时候。
+                     ⛔ 不再写 MinHeight 硬撑居中 —— 那是在 Row1 还是 Auto 时的权宜之计
+                        （撑出一个假高度，让按钮行往下掉一截）。现在 Row1 是 `*`，
+                        这块竖直居中在"标题与按钮行之间"就是自然的，加 MinHeight 反而会在
+                        窗口很矮时把内容顶出滚动区。 -->
+                <StackPanel x:Name="EmptyPanel" Grid.Row="1" Spacing="12" Visibility="Collapsed"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE896;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
+                    <TextBlock Text="当前无下载任务" FontSize="14" FontWeight="SemiBold" Opacity="0.75"
+                               HorizontalAlignment="Center" />
+                    <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Opacity="0.6"
+                               Text="在「软件下载」中打开任意软件并单击「下载」，任务将显示在此处。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
+                </StackPanel>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
-                <Button Content="打开下载文件夹" Click="OpenFolder_Click" />
-                <Button x:Name="ClearButton" Content="清除已完成" Click="ClearFinished_Click" />
-            </StackPanel>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                    <Button Content="打开下载文件夹" Click="OpenFolder_Click" />
+                    <Button x:Name="ClearButton" Content="清除已完成" Click="ClearFinished_Click" />
+                </StackPanel>
+            </Grid>
         </Grid>
-    </Grid>
+    </ScrollViewer>
 </Page>

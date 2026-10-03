@@ -7,14 +7,18 @@
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
     <!-- 和内置工具页同一套版式：内容钉在中间 960 宽（Nick 2026-09-26 要求"页面布局类似于内置工具页面"） -->
-    <Grid Padding="24,36,24,44">
+    <!-- 根 Grid 不带 Margin：间距放进中间列，让 GridView 拿到整页高度约束。
+         ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
+            Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
+         本页最后一行是「实验性的含义」页脚卡片 → 写 44，否则页脚直接怼到窗口下边框。 -->
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -29,14 +33,11 @@
 
             <!-- 卡片 462 + 间距 16 = 478，960 里正好两列（跟内置工具页同一个尺寸口径） -->
             <GridView x:Name="FeatureGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
-                      ItemClick="FeatureGrid_ItemClick" Padding="0,2,0,0"
+                      ItemClick="FeatureGrid_ItemClick" Padding="0,2,0,44"
                       ItemContainerStyle="{StaticResource CshCardItemStyle}">
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="data:ExperimentalFeature">
-                        <Border Width="462" Height="76" CornerRadius="8" Padding="20,0" Margin="0,0,16,14"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
+                        <Border Style="{StaticResource CshCardStyle}" Width="462" Height="76" Padding="20,0" Margin="0,0,16,14"
                                 PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                             <Grid ColumnSpacing="14">
                                 <Grid.ColumnDefinitions>
@@ -61,7 +62,7 @@
             </GridView>
 
             <!-- 页脚：把「实验性」这个标签的含义和检测范围讲清楚（先说清边界，别让用户自己猜） -->
-            <Border Grid.Row="2" CornerRadius="8" Padding="20,16" Margin="0,4,0,0"
+            <Border Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,4,0,0"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <Grid ColumnSpacing="16" RowSpacing="6">

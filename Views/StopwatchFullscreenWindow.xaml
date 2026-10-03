@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.StopwatchFullscreenWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      全屏秒表：铺满屏幕，把源秒表的时间显示出来。
+      它是**只读投影** —— 时间由打开它的那个控件提供，全屏窗口自己只负责显示和退出。
+      这样浮窗版和应用端的两处秒表都能复用同一个全屏窗口，不会有"两份时间对不上"的问题。
+    -->
+    <Grid x:Name="Root" IsTabStop="True" KeyDown="Root_KeyDown" DoubleTapped="Root_DoubleTapped"
+          Background="#FF101418">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+                <TextBlock x:Name="TimeText" Text="00:00" FontSize="260" FontWeight="Bold"
+                           FontFamily="Bahnschrift" Foreground="#FFF2F4F7" />
+                <TextBlock x:Name="CsText" Text=".00" FontSize="110" FontWeight="SemiBold"
+                           Opacity="0.8" FontFamily="Bahnschrift" Foreground="#FFF2F4F7"
+                           VerticalAlignment="Bottom" Margin="0,0,0,26" />
+            </StackPanel>
+            <TextBlock x:Name="StateText" FontSize="34" Opacity="0.75" HorizontalAlignment="Center"
+                       Foreground="#FFF2F4F7" Text="未开始" />
+        </StackPanel>
+
+        <!--
+          退出入口：跟全屏时钟一样，进来先亮几秒，之后淡出；鼠标一动 / 手指一碰再亮。
+          颜色故意写死（底下永远是深底，不跟主题走也不怕主题变）。
+        -->
+        <Border x:Name="ExitBar" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,18,18,0" CornerRadius="8" Padding="16,6,8,6"
+                Opacity="0" IsHitTestVisible="False"
+                Background="#CC1A1A1A" BorderBrush="#40FFFFFF" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="按 Esc、双击屏幕，或单击此处退出" FontSize="14"
+                           Foreground="#FFFFFFFF" VerticalAlignment="Center" />
+                <Button Click="Exit_Click" MinWidth="36" MinHeight="36" Padding="0"
+                        Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="退出全屏秒表">
+                    <FontIcon Glyph="&#xE711;" FontSize="14" Foreground="#FFFFFFFF" />
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -6,66 +6,75 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
-    <Grid Padding="24,14,24,20" RowSpacing="14">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="1008" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="1" Margin="24,14,24,20" RowSpacing="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <StackPanel Spacing="2">
-            <TextBlock x:Name="TitleText" Text="系统镜像下载" FontSize="24" FontWeight="Bold" />
-            <TextBlock x:Name="SubtitleText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
-        </StackPanel>
-
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="10">
-                <InfoBar x:Name="DisclaimerBar" IsOpen="False" IsClosable="False" Severity="Warning" />
-                <TextBlock x:Name="EmptyText" Visibility="Collapsed" Opacity="0.6" TextWrapping="Wrap"
-                           Text="未读取到镜像清单（内容包中的 text/mirror-sites.json）。" />
-                <ItemsControl x:Name="Rows">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="data:MirrorSite">
-                            <Button Click="Row_Click" Tag="{x:Bind Url}"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                    Padding="16,12" CornerRadius="8" Margin="0,0,0,8"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1">
-                                <Grid ColumnSpacing="14">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="40" Height="40" CornerRadius="10" VerticalAlignment="Center"
-                                            BorderThickness="1"
-                                            Background="{x:Bind BadgeBackground}"
-                                            BorderBrush="{x:Bind BadgeBorder}">
-                                        <Grid>
-                                            <Image Source="{x:Bind Icon}" Width="26" Height="26"
-                                                   Visibility="{x:Bind IconVisibility}" />
-                                            <TextBlock Text="{x:Bind Badge}" FontSize="16" FontWeight="Bold"
-                                                       Visibility="{x:Bind BadgeVisibility}"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Grid>
-                                    </Border>
-                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="Bold" />
-                                        <TextBlock Text="{x:Bind Desc}" FontSize="13" Opacity="0.65"
-                                                   TextWrapping="Wrap" />
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{x:Bind Host}" FontSize="12" Opacity="0.5"
-                                               VerticalAlignment="Center" />
-                                    <FontIcon Grid.Column="3" Glyph="&#xE8A7;" FontSize="13" Opacity="0.6"
-                                              VerticalAlignment="Center" />
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock x:Name="NoteText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" Margin="0,8,0,8" />
+            <StackPanel Spacing="2">
+                <TextBlock x:Name="TitleText" Text="系统镜像下载" FontSize="24" FontWeight="Bold" />
+                <TextBlock x:Name="SubtitleText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" />
             </StackPanel>
-        </ScrollViewer>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <!-- ⛔ 底部 Margin 是保险栓：外层 Grid 的 Padding 底部在滚动区**之外**，
+                     实测滚到底仍会贴住窗口底边 —— 留白必须写在滚动区**里**。 -->
+                <StackPanel Spacing="10" Margin="0,0,0,20">
+                    <InfoBar x:Name="DisclaimerBar" IsOpen="False" IsClosable="False" Severity="Warning" />
+                    <TextBlock x:Name="EmptyText" Visibility="Collapsed" Opacity="0.6" TextWrapping="Wrap"
+                               Text="未读取到镜像清单（内容包中的 text/mirror-sites.json）。" />
+                    <ItemsControl x:Name="Rows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="data:MirrorSite">
+                                <Button Click="Row_Click" Tag="{x:Bind Url}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                        Padding="16,12" CornerRadius="4" Margin="0,0,0,8"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                    <Grid ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="40" Height="40" CornerRadius="10" VerticalAlignment="Center"
+                                                BorderThickness="1"
+                                                Background="{x:Bind BadgeBackground}"
+                                                BorderBrush="{x:Bind BadgeBorder}">
+                                            <Grid>
+                                                <Image Source="{x:Bind Icon}" Width="26" Height="26"
+                                                       Visibility="{x:Bind IconVisibility}" />
+                                                <TextBlock Text="{x:Bind Badge}" FontSize="16" FontWeight="Bold"
+                                                           Visibility="{x:Bind BadgeVisibility}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="Bold" />
+                                            <TextBlock Text="{x:Bind Desc}" FontSize="13" Opacity="0.65"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{x:Bind Host}" FontSize="12" Opacity="0.5"
+                                                   VerticalAlignment="Center" />
+                                        <FontIcon Grid.Column="3" Glyph="&#xE8A7;" FontSize="13" Opacity="0.6"
+                                                  VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="NoteText" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap" Margin="0,8,0,8" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </Page>

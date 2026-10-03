@@ -44,13 +44,17 @@ public sealed partial class MiniTimer : UserControl
         _blink.IsRepeating = true;
         _blink.Tick += (_, _) => Display.Opacity = Display.Opacity < 0.9 ? 1 : 0.35;
 
-        // 自定义分/秒：改一下就立刻生效（不用再点"应用"）
-        MinuteStepper.ValueChanged += (_, _) => TimeSettingChanged();
-        SecondStepper.ValueChanged += (_, _) => TimeSettingChanged();
+        // 自定义时长（时:分:秒 三列一体）：改一下就立刻生效（不用再点"应用"）
+        for (var i = 0; i < 24; i++) HourBox.Items.Add(i);
+        for (var i = 0; i < 60; i++) { MinuteBox.Items.Add(i); SecondBox.Items.Add(i); }
+        HourBox.SelectionChanged += (_, _) => TimeSettingChanged();
+        MinuteBox.SelectionChanged += (_, _) => TimeSettingChanged();
+        SecondBox.SelectionChanged += (_, _) => TimeSettingChanged();
 
         _suppressTime = true;
-        MinuteStepper.Value = 5;
-        SecondStepper.Value = 0;
+        HourBox.SelectedIndex = 0;
+        MinuteBox.SelectedIndex = 5;
+        SecondBox.SelectedIndex = 0;
         _suppressTime = false;
         _totalMs = 5 * 60 * 1000;
         _remainMs = _totalMs;
@@ -60,9 +64,9 @@ public sealed partial class MiniTimer : UserControl
     }
 
     private bool _pendingResume;
-    private bool _suppressTime;      // 构造 / 程序里改步进器时不要再回头算一遍
+    private bool _suppressTime;      // 构造 / 程序里改时长时不要再回头算一遍
 
-    /// <summary>自定义时间改了：没在跑就直接换成新时长。</summary>
+    /// <summary>自定义时长改了：没在跑就直接换成新时长。</summary>
     private void TimeSettingChanged()
     {
         if (_suppressTime || _running) return;
@@ -70,27 +74,10 @@ public sealed partial class MiniTimer : UserControl
         _blink.Stop();
         _finished = false;
         _sw.Reset();
-        _totalMs = (MinuteStepper.Value * 60L + SecondStepper.Value) * 1000L;
-        _remainMs = _totalMs;
-        UpdateDisplay();
-        SyncInputs();
-    }
-
-    /// <summary>预设按钮 → 把分/秒步进器设成对应值（然后由 TimeSettingChanged 统一生效）。</summary>
-    private void SetPreset(int minutes)
-    {
-        _tick.Stop();
-        _blink.Stop();
-        _running = false;
-        _finished = false;
-        _sw.Reset();
-
-        _suppressTime = true;
-        MinuteStepper.Value = minutes;
-        SecondStepper.Value = 0;
-        _suppressTime = false;
-
-        _totalMs = minutes * 60_000L;
+        var h = Math.Max(0, HourBox.SelectedIndex);
+        var m = Math.Max(0, MinuteBox.SelectedIndex);
+        var s = Math.Max(0, SecondBox.SelectedIndex);
+        _totalMs = Math.Max(0, (h * 3600L + m * 60L + s) * 1000);
         _remainMs = _totalMs;
         UpdateDisplay();
         SyncInputs();
@@ -125,11 +112,8 @@ public sealed partial class MiniTimer : UserControl
         SyncInputs();
     }
 
-    private void Preset_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button b || b.Tag is not string tag || !int.TryParse(tag, out var minutes)) return;
-        SetPreset(minutes);
-    }
+    private void Fullscreen_Click(object sender, RoutedEventArgs e)
+        => TimerFullscreenWindow.Show(() => _remainMs, () => _totalMs, () => _running);
 
     private void StartPause_Click(object sender, RoutedEventArgs e)
     {
@@ -205,12 +189,10 @@ public sealed partial class MiniTimer : UserControl
 
     private void SyncInputs()
     {
-        foreach (var child in PresetRow.Children)
-            if (child is Button b) b.IsEnabled = !_running;
-
         // 跑起来之后不让改时间（改了也说不清是"这一轮"还是"下一轮"），要改先暂停
-        MinuteStepper.IsEnabled = !_running;
-        SecondStepper.IsEnabled = !_running;
+        HourBox.IsEnabled = !_running;
+        MinuteBox.IsEnabled = !_running;
+        SecondBox.IsEnabled = !_running;
         StartButton.IsEnabled = _totalMs > 0 || _running;
 
         Display.Opacity = 1;

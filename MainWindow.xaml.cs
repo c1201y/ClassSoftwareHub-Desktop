@@ -100,6 +100,13 @@ public sealed partial class MainWindow : Window
         Activated += OnFirstActivated;
 
         _ = BootAsync();
+
+        // 构造走完留一笔，跟 App.xaml.cs 那侧的启动护栏对着看就能定位崩溃位置：
+        //   · 有这行           → 建窗完整成功
+        //   · 只有 [startup] 构造失败 → 崩在上面 InitTray() 之后
+        //     ⚠️ InitTray() 里已经把工具侧边栏显示出来了 —— 崩在它之后，正是
+        //        「侧边栏挂在屏幕上、主窗口却没有」那种形态（2026-10-02 用户反馈）。
+        Services.ScreenCapture.Log("[startup] 主窗口构造完成");
     }
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
@@ -111,6 +118,10 @@ public sealed partial class MainWindow : Window
         // 窗口真正显示之后再兜一次圆角：框架在首帧还会碰一次标题栏，
         // 早于显示设的值有可能被它按回去（图标那边也踩过同样的重置，见上面的 Activated 补刀）。
         ApplyWindowRounding();
+
+        // 「工具侧边栏」在这儿才挂出来 —— 主窗口已经在屏幕上了，它再抢前台也抢不走主角。
+        // ⚠️ 顺序就是 2026-10-02 那次修复的要点，别挪回 InitTray()（那边有详细说明）。
+        StartToolSidebarAfterFirstFrame();
 
         if (_startPalette)
         {
@@ -126,6 +137,145 @@ public sealed partial class MainWindow : Window
 
         // 启动时查一次更新：**不强制**，有新版就问用户（主窗口没露脸时发系统通知）
         _ = CheckUpdateOnStartupAsync();
+    }
+
+    /// <summary>
+    /// 把「工具侧边栏」挂出来（按设置决定贴哪条边、几条边）。
+    ///
+    /// ⚠️⚠️ 调用时机不能提前到主窗口显示之前（2026-10-02 定，两次才挪到位）：
+    ///    侧边栏窗口第一次显示只能靠 <c>Activate()</c>（WinUI 没有 Show()），
+    ///    它一旦跑在主窗口**画出第一帧之前**，就会先出现在屏幕上并把自己设成置顶，
+    ///    主窗口被挤在后面 —— 实测到的最终形态是主窗口停在 <c>rect=0,0 0x0 / 不可见</c>：
+    ///    日志里「主窗口构造完成」「侧边栏已挂出」一条不少，代码路径全看着正常，
+    ///    但屏幕上就是没有主界面（用户反馈的"任务栏没图标、点桌面图标没反应"就是这个）。
+    ///    ⛔ 所以**别**直接调它，走 <see cref="StartToolSidebarAfterFirstFrame"/>。
+    /// </summary>
+    private void StartToolSidebar()
+    {
+        try
+        {
+            Views.ToolSidebarWindow.ApplySetting();
+            Services.ScreenCapture.Log("[startup] 工具侧边栏已挂出");
+        }
+        catch (Exception ex)
+        {
+            // 侧边栏挂不出来不影响主界面，但必须留痕 —— 别让它静默消失
+            Services.ScreenCapture.Log("[startup] 工具侧边栏挂出失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 等主窗口**真的画出第一帧**之后再挂侧边栏。
+    ///
+    /// 为什么不能直接在 <see cref="OnFirstActivated"/> 里挂：那个回调在 <c>Activate()</c>
+    /// 时就会跑，此刻窗口内容还没呈现 —— 侧边栏这时抢前台，会把主窗口顶成"从未显示"。
+    /// 实测（`--page=logs` 这种要读文件的重页面更容易复现）：
+    /// 窗口停在 <c>rect=0,0 0x0</c>，而所有日志都写着成功。
+    ///
+    /// 用 <c>CompositionTarget.Rendering</c> 卡首帧，配 2 秒超时兜底 ——
+    /// 窗口被收进托盘 / 最小化时 Rendering 根本不触发，没有兜底就永远挂不出侧边栏了
+    /// （跟 Core/PerfLog.cs 里那套是同一个套路）。
+    /// </summary>
+    private void StartToolSidebarAfterFirstFrame()
+    {
+        var done = false;
+        EventHandler<object>? onFrame = null;
+        Microsoft.UI.Dispatching.DispatcherQueueTimer? guard = null;
+
+        void Fire(string how)
+        {
+            if (done) return;
+            done = true;
+
+            if (onFrame is not null)
+            {
+                try { Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= onFrame; } catch { }
+            }
+            if (guard is not null)
+            {
+                try { guard.Stop(); } catch { }
+            }
+
+            Services.ScreenCapture.Log($"[startup] 主窗口首帧就绪（{how}）→ 挂工具侧边栏");
+            StartToolSidebar();
+        }
+
+        onFrame = (_, _) => Fire("首帧");
+        try
+        {
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += onFrame;
+        }
+        catch
+        {
+            Fire("帧回调挂不上");       // 挂不上就立刻挂侧边栏，别把功能丢了
+            return;
+        }
+
+        try
+        {
+            var queue = DispatcherQueue;
+            if (queue is not null)
+            {
+                guard = queue.CreateTimer();
+                guard.Interval = TimeSpan.FromMilliseconds(2000);
+                guard.IsRepeating = false;
+                guard.Tick += (_, _) => Fire("超时兜底");
+                guard.Start();
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 主窗口此刻真的在屏幕上吗？（<c>Activate()</c> 之后由 App 侧的兜底来核）
+    /// 「激活过了但没显示出来」这种状态在 Win32 层面是可能存在的，
+    /// 而用户看到的只是"点了图标什么也没有" —— 所以得有个地方问这一句。
+    /// </summary>
+    public bool IsVisibleNow()
+    {
+        try { return IsWindowVisible(WindowNative.GetWindowHandle(this)); }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// 启动兜底：隔一拍（800ms）核一次「主窗口真的在屏幕上吗」。
+    ///
+    /// 为什么需要：<c>Activate()</c> 返回并不等于窗口已经显示出来 —— 上面那条
+    /// 「有侧边栏、没主界面、任务栏也没图标」的反馈，在日志里表现为什么都正常。
+    /// 这里主动问一句：不可见就再亮一次，并且把结果写进日志。
+    /// 有了它，以后同样的反馈能一眼区分「根本没显示」和「显示了又被藏起来」。
+    ///
+    /// ⚠️ 只在"本来该露脸"的启动方式下武装（由 App 侧判断 --minimized / --palette，
+    ///    那两种是**故意**藏窗口的，装兜底会刚藏起来就被叫回来）。
+    /// </summary>
+    public void ArmStartupVisibleWatchdog()
+    {
+        try
+        {
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(800);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) =>
+            {
+                try
+                {
+                    if (IsVisibleNow()) return;
+
+                    Services.ScreenCapture.Log("[startup] 主窗口 Activate 之后仍不可见，强制再显示一次");
+                    ShowFromTray();
+                    Services.ScreenCapture.Log("[startup] 可见性兜底执行完毕，当前可见=" + IsVisibleNow());
+                }
+                catch (Exception ex)
+                {
+                    Services.ScreenCapture.Log("[startup] 可见性兜底执行失败: " + ex.Message);
+                }
+            };
+            timer.Start();
+        }
+        catch (Exception ex)
+        {
+            Services.ScreenCapture.Log("[startup] 可见性兜底装不上: " + ex.Message);
+        }
     }
 
     private async Task CheckUpdateOnStartupAsync()    {
@@ -460,13 +610,21 @@ public sealed partial class MainWindow : Window
                 ApplyWindowRounding();   // 最大化 / 还原 → 圆角跟着切换（最大化必须直角）
             }
 
-            // 最小化 = 用户看不见窗口了，这时候才值得把内存还给系统（教学机 8G）。
+            // 最小化 = 用户看不见窗口了 → 把内存还给系统（教学机 8G）。
             // ⚠️ 不要挪到切页时做 —— 那条路会把 GC 卡在用户正要滚动的瞬间（见 Services/MemoryTrimmer.cs）。
+            //    可见时的回收由 MemoryTrimmer 自己的巡检线程负责（水位 + 停手）。
             if (args.DidPresenterChange && IsMinimized()) Services.MemoryTrimmer.TrimLater(2500);
         };
 
-        // 让内存回收知道"用户此刻看不看得见窗口"：藏进托盘、最小化 → 可以收；否则一律不收。
+        // 让内存回收知道"用户此刻看不看得见窗口"：
+        //   藏进托盘 / 最小化 → 立刻收（不等水位、不等停手，这是最该收的时候）；
+        //   看得见            → 走"水位 + 停手"那条路（见 Services/MemoryTrimmer.cs）。
         Services.MemoryTrimmer.IsIdle = () => !IsWindowVisible(WindowNative.GetWindowHandle(this)) || IsMinimized();
+
+        // 可见时也得能收 —— 后台巡检线程就是那条路唯一的触发点（2026-10-02，
+        // 起因：用户一直可见地乱点也能把占用顶到半个 G，而原来只在最小化时收）。
+        // ⚠️ 必须**注完 IsIdle 再起**，否则头几轮巡检会按"看得见"判、空转。
+        Services.MemoryTrimmer.StartWatch();
     }
 
     /// <summary>
@@ -1253,8 +1411,12 @@ public sealed partial class MainWindow : Window
             if (!_trayTools.Setup("常用工具"))
                 Debug.WriteLine("[tray] 第二个托盘图标没挂上");
 
-            // 屏幕右边那条工具侧边栏（全屏放 PPT 时也够得着工具）
-            Views.ToolSidebarWindow.ApplySetting();
+            // ⚠️⚠️「工具侧边栏」不在这里挂 —— 挪到主窗口首帧显示之后了（见 StartToolSidebar）。
+            //    原来那句 ApplySetting() 摆在 InitTray() 里，也就是主窗口**构造函数中途**；
+            //    而侧边栏窗口第一次显示必须走 Activate()（WinUI 没有 Show()），
+            //    结果它抢在主窗口之前出现在屏幕上、还把自己设成置顶 ——
+            //    主窗口那声 Activate() 反倒成了配角。用户看到的正是
+            //    「侧边栏挂在屏幕上、任务栏里却没有本应用、点桌面图标没反应」。
 
             // 记着"上一次在用的窗口"（点了侧边栏之后前台就变成我们自己了，"关前台应用"得知道原本是谁）
             Services.TeachingActions.StartFocusWatcher();

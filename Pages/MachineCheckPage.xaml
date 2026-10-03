@@ -16,14 +16,19 @@
       统计从"独立大卡片"压成一行工具栏、筛选并到同一行、列表改 3 列卡片网格 ——
       可视条目从一屏约 4 条提到 12 条，纵向空间几乎全留给列表。
     -->
-    <Grid Padding="24,36,24,44">
+    <!-- 根 Grid 不带 Margin：间距放进中间列，让 GridView 拿到整页高度约束，
+         否则内容一超出就「底部截断且滚不动」（与软件下载页同病，2026-10-03 统一）。
+         ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
+            Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
+         本页最后一行是「重新检测 / 打开软件下载」页脚卡片 → 写 44，否则怼到窗口下边框。 -->
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -52,7 +57,7 @@
             </StackPanel>
 
             <!-- 工具栏：左边统计，右边筛选（合成一行，把纵向空间让给列表） -->
-            <Border Grid.Row="1" CornerRadius="8" Padding="18,12"
+            <Border Grid.Row="1" CornerRadius="4" Padding="18,12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1">
@@ -96,14 +101,11 @@
             <!-- 列表：3 列卡片网格（302 + 16 间距 = 正好 960，和「软件下载」磁贴同一尺寸） -->
             <Grid Grid.Row="2">
                 <GridView x:Name="ResultGrid" SelectionMode="None" IsItemClickEnabled="True"
-                          ItemClick="Result_ItemClick" Padding="0,2,0,0"
+                          ItemClick="Result_ItemClick" Padding="0,2,0,44"
                           ItemContainerStyle="{StaticResource CshCardItemStyle}">
                     <GridView.ItemTemplate>
                         <DataTemplate x:DataType="local:CheckRow">
-                            <Border Width="302" Height="108" CornerRadius="8" Padding="16,14" Margin="0,0,16,14"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
+                            <Border Style="{StaticResource CshCardStyle}" Width="302" Height="108" Padding="16,14" Margin="0,0,16,14"
                                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
@@ -164,16 +166,24 @@
                 </StackPanel>
             </Grid>
 
-            <!-- 底部：重测 + 概览 + 口径说明 -->
-            <StackPanel Grid.Row="3" Spacing="8">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Button x:Name="RescanButton" Content="重新检测" Click="Rescan_Click" />
-                    <Button Content="打开软件下载" Click="GoApps_Click" />
-                    <TextBlock x:Name="SummaryHint" FontSize="12" Opacity="0.7" MaxLines="1"
-                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0,0,0" />
+            <!--
+              底部：重测 + 概览 + 口径说明。
+              2026-10-03：整块**装进一张卡片**（原来是裸排版）。两个原因：
+                ① 本页已改成"内容铺满整页高"（见上方注释），页脚会直接贴到窗口底边 ——
+                   裸文本贴边会顶死，套上 CshCardStyle 后自带 16,12 内边距，文字离边有余量；
+                ② 「实验性功能」「内置工具」的页脚本来就是卡片，这里与它们对齐，全站页脚同一个语言。
+            -->
+            <Border Grid.Row="3" Style="{StaticResource CshCardStyle}">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button x:Name="RescanButton" Content="重新检测" Click="Rescan_Click" />
+                        <Button Content="打开软件下载" Click="GoApps_Click" />
+                        <TextBlock x:Name="SummaryHint" FontSize="12" Opacity="0.7" MaxLines="1"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    </StackPanel>
+                    <TextBlock x:Name="FootNote" FontSize="12" Opacity="0.55" TextWrapping="Wrap" />
                 </StackPanel>
-                <TextBlock x:Name="FootNote" FontSize="12" Opacity="0.55" TextWrapping="Wrap" />
-            </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Page>

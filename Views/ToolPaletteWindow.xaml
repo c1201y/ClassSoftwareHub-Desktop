@@ -28,23 +28,28 @@
             </StackPanel>
         </Grid>
 
-        <!-- 四个工具切换（等宽，标题统一四个字） -->
-        <Grid Grid.Row="1" ColumnSpacing="6" Padding="14,6,14,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Button x:Name="ChipPick" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Content="随机抽号" Tag="pick-number" HorizontalAlignment="Stretch"
-                    Padding="0,6" MinWidth="0" Click="Chip_Click" />
-            <Button x:Name="ChipTimer" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Grid.Column="1" Content="课堂计时" Tag="timer" MinWidth="0"
-                    HorizontalAlignment="Stretch" Padding="0,6" Click="Chip_Click" />
-            <Button x:Name="ChipStopwatch" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Grid.Column="2" Content="秒表计时" Tag="stopwatch" MinWidth="0"
-                    HorizontalAlignment="Stretch" Padding="0,6" Click="Chip_Click" />
-            <Button x:Name="ChipClock" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" Background="Transparent" Grid.Column="3" Content="全屏时钟" Tag="clock" MinWidth="0"
-                    HorizontalAlignment="Stretch" Padding="0,6" Click="Chip_Click" />
-        </Grid>
+        <!-- 快速打开对应页面：放在 AppTitleBar **外面**（SetTitleBar 的元素整条是拖拽区，
+             塞在里面收不到点击），叠在标题栏右边、系统 × 的左侧（这窗只有一个关闭钮 ≈48dip） -->
+        <Button x:Name="OpenPageButton" Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                Width="34" Height="28" Margin="0,0,50,0" Padding="0" MinWidth="0" BorderThickness="0"
+                Background="Transparent"
+                AutomationProperties.Name="打开对应的完整页面"
+                ToolTipService.ToolTip="在主界面打开对应的完整页面"
+                Click="OpenPage_Click">
+            <FontIcon Glyph="&#xE8A7;" FontSize="13" />
+        </Button>
+
+        <!-- 四个工具切换（2026-10-03 Nick 二轮：Pivot → SelectorBar）
+             ⛔ Pivot 的选中下划线是**滑动动画**（内容先切、下划线才滑过去），Nick 觉得"高光要等一会"；
+             SelectorBar 选中瞬时、又是 Win11 原生，还能直接 HorizontalAlignment=Center 居中，
+             不再需要 CenterPivotHeaders 那套垫偏移（那套还会让命中区错位）。 -->
+        <SelectorBar x:Name="ToolPivot" Grid.Row="1" HorizontalAlignment="Center"
+                     SelectionChanged="ToolPivot_SelectionChanged">
+            <SelectorBarItem x:Name="PivotPick" Tag="pick-number" Text="随机抽号" />
+            <SelectorBarItem x:Name="PivotTimer" Tag="timer" Text="课堂计时" />
+            <SelectorBarItem x:Name="PivotStopwatch" Tag="stopwatch" Text="秒表计时" />
+            <SelectorBarItem x:Name="PivotClock" Tag="clock" Text="全屏时钟" />
+        </SelectorBar>
 
         <!-- 当前工具 -->
         <Grid Grid.Row="2" Padding="14,0,14,14">

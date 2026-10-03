@@ -7,14 +7,19 @@
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
     <!-- 和其余页面同一套版式：内容钉在中间 960 宽 -->
-    <Grid Padding="24,36,24,44">
+    <!-- 根 Grid 不带 Margin：间距放进中间列，让双栏容器拿到整页高度约束。
+         ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
+            Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
+         本页最后一行是「版本列表 + 详情」撑满容器（自带边框），归 0 会让卡片外框贴到窗口
+         下边框 → 写 44。 -->
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -29,10 +34,7 @@
             </StackPanel>
 
             <!-- 当前版本 -->
-            <Border Grid.Row="1" CornerRadius="8" Padding="20,16"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1">
+            <Border Grid.Row="1" Style="{StaticResource CshCardStyle}" Padding="20,16">
                 <StackPanel Spacing="6">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock x:Name="CurrentVersionText" FontSize="20" FontWeight="Bold" />
@@ -78,10 +80,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" CornerRadius="8" Padding="0,14,0,12"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1">
+                <Border Grid.Column="0" Style="{StaticResource CshCardStyle}" Padding="0,14,0,12">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -126,10 +125,7 @@
                             <ItemsControl x:Name="ReleaseList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="local:ReleaseRow">
-                                        <Border CornerRadius="8" Padding="20,16,20,18" Margin="0,0,0,12"
-                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                BorderThickness="1">
+                                        <Border Style="{StaticResource CshCardStyle}" Padding="20,16,20,18" Margin="0,0,0,12">
                                             <StackPanel Spacing="10">
                                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                                     <TextBlock Text="{x:Bind Tag}" FontSize="18" FontWeight="Bold"

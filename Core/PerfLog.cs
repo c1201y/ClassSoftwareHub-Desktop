@@ -35,8 +35,6 @@ public static class PerfLog
     private static Stopwatch? _nav;
     private static string _navTag = "";
 
-    private static string LogPath => Path.Combine(SettingsStore.Dir, "perf.log");
-
     /// <summary>随便记一笔（带自启动以来的毫秒数，方便看整条时间线）。</summary>
     public static void Mark(string message)
     {
@@ -135,10 +133,7 @@ public static class PerfLog
         {
             lock (Gate)
             {
-                Directory.CreateDirectory(SettingsStore.Dir);
-                File.AppendAllText(LogPath,
-                    $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {line}\r\n",
-                    System.Text.Encoding.UTF8);
+                AppLog.Info("perf", line);
             }
         }
         catch

@@ -6,15 +6,25 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
-    <!-- 和首页 / 设置页 / 软件下载页同一套版式：内容钉在中间 960 宽 -->
-    <Grid Padding="24,36,24,44">
+    <!-- 和首页 / 设置页 / 软件下载页同一套版式：内容钉在中间 960 宽，卡片固定 462 × 2 列。
+         ⛔ 2026-10-02 试过"卡片随窗口拉伸铺满"，Nick 当场否掉（「为什么这么丑，像其他页面一样
+            一个固定宽度」）—— 这页跟全站一样是固定宽内容区，别再改成自适应。 -->
+    <!-- 根 Grid 不带 Margin：间距放进中间列，让 GridView 拿到整页高度约束。
+         ⛔⛔ 中间列底部间距分两种写法（2026-10-03 定，别再一刀切）：
+             · 页面最后一行是「自滚容器」（Height="*" + 自带 Padding="0,2,0,44"）→ 底部写 0，
+               留白交给滚动内容自己；写 44 会把视口整体上提、够不到窗口底边，
+               底下空出一条页面底色带（Nick：「整个页面高度没用完，有个框给框起来了」）。
+             · 页面最后一行是「页脚 / 卡片」等非自滚元素 → 底部写 44，
+               否则页脚直接怼到窗口下边框（Nick：「下面那个东西直接贴到下边框了」）。
+         本页最后一行是「常用工具窗口」页脚卡片 → 底盘写 44。 -->
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" RowSpacing="14">
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -27,14 +37,11 @@
                  2026-09-29：加上一句话说明（ToolDef.Desc 一直有这个字段，之前没显示）——
                  光看工具名猜不出点进去能干什么，用户得挨个试一遍。 -->
             <GridView x:Name="ToolGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
-                      ItemClick="ToolGrid_ItemClick" Padding="0,2,0,0"
+                      ItemClick="ToolGrid_ItemClick" Padding="0,2,0,44"
                       ItemContainerStyle="{StaticResource CshCardItemStyle}">
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="data:ToolDef">
-                        <Border Width="462" Height="88" CornerRadius="8" Padding="20,0" Margin="0,0,16,14"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
+                        <Border Style="{StaticResource CshCardStyle}" Width="462" Height="88" Padding="20,0" Margin="0,0,16,14"
                                 PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                             <Grid ColumnSpacing="14">
                                 <Grid.ColumnDefinitions>
@@ -59,7 +66,7 @@
             </GridView>
 
             <!-- ===== 常用工具窗口：开关就放这儿，跟首页「体验网页版」那张卡一个意思 ===== -->
-            <Border Grid.Row="2" CornerRadius="8" Padding="20,16" Margin="0,4,0,0"
+            <Border Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,4,0,0"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <Grid ColumnSpacing="16" RowSpacing="12">

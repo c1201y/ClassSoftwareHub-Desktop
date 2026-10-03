@@ -4,7 +4,12 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- 浮窗版秒表：正计时 + 计次（只管用，不落盘） -->
+    <!--
+      浮窗版秒表：正计时 + 全屏。
+
+      2026-10-03（Nick）：**计次（分段）取消** —— 教室里基本用不到，而它要占掉大半个显示区。
+      改成给「全屏」按钮：投影时直接把秒表铺满整面墙，倒计时类比赛/交卷提醒都用得上。
+    -->
     <Grid RowSpacing="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -18,8 +23,8 @@
                 <TextBlock x:Name="CsText" Text=".00" FontSize="24" FontWeight="SemiBold" Opacity="0.8"
                            FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,8" />
             </StackPanel>
-            <TextBlock x:Name="LapText" FontSize="11.5" Opacity="0.65" TextAlignment="Center"
-                       TextWrapping="Wrap" Margin="0,2,0,0" />
+            <TextBlock x:Name="StateText" FontSize="11.5" Opacity="0.65" TextAlignment="Center"
+                       Text="未开始" Margin="0,2,0,0" />
         </StackPanel>
 
         <Grid Grid.Row="1" ColumnSpacing="8">
@@ -30,7 +35,8 @@
             </Grid.ColumnDefinitions>
             <Button x:Name="StartButton" Content="开始" Style="{StaticResource AccentButtonStyle}"
                     HorizontalAlignment="Stretch" Click="StartPause_Click" />
-            <Button x:Name="LapButton" Grid.Column="1" Content="计次" Click="Lap_Click" />
+            <Button Grid.Column="1" Content="全屏" Click="Fullscreen_Click"
+                    ToolTipService.ToolTip="把秒表铺满整块屏幕，适合投影或比赛计时" />
             <Button Grid.Column="2" Content="重置" Click="Reset_Click" />
         </Grid>
     </Grid>

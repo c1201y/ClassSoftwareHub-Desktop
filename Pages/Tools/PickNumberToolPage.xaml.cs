@@ -440,8 +440,8 @@ public sealed partial class PickNumberToolPage : Page
             ResultHost.Children.Add(new TextBlock
             {
                 Text = n.ToString(),
-                // 2026-09-29：右栏成了结果专用空间，字号跟着放大一档 —— 抽出来的号是这一页的主角
-                FontSize = 52,
+                // 2026-10-02：结果区从"右栏"改成整页的舞台，字号再放大一档 —— 抽出来的号是这一页的主角
+                FontSize = 72,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Opacity = rolling ? 0.72 : 1,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -460,10 +460,10 @@ public sealed partial class PickNumberToolPage : Page
             ResultHost.Children.Add(new TextBlock
             {
                 Text = name,
-                FontSize = 42,
+                FontSize = 44,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Opacity = rolling ? 0.72 : 1,
-                MaxWidth = 138,
+                MaxWidth = 156,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,

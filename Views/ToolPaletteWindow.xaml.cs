@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -38,6 +39,9 @@ public sealed partial class ToolPaletteWindow : Window
     private string _tool = "pick-number";
     private bool _shownOnce;
     private bool _visible;
+    private bool _syncingPivot;                         // 代码拨选中时别让它反过来再切一遍
+    private bool _pivotLoaded;                          // SelectorBar 加载完（自动选第一项那一下已过去）才放行用户点击
+    private int _fadeEpoch;                              // 淡入/淡出的代次：淡出播完别回头把刚显示的窗藏掉
 
     public bool IsVisible => _visible;
 
@@ -45,7 +49,37 @@ public sealed partial class ToolPaletteWindow : Window
     {
         InitializeComponent();
         Configure();
-        ApplySelection();
+
+        // SelectorBar 在 Loaded 时会自动选中第一项、把 _tool 冲回 pick-number，
+        // 所以 ShowTool 指定的工具要等加载完再按 _tool 拨回（照 MiniPickNumber 的处理）。
+        ToolPivot.Loaded += (_, _) => DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            _pivotLoaded = true;
+            SyncPivotToTool();
+        });
+    }
+
+    /// <summary>标题栏那颗按钮：当前这个工具在主界面里的完整页面（全屏时钟没有页面，直接开全屏）。</summary>
+    private void OpenPage_Click(object sender, RoutedEventArgs e)
+    {
+        switch (_tool)
+        {
+            case "timer":
+            case "stopwatch":
+                HidePalette();
+                App.MainWindow?.OpenToolSettings(typeof(Pages.Tools.TimerToolPage));
+                break;
+
+            case "clock":
+                HidePalette();   // 全屏前面不能挡着浮窗（照 MiniClock 全屏的做法）
+                try { ClockFullscreenWindow.Show(null, Root.ActualTheme == ElementTheme.Dark); } catch { }
+                break;
+
+            default:             // 随机抽号
+                HidePalette();
+                App.MainWindow?.OpenToolSettings(typeof(Pages.Tools.PickNumberToolPage));
+                break;
+        }
     }
 
     // ── 对外入口 ─────────────────────────────────────────────
@@ -102,7 +136,7 @@ public sealed partial class ToolPaletteWindow : Window
             BackdropHost.Apply(this, Root,
                 string.Equals(want, "mica", StringComparison.OrdinalIgnoreCase) ? "acrylic" : want);
 
-            Root.ActualThemeChanged += (_, _) => { UpdateCaptionButtonColors(); ApplySelection(); };   // 换主题时系统按钮颜色跟着变
+            Root.ActualThemeChanged += (_, _) => { UpdateCaptionButtonColors(); };   // 换主题时系统按钮颜色跟着变
             ThemeHost.Apply(Root);                          // 跟「设置」里的深浅色走
             ResizeClientDip(PaletteWidthDip, PaletteHeightDip);
         }
@@ -188,14 +222,11 @@ public sealed partial class ToolPaletteWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
-    private static string LogPath => System.IO.Path.Combine(SettingsStore.Dir, "palette.log");
-
     private static void Log(string message)
     {
         try
         {
-            System.IO.Directory.CreateDirectory(SettingsStore.Dir);
-            System.IO.File.AppendAllText(LogPath, $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            Core.AppLog.Info("palette", message);
         }
         catch { }
     }
@@ -313,6 +344,11 @@ public sealed partial class ToolPaletteWindow : Window
         if (!string.IsNullOrWhiteSpace(toolId)) _tool = toolId!;
         SelectPane(_tool, reload: true);
 
+        // 淡入：先压透明再露脸，然后淡到不透明（系统 Flyout 那种"浮现"而不是"啪"一下）。
+        // ⚠️ 压透明必须在 ShowWindow/Activate **之前**：否则先闪一帧满不透明，再被我压 0 重淡，等于闪了一下。
+        _fadeEpoch++;                            // 作废还在跑的淡出（别让它回头把窗藏掉）
+        FlyoutFade.Prepare(Root);
+
         try
         {
             if (_appWindow?.Presenter is OverlappedPresenter p)
@@ -337,8 +373,9 @@ public sealed partial class ToolPaletteWindow : Window
         }
 
         _visible = true;
-        ApplySelection();
         try { Root.Focus(FocusState.Programmatic); } catch { }     // Esc 收起
+
+        FlyoutFade.In(Root, 150);
 
         // 里面的表该走的走起来
         try { ClockView.Resume(); TimerView.Resume(); StopwatchView.Resume(); } catch { }
@@ -356,14 +393,25 @@ public sealed partial class ToolPaletteWindow : Window
         // 收起 = 没人看：停掉里面的表，顺手把内存还给系统
         try { ClockView.Pause(); TimerView.Pause(); StopwatchView.Pause(); } catch { }
 
-        try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); }
-        catch (Exception ex) { Debug.WriteLine("[toolwin] 收起失败: " + ex.Message); }
+        // 先淡出，播完再藏 —— 别"啪"一下消失（系统 Flyout 收起也是淡出）
+        var epoch = ++_fadeEpoch;
+        FlyoutFade.Out(Root, 150, () =>
+        {
+            if (epoch != _fadeEpoch) return;             // 淡出期间又点开了：别把刚显示的窗藏掉
+            try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); }
+            catch (Exception ex) { Debug.WriteLine("[toolwin] 收起失败: " + ex.Message); }
 
-        MemoryTrimmer.Trim();
+            MemoryTrimmer.Trim();
+        });
     }
 
     // ── 四个工具的切换 ───────────────────────────────────────
 
+    /// <summary>
+    /// 切到某个工具：把 Pivot 选中项对过去（Pivot 自己会滚到可见）再放内容。
+    /// ⚠️ 切换时要把 _syncing 置起来：Pivot 的选中变化会反过来触发 SelectionChanged，
+    ///    不挡住就会跟着再跑一遍 SelectPane（存档会被多写一次）。
+    /// </summary>
     private void SelectPane(string tool, bool reload)
     {
         PanePick.Visibility = tool == "pick-number" ? Visibility.Visible : Visibility.Collapsed;
@@ -371,52 +419,43 @@ public sealed partial class ToolPaletteWindow : Window
         PaneStopwatch.Visibility = tool == "stopwatch" ? Visibility.Visible : Visibility.Collapsed;
         PaneClock.Visibility = tool == "clock" ? Visibility.Visible : Visibility.Collapsed;
 
+        // 只记内存不落盘：切一次页写一遍设置文件是切换卡顿的一半原因；存档统一在收起时落
         App.Settings.Current.PaletteTool = tool;
-        App.Settings.Save();
 
         if (reload && tool == "pick-number") PickView.Reload();
+
+        SyncPivotToTool();
     }
 
-    private void ApplySelection()
+    /// <summary>按 _tool 把 SelectorBar 的选中项拨过去（代码切页时用；用户点击时不用调）。</summary>
+    private void SyncPivotToTool()
     {
-        var accent = Services.ThemeBrush.Get(Root, "AccentFillColorDefaultBrush");
-        var textOnAccent = Services.ThemeBrush.Get(Root, "TextOnAccentFillColorPrimaryBrush");
-
-        foreach (var (chip, tag) in new[]
-                 {
-                     (ChipPick, "pick-number"),
-                     (ChipTimer, "timer"),
-                     (ChipStopwatch, "stopwatch"),
-                     (ChipClock, "clock"),
-                 })
+        var item = _tool switch
         {
-            var on = tag == _tool;
-            chip.BorderThickness = new Thickness(1);
+            "pick-number" => PivotPick,
+            "timer" => PivotTimer,
+            "stopwatch" => PivotStopwatch,
+            _ => PivotClock,
+        };
 
-            if (on)
-            {
-                chip.Background = accent;
-                chip.Foreground = textOnAccent;
-                chip.BorderBrush = accent;
-            }
-            else
-            {
-                // ⚠️ 没选中的交给 XAML 里那套 {ThemeResource ...}：主题一变它自己就跟着变，最稳
-                chip.ClearValue(Control.BackgroundProperty);
-                chip.ClearValue(Control.ForegroundProperty);
-                chip.ClearValue(Control.BorderBrushProperty);
-            }
+        // ⚠️ 必须转成 SelectorBarItem 再比：SelectedItem 是 object，直接 `!=` 会走引用比较（CS0252）
+        var current = ToolPivot.SelectedItem as SelectorBarItem;
+        if (current != item)
+        {
+            _syncingPivot = true;
+            try { ToolPivot.SelectedItem = item; }
+            finally { _syncingPivot = false; }
         }
     }
 
-    private void Chip_Click(object sender, RoutedEventArgs e)
+    private void ToolPivot_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        if (sender is Button b && b.Tag is string tag)
-        {
-            _tool = tag;
-            SelectPane(tag, reload: true);
-            ApplySelection();
-        }
+        if (_syncingPivot || !_pivotLoaded) return;   // 加载前（含自动选第一项那一下）别把 _tool 冲掉
+        if (ToolPivot.SelectedItem is not SelectorBarItem item) return;
+        if (item.Tag is not string tag || tag == _tool) return;
+
+        _tool = tag;
+        SelectPane(tag, reload: true);
     }
 
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)

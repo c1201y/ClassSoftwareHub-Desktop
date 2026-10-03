@@ -135,7 +135,10 @@ public static class Feedback
         public string AppId { get; set; } = "";
         public string Title { get; set; } = "";
         public string Detail { get; set; } = "";
-        /// <summary>联系方式：选填，会公开显示在 Issue 里。</summary>
+        /// <summary>
+        /// 联系方式：选填，明文只留在本机（内存 + 本地草稿文件）。
+        /// 提交时由页面层在内存里加密成 age 密文，离开本机的那份永远是密文。
+        /// </summary>
         public string Contact { get; set; } = "";
         /// <summary>是否在正文里附带本机环境信息（桌面版比网页版多的这一项）。</summary>
         public bool IncludeEnv { get; set; } = true;
@@ -213,9 +216,6 @@ public static class Feedback
             sb.Append("| 涉及软件 | 桌面版本体 / 未指定 |\n");
         }
 
-        if (draft.Contact.Trim().Length > 0)
-            sb.Append($"| 联系方式 | {draft.Contact.Trim()} |\n");
-
         // 环境信息（可在表单里取消）：排查问题时最想知道的就是"你什么版本、什么系统"
         if (env is not null)
         {
@@ -224,6 +224,18 @@ public static class Feedback
         }
 
         sb.Append('\n');
+
+        // 联系方式：传进来的是**本地加密后的 age 密文**（页面层加密，见 FeedbackFormPage.EncryptedDraft），
+        // 绝不是明文。密文是多行 ASCII armor，塞进 Markdown 表格会把表格撑破，
+        // 所以单列一段代码块 —— 顺带也好整段复制去用私钥解密。
+        if (draft.Contact.Trim().Length > 0)
+        {
+            sb.Append("### 联系方式（已在本地加密，仅维护者可用私钥解密）\n\n");
+            sb.Append("```\n");
+            sb.Append(draft.Contact.Trim()).Append('\n');
+            sb.Append("```\n\n");
+        }
+
         sb.Append("<!-- 由桌面版「反馈中心」生成。标题或正文如有错误，可直接在此修改。 -->");
 
         return sb.ToString();

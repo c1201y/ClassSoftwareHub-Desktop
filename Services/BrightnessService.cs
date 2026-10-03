@@ -323,9 +323,7 @@ public static class BrightnessService
     {
         try
         {
-            Directory.CreateDirectory(SettingsStore.Dir);
-            File.AppendAllText(Path.Combine(SettingsStore.Dir, "brightness.log"),
-                $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            Core.AppLog.Info("brightness", message);
         }
         catch
         {

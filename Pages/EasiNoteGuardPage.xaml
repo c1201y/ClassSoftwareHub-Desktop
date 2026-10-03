@@ -9,22 +9,25 @@
     <!--
       版式跟「本机核实」同源：三列 Grid 把内容钉在中间 960 宽。
       ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
-    -->
-    <Grid Padding="24,36,24,44">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" />
-            <ColumnDefinition Width="998*" MaxWidth="960" />
-            <ColumnDefinition Width="1*" />
-        </Grid.ColumnDefinitions>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
-            <StackPanel Spacing="14">
+      卡片语言（2026-10-02 二改，向设置页看齐）：圆角 4、间距 4、内边距 16,12，
+      手写 Border 一律走 CshCardStyle；标题块自带 20 的底部呼吸。
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,36,24,44">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
                 <!-- 标题 + 实验性标记 -->
-                <StackPanel Spacing="6">
+                <StackPanel Spacing="6" Margin="0,0,0,20">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="白板专杀" FontSize="28" FontWeight="Bold" />
-                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+                        <Border CornerRadius="4" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
                                 BorderThickness="1"
                                 BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -40,7 +43,7 @@
                 </StackPanel>
 
                 <!-- 开关：SettingsCard 原生控件（与设置页同一套），不再手叠 Border -->
-                <controls:SettingsCard Header="自动执行" MinHeight="0">
+                <controls:SettingsCard Header="自动执行">
                     <controls:SettingsCard.Description>
                         <TextBlock x:Name="SwitchHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" Text="" />
                     </controls:SettingsCard.Description>
@@ -49,10 +52,7 @@
                 </controls:SettingsCard>
 
                 <!-- 时间点 -->
-                <Border CornerRadius="8" Padding="18,14"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1">
+                <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="结束时间点" FontSize="14" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
@@ -67,10 +67,7 @@
                 </Border>
 
                 <!-- 手动执行 -->
-                <Border CornerRadius="8" Padding="18,14"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1">
+                <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="立即执行一次" FontSize="14" />
                         <StackPanel Orientation="Horizontal" Spacing="10">
@@ -82,10 +79,7 @@
                 </Border>
 
                 <!-- 当前进程 -->
-                <Border CornerRadius="8" Padding="18,14"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1">
+                <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="8">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TextBlock Text="本机白板5 进程" FontSize="14" VerticalAlignment="Center" />
@@ -97,10 +91,7 @@
                 </Border>
 
                 <!-- 页脚：讲清楚依据和局限，不含糊 -->
-                <Border CornerRadius="8" Padding="18,14"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1">
+                <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="7">
                         <TextBlock Text="执行依据与限制" FontSize="12" FontWeight="Bold" Opacity="0.85" />
                         <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
@@ -115,6 +106,6 @@
                 </Border>
 
             </StackPanel>
-        </ScrollViewer>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Page>

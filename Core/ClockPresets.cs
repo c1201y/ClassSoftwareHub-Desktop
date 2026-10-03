@@ -137,14 +137,5 @@ public static class ClockPresetStore
         }
     }
 
-    private static void Log(string message)
-    {
-        try
-        {
-            Directory.CreateDirectory(Dir);
-            File.AppendAllText(Path.Combine(Dir, "clock-presets.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
-        }
-        catch { /* 日志本身写不进去就算了，别反过来影响主流程 */ }
-    }
+    private static void Log(string message) => AppLog.Info("clock-presets", message);
 }

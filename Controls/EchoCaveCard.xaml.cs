@@ -10,13 +10,12 @@ using Windows.System;
 namespace ClassSoftwareHub.Desktop.Controls;
 
 /// <summary>
-/// 回声洞卡片：把站点仓库「回声洞/messages/」目录里的字条逐条展示出来。
+/// 回声洞「正文区」：把站点仓库「回声洞/messages/」目录里的字条逐条展示出来。
 /// 那里一条一个文件（message1.json、message2.json……），文件里只有一句话，没有作者 / 日期。
 ///
-/// 交互照 ClassIsland 的回声洞（<c>_refs/ClassIsland</c> 的 AboutSettingsPage + TypingControl，
-/// 2026-10-03 按 Nick 要求把原来的「5 秒自动轮播」换掉）：
+/// 交互照 ClassIsland 的回声洞（<c>_refs/ClassIsland</c> 的 AboutSettingsPage + TypingControl）：
 ///
-///   · **点击换一条 + 打字机逐字**，不再自动轮播（走动条一并去掉）；
+///   · **点击换一条 + 打字机逐字**，不是自动轮播；
 ///   · 进页面先静静显示一条，不打扰；点一下才动；
 ///   · 打字期间再点无效（<see cref="_isTyping"/> 挡住），不打断正在打的这一遍；
 ///   · 一轮之内不重复：整份数据洗成队列逐条出队，抽完才重洗。
@@ -26,6 +25,13 @@ namespace ClassSoftwareHub.Desktop.Controls;
 /// 逐字改文本没法用 Storyboard（Text 不是可动画属性），所以走 async/await + Task.Delay，
 /// 并用一个自增的 <see cref="_typeGeneration"/> 让"上一遍"在下一个检查点自己退出 ——
 /// 比嵌一层 CancellationTokenSource 简单，离开页面时也只需把代数 +1。
+///
+/// 本控件**只管正文那一句**，不带卡片外观、不写任何状态文字（它住在设置页 SettingsExpander 展开区的
+/// SettingsCard 里，见 Pages/SettingsPage.xaml）；「投稿」按钮也在那边，点了调
+/// <see cref="OpenSubmitPage"/> —— 投稿地址归本控件管，设置页不必知道。
+/// ⛔ 卡面除了字条本身不许有任何文字：条数、取数状态、报错、投稿回执全都不在这里显示
+/// （2026-10-03 Nick：「这一片永远不要显示文字，要最纯粹的回声洞」）。
+/// 取数期间例外地摆一枚 <c>ProgressRing</c>（图形，不是文字，他要的"正在加载"提示）。
 /// </summary>
 public sealed partial class EchoCaveCard : UserControl
 {
@@ -37,6 +43,12 @@ public sealed partial class EchoCaveCard : UserControl
 
     /// <summary>光标闪动周期：每打这么多个字翻一次（照 ClassIsland 的 i/10）。</summary>
     private const int BlinkEvery = 10;
+
+    /// <summary>
+    /// 卡片上的常驻默认文字（Nick 2026-10-03 指定）：还没取到字条、或者洞里空着时就显示这句。
+    /// ⛔ 别改文案 —— 这是他要的原文。
+    /// </summary>
+    private const string Placeholder = "点击此处可以查看 ClassSoftwareHub 群友逆天发言";
 
     private IReadOnlyList<EchoMessage> _messages = Array.Empty<EchoMessage>();
 
@@ -55,6 +67,12 @@ public sealed partial class EchoCaveCard : UserControl
     {
         InitializeComponent();
 
+        MessageText.Text = Placeholder;   // 起手先摆默认文字，别让卡片空着（取数回来再换掉）
+
+        // 取数挂 Loaded 而不是"页面展开时调一下"：
+        // SettingsExpander 的折叠内容由 ItemsRepeater 实现，折叠时**可能压根没实例化**，
+        // 那样页面在展开事件里根本拿不到本控件。挂 Loaded 则两种情形都对 ——
+        // 早就实例化好了就提前悄悄取完，展开时才实例化的就正好在展开那一刻取。
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -75,6 +93,7 @@ public sealed partial class EchoCaveCard : UserControl
         _typeGeneration++;
         _isTyping = false;
 
+        SetLoading(false);                 // 离屏就别再转圈了（占着合成线程）
         try { _cts?.Cancel(); } catch { /* 已经结束 */ }
         _cts = null;
     }
@@ -85,8 +104,7 @@ public sealed partial class EchoCaveCard : UserControl
     {
         if (_busy) return;
         _busy = true;
-        RefreshLink.IsEnabled = false;
-        StatusText.Text = "正在读取…";
+        SetLoading(true);
 
         try
         {
@@ -97,29 +115,22 @@ public sealed partial class EchoCaveCard : UserControl
 
             _messages = result.Messages;
             _queue.Clear();                 // 数据换了，本轮队列作废
-            StatusText.Text = result.Message;
 
             if (_messages.Count > 0)
             {
-                MessagePanel.Visibility = Visibility.Visible;
-                EmptyText.Visibility = Visibility.Collapsed;
-
                 var first = TakeNext();
                 if (first is not null)
-                {
                     MessageText.Text = first.Text;   // 首次直接显示全文，不打字（照 ClassIsland 的 _isFirstUpdate）
-                }
             }
             else
             {
                 _typeGeneration++;                // 清场：别让上一遍打字还往空状态上写
                 _isTyping = false;
 
-                MessagePanel.Visibility = Visibility.Collapsed;
-                EmptyText.Visibility = Visibility.Visible;
-                EmptyText.Text = result.Ok
-                    ? "洞里还安安静静的 —— 可以点「投稿一条」补上第一声。"
-                    : result.Message;
+                // 没字条就回到默认文字。"链路通、只是没人说话"和"网络不通"是两句不同的话，
+                // 判据在 EchoCaveService —— 但那是给日志看的，界面上一个字都不说（Nick 2026-10-03）。
+                // （点不点都没反应，外层卡片那边由 ShowNext 里的空数据判断挡住。）
+                MessageText.Text = Placeholder;
             }
         }
         catch (OperationCanceledException)
@@ -128,13 +139,24 @@ public sealed partial class EchoCaveCard : UserControl
         }
         catch (Exception ex)
         {
-            StatusText.Text = "读取失败：" + ex.Message;
+            // ⛔ 卡面永远只显示字条本身：取数异常只写日志，不在这一片留任何文字。
+            ScreenCapture.Log("[echo-cave] 读取失败: " + ex.Message);
         }
         finally
         {
             _busy = false;
-            RefreshLink.IsEnabled = true;
+            SetLoading(false);
         }
+    }
+
+    /// <summary>
+    /// 取数期间那枚转圈（Nick 2026-10-03：要有个"正在加载"的提示）。
+    /// ⛔ 它是**图形不是文字** —— 卡面依然一个字都不写（见 XAML 头注释）。
+    /// </summary>
+    private void SetLoading(bool loading)
+    {
+        LoadingRing.IsActive = loading;
+        LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ══════════ 洗牌队列（一轮之内不重复） ══════════
@@ -171,7 +193,12 @@ public sealed partial class EchoCaveCard : UserControl
 
     // ══════════ 点击换一条 + 打字机 ══════════
 
-    private async void Stage_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 换一条并打字（**点击由外面那张卡片整卡承接** —— SettingsCard IsClickEnabled="True"，
+    /// 为此正文本身不再是个按钮，免得文字外圈再画出一道框）。
+    /// 打字期间 / 没有数据时不动作。
+    /// </summary>
+    public async void ShowNext()
     {
         // 打字期间不接受新的点击 —— 跟 ClassIsland 用 IsBusy 挡住重复点击同理
         if (_isTyping || _messages.Count == 0) return;
@@ -214,19 +241,24 @@ public sealed partial class EchoCaveCard : UserControl
         }
     }
 
-    // ══════════ 页脚 ══════════
+    // ══════════ 投稿 ══════════
 
-    private async void Refresh_Click(object sender, RoutedEventArgs e) => await ReloadAsync(force: true);
-
-    private async void Submit_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 打开投稿入口（设置页那颗「投稿」按钮的兜底链接点这个）：
+    /// GitHub 上给字条目录「新建文件」的页面，与网页版指向同一处。
+    /// </summary>
+    /// <returns>浏览器是否被叫起来。false 时由调用方在「投稿」弹层里说一句 ——
+    /// 卡面这一片不许出现任何文字。</returns>
+    public async Task<bool> OpenSubmitPage()
     {
         try
         {
-            await Launcher.LaunchUriAsync(new Uri(EchoCaveService.SubmitUrl));
+            return await Launcher.LaunchUriAsync(new Uri(EchoCaveService.SubmitUrl));
         }
         catch (Exception ex)
         {
-            StatusText.Text = "无法打开浏览器：" + ex.Message;
+            ScreenCapture.Log("[echo-cave] 打开投稿页失败: " + ex.Message);
+            return false;
         }
     }
 }

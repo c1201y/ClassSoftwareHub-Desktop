@@ -264,11 +264,7 @@ public sealed partial class MiniClock : UserControl
     {
         try
         {
-            var dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassSoftwareHub");
-            System.IO.Directory.CreateDirectory(dir);
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "palette.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+            Core.AppLog.Info("palette", message);
         }
         catch { /* 日志写不进去就算了，别反过来影响时钟 */ }
     }

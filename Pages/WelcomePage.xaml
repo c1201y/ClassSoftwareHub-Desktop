@@ -9,7 +9,7 @@
     <Page.Resources>
         <!-- 快捷入口两套模板：颜色全走 {ThemeResource}（它认识"这棵树"的主题，浅色/深色自己会变） -->
         <DataTemplate x:Key="QuickLinkNormal">
-            <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95" />
@@ -20,7 +20,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="QuickLinkAccent">
-            <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                     Background="{ThemeResource AccentFillColorDefaultBrush}">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
@@ -54,12 +54,12 @@
         <Grid Margin="24,36,24,44">
             <!-- 中间列 = 想要 960 宽：窗口够宽就正好 960 且居中（剩余给两侧星列），窗口太窄就自动缩、不裁切 -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" />
-                <ColumnDefinition Width="998*" MaxWidth="960" />
-                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="1" Spacing="14">
+            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="14">
 
             <!-- 更新待装横幅：后台下载完成后每次启动都提醒，装上新版本后自检清除 -->
             <InfoBar x:Name="UpdateReadyBar" Severity="Informational" IsOpen="False"
@@ -81,7 +81,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border CornerRadius="8" BorderThickness="1"
+                <Border CornerRadius="4" BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <Image x:Name="Banner" Height="140" Stretch="Uniform" />
@@ -105,7 +105,7 @@
             <TextBlock Text="快速开始" FontSize="20" FontWeight="Bold" Margin="0,20,0,4" />
 
             <!-- 更宽的一行：体验网页版（主题色底） -->
-            <Border x:Name="WebCard" Tag="web" Height="60" CornerRadius="8" Padding="20,0"
+            <Border x:Name="WebCard" Tag="web" Height="60" CornerRadius="4" Padding="20,0"
                     Background="{ThemeResource AccentFillColorDefaultBrush}"
                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                     Tapped="Card_Tapped">
@@ -132,7 +132,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Tag="apps" CornerRadius="8" Padding="20,0"
+                <Border Grid.Column="0" Tag="apps" CornerRadius="4" Padding="20,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -143,7 +143,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="1" Tag="tools" CornerRadius="8" Padding="20,0"
+                <Border Grid.Column="1" Tag="tools" CornerRadius="4" Padding="20,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -162,7 +162,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Tag="sidebar" CornerRadius="8" Padding="20,0"
+                <Border Grid.Column="0" Tag="sidebar" CornerRadius="4" Padding="20,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -177,7 +177,7 @@
                   实验性功能：**故意不列它下面有什么**（Nick 2026-09-26）——
                   首页卡片只说"这里有一组还没成熟的功能"，具体内容进去看。
                 -->
-                <Border Grid.Column="1" Tag="experimental" CornerRadius="8" Padding="20,0"
+                <Border Grid.Column="1" Tag="experimental" CornerRadius="4" Padding="20,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -201,7 +201,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Tag="submit" CornerRadius="8" Padding="20,0"
+                <Border Grid.Column="0" Tag="submit" CornerRadius="4" Padding="20,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -213,7 +213,7 @@
                 </Border>
 
                 <!-- 反馈中心：图标口径跟导航栏那条一致（E939 = 人 + 对话泡） -->
-                <Border Grid.Column="1" Tag="feedback" CornerRadius="8" Padding="20,0"
+                <Border Grid.Column="1" Tag="feedback" CornerRadius="4" Padding="20,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -226,7 +226,7 @@
             </Grid>
 
             <!-- 设置：必须永远在最后一张，反馈中心进来后这一行放不下第三个，所以它单独占一行 -->
-            <Border Tag="settings" Height="60" CornerRadius="8" Padding="20,0"
+            <Border Tag="settings" Height="60" CornerRadius="4" Padding="20,0"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"

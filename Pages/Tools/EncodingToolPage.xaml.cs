@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -24,6 +27,34 @@ namespace ClassSoftwareHub.Desktop.Pages.Tools;
 public sealed record HashCheckRequest(string Hash, string AppName);
 
 /// <summary>
+/// 一条只读哈希结果（算法名 + 值）。
+/// 2026-10-02：四条结果改由 <c>ListView</c> 承载（见 XAML 的 HashRowTemplate），
+/// 于是需要这样一个能被 <c>x:Bind</c> 绑上的数据行 —— 值算完就地刷新，不用再手动找 TextBlock。
+/// </summary>
+public sealed class HashRow : INotifyPropertyChanged
+{
+    private string _value = "—";
+
+    public HashRow(string name) => Name = name;
+
+    public string Name { get; }
+
+    public string Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value) return;
+            _value = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+
+
+/// <summary>
 /// 编码 / 哈希工具。
 ///
 /// 2026-09-29 重构（Nick）：按**用途**拆成两条主线（<c>SelectorBar</c> 两个页签），
@@ -37,10 +68,10 @@ public sealed partial class EncodingToolPage : Page
     private const string EmptyMark = "—";
 
     /// <summary>「文件校验」页签里的四行哈希（算法名 · 值 · 复制）。</summary>
-    private readonly Dictionary<string, TextBlock> _fileHashTexts = new();
+    private readonly Dictionary<string, HashRow> _fileRows = new();
 
     /// <summary>「文本编解码」页签里的四行哈希（内容跟输入框实时联动）。</summary>
-    private readonly Dictionary<string, TextBlock> _textHashTexts = new();
+    private readonly Dictionary<string, HashRow> _textRows = new();
 
     private string _filePath = "";
     private Dictionary<string, string> _fileHashes = new();
@@ -49,10 +80,10 @@ public sealed partial class EncodingToolPage : Page
     public EncodingToolPage()
     {
         InitializeComponent();
-        BuildHashRows(HashPanel, _fileHashTexts);
-        BuildHashRows(TextHashPanel, _textHashTexts);
+        BuildHashRows(HashPanel, _fileRows);
+        BuildHashRows(TextHashPanel, _textRows);
 
-        // 两张卡的 Checked 挂在 XAML 上（Mode_Changed）；这里只设初始状态。
+        // 两个用途 RadioButton 的 Checked 挂在 XAML 上（Mode_Changed）；这里只设初始状态。
         // 默认停在「文件校验」—— 现实中这个工具绝大多数是用来核对刚下载的安装包的。
         // ⚠️ IsChecked 不能在 XAML 里写 True，必须在代码里赋（见 App.xaml 的 CshModeCardStyle）。
         FileTab.IsChecked = true;
@@ -107,64 +138,36 @@ public sealed partial class EncodingToolPage : Page
         if (view.IsLoaded) view.ChangeView(0, 0, null);
     }
 
-    // ══════════ 哈希行（两个页签各一套，样式完全一致） ══════════
+    // ══════════ 哈希行（两个页签各一套，模板共用） ══════════
     /// <summary>
     /// 四种算法各一行：算法名（定宽）+ 值（占满，长了折行）+ 复制。
     /// 2026-09-29 前是"标题一行、值框一行"的两行式，四个算法就是八行，一屏看不全。
     ///
     /// ⚠️ 2026-09-29 二次调整（Nick）：「那些哈希值文本框，看起来像是可以编辑的，但实际上只是为了复制」。
     ///    原来每行的值外面套一个灰底圆角 Border，视觉上跟 TextBox 一模一样 —— 用户会去点它想改。
-    ///    现在去掉底框，改用**逐行分隔线**（只画底边，最后一行不画）：
-    ///    一眼就是"只读的结果列表"。值本身仍可拖选复制（<c>IsTextSelectionEnabled</c>）。
+    ///    去掉了底框，改用逐行分隔线。
+    ///
+    /// ⚠️ 2026-10-02 三次调整（Nick：「所有块都是方块包方块，像一张填满格子的 Excel」）：
+    ///    逐行分隔线仍然是"手画的表格"，于是整块换成 <c>ListView</c>（行模板见 XAML 的 HashRowTemplate）——
+    ///    悬停底色、圆角、键盘导航全部由系统 ListViewItem 提供，外面那张大卡片也一并删掉。
+    ///    这里只负责把四行数据铺进去；值的刷新靠 <see cref="HashRow"/> 的属性通知，不用再手动找控件。
     /// </summary>
-    private void BuildHashRows(StackPanel host, Dictionary<string, TextBlock> table)
+    private static void BuildHashRows(ListView host, Dictionary<string, HashRow> table)
     {
-        for (var i = 0; i < Algorithms.Length; i++)
+        var items = new ObservableCollection<HashRow>();
+        foreach (var name in Algorithms)
         {
-            var name = Algorithms[i];
-
-            var value = new TextBlock
-            {
-                Text = EmptyMark,
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                IsTextSelectionEnabled = true,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            table[name] = value;
-
-            var copy = new Button { Content = "复制", Padding = new Thickness(10, 0, 10, 0), FontSize = 12 };
-            var captured = name;
-            copy.Click += (_, _) => Copy(table[captured].Text, captured);
-
-            var row = new Grid { ColumnSpacing = 12 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            row.Children.Add(new TextBlock
-            {
-                Text = name,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-
-            Grid.SetColumn(value, 1);
-            row.Children.Add(value);
-
-            Grid.SetColumn(copy, 2);
-            row.Children.Add(copy);
-
-            var line = new Border { Padding = new Thickness(0, 9, 0, 9), Child = row };
-            if (i < Algorithms.Length - 1)
-            {
-                line.BorderThickness = new Thickness(0, 0, 0, 1);
-                line.BorderBrush = Res("CardStrokeColorDefaultBrush");
-            }
-            host.Children.Add(line);
+            var row = new HashRow(name);
+            table[name] = row;
+            items.Add(row);
         }
+        host.ItemsSource = items;
+    }
+
+    /// <summary>行模板里的「复制」键：DataContext 就是那一行。</summary>
+    private void CopyHashRow_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is HashRow row) Copy(row.Value, row.Name);
     }
 
     private Brush Res(string key) => Services.ThemeBrush.Get(this, key);
@@ -321,12 +324,12 @@ public sealed partial class EncodingToolPage : Page
     private void ApplyFileHashes(Dictionary<string, string> hashes)
     {
         foreach (var name in Algorithms)
-            _fileHashTexts[name].Text = hashes.TryGetValue(name, out var v) && v.Length > 0 ? v : EmptyMark;
+            _fileRows[name].Value = hashes.TryGetValue(name, out var v) && v.Length > 0 ? v : EmptyMark;
     }
 
     private void SetFileRowsEmpty(string placeholder)
     {
-        foreach (var name in Algorithms) _fileHashTexts[name].Text = placeholder;
+        foreach (var name in Algorithms) _fileRows[name].Value = placeholder;
     }
 
     // ══════════ 文本（编解码 + 实时哈希） ══════════
@@ -344,12 +347,12 @@ public sealed partial class EncodingToolPage : Page
         var text = InputBox.Text ?? "";
         if (text.Length == 0)
         {
-            foreach (var name in Algorithms) _textHashTexts[name].Text = EmptyMark;
+            foreach (var name in Algorithms) _textRows[name].Value = EmptyMark;
             return;
         }
 
         var hashes = ComputeTextHashes(text);
-        foreach (var name in Algorithms) _textHashTexts[name].Text = hashes[name];
+        foreach (var name in Algorithms) _textRows[name].Value = hashes[name];
     }
 
     private static Dictionary<string, string> ComputeTextHashes(string text)
@@ -390,7 +393,7 @@ public sealed partial class EncodingToolPage : Page
             return;
         }
 
-        var hit = Algorithms.FirstOrDefault(a => Norm(_fileHashTexts[a].Text) == expected);
+        var hit = Algorithms.FirstOrDefault(a => Norm(_fileRows[a].Value) == expected);
         if (hit is not null)
         {
             MatchText.Text = $"✓ 与 {hit} 一致";

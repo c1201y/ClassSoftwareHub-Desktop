@@ -252,6 +252,13 @@ public static class EdgeGeometry
 /// <summary>浮窗内容淡入（走合成器，跟窗口滑动同时进行，别让字"啪"一下出现）。</summary>
 public static class FlyoutFade
 {
+    /// <summary>把内容压到透明（不播动画）。用在"窗口露脸之前"——先压透明再淡入，免得先闪一帧再淡。</summary>
+    public static void Prepare(UIElement element)
+    {
+        try { ElementCompositionPreview.GetElementVisual(element).Opacity = 0f; }
+        catch { }
+    }
+
     public static void In(UIElement element, double ms)
     {
         try
@@ -271,6 +278,39 @@ public static class FlyoutFade
         catch
         {
             try { element.Opacity = 1.0; } catch { }
+        }
+    }
+
+    /// <summary>内容淡出，播完回调 <paramref name="done"/>（用于"淡出后再藏窗"，别让窗口先消失动画没得播）。</summary>
+    public static void Out(UIElement element, double ms, Action? done = null)
+    {
+        try
+        {
+            var visual = ElementCompositionPreview.GetElementVisual(element);
+            var compositor = visual.Compositor;
+            visual.StopAnimation("Opacity");
+
+            var anim = compositor.CreateScalarKeyFrameAnimation();
+            anim.InsertKeyFrame(1f, 0f, compositor.CreateCubicBezierEasingFunction(
+                new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f)));
+            anim.Duration = TimeSpan.FromMilliseconds(ms);
+
+            if (done is not null)
+            {
+                var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+                batch.Completed += (_, _) => done();
+                visual.StartAnimation("Opacity", anim);
+                batch.End();
+            }
+            else
+            {
+                visual.StartAnimation("Opacity", anim);
+            }
+        }
+        catch
+        {
+            try { element.Opacity = 0.0; } catch { }
+            done?.Invoke();
         }
     }
 }

@@ -199,10 +199,40 @@ public sealed partial class FeedbackFormPage : Page
             return null;
         }
 
+        // 联系方式在离开本机前加密（内存内完成，原草稿仍留明文供本机恢复）
+        var outgoing = EncryptedDraft();
+        if (outgoing is null) return null;
+
         ErrorBar.IsOpen = false;
-        var link = Feedback.BuildIssueLink(Draft, SelectedApp(), EnvRows());
+        var link = Feedback.BuildIssueLink(outgoing, SelectedApp(), EnvRows());
         TruncateBar.IsOpen = link.Truncated;
         return link;
+    }
+
+    /// <summary>
+    /// 返回一份「联系方式已加密」的草稿副本，专供**离开本机**的那份内容用（Issue 链接 / 复制文本）。
+    /// <see cref="Draft"/> 本身保留明文，只存在于本机内存与本地草稿文件里。
+    /// ⛔ 只加密、绝不解密；联系方式为空时原样返回。
+    /// 加密失败返回 null 并弹提示 —— 宁可让用户重试，也绝不把明文发出去。
+    /// </summary>
+    private Feedback.Draft? EncryptedDraft()
+    {
+        if (Draft.Contact.Trim().Length == 0) return Draft;
+
+        try
+        {
+            var copy = new Feedback.Draft();
+            copy.CopyFrom(Draft);
+            copy.Contact = AgeEncryption.EncryptToArmor(Draft.Contact.Trim());
+            return copy;
+        }
+        catch
+        {
+            ErrorBar.Message = "联系方式加密失败，请稍后重试。若反复失败，可改用「在 Q 群中反馈」联系维护者。";
+            ErrorBar.IsOpen = true;
+            TruncateBar.IsOpen = false;
+            return null;
+        }
     }
 
     private SoftwareApp? SelectedApp() => App.Content.FindById(Draft.AppId);
@@ -265,8 +295,12 @@ public sealed partial class FeedbackFormPage : Page
 
         ErrorBar.IsOpen = false;
 
-        var body = Feedback.BuildBody(Draft, SelectedApp(), EnvRows());
-        return Feedback.BuildTitle(Draft) + "\n\n" + body;
+        // 复制出去的内容同样会离开本机（贴进 Q 群相册），联系方式一样只给密文
+        var outgoing = EncryptedDraft();
+        if (outgoing is null) return null;
+
+        var body = Feedback.BuildBody(outgoing, SelectedApp(), EnvRows());
+        return Feedback.BuildTitle(outgoing) + "\n\n" + body;
     }
 
     // ════════════════════════════════════════════════════════════════

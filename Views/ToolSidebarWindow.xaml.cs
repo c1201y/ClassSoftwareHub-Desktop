@@ -2174,14 +2174,11 @@ public sealed partial class ToolSidebarWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
-    private static string LogPath => System.IO.Path.Combine(SettingsStore.Dir, "sidebar.log");
-
     private static void Log(string message)
     {
         try
         {
-            System.IO.Directory.CreateDirectory(SettingsStore.Dir);
-            System.IO.File.AppendAllText(LogPath, $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            Core.AppLog.Info("sidebar", message);
         }
         catch { }
     }
