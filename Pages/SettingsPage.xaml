@@ -6,6 +6,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:core="using:ClassSoftwareHub.Desktop.Core"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:ClassSoftwareHub.Desktop.Controls"
     Background="{x:Null}">
 
     <!--
@@ -24,7 +25,7 @@
     <Page.Resources>
         <!-- 快捷入口两套模板（同首页）：颜色全走 {ThemeResource}，浅色/深色自己会变 -->
         <DataTemplate x:Key="QuickLinkNormal">
-            <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95" />
@@ -35,7 +36,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="QuickLinkAccent">
-            <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                     Background="{ThemeResource AccentFillColorDefaultBrush}">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
@@ -59,9 +60,9 @@
         <!-- 和首页同一套版式：三列 Grid 把内容钉在中间 960 宽，导航展开/收起都不动 -->
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="1*" MinWidth="24" />
                 <ColumnDefinition Width="998*" MaxWidth="960" />
-                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="1*" MinWidth="24" />
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="1">
@@ -193,6 +194,28 @@
 
                 </StackPanel>
 
+                <!-- ================= 诊断 ================= -->
+                <!-- 2026-10-02：日志查看从实验性分组挪来这儿（Nick：不是实验功能，设置里给个正式入口）。
+                     位置他指定：窗口之后、软件内容之前。SettingsCard 继承 ButtonBase，
+                     IsClickEnabled=True 整卡可点（系统控件观感，别自己叠 Border 画假按钮）。 -->
+                <TextBlock Text="诊断" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+
+                    <controls:SettingsCard Header="日志查看"
+                                           Description="在应用内查看运行日志，可按级别与内容筛选，一键导出全部日志交给开发者。"
+                                           IsClickEnabled="True" Click="OpenLogViewer_Click">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE7C3;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <!--
+                          ⚠️ 右侧**不要**自己放箭头：IsClickEnabled=True 时 SettingsCard 自带一颗
+                             Chevron（系统尺寸/颜色/动画），再叠一个就是两颗箭头（2026-10-02 截到过）。
+                             内容留空 = 只有系统那颗。
+                        -->
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
                 <!-- ================= 软件内容 ================= -->
                 <!-- 2026-10-01：原「常用工具」整组（浮窗置顶 / 屏幕边缘侧边栏 / 放置模式 / 贴哪条边）
                      与「截图」两项，都搬去了「侧边布局」页 —— 那页本就是侧边栏与常用工具的布置中心。 -->
@@ -225,6 +248,21 @@
                             </StackPanel>
                         </controls:SettingsCard.Description>
                     </controls:SettingsCard>
+
+                </StackPanel>
+
+                <!-- ================= 回声洞 ================= -->
+                <!-- 2026-10-03：位置由 Nick 指定 —— 软件内容之后、更新之前。
+                     形态照搬网页版：**就地在设置页里内嵌一张卡片**（对应组件 EchoCaveCard.vue），
+                     不另开独立页面。数据在站点仓库根目录「回声洞/messages/」——一条一个文件
+                     （message1.json、message2.json……，只有一句话），与网页版、控制台同一套。
+                     交互照 ClassIsland 的回声洞：**点击换一条 + 打字机逐字**（不是自动轮播）。
+                     ⚠️ 卡片自己是自包含控件（加载 / 换条 / 打字 / 投稿都在 Controls/EchoCaveCard.* 里），
+                        这里只负责摆位置 —— 设置页的 code-behind 不掺和它的逻辑。 -->
+                <TextBlock Text="回声洞" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+
+                    <ui:EchoCaveCard />
 
                 </StackPanel>
 
