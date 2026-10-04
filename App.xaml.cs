@@ -6,6 +6,20 @@ namespace ClassSoftwareHub.Desktop;
 public partial class App : Application
 {
     public static MainWindow? MainWindow { get; private set; }
+
+    /// <summary>
+    /// 「应用正在退出」的全局标记（2026-10-04 修）。
+    ///
+    /// ⛔ 为什么必须有：工具浮窗（<c>ToolPaletteWindow</c>）和 Q 群反馈窗（<c>QqFeedbackGuideWindow</c>）
+    ///    都把 <c>AppWindow.Closing</c> 拦下来当"收起来"用（<c>args.Cancel = true</c>），这是它们自己的
+    ///    正常语义。但 WinUI 的 <c>Application.Exit()</c> 是**逐个关窗**的，碰到被取消的就中止整条退出
+    ///    流程 —— 结果：只要这两个窗里任意一个开着，托盘菜单「退出」就会变成
+    ///    「主窗关了、托盘图标摘了、**进程却一直赖在任务管理器里**」。
+    ///    实测复现：正常启动 → 托盘菜单开「常用工具」→ 托盘菜单「退出」→ 进程 15 分钟不退。
+    ///    退出流程一开始就把它置 true，那两个窗口的 Closing 看到它就放行，不再拦。
+    /// </summary>
+    public static bool IsExiting { get; set; }
+
     public static SettingsStore Settings { get; } = new();
     public static ITelemetryService Telemetry { get; private set; } = new NoopTelemetryService(Settings);
 

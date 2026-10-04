@@ -591,13 +591,29 @@ public sealed partial class MainWindow : Window
         }
         catch { }
 
-        _appWindow.Closing += (_, _) => SaveWindowState();
+        _appWindow.Closing += (_, _) =>
+        {
+            Core.AppLog.Info("exit", "主窗 Closing#1 SaveWindowState");
+            SaveWindowState();
+        };
 
         // 点右上角 × 默认收进托盘（可在设置 / 内置工具页关掉）；托盘挂不上就直接退，别把用户困在后台
         _appWindow.Closing += (_, args) =>
         {
-            if (_exitRequested || !_settings.Current.CloseToTray || _tray?.IsReady != true) return;
+            Core.AppLog.Info("exit", $"主窗 Closing: exitRequested={_exitRequested} "
+                + $"closeToTray={_settings.Current.CloseToTray} trayReady={_tray?.IsReady}");
+            if (_exitRequested || !_settings.Current.CloseToTray || _tray?.IsReady != true)
+            {
+                // 这一支是"真的要走"（托盘退出 / 用户关掉了「收进托盘」/ 托盘没挂上）。
+                // ⚠️ 必须打上全局退出标记：工具浮窗与 Q 群反馈窗的 Closing 会把关闭拦成"收起来"，
+                //    而 WinUI 的 Application.Exit() 撞上被取消的关闭就会中止整条退出流程 ——
+                //    结果就是"窗口都关了、托盘也摘了、进程却一直不走"（2026-10-04 实测）。
+                App.IsExiting = true;
+                Core.AppLog.Info("exit", "主窗 Closing -> 放行（真的要走）");
+                return;
+            }
             args.Cancel = true;
+            Core.AppLog.Info("exit", "主窗 Closing -> 取消（收进托盘）");
             HideToTray();
             ShowTrayHideHintOnce();
         };
@@ -842,8 +858,8 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        Core.AppLog.Info("exit", $"主窗口 Closed (exitRequested={_exitRequested})");
         _loadTimer.Stop();
-        _exitRequested = true;
         DownloadManager.Current.Finished -= OnDownloadFinished;
         try { _settings.Save(); } catch { }
         try { Web.Close(); } catch { }
@@ -851,6 +867,19 @@ public sealed partial class MainWindow : Window
         _tray = null;
         try { _trayTools?.Dispose(); } catch { }
         _trayTools = null;
+
+        // 走到这儿说明主窗口是**真的关掉了**（"收进托盘"那条路在 Closing 里被 cancel，压根到不了 Closed）
+        // → 应用就该退出了。
+        // ⛔ 必须自己把剩下的窗口收掉并请 Application 退出：WinUI 3 **不会**因为"主窗关了"就自动退出，
+        //    而侧边栏 / 工具浮窗还活着 → 进程一直挂在任务管理器里。
+        //    2026-10-04 实测：把「关闭时收进托盘」关掉后点 ×（= 任务栏右键「关闭窗口」）必现残留。
+        //    已经由 ExitApp 发起时（_exitRequested 已是 true）不重复走 —— 那条路自己会收尾。
+        if (!_exitRequested)
+        {
+            _exitRequested = true;
+            App.IsExiting = true;
+            FinishExit();
+        }
     }
 
     private void LoadLoadingIcon()
@@ -2055,14 +2084,59 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public void ExitApp()
     {
+        Core.AppLog.Info("exit", "ExitApp() 被调用");
         _exitRequested = true;
+        // 让工具浮窗 / Q 群反馈窗的 Closing 放行（它们默认是"关掉 = 收起来"）。
+        // ⚠️ 实测（2026-10-04）：程序化的 Window.Close() 和 Application.Exit() **都不触发**
+        //    AppWindow.Closing（只有用户级的 × / Alt+F4 / 任务栏「关闭窗口」才触发），
+        //    所以真正保证退干净的是 FinishExit() 里的显式关窗；这个标记是防御性的 ——
+        //    万一某个版本让程序化关闭也走 Closing，它保证那两个窗不会被自己的 args.Cancel 拦下。
+        App.IsExiting = true;
         try { _settings.Save(); } catch { }
         try { _tray?.Dispose(); } catch { }
         _tray = null;
         try { _trayTools?.Dispose(); } catch { }
         _trayTools = null;
+        FinishExit();
+    }
+
+    /// <summary>
+    /// 退出流程的后半段：摘钩子 → 关掉所有自家窗口 → <c>Application.Exit()</c> → 1.5 秒硬退兜底。
+    /// 两个入口共用：<see cref="ExitApp"/>（托盘「退出」/ 更新安装器要接管），
+    /// 以及 <see cref="OnWindowClosed"/>（用户点了 × 且没开「关闭时收进托盘」）。
+    /// </summary>
+    private void FinishExit()
+    {
+        // ① 先摘钩子 / 还原注册表（虚拟键盘）。必须在任何硬退兜底之前 —— 硬退会跳过清理，
+        //    把"系统键盘不自动弹"这种脏状态留在用户机器上。
+        try { Services.VirtualKeyboard.VirtualKeyboardService.Stop(); } catch { }
+
+        // ② 显式关掉我们自己建的每一个窗口，再请 Application 退出。
+        //    ⛔ 不能只依赖 Application.Exit()，2026-10-04 实测（logs\exit.log）它：
+        //       · **不走 AppWindow.Closing** —— 所以"关掉=收起来"那套既拦不住它、也感知不到它在关窗；
+        //       · 且**只关掉一部分窗口**，剩下没关掉的窗口把消息循环撑住，
+        //         结果就是「主界面没了、托盘图标也没了，进程却一直挂在任务管理器里」。
+        //         这正是用户反馈的"点了退出，任务管理器里还有残留"。
+        Core.AppLog.Info("exit", "开始显式关闭所有窗口");
+        try { Views.ToolPaletteWindow.CloseForExit(); } catch { }
+        try { Views.QqFeedbackGuideWindow.CloseForExit(); } catch { }
+        try { Views.ToolSidebarWindow.CloseForExit(); } catch { }
+        try { Close(); } catch { }
+        Core.AppLog.Info("exit", "窗口已全部请求关闭");
+
         try { Application.Current.Exit(); }
         catch { Environment.Exit(0); }
+        Core.AppLog.Info("exit", "Application.Exit() 已返回（若进程仍在 = 消息循环没退）");
+
+        // ③ 最后一道保险：Application.Exit() 偶尔仍会让消息循环卡住不退。
+        //    1.5 秒还没走就硬退 —— 走到这里该做的清理都已做完（设置已存、托盘已摘、键盘钩子已还原），硬退是安全的。
+        new System.Threading.Thread(() =>
+        {
+            System.Threading.Thread.Sleep(1500);
+            Core.AppLog.Info("exit", "1.5 秒后进程仍在 -> 硬退兜底");
+            Environment.Exit(0);
+        })
+        { IsBackground = true, Name = "csh-exit-watchdog" }.Start();
     }
 
     private async Task ExecuteScriptAsync(string script)

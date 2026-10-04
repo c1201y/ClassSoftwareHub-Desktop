@@ -99,6 +99,19 @@ public sealed partial class ToolPaletteWindow : Window
         else ShowTool();
     }
 
+    /// <summary>
+    /// 退出应用时**真正销毁**实例 —— 和平时"关掉=收起来"（<see cref="HidePalette"/>）是两回事。
+    /// ⛔ 为什么必须有：Application.Exit() 在 WinUI 3 里会漏窗口，浮窗没被关掉就会把消息循环撑住、
+    ///    让进程留在任务管理器里（2026-10-04 实测，见 MainWindow.ExitApp 的注释）。
+    /// </summary>
+    public static void CloseForExit()
+    {
+        var w = _instance;
+        _instance = null;
+        try { w?.Close(); } catch { }
+        Core.AppLog.Info("exit", "浮窗实例已请求 Close");
+    }
+
     public static bool IsPaletteVisible => _instance is { _visible: true };
 
     /// <summary>窗口置顶开关变了之后同步一下。</summary>
@@ -147,8 +160,23 @@ public sealed partial class ToolPaletteWindow : Window
 
         ApplyPosition();
 
+        Core.AppLog.Info("exit", "浮窗实例已建");
+        Closed += (_, _) => Core.AppLog.Info("exit", "浮窗 Closed");
         if (_appWindow is not null)
-            _appWindow.Closing += (_, args) => { args.Cancel = true; HidePalette(); };   // 关掉 = 收起来，别真销毁
+        {
+            // 关掉 = 收起来，别真销毁。
+            // ⛔ 但**应用正在退出时必须放行**：WinUI 的 Application.Exit() 逐个关窗，撞上被取消的关闭
+            //    会中止整条退出流程 → 只要本窗开着，托盘「退出」后进程就会赖在任务管理器里不走
+            //    （2026-10-04 实测复现）。App.IsExiting 由 MainWindow.ExitApp / 主窗真的关闭时置位。
+            _appWindow.Closing += (_, args) =>
+            {
+                Core.AppLog.Info("exit", $"浮窗 Closing: IsExiting={App.IsExiting}");
+                if (App.IsExiting) return;
+                args.Cancel = true;
+                Core.AppLog.Info("exit", "浮窗 Closing -> 取消（收起来）");
+                HidePalette();
+            };
+        }
     }
 
     /// <summary>自绘标题栏：外观我们自己的（不是系统那根），拖动还是系统管（含触屏）。</summary>

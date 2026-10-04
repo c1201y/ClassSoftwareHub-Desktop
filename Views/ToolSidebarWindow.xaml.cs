@@ -246,6 +246,9 @@ public sealed partial class ToolSidebarWindow : Window
         _idle.Tick += (_, _) => { if (_expanded && !App.Settings.Current.SidebarPinned && !SuppressAutoCollapse) Collapse(); };
 
         Configure();
+
+        Core.AppLog.Info("exit", $"侧边栏实例已建 edge={_edge}");
+        Closed += (_, _) => Core.AppLog.Info("exit", $"侧边栏 Closed edge={_edge}");
     }
 
     // ── 对外入口 ─────────────────────────────────────────────
@@ -264,6 +267,21 @@ public sealed partial class ToolSidebarWindow : Window
     public static void HideSidebar()
     {
         foreach (var w in _pool.Values) w.HideSelf();
+    }
+
+    /// <summary>
+    /// 退出应用时把实例池里的窗口**真正关掉**（平时只是显隐，从不销毁）。
+    /// ⛔ 为什么必须有：Application.Exit() 在 WinUI 3 里会漏窗口 —— 2026-10-04 实测，
+    ///    托盘「退出」后侧边栏常常是唯一活下来的那个窗口，把消息循环撑住、进程退不掉。
+    /// </summary>
+    public static void CloseForExit()
+    {
+        foreach (var w in _pool.Values.ToList())
+        {
+            try { w.Close(); } catch { }
+        }
+        _pool.Clear();
+        Core.AppLog.Info("exit", "侧边栏实例已请求 Close");
     }
 
     /// <summary>
@@ -412,6 +430,7 @@ public sealed partial class ToolSidebarWindow : Window
             var hwnd = WindowNative.GetWindowHandle(this);
             _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(hwnd));
             _appWindow.Title = "工具侧边栏";
+            _appWindow.Closing += (_, _) => Core.AppLog.Info("exit", $"侧边栏 Closing edge={_edge}");
 
             _appWindow.IsShownInSwitchers = false;          // 不进任务栏、不进 Alt+Tab
 

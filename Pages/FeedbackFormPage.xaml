@@ -120,17 +120,37 @@
                 <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" Title="无法提交"
                          Margin="0,16,0,0" IsClosable="True" />
 
+                <InfoBar x:Name="SuccessBar" IsOpen="False" Severity="Success" Title="已提交"
+                         Margin="0,16,0,0" IsClosable="True">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="ViewIssueButton" Content="查看议题" Click="ViewIssue_Click"
+                                Visibility="Collapsed" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
                 <InfoBar x:Name="TruncateBar" IsOpen="False" Severity="Warning" Title="内容已自动截断"
                          Message="描述长度超出链接可承载的上限，已自动截断。单击「在 Q 群中反馈」可取得完整内容，粘贴到群相册的说明栏即可。"
                          Margin="0,16,0,0" IsClosable="True" />
 
                 <!-- 动作 -->
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,24,0,0">
-                    <Button x:Name="OpenIssueButton" Click="OpenIssue_Click"
-                            Style="{StaticResource AccentButtonStyle}" Padding="18,8,18,8">
+                    <!--
+                      主出口：交给自建提交服务，令牌在服务端 —— 用户不用登录 GitHub。
+                      服务端没这条路由 / 连不上时会把用户引到右边那颗兜底按钮。
+                    -->
+                    <Button x:Name="SubmitButton" Click="Submit_Click" Style="{StaticResource AccentButtonStyle}"
+                            Padding="18,8,18,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE724;" FontSize="14" />
+                            <TextBlock x:Name="SubmitLabel" Text="提交反馈" />
+                        </StackPanel>
+                    </Button>
+
+                    <!-- 兜底：拼一个 Issue 预填链接交给系统浏览器（需要登录 GitHub） -->
+                    <Button x:Name="OpenIssueButton" Click="OpenIssue_Click" Padding="18,8,18,8">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE8A7;" FontSize="14" />
-                            <TextBlock Text="提交至 GitHub" />
+                            <TextBlock Text="在 GitHub 上提交" />
                         </StackPanel>
                     </Button>
 
@@ -147,9 +167,34 @@
                     </Button>
                 </StackPanel>
 
-                <TextBlock Margin="0,14,0,0" FontSize="12" TextWrapping="Wrap" LineHeight="18"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           Text="「提交至 GitHub」将打开议题创建页面，标题与正文已自动填入，登录后单击「Submit new issue」即可提交；若无 GitHub 账号，可改用「在 Q 群中反馈」，按弹出的图文流程把反馈提交至群相册。填写内容在本地自动保存为草稿，中途离开亦不会丢失。" />
+                <!--
+                  三条出口的差别（2026-10-04 Nick 指定要写清楚）：
+                  主出口由机器人代为提交，代价是议题不属于本人，收不到开发者回复的通知；
+                  这一点必须写明，否则用户会一直等一条永远不来的回复。
+                -->
+                <StackPanel Margin="0,16,0,0" Spacing="6">
+                    <TextBlock FontSize="12" TextWrapping="Wrap" LineHeight="18"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                        <Run Text="「提交反馈」" FontWeight="SemiBold" />
+                        <Run Text="：使用机器人代为提交，无需注册或登录 GitHub 账户，提交后即进入公开议题列表。由于议题并非由本人创建，开发者在该议题下的回复将不会通知到您。" />
+                    </TextBlock>
+
+                    <TextBlock FontSize="12" TextWrapping="Wrap" LineHeight="18"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                        <Run Text="「在 GitHub 上提交」" FontWeight="SemiBold" />
+                        <Run Text="：将打开 GitHub 议题创建页并预先填好标题与正文，此通道需要用户拥有 GitHub 账户，登录后单击「Submit new issue」即可。议题由本人创建，可收到开发者的回复通知。" />
+                    </TextBlock>
+
+                    <TextBlock FontSize="12" TextWrapping="Wrap" LineHeight="18"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                        <Run Text="「在 Q 群中反馈」" FontWeight="SemiBold" />
+                        <Run Text="：打开交流群并弹出图文流程，可复制完整反馈内容，粘贴至群相册的说明栏即可；以上两者均不便使用时改用此通道。" />
+                    </TextBlock>
+
+                    <TextBlock Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" LineHeight="18"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Text="填写内容在本地自动保存为草稿，中途离开亦不会丢失。" />
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

@@ -32,7 +32,7 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.1.0-insider1.6";
+    public const string ShellVersion = "1.1.0-insider1.7";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -129,8 +129,9 @@ public static class ShellConfig
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// 提交服务入口（自建 Worker，令牌在服务端，客户端只发内容）。
-    /// 提交软件走 <c>{入口}/api/submit</c>；回声洞投稿走 <c>{入口}/api/echocave</c>。
+    /// 提交服务入口（自建 Worker <c>classhub</c>，令牌在服务端，客户端只发内容）。
+    /// 提交软件走 <c>{入口}/api/submit</c>；回声洞投稿走 <c>{入口}/api/echocave</c>；
+    /// 反馈中心走 <c>{入口}/api/feedback</c>（见 <see cref="Services.FeedbackSubmit"/>）。
     /// 两个域名指向同一套服务，按顺序试；成功的那个记进 <see cref="SubmitEndpointFile"/>。
     /// </summary>
     public static readonly string[] SubmitEndpoints =

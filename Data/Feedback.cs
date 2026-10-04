@@ -8,18 +8,22 @@ using System.Text.Json;
 namespace ClassSoftwareHub.Desktop.Data;
 
 /// <summary>
-/// 反馈中心的纯逻辑（界面在 <c>Pages/FeedbackPage.*</c>）—— 照搬站点
+/// 反馈中心的纯逻辑（界面在 <c>Pages/FeedbackPage.*</c>）—— 最初照搬站点
 /// <c>FeedbackPage.vue</c> + <c>feedback.ts</c> 那一套做法。
 ///
-/// 桌面版和站点一样**没有后端**，所以「提交」= 拼一个 **GitHub Issue 预填链接**
-/// 交给系统浏览器打开，用户点一下 GitHub 上的「Submit new issue」即可。
-/// 不走任何网络请求：既不用白等超时，也不受网络环境影响。
+/// **两条出口，默认那条不用登录**（2026-10-04 Nick 定）：
+///   ①（主）**服务端代提**：<c>POST {入口}/api/feedback</c> 交给自建服务，
+///      令牌在服务端，用户在应用里点一下就完事 —— 见 <see cref="Services.FeedbackSubmit"/>；
+///   ②（兜底）**GitHub 预填链接**：拼一个 Issue 新建页的链接丢给系统浏览器，
+///      用户在 GitHub 上点「Submit new issue」——服务端连不上 / 还没这条路由时用。
 /// 没有 GitHub 账号的用户走「在 Q 群中反馈」（2026-09-30 起）：
 /// 打开 Q 群卡片 → 提醒浮窗里点「复制」→ 按图文流程把反馈连同截图提交到**群相册**。
 ///
-/// ⚠️ 目标仓库是**桌面版自己的仓库**（<see cref="Core.ShellConfig.UpdateRepoName"/>），
-///    不是站点仓库 —— Nick 2026-09-26 定：桌面版的问题（侧边栏、音量、下载……）
-///    应该进桌面版自己的 Issue 列表，跟发版仓库同一个，维护时不用两头翻。
+/// ⚠️ 目标仓库是**站点仓库**（<see cref="Core.ShellConfig.SiteRepoName"/>），**不是**桌面版自己的仓库
+///    —— 2026-10-04 从桌面仓库改过来：`用户反馈 / 报告问题 / 逻辑交互 …` 这套标签、
+///    以及 `submissions/` 那套草稿→审核管道都在站点仓库，桌面仓库里一个相关标签都没有
+///    （标签对不上时 GitHub 是**静默忽略**的，桌面版反馈因此一直没标签）。
+///    站点端的反馈本来也落在同一个列表里，桌面版的多带一个 <see cref="DesktopLabel"/> 用来区分。
 ///
 /// ⚠️ <see cref="KindDef.Label"/> / <see cref="SubKindDef.Label"/> 必须与仓库 Labels
 ///    里的名字**一字不差**（含空格）。对不上的标签会被 GitHub **静默忽略**——
@@ -31,11 +35,17 @@ public static class Feedback
     // 目标仓库
     // ════════════════════════════════════════════════════════════════
 
+    /// <summary>站点仓库（标签与审核管道都在这里，站点端反馈也落同一个列表）。</summary>
     public static string RepoUrl =>
-        $"https://github.com/{Core.ShellConfig.UpdateRepoOwner}/{Core.ShellConfig.UpdateRepoName}";
+        $"https://github.com/{Core.ShellConfig.SiteRepoOwner}/{Core.ShellConfig.SiteRepoName}";
 
-    /// <summary>公开议题列表（先查重再决定要不要提）。</summary>
-    public static string IssueListUrl => RepoUrl + "/issues";
+    /// <summary>
+    /// 公开议题列表（先查重再决定要不要提）。
+    /// ⚠️ 带了个 <c>q</c> 只筛本端反馈：站点仓库里还堆着成百上千条软件提交的 Issue/PR，
+    ///    不筛的话用户点进去是一堵墙。标签不存在时 GitHub 会当"搜不到"给空列表（不会报错）。
+    /// </summary>
+    public static string IssueListUrl =>
+        RepoUrl + "/issues?q=" + Uri.EscapeDataString($"is:issue label:\"{DesktopLabel}\"");
 
     // ════════════════════════════════════════════════════════════════
     // 分类（两层）
@@ -99,6 +109,12 @@ public static class Feedback
 
     /// <summary>所有反馈共用的总标签，用来把用户反馈和仓库里其它 Issue 分开。</summary>
     public const string CommonLabel = "用户反馈";
+
+    /// <summary>
+    /// 桌面版专有的区分标签（站点仓库里站点端反馈也在同一个列表）。
+    /// ⚠️ 这个标签必须**在仓库里真实存在**，否则 GitHub 静默忽略、也就分不出来了。
+    /// </summary>
+    public const string DesktopLabel = "桌面版";
 
     public static KindDef? FindKind(string key) =>
         Kinds.FirstOrDefault(k => k.Key == key);
@@ -186,6 +202,7 @@ public static class Feedback
             var sub = FindSubKind(draft.SubKind);
             if (sub is not null) labels.Add(sub.Label);
         }
+        labels.Add(DesktopLabel);      // 桌面版反馈与站点端反馈在同一个仓库，靠它分开
         return labels;
     }
 
@@ -237,6 +254,28 @@ public static class Feedback
         }
 
         sb.Append("<!-- 由桌面版「反馈中心」生成。标题或正文如有错误，可直接在此修改。 -->");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 服务端那条路（<see cref="Services.FeedbackSubmit"/>）要的「详细描述」：
+    /// 用户的描述原文；勾了「随反馈附上本机信息」时在末尾追加一行本机信息。
+    ///
+    /// ⚠️ 只给描述本身，**不要拼模板** —— 服务端会把这段套进引用块，再自己补
+    ///    「类型」「涉及软件」表格与联系方式代码块。在这里拼完整正文会导致议题里套两层。
+    /// ⚠️ 环境信息压成一行：引用块里渲染不了 Markdown 表格。
+    /// </summary>
+    public static string BuildSubmitDetail(Draft draft, IReadOnlyList<EnvRow>? env)
+    {
+        var sb = new StringBuilder();
+        sb.Append(draft.Detail.Trim());
+
+        if (env is not null && env.Count > 0)
+        {
+            sb.Append("\n\n——\n\n本机信息：");
+            sb.Append(string.Join(" · ", env.Select(r => $"{r.Label} {r.Value}")));
+        }
 
         return sb.ToString();
     }
@@ -328,9 +367,13 @@ public static class Feedback
 
 /// <summary>
 /// 反馈草稿的本地持久化（%LOCALAPPDATA%\ClassSoftwareHub\feedback-draft.json）。
-/// ⚠️ 与站点一样**故意不提供「提交成功后清草稿」**：打开的是浏览器里的 GitHub 页面，
+///
+/// ⚠️ **走 GitHub 预填链接那条路时故意不清草稿**：打开的是浏览器里的 GitHub 页面，
 ///    跨进程读不到那边到底提交没有。清掉反而危险 —— 用户以为提交了、其实没点，内容却没了。
 ///    宁可下次进来多问一句「恢复上次填写」。
+/// ⚠️ 走服务端那条路（<see cref="Services.FeedbackSubmit"/>）时**成了就清**：接口明确回了
+///    <c>success</c>，不存在"以为提交了其实没提交"，留着草稿只会让用户以为没成功、
+///    再点一次又建一个重复 Issue（见 <c>FeedbackFormPage.Submit_Click</c>）。
 /// </summary>
 public static class FeedbackDraftStore
 {
@@ -386,5 +429,18 @@ public static class FeedbackDraftStore
     public static void Clear()
     {
         try { if (File.Exists(FilePath)) File.Delete(FilePath); } catch { }
+    }
+
+    /// <summary>
+    /// 丢弃草稿：把**进程内那一份**就地清空 + 删掉本地草稿文件。
+    ///
+    /// ⚠️ 两件事都得做：只删文件的话，<see cref="Current"/> 里还留着刚填的内容，
+    ///    草稿条下次进页面照样会冒出来（页面判定它非空）—— 那就白点了。
+    /// ⚠️ 就地 <see cref="Feedback.Draft.CopyFrom"/> 重置，⛔ 不能换引用（两个页面共用同一个实例）。
+    /// </summary>
+    public static void Discard()
+    {
+        Current.CopyFrom(new Feedback.Draft());
+        Clear();
     }
 }

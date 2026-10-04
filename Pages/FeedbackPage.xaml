@@ -179,8 +179,8 @@
                                     </Grid>
 
                                     <StackPanel Grid.Column="1" Spacing="5">
-                                        <TextBlock Text="跳转至 GitHub" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="标题与正文已自动填入议题表单，登录后单击提交，内容将公开可见。"
+                                        <TextBlock Text="提交反馈" FontSize="14" FontWeight="SemiBold" />
+                                        <TextBlock Text="在应用里点一下即可提交，无需登录任何账号；内容将公开可见。若提交服务连不上，也可跳转 GitHub 议题表单手动提交。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
@@ -230,7 +230,7 @@
 
                             <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
                                 <TextBlock Text="请先查阅已有反馈" FontSize="14" FontWeight="SemiBold" />
-                                <TextBlock Text="已有反馈均记录于公开议题列表中，建议先行搜索关键词，以避免重复提交。"
+                                <TextBlock Text="桌面版反馈均记录于公开议题列表中，建议先行搜索关键词，以避免重复提交。"
                                            FontSize="13" TextWrapping="Wrap"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
@@ -246,10 +246,16 @@
                         </Grid>
                     </Border>
 
-                    <!-- 草稿条。单击「恢复上次填写」= 带着草稿里的类型直接进表单页 -->
+                    <!--
+                      草稿条。
+                        · 单击「恢复上次填写」= 带着草稿里的类型直接进表单页；
+                        · 右上角那个 ✕（IsClosable=True 的关闭按钮）= **丢弃草稿**（2026-10-04 Nick 指定），
+                          点下去会先确认一次，确认后删本地草稿文件并清掉进程内那一份 —— 草稿条不再冒出来。
+                      ⚠️ 别把这个 ✕ 改成「只把提示条收起来」：那样下次进本页又会出现，正是 Nick 说的"一直在很烦"。
+                    -->
                     <InfoBar x:Name="DraftBar" IsOpen="False" Severity="Informational"
-                             Title="存在上次填写的反馈草稿" Message="可直接继续填写。"
-                             Margin="0,16,0,0" IsClosable="False">
+                             Title="存在上次填写的反馈草稿" Message="可直接继续填写；点右上角关闭按钮可丢弃这份草稿。"
+                             Margin="0,16,0,0" IsClosable="True" CloseButtonClick="DraftBar_Close">
                         <InfoBar.ActionButton>
                             <Button Content="恢复上次填写" Click="ResumeDraft_Click" />
                         </InfoBar.ActionButton>

@@ -124,13 +124,27 @@ public sealed partial class FeedbackPage : Page
     // 草稿
     // ════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// 草稿条显不显示。
+    ///
+    /// ⚠️ 判定标准是「**真的填过东西**」（标题 / 描述 / 联系方式任一处非空），
+    ///    ⛔ 不是「草稿文件存在」、⛔ 也不是「草稿里记着类型」。
+    ///    原因（2026-10-04 Nick 反馈"这个草稿条一直在，很烦"）：
+    ///    点一下类型卡片就会把 Kind 写进草稿并落盘，而 <see cref="FeedbackDraftStore.Load"/> 对
+    ///    "只有 Kind、一个字没写"的草稿是**当作有草稿**返回的 —— 于是只要点过一次反馈类型，
+    ///    这条提示就永远挂在页面上，可它其实什么都没得恢复。
+    /// </summary>
     private void RefreshDraftBar()
     {
-        var cur = FeedbackDraftStore.Current;
-        DraftBar.IsOpen = cur.Kind.Length > 0
-                          || cur.Title.Trim().Length > 0
-                          || FeedbackDraftStore.Load() is not null;
+        var saved = FeedbackDraftStore.Load();
+        DraftBar.IsOpen = HasTyped(FeedbackDraftStore.Current) || (saved is not null && HasTyped(saved));
     }
+
+    /// <summary>有没有值得恢复的正文（标题 / 描述 / 联系方式）。只选了类型、什么都没写 = 没有。</summary>
+    private static bool HasTyped(Feedback.Draft draft) =>
+        draft.Title.Trim().Length > 0
+        || draft.Detail.Trim().Length > 0
+        || draft.Contact.Trim().Length > 0;
 
     private void ResumeDraft_Click(object sender, RoutedEventArgs e)
     {
@@ -149,6 +163,38 @@ public sealed partial class FeedbackPage : Page
 
         if (draft.Kind.Length == 0) return;
         NavigateToForm(draft.Kind);
+    }
+
+    /// <summary>
+    /// 草稿条右上角那个 ✕ = **丢弃草稿**（2026-10-04 Nick 指定）。
+    ///
+    /// 丢弃会真的删掉已填内容且不可恢复，所以先弹一次确认。
+    ///
+    /// ⚠️ InfoBar 的关闭按钮点下去就会自己收起，且 <c>CloseButtonClick</c> 的参数里没有
+    ///    <c>Handled</c> 可拦 —— 所以「取消」时要在对话框关掉之后再把 <see cref="DraftBar"/> 放回来。
+    ///    （对话框是模态的，中间那下收起看不见。）
+    /// </summary>
+    private async void DraftBar_Close(InfoBar sender, object args)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "丢弃这份反馈草稿？",
+            Content = "已填写的内容会被删除，且无法恢复。",
+            PrimaryButtonText = "丢弃",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,     // 回车落「取消」，别一键把草稿送走
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            DraftBar.IsOpen = true;      // 反悔：把条放回去
+            return;
+        }
+
+        FeedbackDraftStore.Discard();
+        DraftBar.IsOpen = false;
     }
 
     private void OpenIssueList_Click(object sender, RoutedEventArgs e)

@@ -14,7 +14,7 @@ using Microsoft.UI.Xaml.Navigation;
 namespace ClassSoftwareHub.Desktop.Pages;
 
 /// <summary>
-/// 反馈中心的**表单页**：填标题 / 描述 / 联系方式，然后从两条出口之一提交。
+/// 反馈中心的**表单页**：填标题 / 描述 / 联系方式，然后从三条出口之一提交。
 ///
 /// 导航关系（2026-09-30 起是**正常页面导航**，不是同页 Visibility 互斥）：
 ///     <see cref="FeedbackPage"/>（选类型）--单击卡片--> 本页
@@ -23,8 +23,11 @@ namespace ClassSoftwareHub.Desktop.Pages;
 /// <see cref="Feedback.KindSuggestion"/>）；<c>--page=feedback-form</c> 直达时不带参数，
 /// 退回草稿里的类型。
 ///
-/// 两条出口：
-///   · 「提交至 GitHub」= 拼一个 Issue 预填链接交给系统浏览器，**不发任何网络请求**；
+/// 三条出口（2026-10-04 起主出口不再需要登录 GitHub）：
+///   · 「提交反馈」【主】= <see cref="FeedbackSubmit"/> 发到自建提交服务，令牌在服务端，
+///     服务端直接建议题；**成功即清草稿**（接口明确回了 success，留着只会诱发重复提交）；
+///   · 「在 GitHub 上提交」【兜底】= 拼一个 Issue 预填链接交给系统浏览器，需要用户登录 GitHub；
+///     服务端连不上 / 还没这条路由时改用它；
 ///   · 「在 Q 群中反馈」= 打开 Q 群卡片 + 弹提醒浮窗，浮窗里点「复制」再摊开图文流程
 ///     （见 <see cref="QqFeedbackFlyoutWindow"/> / <see cref="QqFeedbackGuideWindow"/>）。
 ///
@@ -40,11 +43,24 @@ public sealed partial class FeedbackFormPage : Page
     /// <summary>导航参数带来的类型；空串 = 没带（<c>--page=feedback-form</c> 直达）。</summary>
     private string _pendingKind = "";
 
+    /// <summary>
+    /// 本页「这次要填的类型」，用来在草稿被清空后还能把页头（图标 + 类型名 + 子类型框）撑住。
+    /// 提交成功后草稿会被丢弃，<see cref="Feedback.Draft.Kind"/> 变成空串 —— 没有这个兜底，
+    /// 页头会当场变成一片空白，看着像页面坏了。
+    /// </summary>
+    private string _pageKind = "";
+
     /// <summary>代码填控件时置位，避免 SelectionChanged 把刚设好的值又写回去（或误清子类型）。</summary>
     private bool _suppress;
 
     /// <summary>上次打开 GitHub 的时间，用于防连点（网页版是禁用按钮 3 秒）。</summary>
     private DateTimeOffset _lastOpen;
+
+    /// <summary>正在提交（服务端那条路有网络往返，期间按钮要禁用、文案要换）。</summary>
+    private bool _busy;
+
+    /// <summary>服务端建好的议题地址（服务端愿意回才有），供「查看议题」用。</summary>
+    private string? _issueUrl;
 
     /// <summary>本页是否已经初始化过 —— <see cref="FrameworkElement.Loaded"/> 可能触发多次，
     /// 而每次重新用草稿刷表单都会盖掉用户刚敲的字。</summary>
@@ -99,6 +115,7 @@ public sealed partial class FeedbackFormPage : Page
             if (saved is not null) Draft.CopyFrom(saved);
         }
         if (Draft.Kind.Length == 0) Draft.Kind = Feedback.KindReport;   // 兜底：别开出一张没有类型的表单
+        _pageKind = Draft.Kind;
 
         // 只有「报告问题」有子类型。切到别的大类时把子类型清掉；
         // 留在「报告问题」时**不动**它 —— 从草稿恢复过来的那一条要留着。
@@ -145,10 +162,11 @@ public sealed partial class FeedbackFormPage : Page
     /// <summary>页头图标 + 类型名，以及子类型下拉框显不显示（只有「报告问题」有）。</summary>
     private void ApplyKindHeader()
     {
-        var kind = Feedback.FindKind(Draft.Kind);
-        FormKindText.Text = kind?.Title ?? "";
-        FormKindImage.Source = Draft.Kind == Feedback.KindSuggestion ? _iconSuggestion : _iconReport;
-        SubKindCombo.Visibility = Draft.Kind == Feedback.KindReport
+        // 草稿被清空（提交成功）时用 _pageKind 兜住，页头不至于开天窗
+        var key = Draft.Kind.Length > 0 ? Draft.Kind : _pageKind;
+        FormKindText.Text = Feedback.FindKind(key)?.Title ?? "";
+        FormKindImage.Source = key == Feedback.KindSuggestion ? _iconSuggestion : _iconReport;
+        SubKindCombo.Visibility = key == Feedback.KindReport
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -186,31 +204,42 @@ public sealed partial class FeedbackFormPage : Page
     // 提交 / 复制
     // ════════════════════════════════════════════════════════════════
 
-    /// <summary>校验通过就返回拼好的链接；不通过时把提示填进 ErrorBar 并返回 null。</summary>
-    private Feedback.IssueLink? Prepare()
+    /// <summary>
+    /// 校验 + 联系方式加密，返回一份「可以离开本机」的草稿副本；
+    /// 不通过时把提示填进 <see cref="ErrorBar"/> 并返回 null。
+    /// <see cref="Draft"/> 本身仍留着明文，只在本机内存与本地草稿文件里。
+    /// </summary>
+    private Feedback.Draft? PrepareOutgoing()
     {
         SyncDraftFromForm();
 
         var error = Feedback.Validate(Draft);
         if (error.Length > 0)
         {
-            ErrorBar.Message = error;
-            ErrorBar.IsOpen = true;
+            ShowError("无法提交", error);
             return null;
         }
 
-        // 联系方式在离开本机前加密（内存内完成，原草稿仍留明文供本机恢复）
         var outgoing = EncryptedDraft();
         if (outgoing is null) return null;
 
         ErrorBar.IsOpen = false;
-        var link = Feedback.BuildIssueLink(outgoing, SelectedApp(), EnvRows());
+        return outgoing;
+    }
+
+    /// <summary>校验通过就返回拼好的链接；不通过时把提示填进 ErrorBar 并返回 null。</summary>
+    private Feedback.IssueLink? Prepare()
+    {
+        var outgoing = PrepareOutgoing();
+        if (outgoing is null) return null;
+
+        var link = Feedback.BuildIssueLink(outgoing, SelectedApp(), EnvRowsIfEnabled());
         TruncateBar.IsOpen = link.Truncated;
         return link;
     }
 
     /// <summary>
-    /// 返回一份「联系方式已加密」的草稿副本，专供**离开本机**的那份内容用（Issue 链接 / 复制文本）。
+    /// 返回一份「联系方式已加密」的草稿副本，专供**离开本机**的那份内容用（提交 / Issue 链接 / 复制文本）。
     /// <see cref="Draft"/> 本身保留明文，只存在于本机内存与本地草稿文件里。
     /// ⛔ 只加密、绝不解密；联系方式为空时原样返回。
     /// 加密失败返回 null 并弹提示 —— 宁可让用户重试，也绝不把明文发出去。
@@ -228,17 +257,116 @@ public sealed partial class FeedbackFormPage : Page
         }
         catch
         {
-            ErrorBar.Message = "联系方式加密失败，请稍后重试。若反复失败，可改用「在 Q 群中反馈」联系维护者。";
-            ErrorBar.IsOpen = true;
+            ShowError("无法提交",
+                "联系方式加密失败，请稍后重试。若反复失败，可改用「在 Q 群中反馈」联系维护者。");
             TruncateBar.IsOpen = false;
             return null;
         }
     }
 
+    private void ShowError(string title, string message)
+    {
+        ErrorBar.Title = title;
+        ErrorBar.Message = message;
+        ErrorBar.IsOpen = true;
+    }
+
     private SoftwareApp? SelectedApp() => App.Content.FindById(Draft.AppId);
+
+    // ════════════════════════════════════════════════════════════════
+    // 出口①：提交反馈（走自建服务，不用登录）
+    // ════════════════════════════════════════════════════════════════
+
+    private async void Submit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+
+        var outgoing = PrepareOutgoing();
+        if (outgoing is null) return;
+
+        // 服务端这条路没有 URL 长度限制，内容给完整的一份，不做截断。
+        // ⚠️ 只发**原始字段**：标题不带 [类型] 前缀、正文不套模板 —— 那两样服务端自己会拼
+        //    （见 Services/FeedbackSubmit 的契约注释）。在这里拼了，议题里会套两层。
+        TruncateBar.IsOpen = false;
+        var title = outgoing.Title.Trim();
+        var detail = Feedback.BuildSubmitDetail(outgoing, EnvRowsIfEnabled());
+
+        // 发出去之前先把草稿落盘：万一半路失败 / 应用被关掉，内容还在
+        FeedbackDraftStore.Save(Draft);
+
+        _busy = true;
+        SetBusy(true);
+        SuccessBar.IsOpen = false;
+
+        try
+        {
+            var result = await FeedbackSubmit.SubmitAsync(
+                outgoing.Kind, outgoing.SubKind, outgoing.AppId,
+                title, detail, outgoing.Contact.Trim());
+
+            if (!result.Ok)
+            {
+                ShowError("提交失败", result.Message + " 可改用「在 GitHub 上提交」或「在 Q 群中反馈」。");
+                return;
+            }
+
+            // 接口明确回了成功 —— 这时清草稿是安全的。
+            // ⚠️ 不清反而有害：草稿条会一直挂着，用户以为没提交成功、再点一次就建出重复议题。
+            FeedbackDraftStore.Discard();
+            ResetForm();
+
+            _issueUrl = result.Url;
+            ViewIssueButton.Visibility = string.IsNullOrWhiteSpace(result.Url)
+                ? Visibility.Collapsed : Visibility.Visible;
+            SuccessBar.Message = result.Message;
+            SuccessBar.IsOpen = true;
+            ErrorBar.IsOpen = false;
+        }
+        catch (Exception ex)
+        {
+            ShowError("提交失败", "发生意外错误：" + ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+            SetBusy(false);
+        }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        SubmitButton.IsEnabled = !busy;
+        SubmitLabel.Text = busy ? "正在提交" : "提交反馈";
+        OpenIssueButton.IsEnabled = !busy;
+        QqGroupButton.IsEnabled = !busy;
+    }
+
+    /// <summary>提交成功后把表单清干净（草稿已被丢弃，输入框也得跟着空，否则容易被再提交一次）。</summary>
+    private void ResetForm()
+    {
+        _suppress = true;
+        TitleBox.Text = "";
+        DetailBox.Text = "";
+        ContactBox.Text = "";
+        _suppress = false;
+
+        UpdateEnvPreview();
+        ApplyKindHeader();      // 草稿清空后靠 _pageKind 把页头撑住
+    }
+
+    private void ViewIssue_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(_issueUrl)) App.MainWindow?.OpenExternal(_issueUrl!);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 出口②：在 GitHub 上提交（兜底，需要登录）
+    // ════════════════════════════════════════════════════════════════
 
     private void OpenIssue_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
+
         var link = Prepare();
         if (link is null) return;
 
@@ -252,6 +380,10 @@ public sealed partial class FeedbackFormPage : Page
         App.MainWindow?.OpenExternal(link.Url);
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // 出口③：在 Q 群中反馈
+    // ════════════════════════════════════════════════════════════════
+
     /// <summary>
     /// 「在 Q 群中反馈」：打开 Q 群卡片 + 弹「加群后请复制反馈信息」浮窗。
     /// 浮窗里点「复制」才真正写剪贴板，并顺势摊开图文提交流程窗。
@@ -263,6 +395,8 @@ public sealed partial class FeedbackFormPage : Page
     /// </summary>
     private void QqGroup_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
+
         var text = PrepareCopyText();
         if (text is null) return;
 
@@ -283,23 +417,10 @@ public sealed partial class FeedbackFormPage : Page
     /// </summary>
     private string? PrepareCopyText()
     {
-        SyncDraftFromForm();
-
-        var error = Feedback.Validate(Draft);
-        if (error.Length > 0)
-        {
-            ErrorBar.Message = error;
-            ErrorBar.IsOpen = true;
-            return null;
-        }
-
-        ErrorBar.IsOpen = false;
-
-        // 复制出去的内容同样会离开本机（贴进 Q 群相册），联系方式一样只给密文
-        var outgoing = EncryptedDraft();
+        var outgoing = PrepareOutgoing();
         if (outgoing is null) return null;
 
-        var body = Feedback.BuildBody(outgoing, SelectedApp(), EnvRows());
+        var body = Feedback.BuildBody(outgoing, SelectedApp(), EnvRowsIfEnabled());
         return Feedback.BuildTitle(outgoing) + "\n\n" + body;
     }
 
@@ -329,6 +450,14 @@ public sealed partial class FeedbackFormPage : Page
         // 空值不出现在正文里（比如注册表读不到）
         return rows.Where(r => r.Value.Length > 0).ToList();
     }
+
+    /// <summary>
+    /// 按「随反馈附上本机信息」的勾选状态给环境信息：没勾就返回 <c>null</c>，
+    /// 正文 / 提交详情里那几行就整段不出现。
+    /// ⚠️ 之前三个出口都无条件传 <see cref="EnvRows"/>，勾选框形同虚设 —— 用户取消勾选后
+    ///    本机版本与系统信息照样跟着反馈出去（2026-10-04 修）。三条出口统一走这个方法。
+    /// </summary>
+    private List<Feedback.EnvRow>? EnvRowsIfEnabled() => Draft.IncludeEnv ? EnvRows() : null;
 
     private void UpdateEnvPreview()
     {

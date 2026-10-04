@@ -104,9 +104,10 @@ public static class EchoCaveService
     /// <summary>
     /// 投稿一条字条 —— **走「提交软件」同一套自建服务**（令牌在服务端，客户端只发内容）：
     /// <c>POST {入口}/api/echocave</c>，请求体 <c>{ "text": "…" }</c>，
-    /// 服务端负责写进仓库 <c>回声洞/messages/messageN.json</c> 并开审核。
-    /// 入口顺序、超时、出错体解析都与提交软件一致（{success,message,error}）。
+    /// 服务端负责落一份 <c>submissions/echo-*.json</c> 草稿 + 开审核 Issue，
+    /// 审核通过后由工作流收进 <c>回声洞/messages/messageN.json</c>。
     ///
+    /// 入口顺序、超时、出错体解析都在 <see cref="SubmitClient"/> 里，三条路共用。
     /// 不抛异常：连不上 / 服务端还没这条路由，都返回 (false, 人话)，界面上照说照显示。
     /// </summary>
     public static async Task<(bool Ok, string Message)> SubmitAsync(string text, CancellationToken ct = default)
@@ -114,51 +115,14 @@ public static class EchoCaveService
         text = (text ?? "").Trim();
         if (text.Length == 0) return (false, "还没写内容。");
 
-        var payload = JsonSerializer.Serialize(new { text });
+        var reply = await SubmitClient
+            .PostAsync("/api/echocave", JsonSerializer.Serialize(new { text }),
+                "已提交，审核通过后就会出现在回声洞里。", ct)
+            .ConfigureAwait(false);
 
-        foreach (var baseUrl in ShellConfig.OrderedSubmitEndpoints())
-        {
-            try
-            {
-                using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                budget.CancelAfter(TimeSpan.FromMilliseconds(ShellConfig.SubmitTimeoutMs));
-
-                using var content = new StringContent(payload, Utf8NoBom, "application/json");
-                using var response = await Http
-                    .PostAsync(baseUrl + "/api/echocave", content, budget.Token)
-                    .ConfigureAwait(false);
-                var body = await response.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
-
-                using var doc = JsonDocument.Parse(body);
-                var root = doc.RootElement;
-                var ok = root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True;
-                var hasError = root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String;
-                if (!ok && !hasError) continue;   // 不是这个接口的响应（回源还没生效时会返回 nginx 错误页）
-
-                ShellConfig.RememberSubmitEndpoint(baseUrl);
-
-                if (ok)
-                {
-                    var message = root.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.String
-                        ? msg.GetString()
-                        : null;
-                    return (true, string.IsNullOrWhiteSpace(message)
-                        ? "已提交，审核通过后就会出现在回声洞里。"
-                        : message!);
-                }
-                return (false, (hasError ? err.GetString() : null) ?? "服务端没有接受这条内容。");
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch
-            {
-                // 连不上 / 超时 / 响应不是 JSON（路由还没有）→ 换下一个入口
-            }
-        }
-
-        return (false, "连不上投稿服务（网络或地区限制），可以改用下方入口在 GitHub 网页上投稿。");
+        return reply is null
+            ? (false, "连不上投稿服务（网络或地区限制），可以改用下方入口在 GitHub 网页上投稿。")
+            : (reply.Ok, reply.Message);
     }
 
     /// <summary>本机缓存（网络不通时显示上次取到的内容）。</summary>
