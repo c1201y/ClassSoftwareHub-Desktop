@@ -32,7 +32,7 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.1.0-insider1.5";
+    public const string ShellVersion = "1.1.0-insider1.6";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -67,8 +67,23 @@ public static class ShellConfig
     /// </summary>
     public static string DefaultUpdateChannel => IsInsider ? "insider" : "stable";
 
-    /// <summary>与站点 v2.3.4 对齐的适配版本号（内容包里读不到 app.version 时的兜底）。</summary>
+    /// <summary>与站点 v2.3.4 对齐的适配版本号（短号，传给网页做核对用的那个值）。</summary>
     public const string SiteVersionTarget = "v2.3.4";
+
+    /// <summary>
+    /// 设置页「站点版本」那一行显示的全文。
+    ///
+    /// ⛔⛔ **不要再改回去读内容包的 <c>text/ui.json → app.version</c>**（2026-10-04 踩实了）：
+    ///   内容包里除了 <c>软件数据/apps/*.json</c>，其它文件（<c>text/</c>、<c>manifest.json</c>）**都不联网更新** ——
+    ///   <see cref="Services.GithubContentSync"/> 只拉「软件数据/」，而 <c>SeedMissingFiles</c> 又只在文件**缺失**时才从安装包补
+    ///   （<c>overwrite: false</c>）。于是装机那一刻写进缓存的那份文案就**冻结**了：
+    ///   该字段一直停在装机时那版（实测老机器上读到的是 2.3.2），怎么升级客户端都不会变，
+    ///   用户就会看到「客户端 1.6 / 站点版本 2.3.2」这种自相矛盾的搭配。
+    ///
+    /// 站点的真实版本只有客户端自己知道（发版时人工对齐），所以这里以**编译进程序的常量**为准，
+    /// 每次发版跟着 <see cref="SiteVersionTarget"/> 一起改。
+    /// </summary>
+    public const string SiteVersionDisplay = "v2.3.4 - Tangram (20260927PR01)";
 
     public const string WebView2DownloadUrl = "https://developer.microsoft.com/microsoft-edge/webview2/";
 

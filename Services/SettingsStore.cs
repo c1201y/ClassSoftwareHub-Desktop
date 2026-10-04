@@ -249,6 +249,19 @@ public sealed class AppSettings
     /// false = 按规格书走「网页判断 → 桥接消息 → 原生拖动」。
     /// </summary>
     public bool NativeCaptionRegions { get; set; } = false;
+
+    /// <summary>
+    /// 课堂计时器到点的自定义铃声（完整路径；空 = 用内嵌的默认铃声）。
+    /// ⚠️ 只存路径不存副本：这是本地工具，用户自己挑的文件放在他自己知道的地方；
+    ///    哪天文件没了由 <c>TimerAlarm.ResolvePath</c> 退回默认，不会静默哑掉。
+    /// </summary>
+    public string TimerAlarmPath { get; set; } = "";
+
+    /// <summary>
+    /// 全屏倒计时 / 全屏秒表的背景是否沿用「全屏时钟」那套外观（背景图、蒙版、底色、字色）。
+    /// 开着的场合，投影出来的计时盘跟教室那块全屏时钟长一样，不会一边一个画风。
+    /// </summary>
+    public bool TimerUseClockBackground { get; set; }
 }
 
 /// <summary>设置存储：%LOCALAPPDATA%\ClassSoftwareHub\settings.json</summary>

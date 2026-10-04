@@ -193,6 +193,7 @@ public static class WindowChrome
             catch (Exception ex) { ChromeLog("  subclass FAILED: " + ex.GetType().Name + " " + ex.Message); }
 
             SetDarkMode(hwnd, dark);
+            SetBackgroundFallback(hwnd, dark);
 
             if (borderless)
             {
@@ -264,6 +265,59 @@ public static class WindowChrome
             }
         }
         catch { }
+    }
+
+    // ── 窗口底色兜底（2026-10-04）──────────────────────────────────
+    // 起因（Nick 截图）：点开侧边栏的一瞬间会冒出一个**纯黑框**。
+    //   实测（连拍 + 帧间差分，见会话记忆）确认根因：展开时窗口被放大，
+    //   新露出来的那几帧"XAML 内容还没铺出来 / 亚克力底还没跟上"，
+    //   这几帧唯一被画上去的东西就是**窗口类的背景刷** —— 而 WinUI 3 注册窗口类时给的是**黑刷**，
+    //   于是整条纯黑闪过去。
+    //
+    // 治法：把窗口类背景刷换成主题底色。它本来就是"没内容时兜底的那层颜色"，
+    //      换成主题色之后即便内容还没画完，看到的也只是底色，不再是纯黑。
+    //
+    // ⚠️ 三条注意（别顺手改）：
+    //   1) 刷子句柄必须**活到进程结束** —— 窗口类持有它，删了下次擦背景就是野指针。所以缓存在静态字段里，从不删除；
+    //   2) 窗口类是**进程内共享**的（WinUI 所有窗口同一个类），因此这一改对所有窗口生效 ——
+    //      这正是想要的：主窗口、音量浮窗的首帧也是同一种黑；
+    //   3) 必须在**拥有该窗口的线程**上调用（本文件的调用方都在 UI 线程）。
+    private const int GclpHbrBackground = -10;
+
+    [DllImport("user32.dll", EntryPoint = "SetClassLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetClassLongPtrW(IntPtr hwnd, int index, IntPtr value);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateSolidBrush(uint color);
+
+    private static IntPtr _bgBrushDark = IntPtr.Zero;
+    private static IntPtr _bgBrushLight = IntPtr.Zero;
+
+    /// <summary>
+    /// 把窗口类背景刷设成主题底色（幂等：同一主题只建一次刷子）。
+    /// 深色 #202020 / 浅色 #F3F3F3 —— 与侧边栏、浮窗面板压的那层底色同一族，换了不会突兀。
+    /// </summary>
+    public static void SetBackgroundFallback(IntPtr hwnd, bool dark)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        try
+        {
+            var brush = dark ? _bgBrushDark : _bgBrushLight;
+            if (brush == IntPtr.Zero)
+            {
+                // COLORREF = 0x00BBGGRR
+                brush = CreateSolidBrush(dark ? 0x00202020u : 0x00F3F3F3u);
+                if (brush == IntPtr.Zero) return;
+                if (dark) _bgBrushDark = brush; else _bgBrushLight = brush;
+            }
+
+            var old = SetClassLongPtrW(hwnd, GclpHbrBackground, brush);
+            if (old != brush) ChromeLog($"背景刷 → {(dark ? "深色 #202020" : "浅色 #F3F3F3")}（old={old}）");
+        }
+        catch (Exception ex)
+        {
+            ChromeLog("SetBackgroundFallback 失败: " + ex.Message);
+        }
     }
 
     /// <summary>恢复系统默认边框（要用的时候再说，先留着）。</summary>

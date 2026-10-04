@@ -39,16 +39,37 @@
                         Click="OpenPalette_Click" ToolTipService.ToolTip="打开置顶小窗口，便于随时计时" />
             </Grid>
 
-            <!-- 模式选择：⚠️ MinWidth 必须清零（RadioButton 默认 120），IsChecked 一律在代码里赋初值 -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="模式" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,2,0" />
-                <RadioButton x:Name="BtnCountdown" GroupName="TimerMode" Content="倒计时" MinWidth="0"
-                             Checked="Mode_Changed" />
-                <RadioButton x:Name="BtnStopwatch" GroupName="TimerMode" Content="秒表" MinWidth="0"
-                             Checked="Mode_Changed" />
-                <TextBlock FontSize="12" Opacity="0.55" VerticalAlignment="Center" Margin="10,0,0,0"
+            <!-- 模式选择：⚠️ MinWidth 必须清零（RadioButton 默认 120），IsChecked 一律在代码里赋初值。
+                 2026-10-04（Nick）：这一行右边再加「自定义铃声」按钮 + 「使用全屏时钟背景设置」开关。
+                 改成三列 —— 说明文字落中间那一列（* 宽），窗口窄的时候由它自己省略，
+                 不会把右边两个控件挤出去。 -->
+            <Grid Grid.Row="1" ColumnSpacing="12" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="模式" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,2,0" />
+                    <RadioButton x:Name="BtnCountdown" GroupName="TimerMode" Content="倒计时" MinWidth="0"
+                                 Checked="Mode_Changed" />
+                    <RadioButton x:Name="BtnStopwatch" GroupName="TimerMode" Content="秒表" MinWidth="0"
+                                 Checked="Mode_Changed" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="1" FontSize="12" Opacity="0.55" VerticalAlignment="Center" Margin="10,0,0,0"
+                           TextTrimming="CharacterEllipsis"
                            Text="倒计时设定时长后倒数，到点响铃；秒表从 0 开始正向计时。" />
-            </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Button x:Name="AlarmButton" Content="自定义铃声" Click="Alarm_Click" MinWidth="0" />
+                    <TextBlock Text="使用全屏时钟背景设置" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+                    <!-- ⚠️ MinWidth 必须清零；On/Off 文案留空 —— 标签已经在左边了，再来个「开/关」就重复 -->
+                    <ToggleSwitch x:Name="ClockBgSwitch" MinWidth="0" OffContent="" OnContent=""
+                                  Toggled="ClockBg_Toggled" />
+                </StackPanel>
+            </Grid>
 
             <!-- ═══ 计时盘：这一页的主角 ═══
                  只保留一块素净底，不给描边 —— 省掉"方块包方块"的厚重感，视线直接落在大字上。 -->
@@ -82,20 +103,35 @@
             <StackPanel x:Name="SetupPanel" Grid.Row="3" Spacing="8" HorizontalAlignment="Center">
                 <TextBlock x:Name="SetupTitle" Text="设定时长" FontSize="12" Opacity="0.6"
                            HorizontalAlignment="Center" />
-                <StackPanel x:Name="SetRow" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                    <!-- 2026-10-03（Nick）：分/秒两个框 → 原生 TimePicker，多出「小时」单位。
-                         长时段（公开课 90 分钟、晚自习）不用再先换算成多少分钟。 -->
-                    <TimePicker x:Name="DurationPicker" Width="200" MinuteIncrement="1"
-                                VerticalAlignment="Center" />
-                    <!-- 预设紧贴输入框：原来隔着 16 的距离、按钮之间又各留 10，一行拉出去老远 -->
-                    <Border Width="1" Height="20" Margin="10,0,4,0" VerticalAlignment="Center"
-                            Background="{ThemeResource CardStrokeColorDefaultBrush}" />
-                    <Button Content="1 分钟" Click="Preset_Click" Tag="1" />
-                    <Button Content="3 分钟" Click="Preset_Click" Tag="3" />
-                    <Button Content="5 分钟" Click="Preset_Click" Tag="5" />
-                    <Button Content="10 分钟" Click="Preset_Click" Tag="10" />
-                    <Button Content="15 分钟" Click="Preset_Click" Tag="15" />
-                    <Button Content="1 小时" Click="Preset_Click" Tag="60" />
+                <!-- 2026-10-04（Nick）：这一整块与**网页版** `TimerTool.vue` 对齐 ——
+                     网页版就是「分/秒输入框一行、预设另起一行」，桌面端原来挤成一行，
+                     窗口一窄（≥700 的紧凑导航就是这个区间）左右两头都会被裁掉。
+                     SetRow 现在是**竖排**容器（里面两行），所以 SetMode 里 SetRow.Visibility 照旧管用。 -->
+                <StackPanel x:Name="SetRow" Spacing="12" HorizontalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <!-- ═══ TimePicker 已撤 ═══
+                             TimePicker 的弹出列表只有「时 / 分」、**没有秒**（10 秒倒计时都设不了），
+                             而且它的列表默认朝上展开，会把上面那行「05:00」大字整块盖住（就是"起飞"）。
+                             换回分/秒两个 NumberBox（Compact 步进，只弹一个小加减面板，不糊大字）。
+                             ⚠️ 分上限 999 —— 90 分钟的公开课直接填 90，不用换算成小时（同网页版）。 -->
+                        <NumberBox x:Name="MinBox" Width="92" MinWidth="0" Value="5"
+                                   Minimum="0" Maximum="999" SmallChange="1" SpinButtonPlacementMode="Compact"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="分" FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+                        <NumberBox x:Name="SecBox" Width="92" MinWidth="0" Value="0"
+                                   Minimum="0" Maximum="59" SmallChange="1" SpinButtonPlacementMode="Compact"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="秒" FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="PresetRow" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button Content="1 分钟" Click="Preset_Click" Tag="1" />
+                        <Button Content="3 分钟" Click="Preset_Click" Tag="3" />
+                        <Button Content="5 分钟" Click="Preset_Click" Tag="5" />
+                        <Button Content="10 分钟" Click="Preset_Click" Tag="10" />
+                        <Button Content="15 分钟" Click="Preset_Click" Tag="15" />
+                        <Button Content="1 小时" Click="Preset_Click" Tag="60" />
+                    </StackPanel>
                 </StackPanel>
                 <TextBlock x:Name="StopwatchHint" Visibility="Collapsed" FontSize="12" Opacity="0.65"
                            HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"

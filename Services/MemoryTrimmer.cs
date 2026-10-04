@@ -15,15 +15,20 @@ namespace ClassSoftwareHub.Desktop.Services;
 ///   ② 再把内存真还给系统 —— GC + EmptyWorkingSet（把闲置页丢进系统 standby list，
 ///      进程的工作集会立刻降下来，别的程序要用内存时系统优先回收）
 ///
-/// ⛔⛔ **绝不挂回切页路径** —— 这是 2026-10-01 实测否掉的：切页后 3 秒在 UI 线程上来一次全量
-///    GC + WaitForPendingFinalizers，正好落在用户开始滚动/点击的瞬间，"切过去先顿一下、回来更顿"。
-///    这条结论跟"什么时候允许收"无关，别因为改了触发条件就顺手把它搬回去。
+/// ⛔⛔ **切页路径 2026-10-04 又被挂回来了 —— 但别照抄 2026-10-01 那版**（Nick 要求回到"跳一页收一次"的激进思路）。
+///   两版的差别是**本质**的，不是调参：
+///     · 被否掉那版：在 **UI 线程**上跑 `GC.Collect` + `WaitForPendingFinalizers`【阻塞】，还延时 3 秒 ——
+///       正好落在用户"切过去、刚开始滚动/点击"的瞬间，所以是"切过去先顿一下、回来更顿"；
+///     · 现在这版：触发点只做一次节流判断，回收本体走的还是 <see cref="DoTrim"/> 的**后台线程**、
+///       `blocking:false`、不阻塞 UI；并且由调用方错开约 0.6 秒（等切页动画与首帧过去）再触发。
+///   也就是说："顿"的根源（UI 线程阻塞回收）没有回来，回来的只是"收得勤"。
 ///
 /// 2026-10-02 改触发条件（Nick：用户一直可见地乱点，占用也能顶到半个 G）：
 ///   原先只在"窗口看不见"（托盘 / 最小化）时收 —— 用户不最小化就永远收不到，等于没有回收。
-///   现在**两条路都能收**：
+///   现在**三条路都能收**：
 ///     · 窗口看不见 → 立刻收（最该收的时候，不等水位、不等停手）
-///     · 窗口可见   → **水位 + 停手** 双条件，由 <see cref="StartWatch"/> 起的巡检线程每 5 秒问一次
+///     · 切一页   → 停稳约 0.6 秒收一次（2026-10-04 加回，见上）
+///     · 窗口可见 → **水位 + 停手** 双条件，由 <see cref="StartWatch"/> 起的巡检线程每 5 秒问一次
 ///   "停手"用系统级最后输入时间（<c>GetLastInputInfo</c>）判断：不挂钩子、零侵入、也不区分
 ///   用户在我们窗口里还是别的窗口里 —— 反正他此刻没在操作，收一下就不会被感觉到。
 ///   水位分两档：软水位等停手 10 秒（多半在看内容），硬水位只等 2.5 秒（再涨就要出事，宁可顿一下）。
@@ -69,6 +74,12 @@ public static class MemoryTrimmer
 
     /// <summary>巡检间隔。</summary>
     private const int PollMs = 5000;
+
+    /// <summary>切页回收的节流：连着点导航时不要每一下都 GC（两下导航间隔常小于 1 秒）。</summary>
+    private const int NavCooldownMs = 1200;
+
+    /// <summary>切页之后等这么久再收 —— 让切页动画和首帧先过去，别跟在建的页面抢内存页。</summary>
+    private const int NavDelayMs = 600;
 
     /// <summary>"够水位了但还没收"的观察日志最小间隔（别把日志刷爆）。</summary>
     private const int ObserveLogMs = 60000;
@@ -182,6 +193,41 @@ public static class MemoryTrimmer
         Run($"{Mb(ws):0}MB / 停手 {idle / 1000.0:0.#}s{(hard ? " / 硬水位" : "")}",
             hard ? CooldownHardMs : CooldownSoftMs);
     }
+
+    /// <summary>
+    /// 切完一页之后调（<c>Pages/ShellPage.xaml.cs</c> 的 <c>ContentFrame.Navigated</c>）。
+    ///
+    /// 行为：错开 <see cref="NavDelayMs"/> 再收一次；连点导航时由 <see cref="NavCooldownMs"/> 节流。
+    /// **不看水位、不等停手** —— 这就是 Nick 要的"跳一页收一次"。
+    ///
+    /// ⚠️ 它跟 2026-10-01 被否掉的那版**不是一回事**（那版在 UI 线程上同步 GC 且延时 3 秒，
+    ///    详见类注释）。这里只是"触发"：UI 线程上仅有一次节流判断，回收本体在后台线程。
+    /// </summary>
+    public static void ScheduleAfterNavigate()
+    {
+        try
+        {
+            var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (queue is null) { OnNavigated(); return; }
+
+            var timer = queue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(NavDelayMs);
+            timer.IsRepeating = false;
+            timer.Tick += (s, _) =>
+            {
+                if (s is Microsoft.UI.Dispatching.DispatcherQueueTimer t) t.Stop();
+                OnNavigated();
+            };
+            timer.Start();
+        }
+        catch
+        {
+            OnNavigated();
+        }
+    }
+
+    /// <summary>切页回收本体（节流走 <see cref="Run"/> 那个共享的"上次回收时间"，不会跟别的路重复收）。</summary>
+    private static void OnNavigated() => Run("切页", NavCooldownMs);
 
     /// <summary>过节流就真收（换后台线程做）。</summary>
     private static void Run(string reason, int cooldownMs)

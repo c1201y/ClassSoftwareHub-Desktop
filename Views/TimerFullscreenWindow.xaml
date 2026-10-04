@@ -11,6 +11,10 @@
     -->
     <Grid x:Name="Root" IsTabStop="True" KeyDown="Root_KeyDown" DoubleTapped="Root_DoubleTapped"
           Background="#FF101418">
+        <!-- 背景层：「使用全屏时钟背景设置」开着时由 ClockBackdrop 铺成时钟那套外观（默认整层隐藏） -->
+        <Image x:Name="BgImage" Stretch="UniformToFill" IsHitTestVisible="False" Visibility="Collapsed" />
+        <Border x:Name="BgVeil" IsHitTestVisible="False" />
+
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18">
             <TextBlock x:Name="TimeText" Text="00:00" FontSize="300" FontWeight="Bold"
                        FontFamily="Bahnschrift" Foreground="#FFF2F4F7" HorizontalAlignment="Center" />

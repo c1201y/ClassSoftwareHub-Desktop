@@ -89,6 +89,11 @@ public sealed partial class TimerFullscreenWindow : Window
         Root.PointerMoved += Root_PointerMoved;
         Root.Tapped += Root_Tapped;
 
+        // 「使用全屏时钟背景设置」开着 → 把时钟那套背景（图 / 蒙版 / 底色 / 字色）铺上；
+        // 关着就保持上面那个固定的深底。见 Views/ClockBackdrop.cs。
+        if (App.Settings.Current.TimerUseClockBackground)
+            ClockBackdrop.Apply(Root, BgImage, BgVeil, Bar, TimeText, StateText);
+
         Closed += OnClosed;
     }
 

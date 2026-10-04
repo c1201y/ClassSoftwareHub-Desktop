@@ -40,14 +40,15 @@ public sealed partial class ShellPage : UserControl
         ApplyPaneInset();
 
         // 切页计时（Debug / CSH_PERF=1 才有输出，见 Core/PerfLog.cs）。
-        // ⚠️ 这里**不再**顺手调 MemoryTrimmer —— 切页之后 3 秒在 UI 线程上来一次全量 GC + WaitForPendingFinalizers，
-        //    正好落在用户开始滚动/点击的时候，是"切过去先顿一下"的主因之一。
-        //    回收改由 MemoryTrimmer 自己判定：不可见时立刻收，可见时走"水位 + 停手"（见该文件）。
+        // 切页顺带收一次内存（2026-10-04，Nick 要求回到"跳一页收一次"的激进思路）。
+        // ⚠️ 收本体在**后台线程**、且错开 0.6 秒（等动画与首帧过去）—— 跟 2026-10-01 被否掉的
+        //    "UI 线程上延时 3 秒同步 GC"不是一回事，详见 Services/MemoryTrimmer.cs 的类注释。
         ContentFrame.Navigating += (_, e) => PerfLog.NavBegin(CurrentTag);
         ContentFrame.Navigated += (_, _) =>
         {
             PerfLog.NavEnd(ContentFrame.Content);
             UpdateBackButton();
+            Services.MemoryTrimmer.ScheduleAfterNavigate();
         };
     }
 

@@ -119,10 +119,11 @@ public sealed partial class SettingsPage : Page
 
         AboutApp.Text = ShellConfig.AppName;
         AboutVersion.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
-        var siteVersion = App.Content.Ui.AppVersion;
-        AboutSiteVersion.Text = siteVersion.Length > 0
-            ? $"站点版本：{siteVersion}"
-            : $"站点版本：{ShellConfig.SiteVersionTarget}";
+
+        // 站点版本**以编译进程序的常量为准**，不读内容包的 app.version：
+        // 内容包的 text/ 不联网更新、装机即冻结，读它会一直显示装机那天那版（实测停在 v2.3.2）。
+        // 详见 ShellConfig.SiteVersionDisplay 的注释。
+        AboutSiteVersion.Text = $"站点版本：{ShellConfig.SiteVersionDisplay}";
     }
 
     private void UpdateMinimizeAvailability()

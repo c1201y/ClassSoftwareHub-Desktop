@@ -84,6 +84,10 @@ public sealed partial class StopwatchFullscreenWindow : Window
         _exitTimer.IsRepeating = true;
         _exitTimer.Tick += (_, _) => FadeExit();
 
+        // 「使用全屏时钟背景设置」开着 → 铺时钟那套背景；关着保持固定深底。见 Views/ClockBackdrop.cs。
+        if (App.Settings.Current.TimerUseClockBackground)
+            ClockBackdrop.Apply(Root, BgImage, BgVeil, null, TimeText, CsText, StateText);
+
         Closed += OnClosed;
     }
 

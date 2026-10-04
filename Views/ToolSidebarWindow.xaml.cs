@@ -412,6 +412,7 @@ public sealed partial class ToolSidebarWindow : Window
             var hwnd = WindowNative.GetWindowHandle(this);
             _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(hwnd));
             _appWindow.Title = "工具侧边栏";
+
             _appWindow.IsShownInSwitchers = false;          // 不进任务栏、不进 Alt+Tab
 
             if (_appWindow.Presenter is OverlappedPresenter p)
@@ -473,6 +474,9 @@ public sealed partial class ToolSidebarWindow : Window
 
             var hwnd = WindowNative.GetWindowHandle(this);
 
+            // 首显那几帧亚克力底还没跟上 —— 面板先用不透明主题底色顶住，别让"没底的黑"露出来。
+            HoldOpaqueForTransition();
+
             if (!_shownOnce)
             {
                 _shownOnce = true;
@@ -512,13 +516,50 @@ public sealed partial class ToolSidebarWindow : Window
         try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); } catch { }
     }
 
-    /// <summary>亚克力上面再压一层很淡的色：深色主题压深、浅色主题压白，保证字看得清。</summary>
-    private void ApplyPanelBrush()
+    /// <summary>
+    /// 面板底色：亚克力上面再压一层很淡的色（深色压深、浅色压白），字才看得清。
+    ///
+    /// <paramref name="opaque"/>=true 时**不压薄纱，直接用不透明的主题底色** ——
+    /// 专门给"窗口刚放大 / 刚显形"的那几帧用：那会儿亚克力底还没跟上，
+    /// 半透明薄纱压上去等于压在黑上，一整条纯黑就是这么来的（2026-10-04 Nick 截图那个黑框）。
+    /// 色值跟 <see cref="Core.WindowChrome.SetBackgroundFallback"/> 的兜底底色同族，别各挑各的。
+    /// </summary>
+    private void ApplyPanelBrush(bool opaque = false)
     {
         var dark = Root.ActualTheme == ElementTheme.Dark;
-        Panel.Background = new SolidColorBrush(dark
-            ? Windows.UI.Color.FromArgb(95, 20, 20, 20)
-            : Windows.UI.Color.FromArgb(110, 255, 255, 255));
+        Panel.Background = new SolidColorBrush(opaque
+            ? (dark ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
+                    : Windows.UI.Color.FromArgb(255, 243, 243, 243))
+            : (dark ? Windows.UI.Color.FromArgb(95, 20, 20, 20)
+                    : Windows.UI.Color.FromArgb(110, 255, 255, 255)));
+    }
+
+    /// <summary>
+    /// 过渡期保护：先把面板压成**不透明**，过 <paramref name="frames"/> 帧再放回"亚克力 + 薄纱"。
+    ///
+    /// 为什么只保前几帧：亚克力底跟上就不需要它了。给多了整段动画都是纯色面板，
+    /// 材质会"啪"一下冒出来 —— 反而更显眼。
+    /// ⚠️ 帧数别低于 4：慢机器（本次反馈就是教学机）亚克力底要好几帧才跟上。
+    /// </summary>
+    private void HoldOpaqueForTransition(int frames = 8)
+    {
+        ApplyPanelBrush(opaque: true);
+        try
+        {
+            var left = frames;
+            EventHandler<object>? handler = null;
+            handler = (_, _) =>
+            {
+                if (left-- > 0) return;
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= handler!;
+                ApplyPanelBrush();
+            };
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += handler;
+        }
+        catch
+        {
+            ApplyPanelBrush();       // 挂不上帧回调就直接恢复，别留个纯色面板
+        }
     }
 
     // ── 展开 / 收起 / 隐藏 ───────────────────────────────────
@@ -529,6 +570,11 @@ public sealed partial class ToolSidebarWindow : Window
         _collapseEpoch++;                                 // 取消可能还在跑的"收起滑出/抓手淡入"
         _expanded = true;
         ResetPanelOpacity();
+
+        // 这一下会把窗口放大到展开尺寸（见 SlideInFromEdge），新露出来的那几帧
+        // "内容还没铺出来 / 亚克力底还没跟上"就是那块黑框的来源 —— 先用不透明主题底色顶住。
+        HoldOpaqueForTransition();
+
         CollapsedView.Visibility = Visibility.Collapsed;
         ExpandedView.Visibility = Visibility.Visible;
         ApplyScrollLimit();                               // 先把滚动范围算好；尺寸交给滑入动画一帧设到位

@@ -216,14 +216,20 @@
             </NavigationView.FooterMenuItems>
 
             <!--
-                CacheSize：原本是 0（页面一切走就丢），但那样每次回来都要重新解析 XAML + 重建整棵树，
-                切页能明显看出顿一下。现在留 12 个（页面用 NavigationCacheMode="Enabled" 的才真进缓存，
-                其余仍旧走完就丢）。内存账：常在的几页都是轻量可视化，合计约 10~30MB；
-                真正的"内存还给系统"改由 MemoryTrimmer 在窗口不可见时做（见 Services/MemoryTrimmer.cs）。
+                CacheSize（2026-10-04 由 12 收紧到 2）：
+                原本是 0（页面一切走就丢，每次回来都要重新解析 XAML + 重建整棵树，切页能明显顿一下）；
+                10-01 为了消掉那个顿，一口气放到 12。Nick 现在要"回到最开始那种激进省内存的思路"，
+                所以**不再攒一堆页面** —— 只留最近 2 页（够"来回切"不重解析，又不会把十来个页面的
+                可视化树长期钉在内存里）。
+                ⛔ 没取 0：那正是 10-01 实测"切页明显顿一下"的配置，代价已经被否过一次。
+                ⛔ 没取 12：Nick 明确说"缓存各种页面…还是不够好"。
+                页面用 NavigationCacheMode="Enabled" 的才真进缓存，其余仍旧走完就丢；
+                "内存立刻降下来"主要还是靠 MemoryTrimmer 的回收时机（现在切一页就收一次，
+                见 Services/MemoryTrimmer.cs）。
 
                 ContentTransitions：WinUI 原生的切页过渡（淡入 + 轻微上移），不是自绘动画。
             -->
-            <Frame x:Name="ContentFrame" CacheSize="12">
+            <Frame x:Name="ContentFrame" CacheSize="2">
                 <Frame.ContentTransitions>
                     <TransitionCollection>
                         <NavigationThemeTransition>
