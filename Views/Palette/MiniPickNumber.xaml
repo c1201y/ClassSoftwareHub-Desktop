@@ -48,11 +48,18 @@
                        AutomationProperties.Name="抽取个数" />
         </StackPanel>
 
-        <!-- 结果区：这一页的主角，吃掉中间剩下的全部高度 -->
+        <!-- 结果区：这一页的主角，吃掉中间剩下的全部高度。
+             ⚠️ 外面这层 Viewbox 是必须的（2026-10-05 群反馈）：文本改为**单行**显示，
+                放不下时整体等比缩小；`StretchDirection="DownOnly"` 保证"放得下就保持原字号"，
+                不会被放大。旧版是 TextBlock 自己 `TextWrapping="Wrap"`，
+                名字一长就折成两三行、挤在小小的浮窗里，跟主页面那个"名字折行"是同一处毛病。 -->
         <Grid Grid.Row="2" MinHeight="96">
-            <TextBlock x:Name="ResultText" Text="—" FontSize="64" FontWeight="SemiBold"
-                       FontFamily="Bahnschrift" HorizontalAlignment="Center" VerticalAlignment="Center"
-                       TextAlignment="Center" TextWrapping="Wrap" />
+            <Viewbox Stretch="Uniform" StretchDirection="DownOnly" Margin="8,0"
+                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="ResultText" Text="—" FontSize="64" FontWeight="SemiBold"
+                           FontFamily="Bahnschrift" TextAlignment="Center" TextWrapping="NoWrap"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Viewbox>
             <!-- 提示与池子状态：贴在大字底下，小字退成配角 -->
             <TextBlock x:Name="HintText" FontSize="11.5" Opacity="0.6"
                        VerticalAlignment="Bottom" HorizontalAlignment="Center" TextAlignment="Center"

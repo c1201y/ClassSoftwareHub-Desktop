@@ -432,45 +432,104 @@ public sealed partial class PickNumberToolPage : Page
         }
     }
 
+    /// <summary>号码结果的基准字号（2026-10-02 结果区改成整页舞台后定的，抽出来的号是这一页的主角）。</summary>
+    private const double NumberFontSize = 72;
+
+    /// <summary>名字结果的基准字号：名字比号码长，收一档。</summary>
+    private const double NameFontSize = 44;
+
     private void ShowResult(IReadOnlyList<int> numbers, bool rolling)
     {
-        ResultHost.Children.Clear();
-        foreach (var n in numbers)
-        {
-            ResultHost.Children.Add(new TextBlock
-            {
-                Text = n.ToString(),
-                // 2026-10-02：结果区从"右栏"改成整页的舞台，字号再放大一档 —— 抽出来的号是这一页的主角
-                FontSize = 72,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Opacity = rolling ? 0.72 : 1,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-        }
-        ResultHint.Visibility = numbers.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+        var texts = numbers.Select(n => n.ToString()).ToList();
+        ShowTexts(texts, NumberFontSize, rolling);
     }
 
-    /// <summary>名单模式的结果：名字比号码长，字号收一档，太长了就折行。</summary>
     private void ShowNames(IReadOnlyList<string> names, bool rolling)
     {
+        ShowTexts(names.ToList(), NameFontSize, rolling);
+    }
+
+    /// <summary>
+    /// 结果区渲染：先按这一批内容把卡片槽位铺好，再一格一个"单行自适应"文本框。
+    /// </summary>
+    private void ShowTexts(IReadOnlyList<string> texts, double fontSize, bool rolling)
+    {
         ResultHost.Children.Clear();
-        foreach (var name in names)
+        LayoutStage(texts, fontSize);
+        foreach (var t in texts) ResultHost.Children.Add(FitBox(t, fontSize, rolling));
+        ResultHint.Visibility = texts.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// 结果卡片槽位的尺寸随这一批内容走。
+    ///
+    /// ⛔⛔ 别再写死 180×112（2026-10-05 群反馈的原始 bug）：那时名字那层还写死
+    ///      FontSize=44 ＋ MaxWidth=156 ＋ 强制折行，44px 一个汉字约 44px 宽 ⇒ 156px 只放得下 3 个字，
+    ///      于是「门捷列夫」四个字必然折两行、「学过石油的语文老师」折三行直接顶穿 112 的卡片被裁掉。
+    ///      根子上是"框太小"，不是名单数据有问题。
+    ///
+    /// 现在：宽度按这一批最长的文本估出来（号码只占 0.56 个字宽、汉字占 1 个字宽），
+    /// 再按结果数量限制到"一行放得下几个"的平均宽度；万一还是不够（超长名字／窄窗口），
+    /// 交给 FitBox 里的 Viewbox 等比缩小兜底 —— 总之名字不折行、也不会被裁。
+    /// </summary>
+    private void LayoutStage(IReadOnlyList<string> texts, double fontSize)
+    {
+        if (texts.Count == 0) return;
+
+        // 舞台实际可用宽度；首帧之前拿不到（ActualWidth=0），按 960 页宽减去内外边距估一个。
+        var stage = ResultHost.ActualWidth > 0 ? ResultHost.ActualWidth : 872;
+
+        // 一行最多摆几个：结果少的时候给每个留足地方，多了才收。
+        var perRow = texts.Count switch
         {
-            ResultHost.Children.Add(new TextBlock
+            <= 1 => 1,
+            <= 4 => 2,
+            <= 6 => 3,
+            _ => 4,
+        };
+
+        var want = texts.Max(t => EstimateWidth(t, fontSize)) + 20;   // 左右各留 10 的呼吸位
+        var room = stage / perRow - 8;                                // 平均分到每格的宽度
+        ResultHost.ItemWidth = Math.Max(180, Math.Min(want, room));
+
+        // 高度只跟字号走：号码 72px 的行高约 105，加 Viewbox 上下各 6 的呼吸位约 117；
+        // 名字 44px 用不到 112，就保持原来的卡片高度不变。
+        ResultHost.ItemHeight = Math.Max(112, fontSize * 1.45 + 12);
+    }
+
+    /// <summary>
+    /// 结果卡里的一格：文本始终单行，放不下就整体等比缩小。
+    /// <c>StretchDirection=DownOnly</c> 是关键 —— 只要放得下就原尺寸显示，
+    /// 免得同一批里短名字被放大、长名字被缩小，几格字号参差不齐。
+    /// ⛔ 别改回 <c>TextWrapping="Wrap"</c>：名字一折行就会顶穿卡片高度被裁（2026-10-05 群反馈）。
+    /// </summary>
+    private static Viewbox FitBox(string text, double fontSize, bool rolling)
+    {
+        return new Viewbox
+        {
+            Margin = new Thickness(10, 6, 10, 6),
+            Stretch = Stretch.Uniform,
+            StretchDirection = StretchDirection.DownOnly,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
             {
-                Text = name,
-                FontSize = 44,
+                Text = text,
+                FontSize = fontSize,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Opacity = rolling ? 0.72 : 1,
-                MaxWidth = 156,
-                TextWrapping = TextWrapping.Wrap,
+                TextWrapping = TextWrapping.NoWrap,
                 TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-        }
-        ResultHint.Visibility = names.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+            },
+        };
+    }
+
+    /// <summary>粗略估宽（单位：px）：ASCII 按 0.56 个字宽，其余（汉字等全角）按 1 个字宽。</summary>
+    private static double EstimateWidth(string text, double fontSize)
+    {
+        var em = 0.0;
+        foreach (var ch in text) em += ch <= 0x7F ? 0.56 : 1.0;
+        return em * fontSize;
     }
 
     private void ResetUsed_Click(object sender, RoutedEventArgs e)

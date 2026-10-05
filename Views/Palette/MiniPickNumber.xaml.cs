@@ -357,6 +357,10 @@ public sealed partial class MiniPickNumber : UserControl
         }
     }
 
+    /// <summary>
+    /// 结果写成一行。字号先按数量收一档，再由外层 Viewbox（DownOnly）兜底：
+    /// 浮窗窄、内容长的时候整体等比缩小，保证**单行、不折行、不被裁**（2026-10-05 群反馈）。
+    /// </summary>
     private void ShowNumbers(IReadOnlyList<int> numbers, bool rolling)
     {
         ResultText.Text = string.Join("  ", numbers);

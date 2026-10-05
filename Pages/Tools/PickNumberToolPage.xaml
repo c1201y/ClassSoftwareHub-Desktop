@@ -153,7 +153,11 @@
 
                         <!-- ── 结果舞台：这一页的主角，占掉剩下的全部高度 ──
                              不再用强调色描边（Accent 全页只留给主按钮），改成一块素净的浅底，
-                             让大字自己立住。 -->
+                             让大字自己立住。
+                             ⚠️ 这里的 ItemWidth/ItemHeight 只是设计器里的初值，运行时由
+                                PickNumberToolPage.xaml.cs 的 LayoutStage 按这一批结果重算 ——
+                                旧版写死 180×112，导致名字长一点就折行、更长就顶穿卡片被裁
+                                （2026-10-05 群反馈），别再把尺寸写回这里。 -->
                         <Border x:Name="ResultCard" Grid.Row="1" CornerRadius="4" Padding="20"
                                 Background="{ThemeResource ControlFillColorDefaultBrush}">
                             <Grid>
