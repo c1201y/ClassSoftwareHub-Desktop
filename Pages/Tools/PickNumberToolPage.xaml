@@ -14,7 +14,8 @@
 
            ┌ 标题
            ├ 一行紧凑的选择项（功能 · 抽取对象）—— 都是原生 RadioButton，两个选项都看得见
-           ├ 一条参数带（范围 / 数量 / 不重复），右边挂池子状态
+           ├ 一条参数带（抽取池 + 抽取数量 / 不重复），右边挂池子状态
+           │  ⚠️ 名单模式下这条会分成两行：名单那一排本来就长，见 ParamGrid 上的注释
            ├ ★ 结果舞台：占据剩下的全部高度，抽出来的号大字居中，这是这一页的主角
            ├ 「开始抽号」强调色主按钮（全页唯一的 Accent）
            └ 已抽记录 / 设置摘要 / 公平性自检 —— 全是小字，退到页脚
@@ -91,7 +92,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <!-- ── 参数带：范围 / 数量 / 不重复，全挤在一行 ──
+                        <!-- ── 参数带：抽取池（范围 / 名单）+ 这一批抽多少（数量 / 不重复）──
                              右边那句状态（池子多大 / 抽掉多少 / 还剩多少）属于"池子"，
                              就该待在定义池子的这一行里。 -->
                         <Border CornerRadius="4" Padding="16,8,16,8" BorderThickness="1"
@@ -103,8 +104,22 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <Grid>
-                                    <!-- 号码：范围 + 抽取数量 + 不重复 -->
+                                <!-- 参数区（两行格）：行 0 放"抽取池"本身，行 1 放"这一批抽多少"。
+                                     ⚠️「抽取数量 / 不重复」摆哪一行**由 SyncPoolMode() 按模式决定**：
+                                        · 号码模式 → 并到行 0 的右边，整条参数带仍是一行（与旧版一致）；
+                                        · 名单模式 → 落到行 1 独占一行。名单那一排（标签 + 四个按钮）本来就长，
+                                          同一行再塞数量框，窗口一窄就会被裁掉（2026-10-05 实测）。 -->
+                                <Grid x:Name="ParamGrid" ColumnSpacing="22">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- 号码：只剩范围（数量 / 不重复 已挪到两种模式共用的 BatchPanel） -->
                                     <StackPanel x:Name="RangePanel" Orientation="Horizontal" Spacing="10"
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="号码范围" FontSize="12" FontWeight="SemiBold"
@@ -117,12 +132,6 @@
                                         <TextBlock Text="~" VerticalAlignment="Center" Opacity="0.6" />
                                         <NumberBox x:Name="ToBox" Value="50" Minimum="0" Maximum="9999"
                                                    SmallChange="1" SpinButtonPlacementMode="Compact" Width="104" />
-                                        <TextBlock Text="抽取数量" FontSize="12" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center" Margin="12,0,4,0" />
-                                        <NumberBox x:Name="CountBox" Value="1" Minimum="1" Maximum="50"
-                                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="104" />
-                                        <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0"
-                                                  Padding="6,0,0,0" VerticalAlignment="Center" Margin="8,0,0,0" />
                                     </StackPanel>
 
                                     <!-- 名单：导入 / 示例 / 查看修改 / 清空
@@ -142,6 +151,22 @@
                                                 ToolTipService.ToolTip="列出名单里的每个人，可逐个改名、删除，也可导出成 Excel 或 txt" />
                                         <Button x:Name="ClearRosterButton" Content="清空名单"
                                                 Click="ClearRoster_Click" IsEnabled="False" />
+                                    </StackPanel>
+
+                                    <!-- 两种模式共用「这一批抽多少」（浮窗版 MiniPickNumber 也是把「抽取个数」
+                                         做成两种模式共用的）。
+                                         ⚠️ 上限**不写死在这里**：由 RefreshHints 按当前池子夹 ——
+                                            名单模式跟人数、号码模式跟号码范围，池子只有 10 个时框里填不出 11。
+                                         旧版这两个控件锁在「号码」那一组里，名单模式下整组被收起来，
+                                         于是名单模式压根没有抽取数量（2026-10-05 Nick 提）。 -->
+                                    <StackPanel x:Name="BatchPanel" Orientation="Horizontal" Spacing="10"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="抽取数量" FontSize="12" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" Margin="0,0,4,0" />
+                                        <NumberBox x:Name="CountBox" Value="1" Minimum="1" Maximum="9999"
+                                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="104" />
+                                        <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0"
+                                                  Padding="6,0,0,0" VerticalAlignment="Center" Margin="8,0,0,0" />
                                     </StackPanel>
                                 </Grid>
 

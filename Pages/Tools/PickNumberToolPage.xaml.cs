@@ -35,6 +35,7 @@ public sealed partial class PickNumberToolPage : Page
     private List<int> _pending = new();
     private int _ticks;
     private bool _ready;
+    private bool _updating;   // 正在刷提示（里面会把 CountBox.Maximum 往下夹，可能连带夹到 Value，要忽略掉）
 
     // ── 名单模式（2026-09-27 Nick 提）──
     private readonly List<string> _roster = new();
@@ -149,6 +150,15 @@ public sealed partial class PickNumberToolPage : Page
         RangePanel.Visibility = roster ? Visibility.Collapsed : Visibility.Visible;
         RosterPanel.Visibility = roster ? Visibility.Visible : Visibility.Collapsed;
 
+        // 「抽取数量 / 不重复」两种模式共用（名单模式以前根本没有这个框 —— 它俩锁在 RangePanel 里，
+        // 名单模式一连带被收走了，2026-10-05 Nick 提）。两种模式的摆位不同：
+        //   · 号码模式：并到第一行右边 ⇒ 整条参数带还是一行，跟旧版一样；
+        //   · 名单模式：自己占第二行 ⇒ 名单那一排（标签 + 四个按钮）本来就长，
+        //     同一行再塞数量框，窗口一窄就被裁掉。见 ParamGrid 上的注释。
+        Grid.SetRow(BatchPanel, roster ? 1 : 0);
+        Grid.SetColumn(BatchPanel, roster ? 0 : 1);
+        BatchPanel.Margin = roster ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+
         // 2026-09-29：勾选框挤在控制行里，文案只能短 —— "抽过的名字不再出现"这种补充说明挪到悬停提示
         ToolTipService.SetToolTip(NoRepeatBox, roster ? "抽过的名字不再出现" : "抽过的不再出现");
         RefreshRosterText();
@@ -245,7 +255,7 @@ public sealed partial class PickNumberToolPage : Page
 
     private void OnSettingChanged()
     {
-        if (!_ready) return;
+        if (!_ready || _updating) return;   // _updating：刷提示时改 Maximum 会夹取 Value，别让它再回头存一遍
         SaveConfig();
         RefreshHints();
     }
@@ -254,6 +264,24 @@ public sealed partial class PickNumberToolPage : Page
 
     private void RefreshHints()
     {
+        _updating = true;
+        try { RefreshHintsCore(); }
+        finally { _updating = false; }
+    }
+
+    /// <summary>
+    /// 提示 + 「抽取数量」的上限。
+    ///
+    /// ⚠️ 上限按当前池子走（与浮窗版 MiniPickNumber 同一套规则）：名单模式跟人数、号码模式跟号码范围 ——
+    ///    名单只有 10 人时，框里就不该填得出 11。旧版这个框的 Maximum 在 XAML 里写死 50，
+    ///    名单超过 50 人的班就一次抽不完（2026-10-05 顺带修掉）。
+    /// ⚠️ 改 Maximum 会把超标的 Value 夹进来并触发 ValueChanged，由 <see cref="_updating"/> 挡掉，
+    ///    免得被当成"用户改了设置"再存一遍。
+    /// </summary>
+    private void RefreshHintsCore()
+    {
+        CountBox.Maximum = Math.Max(1, UseRoster ? _roster.Count : PoolSize);
+
         if (UseRoster) { RefreshRosterHints(); return; }
 
         SummaryText.Text = $"本次设置：从 {Lo} ~ {Hi} 中抽取 {WantCount} 个号" + (NoRepeat ? "，抽过的不再出现" : "");
