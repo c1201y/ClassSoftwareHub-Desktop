@@ -34,6 +34,11 @@ public sealed partial class SettingsPage : Page
         base.OnNavigatedTo(e);
         _loading = true;
 
+        // 后台同步完成时这一屏要自己更新（安装包不自带清单，首次进来多半还空着）。
+        // ⚠️ 本页 NavigationCacheMode=Enabled（实例长驻），先 -= 再 += 保证只挂一次。
+        App.Content.Changed -= OnContentChanged;
+        App.Content.Changed += OnContentChanged;
+
         var s = App.Settings.Current;
         BackdropCombo.SelectedIndex = s.Backdrop switch
         {
@@ -102,13 +107,31 @@ public sealed partial class SettingsPage : Page
         _settleTimer.Start();
     }
 
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        App.Content.Changed -= OnContentChanged;
+        base.OnNavigatedFrom(e);
+    }
+
+    /// <summary>内容变了 → 刷新这一组摘要（手动同步进行中就别抢它刚写上的状态行）。</summary>
+    private void OnContentChanged()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(OnContentChanged);
+            return;
+        }
+        if (_contentBusy) return;
+        RefreshContentInfo();
+    }
+
     private void RefreshContentInfo()
     {
         var c = App.Content;
         ContentSummary.Text = c.HasData
             ? $"{c.Apps.Count} 个软件 · {c.Categories.Count} 个分类" +
               (c.ContentVersion.Length > 0 ? $" · 内容版本 {c.ContentVersion}" : "")
-            : "没有读到内容。";
+            : (c.IsSyncing ? "正在获取软件清单…" : "还没有获取到内容 —— 需要联网。");
 
         ContentSource.Text = $"内容来源：{c.SourceLabel}\n{c.Source}";
 
@@ -120,8 +143,8 @@ public sealed partial class SettingsPage : Page
         AboutApp.Text = ShellConfig.AppName;
         AboutVersion.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
 
-        // 站点版本**以编译进程序的常量为准**，不读内容包的 app.version：
-        // 内容包的 text/ 不联网更新、装机即冻结，读它会一直显示装机那天那版（实测停在 v2.3.2）。
+        // 站点版本**以编译进程序的常量为准**，不读任何联网文本：
+        // 以前读内容包的 app.version，而那份 text/ 不联网更新、装机即冻结，一直显示装机那天那版（实测停在 v2.3.2）。
         // 详见 ShellConfig.SiteVersionDisplay 的注释。
         AboutSiteVersion.Text = $"站点版本：{ShellConfig.SiteVersionDisplay}";
     }
@@ -218,13 +241,13 @@ public sealed partial class SettingsPage : Page
         RefreshContentInfo();
     }
 
-    /// <summary>手动同步内容包（远端发布了才有东西下；失败也不影响本机数据）。</summary>
+    /// <summary>手动从网络同步内容（失败也不影响本机已有的那份）。</summary>
     private async void SyncContent_Click(object sender, RoutedEventArgs e)
     {
         if (_contentBusy) return;
         _contentBusy = true;
 
-        ContentSource.Text = "正在同步内容包…";
+        ContentSource.Text = "正在从网络获取…";
         try
         {
             var result = await Services.ContentUpdater.SyncAsync(

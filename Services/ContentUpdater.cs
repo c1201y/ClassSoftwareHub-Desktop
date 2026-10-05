@@ -33,7 +33,8 @@ public sealed record ContentSyncResult(
 ///   ② 备胎：站点 content/manifest.json（列了每个文件的 path + sha256），逐个比对本地
 ///      %LOCALAPPDATA%\ClassSoftwareHub\content 里的文件，只下载 sha256 不一致的
 ///      （先落 .part，校验通过再改名）
-/// 两条都拿不到就安静地什么都不做 —— ContentStore 会用安装包自带的内容 / 开发目录兜底。
+/// 两条都拿不到就安静地什么都不做 —— 此时 ContentStore 只能读到空目录（**没有自带内容包兜底**），
+/// 界面会显示"尚未获取到内容"并给出重试入口。
 /// </summary>
 public static class ContentUpdater
 {
@@ -100,7 +101,7 @@ public static class ContentUpdater
         }
 
         if (manifest is null || manifestUrl.Length == 0)
-            return new ContentSyncResult(false, 0, 0, "远端尚未发布内容包（无法获取 content/manifest.json），已回退到本机数据。", "");
+            return new ContentSyncResult(false, 0, 0, "远端尚未发布内容清单（无法获取 content/manifest.json），本机数据保持不变。", "");
 
         var baseUrl = manifestUrl[..(manifestUrl.LastIndexOf('/') + 1)];
         Directory.CreateDirectory(Dir);

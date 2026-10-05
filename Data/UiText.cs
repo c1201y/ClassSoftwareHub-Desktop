@@ -2,7 +2,19 @@ using System.Collections.Generic;
 
 namespace ClassSoftwareHub.Desktop.Data;
 
-/// <summary>内容包 text/ui.json 里桌面版要用到的文字（标题 / 版本号 / 详情页标签等）。</summary>
+/// <summary>
+/// 站点文字（可选来源 <c>text/ui.json</c>）里桌面版要用到的文字（站点大标题等）。
+///
+/// ⚠️ **现实是这份文件当前根本不存在，所有取值都走硬编码兜底**（2026-10-05）：
+///   安装包不再自带内容包之后，桌面端的内容只从站点仓库的「软件数据/」同步，
+///   而那里**只放了 <c>text/mirror-sites.json</c>，没有 ui.json**。
+///   原因：桌面端真正用到的只有 4 个 key（app.title / detail.pending / detail.hash-copied /
+///   about.qq-group-url），兜底值本来就写死在调用点，而"抄一份站点文案进仓库"会随站点改文字而
+///   悄悄过期 —— 2026-10-04 正是因为这个（读到的 app.version 停在 v2.3.2）才把站点版本号改成编译期常量。
+///
+/// 所以：新增用字**直接在调用点写兜底值**，别指望这份 JSON 会有人喂。
+/// 真要恢复"站点改文案桌面端跟着变"，得先在站点仓库放一份 ui.json 并想清楚怎么不跑偏。
+/// </summary>
 public sealed class UiText
 {
     /// <summary>整份 text/ui.json 原样存一份，界面按 key 取（取不到就用硬编码兜底）。</summary>

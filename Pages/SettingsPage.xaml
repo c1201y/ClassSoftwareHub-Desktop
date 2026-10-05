@@ -222,13 +222,13 @@
                 <TextBlock Text="软件内容" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
-                    <controls:SettingsCard Header="本地内容包">
+                    <controls:SettingsCard Header="软件内容">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8B7;" />
                         </controls:SettingsCard.HeaderIcon>
                         <controls:SettingsCard.Description>
                             <StackPanel Spacing="6" Margin="0,4,0,0">
-                                <TextBlock Text="软件清单与分类来自内容包；重新读取会用当前本地数据再解析一遍。"
+                                <TextBlock Text="软件清单与分类来自网络（安装包不自带），每次启动自动获取最新；「重新读取」只是把本地这份再解析一遍。"
                                            TextWrapping="Wrap"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -242,7 +242,7 @@
                                            Foreground="{ThemeResource SystemFillColorCautionBrush}" />
                                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                                     <Button Content="重新读取内容" Click="ReloadContent_Click" />
-                                    <Button Content="同步内容包" Click="SyncContent_Click" />
+                                    <Button Content="从网络获取" Click="SyncContent_Click" />
                                     <Button Content="打开内容目录" Click="OpenContentDir_Click" />
                                 </StackPanel>
                             </StackPanel>

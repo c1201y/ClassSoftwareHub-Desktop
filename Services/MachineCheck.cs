@@ -36,7 +36,7 @@ public sealed record CheckItem(
 public sealed record CheckSummary(int Total, int Installed, int Outdated, int Newer, int Unknown, int Missing);
 
 /// <summary>
-/// 「本机核实」：拿内容包里的软件清单，逐条跟本机已装软件对一遍。
+/// 「本机核实」：拿联网同步下来的软件清单，逐条跟本机已装软件对一遍。
 ///
 /// 匹配方式：名称归一化后的精确/包含匹配（`InstalledApps.Normalize`）。
 /// ⚠️ 这是**模糊匹配**，不是权威判定 —— 同一款软件在不同渠道的显示名差异很大

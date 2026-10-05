@@ -26,13 +26,13 @@ public static class ShellConfig
     /// 注：<c>dv</c> 前缀由 <see cref="VersionPrefix"/> 单独拼，**不要**写进这个字符串里。
     ///
     /// 递增流程：
-    /// 做出一个能用的版本 → 发 <c>1.1.0-insider1.0</c>
-    /// → 用户反馈还有问题 → 继续改成 <c>1.1.0-insider1.1</c>
-    /// → 一直改到没问题 → **整个 <c>-insider</c> 后缀删掉** → 上线正式版 <c>1.1.0</c>。
+    /// 做出一个能用的版本 → 发 <c>1.1.1-insider1.0</c>
+    /// → 用户反馈还有问题 → 继续改成 <c>1.1.1-insider1.1</c>
+    /// → 一直改到没问题 → **整个 <c>-insider</c> 后缀删掉** → 上线正式版 <c>1.1.1</c>。
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.1.0";
+    public const string ShellVersion = "1.1.1-insider1.0";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -73,12 +73,12 @@ public static class ShellConfig
     /// <summary>
     /// 设置页「站点版本」那一行显示的全文。
     ///
-    /// ⛔⛔ **不要再改回去读内容包的 <c>text/ui.json → app.version</c>**（2026-10-04 踩实了）：
-    ///   内容包里除了 <c>软件数据/apps/*.json</c>，其它文件（<c>text/</c>、<c>manifest.json</c>）**都不联网更新** ——
-    ///   <see cref="Services.GithubContentSync"/> 只拉「软件数据/」，而 <c>SeedMissingFiles</c> 又只在文件**缺失**时才从安装包补
-    ///   （<c>overwrite: false</c>）。于是装机那一刻写进缓存的那份文案就**冻结**了：
-    ///   该字段一直停在装机时那版（实测老机器上读到的是 2.3.2），怎么升级客户端都不会变，
-    ///   用户就会看到「客户端 1.6 / 站点版本 2.3.2」这种自相矛盾的搭配。
+    /// ⛔⛔ **不要再改回去读 <c>text/ui.json → app.version</c>**（2026-10-04 踩实了）：
+    ///   当年那份 <c>text/ui.json</c> 装在安装包里、写进缓存就**冻结**（<c>SeedMissingFiles</c> 只在文件
+    ///   **缺失**时才补，<c>overwrite: false</c>），该字段一直停在装机时那版（实测读到的是 2.3.2），
+    ///   怎么升级客户端都不会变，用户就会看到「客户端 1.6 / 站点版本 2.3.2」这种自相矛盾的搭配。
+    ///   现在虽然安装包不再自带内容、改成联网同步了，但**结论不变** —— 站点版本这种"客户端自己最清楚"的值
+    ///   不该绕一圈去读一份别处的文案（那份文件今天甚至已经不存在，见 <see cref="Data.UiText"/>）。
     ///
     /// 站点的真实版本只有客户端自己知道（发版时人工对齐），所以这里以**编译进程序的常量**为准，
     /// 每次发版跟着 <see cref="SiteVersionTarget"/> 一起改。
@@ -114,8 +114,11 @@ public static class ShellConfig
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// **首选来源**：软件数据直接在站点仓库里，从 GitHub 读就是最新最全的（仓库是公开的，不用令牌）。
-    /// 站点的 content/manifest.json 一直没发布，所以这里才是主力，manifest / 自带内容包是备用。
+    /// **唯一来源**：软件数据直接在站点仓库里，从 GitHub 读就是最新最全的（仓库是公开的，不用令牌）。
+    /// ⛔⛔ 安装包**不再内置**内容包（2026-10-05 Nick 定案"以后统统只有通过网络获取"）：
+    ///    自带的那份是装机那一刻的死快照（实测停在 9/20、比仓库少 13 个软件），
+    ///    而且 seed 回填会把仓库已删除的软件（例如下架的激活工具）永久复活。
+    ///    现在内容一律从网络取，见 <see cref="Services.GithubContentSync"/>。
     /// </summary>
     public const string SiteRepoOwner = "c1201y";
     public const string SiteRepoName = "ClassSoftwareHub";
@@ -188,18 +191,15 @@ public static class ShellConfig
     /// <summary>备用来源（主站挂了可以从网盘拿）。</summary>
     public const string ContentManifestUrlFallback = "https://pan.132614.xyz/dav/%E7%BD%91%E7%AB%99/content/manifest.json";
 
-    /// <summary>增量同步下来的内容缓存目录。</summary>
+    /// <summary>
+    /// 内容目录（**唯一**的那份）：由 <see cref="Services.GithubContentSync"/> 从站点仓库同步下来的缓存。
+    /// 安装包不自带内容包，所以新装的机器**第一次启动时必须联网**才会有软件清单。
+    /// </summary>
     public static string CachedContentDir => System.IO.Path.Combine(AppPaths.DataDir, "content");
 
     /// <summary>
-    /// 安装包里自带的内容（安装目录\content，打包装机时塞进去的那份）。
-    /// 装机就有软件清单，离线也不空；联网后 ContentUpdater 拉到新版会覆盖优先级更高的缓存。
-    /// </summary>
-    public static string BundledContentDir => System.IO.Path.Combine(AppContext.BaseDirectory, "content");
-
-    /// <summary>
-    /// 开发用：直接读站点工程的内容包（跑过 scripts/build-content.mjs 就有）。
-    /// 只有缓存目录里没数据时才会用到它 —— 正式用户机器上这个路径不存在，自动跳过。
+    /// 开发用：直接读站点工程的产物目录（跟站点工程一起构建的那份）。
+    /// ⚠️ 只有本机开发时会命中 —— 正式用户机器上这个路径不存在，自动跳过。
     /// </summary>
     public const string DevContentDir =
         @"C:\Users\Programmer_Nick\OneDrive\文档\Visual Studio 18 项目文件\ClassSoftwareHub\dist\content";

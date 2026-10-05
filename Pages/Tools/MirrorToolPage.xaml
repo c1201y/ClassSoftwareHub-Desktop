@@ -29,7 +29,7 @@
                 <StackPanel Spacing="10" Margin="0,0,0,20">
                     <InfoBar x:Name="DisclaimerBar" IsOpen="False" IsClosable="False" Severity="Warning" />
                     <TextBlock x:Name="EmptyText" Visibility="Collapsed" Opacity="0.6" TextWrapping="Wrap"
-                               Text="未读取到镜像清单（内容包中的 text/mirror-sites.json）。" />
+                               Text="未读取到镜像清单：它随软件清单一并从网络获取。" />
                     <ItemsControl x:Name="Rows">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="data:MirrorSite">

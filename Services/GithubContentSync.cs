@@ -20,6 +20,8 @@ public sealed record RepoContentResult(bool Ok, bool Updated, int Files, string 
 ///
 /// 为什么不用站点的 content/manifest.json：那份清单站点一直没发布（404），
 /// 但仓库里「软件数据/apps/*.json + categories.json」就是原文，公开仓库不用令牌也能读。
+/// 桌面端要用的其它内容（系统镜像清单）同样放在「软件数据/」下，跟着一起同步 ——
+/// 这是"安装包不自带内容、一切从网络取"之后唯一的数据来源（2026-10-05）。
 ///
 /// 做法（尽量省请求 —— 未登录的 GitHub 接口只有 60 次/小时，机房还是同一个出口 IP）：
 ///   1) 问一下分支头 commit sha（**每次同步就 1 个请求**，走 api.github.com，失败换镜像）
@@ -62,6 +64,18 @@ public static class GithubContentSync
     /// <summary>上次成功的入口（这样第二次以后不用再一个个试）。</summary>
     private static string BaseCacheFile => Path.Combine(AppPaths.DataDir, "content-base.txt");
 
+    /// <summary>
+    /// 内容目录的「整理版本」，写在缓存目录的 <c>.repofmt</c> 里。
+    ///
+    /// 为什么需要它：正常启动时若仓库 sha 没变，这里会**直接返回**（这是省请求的关键设计）——
+    /// 于是"删掉仓库里没有的文件"这段根本不会跑，老机器上的历史垃圾会一直留着。
+    /// 缓存里记的版本对不上时就强制走一次完整同步（列目录 + 清理），把上一种规则留下的东西收拾干净。
+    ///
+    /// 改同步规则（清理范围变了 / 布局变了）就 +1。
+    /// v2 = 取消安装包内置内容包，同期把删除范围从 apps/ 扩到整个内容目录（2026-10-05）。
+    /// </summary>
+    private const string SyncFormat = "2";
+
     private static HttpClient CreateClient()
     {
         var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
@@ -91,6 +105,11 @@ public static class GithubContentSync
             try { if (File.Exists(stamp)) known = (await File.ReadAllTextAsync(stamp, ct).ConfigureAwait(false)).Trim(); }
             catch { /* 读不到就当没记过 */ }
 
+            var formatFile = Path.Combine(Dir, ".repofmt");
+            var format = "";
+            try { if (File.Exists(formatFile)) format = (await File.ReadAllTextAsync(formatFile, ct).ConfigureAwait(false)).Trim(); }
+            catch { /* 读不到就当成老版本 → 走一次完整同步 */ }
+
             progress?.Report("正在检查 GitHub 仓库是否有新数据");
             var head = await GetHeadShaAsync(ct).ConfigureAwait(false);
             if (head is null)
@@ -99,14 +118,13 @@ public static class GithubContentSync
             var appsDir = Path.Combine(Dir, "apps");
             var hasApps = Directory.Exists(appsDir) && Directory.EnumerateFiles(appsDir, "*.json").Any();
 
-            if (hasApps && known.Length > 0 && string.Equals(known, head, StringComparison.OrdinalIgnoreCase))
-            {
-                SeedMissingFiles();
+            // ⚠️ 还要求「整理版本一致」：不一致说明缓存是上一套规则留下来的，得走一次完整同步清理
+            if (hasApps && known.Length > 0 && format == SyncFormat
+                && string.Equals(known, head, StringComparison.OrdinalIgnoreCase))
                 return new RepoContentResult(true, false, CountApps(), $"软件数据已是最新（GitHub 仓库 {Short(head)}）");
-            }
 
             progress?.Report("正在列出仓库中的软件数据");
-            var paths = await ListDataFilesAsync(head, ct).ConfigureAwait(false);
+            var (paths, truncated) = await ListDataFilesAsync(head, ct).ConfigureAwait(false);
             if (paths.Count == 0)
                 return new RepoContentResult(false, false, CountApps(), "GitHub 仓库中未列出软件数据文件，本机数据暂不更新。");
 
@@ -142,15 +160,16 @@ public static class GithubContentSync
                 }
             }
 
-            // 仓库里删掉的软件，本地也跟着删（不然清单里留着幽灵条目）
-            foreach (var old in Directory.EnumerateFiles(appsDir, "*.json"))
-            {
-                try { if (!keep.Contains(Path.GetFullPath(old))) File.Delete(old); } catch { /* 删不掉算了 */ }
-            }
+            // 仓库里没有的，本地也跟着删 —— 包含两类：
+            //   ① 软件被下架（不删的话清单里留着幽灵条目）；
+            //   ② 装机残留 —— 安装包以前自带过内容包，老机器缓存里躺着 text/、holiday/ 这类
+            //      仓库根本不维护的文件。安装包不再自带内容后，它们没有任何更新途径，
+            //      留着只会永远停在装机那天（2026-10-05）。
+            // ⚠️ 列目录被 GitHub 截断时**不删**：那种情况下 paths 是残缺的，删了等于误伤。
+            if (!truncated) DeleteUnknownFiles(keep);
 
             try { await File.WriteAllTextAsync(stamp, head, Utf8NoBom, ct).ConfigureAwait(false); } catch { }
-
-            SeedMissingFiles();
+            try { await File.WriteAllTextAsync(formatFile, SyncFormat, Utf8NoBom, ct).ConfigureAwait(false); } catch { }
 
             var count = CountApps();
             return new RepoContentResult(true, true, count,
@@ -194,8 +213,13 @@ public static class GithubContentSync
         return null;
     }
 
-    /// <summary>列出仓库里「软件数据/」下的所有 json（仓库根相对路径）。</summary>
-    private static async Task<List<string>> ListDataFilesAsync(string sha, CancellationToken ct)
+    /// <summary>
+    /// 列出仓库里「软件数据/」下的所有 json（仓库根相对路径）。
+    /// 返回的 <c>Truncated</c> = GitHub 的 tree 接口把结果截断了 —— 这时清单不完整，
+    /// 调用方**不能**拿它当"仓库里就这些"去删本地文件。
+    /// （⚠️ 不能用 <c>out</c> 参数：async 方法不允许 —— CS1988。）
+    /// </summary>
+    private static async Task<(List<string> Paths, bool Truncated)> ListDataFilesAsync(string sha, CancellationToken ct)
     {
         var path = $"repos/{ShellConfig.SiteRepoOwner}/{ShellConfig.SiteRepoName}/git/trees/{sha}?recursive=1";
         using var doc = JsonDocument.Parse(await GetApiAsync(path, ct).ConfigureAwait(false));
@@ -203,8 +227,11 @@ public static class GithubContentSync
         var list = new List<string>();
         var prefix = ShellConfig.SiteRepoDataDir + "/";
 
+        var truncated = doc.RootElement.TryGetProperty("truncated", out var tr)
+                        && tr.ValueKind == JsonValueKind.True;
+
         if (!doc.RootElement.TryGetProperty("tree", out var tree) || tree.ValueKind != JsonValueKind.Array)
-            return list;
+            return (list, truncated);
 
         foreach (var item in tree.EnumerateArray())
         {
@@ -220,7 +247,7 @@ public static class GithubContentSync
             list.Add(path2);
         }
 
-        return list;
+        return (list, truncated);
     }
 
     /// <summary>走 GitHub 接口（api.github.com → 镜像）取一段 JSON 文本。</summary>
@@ -333,30 +360,39 @@ public static class GithubContentSync
     }
 
     /// <summary>
-    /// 从安装包自带的内容里补齐缺的文件（text/ui.json、text/mirror-sites.json、manifest.json 这些
-    /// GitHub 仓库里不是这种形态或不用每次拉），
-    /// 否则缓存目录里只有 apps/ → 界面文案、镜像站清单会空掉。
+    /// 清掉内容目录里「本次没从仓库同步到」的文件 —— 下架的软件、以及装机残留。
+    ///
+    /// ⛔⛔ 历史上这里曾经反着来：删完立刻从**安装包自带的内容包**里把缺的补回来
+    /// （<c>SeedMissingFiles</c>，overwrite:false），于是仓库删掉的软件**删了又被补回**，
+    /// 用户永远看不到它下架（实测本机就复活过一个已下架的激活工具）。同时自带的 text/ 一旦写进缓存
+    /// 就再也不更新。2026-10-05 Nick 定案取消安装包内置内容，这个回填连同它的病根一起删掉。
+    ///
+    /// 放的：`.` 开头的元文件（<c>.reposha</c>）。
+    /// 兜底：任何一步失败都只当没清干净 —— 绝不能连累本次已经同步下来的数据。
     /// </summary>
-    private static void SeedMissingFiles()
+    private static void DeleteUnknownFiles(HashSet<string> keep)
     {
-        var bundled = ShellConfig.BundledContentDir;
-        if (!Directory.Exists(bundled)) return;
-        if (Path.GetFullPath(bundled).Equals(Path.GetFullPath(Dir), StringComparison.OrdinalIgnoreCase)) return;
-
         try
         {
-            foreach (var source in Directory.EnumerateFiles(bundled, "*", SearchOption.AllDirectories))
+            foreach (var file in Directory.EnumerateFiles(Dir, "*", SearchOption.AllDirectories))
             {
-                var rel = Path.GetRelativePath(bundled, source);
-                var target = Path.Combine(Dir, rel);
-                if (File.Exists(target)) continue;
+                if (Path.GetFileName(file).StartsWith('.')) continue;
+                if (keep.Contains(Path.GetFullPath(file))) continue;
+                try { File.Delete(file); } catch { /* 删不掉算了 */ }
+            }
 
-                var dir = Path.GetDirectoryName(target);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                File.Copy(source, target, overwrite: false);
+            // 顺手收掉空目录：holiday/ 这种整个被清完之后会剩个空壳，留着碍眼
+            foreach (var folder in Directory.EnumerateDirectories(Dir, "*", SearchOption.AllDirectories)
+                         .OrderByDescending(d => d.Length))
+            {
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(folder).Any()) Directory.Delete(folder);
+                }
+                catch { /* 删不掉算了 */ }
             }
         }
-        catch { /* 补不上不影响主要数据 */ }
+        catch { /* 清理失败不影响主要数据 */ }
     }
 
     private static int CountApps()

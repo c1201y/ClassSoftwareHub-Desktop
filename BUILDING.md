@@ -91,43 +91,53 @@ installer/   Inno Setup 脚本
 tools/       发版脚本
 ```
 
-## 内容包（软件清单的来源）
+## 软件清单（唯一来源：网络）
 
-客户端的软件清单不是写死在代码里的，来自「内容包」：`apps/*.json`（一个软件一个）+ `categories.json`
-+ `text/*.json`（界面文案、镜像站清单）+ `manifest.json`（版本号）。
+⛔⛔ **安装包不自带任何内容**（2026-10-05 Nick 定案「以后统统只有通过网络获取更新的途径」）。
+客户端的软件清单不是写死在代码里的，也不随安装包发布，只能联网从站点仓库读。
 
 取数顺序（`Services/GithubContentSync.cs` → `Services/ContentUpdater.cs`）：
 
 1. **首选：直接读站点仓库** `c1201y/ClassSoftwareHub`（公开仓库，不用令牌）
    - 先用 GitHub 接口问一下分支头 sha（未登录 60 次/小时，机房是同一个出口 IP，所以**只问这 1 个请求**）
    - sha 没变就收工；变了才列出 `软件数据/` 下的 json 再逐个取内容（走 CDN，不吃配额）
-   - 落地到 `%LOCALAPPDATA%\ClassSoftwareHub\content`（就是 ContentStore 优先读的缓存目录）
+   - 落地到 `%LOCALAPPDATA%\ClassSoftwareHub\content`（就是 ContentStore 读的那个目录）
    - ⚠️ 取文件的入口按顺序回退：`raw.githubusercontent.com` → `cdn.jsdelivr.net` → `fastly.jsdelivr.net`
      → `gh-proxy.com`；接口入口：`api.github.com` → `gh-proxy.com` → `ghfast.top`。
      成功的入口记在 `%LOCALAPPDATA%\ClassSoftwareHub\content-base.txt`，下次优先用。
      （国内/校园网里 raw 经常不通，回退是必需品，不是保险）
-2. 备胎：站点的 `content/manifest.json`（按 sha256 增量拉。⚠️ **站点目前还没发布这个文件**）
-3. 兜底：**安装包自带的内容包**（见下）
-4. 开发兜底：站点工程的 `dist/content`（Debug 构建优先它，改完站点不用等发布就能看效果）
+   - 仓库里没有的文件**本地也会删掉**（下架的软件不能留在客户端里）。
+     ⚠️ GitHub 的 tree 接口返回 `truncated:true` 时跳过删除 —— 那种情况下清单是残缺的，删了等于误伤。
+2. 备胎：站点的 `content/manifest.json`（按 sha256 增量拉。⚠️ **站点目前还没发布这个文件**，这条是死路）
+3. 开发兜底：站点工程的产物目录（`ShellConfig.DevContentDir`）。只有本机开发会命中，
+   正式用户机器上那个路径不存在。
 
-读取优先级（`Core/ContentStore.cs`）：Debug = 开发目录 → 缓存 → 自带；Release = 缓存 → 自带 → 开发。
+读取优先级（`Core/ContentStore.cs`）：Debug = 开发目录 → 缓存；Release = 缓存 → 开发。
+**没有"安装包自带"这一档了。**
 
-### 打包时把内容包塞进去（装机就有清单，离线也不空）
+### 这条变化带来的硬约束
+
+- **新装的机器第一次启动必须联网**，否则清单是空的。所以软件下载页有专门的空状态
+  （「正在获取软件清单」/ 失败给重试按钮），并且 `ContentStore.Changed` 事件负责在数据到位后
+  自动刷新界面 —— 别删那个通知，否则用户得手动切页才能看到列表。
+- 客户端还会读 `软件数据/text/mirror-sites.json`（系统镜像下载页）。这份文件在站点仓库里，
+  和网页版的 `src/gallery/tools/系统镜像网站.ts` 要**同步改**，详见站点仓 `软件数据/README-维护手册.md` 第十节。
+
+### 打包
 
 ```powershell
 dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -p:PublishTrimmed=false -o dist\app
-node tools\sync-content.mjs      # 把站点 dist/content 拷进 dist\app\content（80 个文件 / 约 450KB）
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
 
-> ⚠️ `dotnet publish -o dist\app` 是**覆盖式写入、不清理目录** —— 所以已经存在的 `dist\app\content`
-> 不会被弄丢，重复发布不用重新同步。**别为了"干净"去 `rm -rf dist\app`**，否则内容包一起没了。
+> ⚠️ `dotnet publish -o dist\app` 是**覆盖式写入、不清理目录**。如果 `dist\app\content` 里还留着
+> 早期版本塞进去的内容包（2026-10-05 之前的产物），**发布前删掉它**：
 >
-> ⚠️ `sync-content.mjs` 要求站点工程里已经有 `dist\content`。站点那边没构建过时会直接报错退出；
-> 此时沿用 `dist\app\content` 里现成的那份即可 —— 它跟站点 `软件数据/` 同源，只可能稍旧一点
-> （装机自带的内容包本来就只是兜底，联网后 `ContentUpdater` 会拉新的覆盖）。
-
-`installer\ClassSoftwareHub.iss` 的 `[Files]` 是 `Source: "..\dist\app\*"` 整目录，所以 `dist\app\content`
-会自动进安装包。装完后 `{app}\content` 就是自带内容包；GitHub 同步会顺手把里面缺的 `text/*.json` 补进缓存目录。
-
-> 内容包从哪来：站点仓库跑 `node scripts/build-content.mjs`（产物在站点工程的 `dist/content`）。
+> ```powershell
+> Remove-Item -Recurse -Force dist\app\content -ErrorAction SilentlyContinue
+> ```
+>
+> **务必放在 `dotnet publish` 之前** —— `csproj` 里的 `VerifyNoBundledContent` 是道硬闸，
+> 发布产物里只要还有 `content` 就**直接让 publish 报错**（2026-10-05 起）。
+> 这道闸是"宁可挡住发布，也不让内容包发出去"，所以要清就得先清。
+> 忘了清的话，安装包会白胖 450KB 左右、并让装机首启看起来"有清单" —— 掩盖真正的联网路径有没有通。

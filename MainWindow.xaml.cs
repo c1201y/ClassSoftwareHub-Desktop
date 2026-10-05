@@ -82,13 +82,14 @@ public sealed partial class MainWindow : Window
         DownloadManager.Current.Finished += OnDownloadFinished;
 
         // ===== 原生界面 =====
-        // 软件内容来自内容包（开发时读站点工程 dist/content，正式版走远端 manifest）
+        // ⚠️ 安装包**不自带**内容包，这里的 Load() 在新装的机器上必然读到空目录。
+        //    清单要等下面的 SyncContentAsync() 联网拉回来 —— 首启的"空 → 有"靠 ContentStore.Changed 通知界面。
         App.Content.Load();
         NativeShell.Init();
         NativeShell.SetIcon(LoadingIcon.Source);
         SetTitleBar(NativeShell.TitleBarElement);
 
-        // 后台同步内容包（远端发布过 content/manifest.json 才会真的下载；没有就继续用本机数据）
+        // 后台同步内容（从站点仓库读「软件数据/」；一次 ref 请求就知道有没有变）
         _ = SyncContentAsync();
 
         // 开机自启 + 「开机最小化」：注册表里会带 --minimized，启动时收进任务栏
@@ -415,12 +416,17 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 启动后台同步内容包：远端有 content/manifest.json 就把变化的文件拖到本地缓存
-    /// （%LOCALAPPDATA%\ClassSoftwareHub\content），下次启动 ContentStore 就优先用它，
-    /// 不再依赖开发目录。远端还没发布时什么都不做。
+    /// 启动后台同步内容：从站点仓库把软件数据拖到本地缓存
+    /// （%LOCALAPPDATA%\ClassSoftwareHub\content）。
+    ///
+    /// ⚠️ 安装包不再自带内容包之后，这条路是**新装机器拿到清单的唯一途径**，所以：
+    ///   · 全程置 <see cref="Core.ContentStore.IsSyncing"/>，界面据此显示"正在获取软件清单…"，
+    ///     而不是让用户对着"清单为空"发懵；
+    ///   · 同步完 <c>Load()</c> 会触发 <c>Changed</c>，停在本页的用户也会立刻看到列表。
     /// </summary>
     private async Task SyncContentAsync()
     {
+        App.Content.SetSyncing(true);
         try
         {
             var before = App.Content.SourceKind;
@@ -428,7 +434,7 @@ public sealed partial class MainWindow : Window
 
             if (!result.Updated && before == "cache") return;
 
-            // 有更新（或本来用的是开发目录）→ 重新读一遍，让内容源切到本地缓存
+            // 有更新（或本来还没拿到内容）→ 重新读一遍，内容源切到本地缓存
             var oldSource = App.Content.Source;
             var oldCount = App.Content.Apps.Count;
             App.Content.Load();
@@ -439,7 +445,11 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            // 内容同步失败不打扰用户：本机数据照样能用
+            // 内容同步失败不打扰用户：界面上有"重新获取"入口
+        }
+        finally
+        {
+            App.Content.SetSyncing(false);
         }
     }
 

@@ -83,7 +83,7 @@ public sealed class CheckRow
 }
 
 /// <summary>
-/// 本机核实页：拿内容包的软件清单核对这台电脑装了什么。
+/// 本机核实页：拿（联网同步下来的）软件清单核对这台电脑装了什么。
 ///
 /// 为什么要后台线程：枚举要遍历三个注册表视图的几百个键，某些机器（尤其开了安全软件的）
 /// 读注册表会明显发涩。这活儿不该压在 UI 线程上，所以整体 Task.Run，先把"检测中"摆出来。
@@ -130,7 +130,7 @@ public sealed partial class MachineCheckPage : Page
             LoadingPanel.Visibility = Visibility.Collapsed;
             RescanButton.IsEnabled = true;
             EmptyPanel.Visibility = Visibility.Visible;
-            EmptyText.Text = "软件清单尚未加载，请先前往「软件下载」获取内容包。";
+            EmptyText.Text = "软件清单尚未加载，请先到「软件下载」页联网获取清单。";
             SummaryHint.Text = "";
             return;
         }

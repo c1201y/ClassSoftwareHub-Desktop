@@ -44,15 +44,55 @@ public sealed partial class SoftwarePage : Page
         _loading = false;
         UpdateView();
 
+        // 内容同步好之后自己要刷新 —— 安装包不自带清单，首启就停在"正在获取"这一屏上，
+        // 用户多半不会为了看到列表专门切一次页（2026-10-05）。
+        // ⚠️ 本页 NavigationCacheMode=Enabled（实例长驻），先 -= 再 += 保证只挂一次。
+        App.Content.Changed -= OnContentChanged;
+        App.Content.Changed += OnContentChanged;
+
         if (Fingerprint() == _appliedKey) return;   // 状态没变 → 保留现有卡片，别重建
 
         BuildChips();
         Apply();
     }
 
-    /// <summary>当前"页面状态"的指纹；任一要素变了才值得重建列表与分类条。</summary>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        App.Content.Changed -= OnContentChanged;
+        base.OnNavigatedFrom(e);
+    }
+
+    /// <summary>内容变了（同步完成 / 同步状态变化）：重建列表，或只刷一下空清单那几句提示。</summary>
+    private void OnContentChanged()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(OnContentChanged);
+            return;
+        }
+
+        if (Fingerprint() != _appliedKey)
+        {
+            BuildChips();
+            Apply();
+            return;
+        }
+
+        // 指纹没变 = 内容本身没换，只是"正在同步"的开关翻了页 → 不必重建卡片，
+        // 否则每次同步开始/结束都要付一次列表重建的代价。
+        if (App.Content.Apps.Count == 0) UpdateEmptyState(0);
+    }
+
+    /// <summary>
+    /// 当前"页面状态"的指纹；任一要素变了才值得重建列表与分类条。
+    ///
+    /// ⚠️ 内容那一位必须用 <see cref="Core.ContentStore.Revision"/>（每次 Load 都涨），
+    /// **不能**用 ContentVersion / Source（一个恒为空、一个恒为同一路径，索引不到"清单被补全了"，
+    /// 首启同步完页面就不会自己刷新 —— 2026-10-05 实测踩到）。
+    /// </summary>
     private string Fingerprint()
-        => string.Join("\u0001", _category, _keyword, _view, App.Content.ContentVersion, App.Content.Source);
+        => string.Join("\u0001", _category, _keyword, _view,
+                       App.Content.Revision.ToString(), App.Content.Source);
 
     /// <summary>磁贴（3 列，带简介）/ 网格（5 列，紧凑）切换，选择会记进设置。</summary>
     private void ViewChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -130,8 +170,8 @@ public sealed partial class SoftwarePage : Page
     }
 
     /// <summary>
-    /// 空清单时别只写一句"没有匹配的软件"——要分清两种情况：
-    /// ① 搜索/分类筛掉了 ② 整体就没内容（内容包没同步下来，教学机断网最容易踩）
+    /// 空清单时别只写一句"没有匹配的软件"——要分清三种情况：
+    /// ① 搜索/分类筛掉了 ② 正常：安装包不自带清单，正在联网取 ③ 异常：真的没取到
     /// </summary>
     private void UpdateEmptyState(int shown)
     {
@@ -142,6 +182,9 @@ public sealed partial class SoftwarePage : Page
         }
 
         EmptyPanel.Visibility = Visibility.Visible;
+
+        EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}" +
+                           (App.Content.Issues.Count > 0 ? $"\n读取问题：{App.Content.Issues[0].Message}" : "");
 
         var hasFilter = _keyword.Length > 0 || _category.Length > 0;
         if (hasFilter)
@@ -154,24 +197,32 @@ public sealed partial class SoftwarePage : Page
             return;
         }
 
-        EmptyTitle.Text = "软件清单为空";
-        EmptyText.Text = "清单位于「内容包」中：安装包内置一份，联网后自动从站点更新。" +
-                         "若始终为空，通常是内容包未同步成功（网络不可用或站点尚未发布）。";
-        EmptyText.Visibility = Visibility.Visible;
-        EmptyDetail.Text = $"当前内容来源：{App.Content.SourceLabel}" +
-                           (App.Content.Issues.Count > 0 ? $"\n读取问题：{App.Content.Issues[0].Message}" : "");
         EmptyRetry.Visibility = Visibility.Visible;
         EmptyRetry.IsEnabled = true;
-        EmptyRetry.Content = "重新同步内容包";
+        EmptyRetry.Content = "重新获取清单";
+
+        // 正在联网取 —— 这是最正常的首启状态（安装包不再内置清单），别吓唬用户
+        if (App.Content.IsSyncing)
+        {
+            EmptyTitle.Text = "正在获取软件清单";
+            EmptyText.Text = "正在从网络获取最新的软件清单，请稍候。";
+            EmptyRetry.IsEnabled = false;
+            EmptyRetry.Content = "正在获取";
+            return;
+        }
+
+        EmptyTitle.Text = "软件清单为空";
+        EmptyText.Text = "软件清单不随安装包提供，需要联网获取。" +
+                         "若始终为空，多半是当前网络连不上（教学机、校园网常见），换个网络再点下面的按钮。";
     }
 
-    /// <summary>空状态里的「重新同步内容包」：拉一次远端内容包再重读（失败就照实说）。</summary>
+    /// <summary>空状态里的「重新获取清单」：拉一次网络内容再重读（失败就照实说）。</summary>
     private async void EmptyRetry_Click(object sender, RoutedEventArgs e)
     {
         EmptyRetry.IsEnabled = false;
-        EmptyRetry.Content = "正在同步";
-        EmptyTitle.Text = "正在同步内容包";
-        EmptyText.Text = "正在从站点获取最新清单。";
+        EmptyRetry.Content = "正在获取";
+        EmptyTitle.Text = "正在获取软件清单";
+        EmptyText.Text = "正在从网络获取最新清单。";
         EmptyDetail.Text = "";
 
         try
@@ -186,22 +237,22 @@ public sealed partial class SoftwarePage : Page
 
             if (App.Content.Apps.Count == 0)
             {
-                EmptyTitle.Text = "仍未获取到内容";
-                EmptyText.Text = "站点无法访问，或内容包尚未发布。已安装版本内置的清单可在离线时使用；" +
+                EmptyTitle.Text = "仍未获取到清单";
+                EmptyText.Text = "网络不可用，或当前网络访问获取源不通。可以换个网络再试；" +
                                  "如问题持续，请将本页截图提供给维护人员。";
                 EmptyDetail.Text = result.Message;
             }
         }
         catch (Exception ex)
         {
-            EmptyTitle.Text = "同步失败";
-            EmptyText.Text = "网络不可用或站点暂时无法访问，请稍后重试。";
+            EmptyTitle.Text = "获取失败";
+            EmptyText.Text = "网络不可用或暂时无法访问，请稍后重试。";
             EmptyDetail.Text = ex.Message;
         }
         finally
         {
             EmptyRetry.IsEnabled = true;
-            EmptyRetry.Content = "重新同步内容包";
+            EmptyRetry.Content = "重新获取清单";
         }
     }
 

@@ -21,12 +21,12 @@
     <LangVersion>latest</LangVersion>
     <!-- 版本号规则见 Core/ShellConfig.cs 里 ShellVersion 的注释
          （dv + 主.功能.补丁 + -insider架构.迭代），改版本时这里和 ShellConfig 一起改。
-         ⚠️ AssemblyVersion / FileVersion 只接受「四段纯数字」，塞不进 -insider 后缀，故固定 1.1.0.0；
+         ⚠️ AssemblyVersion / FileVersion 只接受「四段纯数字」，塞不进 -insider 后缀，故固定 1.1.1.0；
          界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
-    <InformationalVersion>1.1.0</InformationalVersion>
+    <Version>1.1.1-insider1.0</Version>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <FileVersion>1.1.1.0</FileVersion>
+    <InformationalVersion>1.1.1-insider1.0</InformationalVersion>
     <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
          否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -75,5 +75,26 @@
             单文件发布下旁边没有散落文件可读，只能走内嵌这条路。 -->
     <EmbeddedResource Include="Assets\Audio\timer-alarm.wav" />
   </ItemGroup>
+
+  <!-- ⛔⛔ 安装包**不带**内容包（2026-10-05 Nick 定案"以后统统只有通过网络获取更新的途径"）。
+       桌面版以前会把站点内容包拷进 dist\app\content 随安装包一起发，装机就有清单；
+       现在取消 —— 客户端只从网络取，所以发布产物里不该再有 content。
+
+       为什么写成构建步骤而不是人工检查：`dotnet publish -o dist\app` 是**覆盖式写入、不清目录**，
+       旧产物里的 content 会一直趟在那儿，没人会注意到（还会让装机首启看起来"有清单"，
+       掩盖真正的联网路径到底通不通）。所以这里放一道**硬闸**：发布产物里只要还有 content 就让 publish 失败。
+
+       ⚠️ 为什么是"报错"而不是"顺手删掉"（2026-10-05 实测两轮，别再走回头路）：
+          MSBuild 的 RemoveDir/Delete 会走 `\\?\C:\…` 长路径形式、Exec 则是拉起 cmd.exe，
+          而本机运行环境对这两者的目录删除一律 `Access denied`（同一目录用普通路径删却正常）。
+          结果是：单个 RemoveDir 会把整个 publish **硬失败**在清理这一步上，加 ContinueOnError 又变成
+          "只警告、根本没删掉"＝等于没做（cmd 的 rmdir 甚至返回退出码 0 却什么都没删，更具欺骗性）。
+          所以放弃"自动清"，改成**宁可挡住发布也不让内容包发出去** —— 清理动作交给发版流程
+          （技能 csh-release 的 publish 之前有一步 rm -rf dist/app/content）。
+       ⚠️ 别把这条当成可以讨论的"优化项"删掉：删了就等于又把内容包发回给用户。 -->
+  <Target Name="VerifyNoBundledContent" AfterTargets="Publish"
+          Condition="Exists('$(PublishDir)content')">
+    <Error Text="发布产物里还有 content 目录（安装包不该带内容包）：$(PublishDir)content。请先删除它再重新 publish —— 例如 rm -rf dist/app/content。" />
+  </Target>
 
 </Project>
