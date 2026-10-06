@@ -23,10 +23,10 @@
          （dv + 主.功能.补丁 + -insider架构.迭代），改版本时这里和 ShellConfig 一起改。
          ⚠️ AssemblyVersion / FileVersion 只接受「四段纯数字」，塞不进 -insider 后缀，故固定 1.1.1.0；
          界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
-    <Version>1.1.1-insider1.0</Version>
+    <Version>1.1.1</Version>
     <AssemblyVersion>1.1.1.0</AssemblyVersion>
     <FileVersion>1.1.1.0</FileVersion>
-    <InformationalVersion>1.1.1-insider1.0</InformationalVersion>
+    <InformationalVersion>1.1.1</InformationalVersion>
     <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
          否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

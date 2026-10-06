@@ -23,7 +23,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.1.1-insider1.0"
+  #define DesktopVersion "1.1.1"
 #endif
 
 #define AppName "ClassSoftwareHub"
