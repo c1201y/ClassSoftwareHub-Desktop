@@ -112,14 +112,18 @@
                         <!-- ═══ TimePicker 已撤 ═══
                              TimePicker 的弹出列表只有「时 / 分」、**没有秒**（10 秒倒计时都设不了），
                              而且它的列表默认朝上展开，会把上面那行「05:00」大字整块盖住（就是"起飞"）。
-                             换回分/秒两个 NumberBox（Compact 步进，只弹一个小加减面板，不糊大字）。
+                             换回分/秒两个 NumberBox。
+                             ⚠️ 步进用 **Inline**，别换回 Compact（2026-10-05 Nick）：Compact 点一下弹浮层，
+                                触屏上那浮层取消不掉、加减也点不动 —— 等于设不了时长。
+                                Inline 的按钮是常驻在框里的，而且**不会朝上弹**，同样不糊上面那行大字。
+                                宽度跟着加（92 → 124）：Inline 两个按钮各占约 32。
                              ⚠️ 分上限 999 —— 90 分钟的公开课直接填 90，不用换算成小时（同网页版）。 -->
-                        <NumberBox x:Name="MinBox" Width="92" MinWidth="0" Value="5"
-                                   Minimum="0" Maximum="999" SmallChange="1" SpinButtonPlacementMode="Compact"
+                        <NumberBox x:Name="MinBox" Width="124" MinWidth="0" Value="5"
+                                   Minimum="0" Maximum="999" SmallChange="1" SpinButtonPlacementMode="Inline"
                                    VerticalAlignment="Center" />
                         <TextBlock Text="分" FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
-                        <NumberBox x:Name="SecBox" Width="92" MinWidth="0" Value="0"
-                                   Minimum="0" Maximum="59" SmallChange="1" SpinButtonPlacementMode="Compact"
+                        <NumberBox x:Name="SecBox" Width="124" MinWidth="0" Value="0"
+                                   Minimum="0" Maximum="59" SmallChange="1" SpinButtonPlacementMode="Inline"
                                    VerticalAlignment="Center" />
                         <TextBlock Text="秒" FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
                     </StackPanel>

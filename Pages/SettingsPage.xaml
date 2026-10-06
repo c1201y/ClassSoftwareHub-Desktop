@@ -249,6 +249,54 @@
                         </controls:SettingsCard.Description>
                     </controls:SettingsCard>
 
+                    <!-- GitHub 下载体验优化（2026-10-05 Nick）：下载路径的**全局默认**。
+                         和详情页那条「加速通道」分工不同：那条是逐条链接手动挑公益镜像，
+                         这里是用户定一次、之后所有 GitHub 下载都按它走；两者不打架 ——
+                         手动挑过的链接域名已经不是 github.com，不会再被这里改写一遍。
+                         (Experimental) 按 Nick 指定走 WinUI 的警告色（SystemFillColorCautionBrush）。 -->
+                    <controls:SettingsCard Header="GitHub 下载体验优化">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE945;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <controls:SettingsCard.Description>
+                            <StackPanel Spacing="6" Margin="0,4,0,0">
+                                <TextBlock Text="指定软件内 GitHub 下载链接的取用路径。官网直链、网盘等非 GitHub 来源不受影响。"
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="GithubRouteHint" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </controls:SettingsCard.Description>
+                        <ComboBox x:Name="GithubRouteCombo" MinWidth="240"
+                                  SelectionChanged="GithubRoute_SelectionChanged">
+                            <ComboBoxItem Tag="auto">
+                                <TextBlock Text="自动" />
+                            </ComboBoxItem>
+                            <ComboBoxItem Tag="selfhosted">
+                                <TextBlock>
+                                    <Run Text="自建加速服务" />
+                                    <Run Text="（Experimental）"
+                                         Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                </TextBlock>
+                            </ComboBoxItem>
+                            <ComboBoxItem Tag="github">
+                                <TextBlock Text="GitHub 源" />
+                            </ComboBoxItem>
+                        </ComboBox>
+                    </controls:SettingsCard>
+
+                    <!-- 自建加速服务未就绪时的红警告（2026-10-06 Nick）：选中那一项就弹出来。
+                         Severity=Error 就是 WinUI 的红；不可关闭 —— 它反映的是服务端状态，
+                         不是一条能让用户点掉的通知。就绪后（GithubRoute.AcceleratorReady=true）自然不再出现。 -->
+                    <InfoBar x:Name="GithubRouteWarning"
+                             Severity="Error"
+                             IsClosable="False"
+                             IsOpen="False"
+                             Title="当前加速服务不可用"
+                             Message="远端服务器正在架设中，此时下载仍走 GitHub 源。" />
+
                 </StackPanel>
 
                 <!-- ================= 回声洞 ================= -->

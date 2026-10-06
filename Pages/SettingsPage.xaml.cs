@@ -57,6 +57,15 @@ public sealed partial class SettingsPage : Page
             _ => 0
         };
 
+        // GitHub 下载体验优化（下载路径）：认不出的值一律当「自动」
+        GithubRouteCombo.SelectedIndex = Services.GithubRoute.Current switch
+        {
+            Services.GithubRoutes.SelfHosted => 1,
+            Services.GithubRoutes.Official => 2,
+            _ => 0,
+        };
+        UpdateGithubRouteHint();
+
         // 外部组件（分体）外观
         SplitThemeSwitch.IsOn = s.SplitTheme;
         ExtThemeCombo.SelectedIndex = s.ExternalTheme switch
@@ -376,6 +385,45 @@ public sealed partial class SettingsPage : Page
     private void OpenLogViewer_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(LogViewerPage));
+    }
+
+    // ══════════ GitHub 下载体验优化（下载路径的全局默认；设置 → 软件内容）══════════
+
+    private void GithubRoute_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (GithubRouteCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string route) return;
+
+        App.Settings.Current.GithubDownloadRoute = Services.GithubRoutes.Normalize(route);
+        App.Settings.Save();
+
+        // 「自动」那次探测结果立刻作废 —— 否则刚换完设置还要等最多 10 分钟才认。
+        Services.GithubRoute.InvalidateCache();
+        UpdateGithubRouteHint();
+    }
+
+    /// <summary>
+    /// 把当前这条路径具体怎么干说清楚（选项名太短，说不清"首次慢、之后快"这种差别），
+    /// 并顺带管那条红色警告 —— 只有「选了自建加速服务」**且**「节点还没架设好」时才弹。
+    /// </summary>
+    private void UpdateGithubRouteHint()
+    {
+        var current = Services.GithubRoute.Current;
+
+        GithubRouteHint.Text = current switch
+        {
+            Services.GithubRoutes.SelfHosted =>
+                "自建加速服务：GitHub 链接统一交由社区自建节点中转（实验性）。节点命中缓存后速率提升明显。",
+            Services.GithubRoutes.Official =>
+                "GitHub 源：直接访问 github.com，不作任何改写（国内网络环境中速率可能偏低或中断）。",
+            _ =>
+                "自动：下载前分别探测各条路径的速率，择其较优者使用；首选路径不可用时自动改用另一条。"
+                + "探测结果保留 10 分钟。",
+        };
+
+        // 服务端状态提示，不是能让用户消掉的通知 ⇒ 只跟着选择开合，不给关闭按钮
+        GithubRouteWarning.IsOpen =
+            current == Services.GithubRoutes.SelfHosted && !Services.GithubRoute.AcceleratorReady;
     }
 
     // ══════════════════════════ 更新 ══════════════════════════

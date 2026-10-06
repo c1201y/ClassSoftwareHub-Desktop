@@ -88,11 +88,24 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="IconBox" Header="图标链接（选填，256×256 方图最佳）"
-                                         PlaceholderText="https://…/icon.png" />
+                                <!-- 图标可以填现成的链接，也可以选本地图片传上来（2026-10-06 对齐网页版）。
+                                     按钮排法照「从 GitHub 读取」那行：框占满、按钮贴在框右侧。 -->
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="IconBox" Header="图标链接（选填，256×256 方图最佳）"
+                                             PlaceholderText="https://…/icon.png" />
+                                    <Button x:Name="IconUploadButton" Grid.Column="1" Content="上传图片" MinWidth="90"
+                                            VerticalAlignment="Bottom" Click="IconUpload_Click" />
+                                </Grid>
                                 <ComboBox x:Name="CategoryCombo" Grid.Column="1" Header="分类 *"
-                                          HorizontalAlignment="Stretch" PlaceholderText="选择分类" />
+                                          HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                                          PlaceholderText="选择分类" />
                             </Grid>
+                            <TextBlock x:Name="IconUploadHint" FontSize="12" Opacity="0.7" TextWrapping="Wrap"
+                                       Visibility="Collapsed" />
 
                             <TextBox x:Name="TaglineBox" PlaceholderText="一句话简介，显示在首页卡片上">
                                 <TextBox.Header>
@@ -153,6 +166,8 @@
                     <TextBlock Text="下载项" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                Text="直链需填写文件本身（.exe / .zip / .msi 等），单击后直接开始下载；请勿填写官网下载页。" />
+                    <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="没有自己的网盘也可以：点「上传到本站」把文件传到站点存储，回填的文件键在下载时同样走票据闸门（单文件上限 2.5 GB，超过请改填官网或 GitHub Releases 直链）。" />
                     <StackPanel x:Name="DownloadsHost" Spacing="12" />
                     <Button Content="+ 添加下载项" Click="AddDownload_Click" HorizontalAlignment="Left" />
 

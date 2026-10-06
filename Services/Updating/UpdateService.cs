@@ -95,6 +95,11 @@ public sealed class UpdateService
     /// <summary>
     /// 下载安装包并校验。校验优先级：MD5（你要求的）→ SHA256（GitHub 自带的 digest）→ 都没有就只报"未校验"。
     /// 校验不过会删掉文件并抛 ChecksumMismatchException。
+    ///
+    /// ⚠️ 走哪条链接由「GitHub 下载体验优化」设置决定（见 <see cref="GithubRoute"/>）——
+    ///    更新包与普通下载共用同一份设置与同一份探速结果；自建加速节点失败会自动回落官方直链。
+    ///    走加速不影响安全：下面的 MD5 / SHA256 校验照常执行，改包会被当场拦下。
+    ///    （只加速安装包本体；那个几百字节的 .md5 校验文件仍直接问 GitHub，不值得为它换路。）
     /// </summary>
     public async Task<DownloadedPackage> DownloadAndVerifyAsync(
         UpdatePackage package, string destinationFile, IProgress<double>? progress = null, CancellationToken ct = default)
@@ -106,27 +111,39 @@ public sealed class UpdateService
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-        using (var req = new HttpRequestMessage(HttpMethod.Get, package.Url))
-        using (var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct))
+        var candidates = await GithubRoute.ResolveAsync(package.Url.ToString(), ct);
+
+        Exception? lastError = null;
+        for (var i = 0; i < candidates.Count; i++)
         {
-            resp.EnsureSuccessStatusCode();
-            var total = resp.Content.Headers.ContentLength ?? package.Size;
-
-            await using var src = await resp.Content.ReadAsStreamAsync(ct);
-            await using var dst = File.Create(temp);
-
-            var buffer = new byte[128 * 1024];
-            long done = 0;
-            int read;
-            while ((read = await src.ReadAsync(buffer, ct)) > 0)
+            ct.ThrowIfCancellationRequested();
+            try
             {
-                await dst.WriteAsync(buffer.AsMemory(0, read), ct);
-                md5.AppendData(buffer, 0, read);
-                sha.AppendData(buffer, 0, read);
-                done += read;
-                if (total > 0) progress?.Report(Math.Min(1.0, done / (double)total));
+                await FetchPackageAsync(candidates[i], package, temp, md5, sha, progress, ct);
+                lastError = null;
+                break;
+            }
+            catch (OperationCanceledException)
+            {
+                TryDelete(temp);
+                throw;                                   // 用户自己取消的，不是这条路不行
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                TryDelete(temp);
+                // 半截数据的哈希必须清掉，否则第二次尝试算出来的是两段拼起来的摘要
+                md5.GetHashAndReset();
+                sha.GetHashAndReset();
+                if (i < candidates.Count - 1)
+                {
+                    progress?.Report(0);
+                    AppLog.Info("update", $"更新包 {candidates[i]} 下载失败（{ex.Message}），改用 {candidates[i + 1]}");
+                }
             }
         }
+
+        if (lastError is not null) throw lastError;
 
         var actualMd5 = Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
         var actualSha = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
@@ -169,6 +186,36 @@ public sealed class UpdateService
         File.Move(temp, destinationFile);
 
         return new DownloadedPackage(destinationFile, actualMd5, actualSha, verified, note);
+    }
+
+    /// <summary>
+    /// 真正抓一条链接到 <paramref name="temp"/>，边下边喂两个哈希。
+    /// 一次只试一条；失败/取消都把 .part 删掉再往外抛（重试由调用方换下一条候选）。
+    /// </summary>
+    private static async Task FetchPackageAsync(
+        string url, UpdatePackage package, string temp,
+        IncrementalHash md5, IncrementalHash sha, IProgress<double>? progress, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+        var total = resp.Content.Headers.ContentLength ?? package.Size;
+
+        await using var src = await resp.Content.ReadAsStreamAsync(ct);
+        // File.Create 是截断式的 —— 换下一条候选时天然从头写，不会把两段拼在一起
+        await using var dst = File.Create(temp);
+
+        var buffer = new byte[128 * 1024];
+        long done = 0;
+        int read;
+        while ((read = await src.ReadAsync(buffer, ct)) > 0)
+        {
+            await dst.WriteAsync(buffer.AsMemory(0, read), ct);
+            md5.AppendData(buffer, 0, read);
+            sha.AppendData(buffer, 0, read);
+            done += read;
+            if (total > 0) progress?.Report(Math.Min(1.0, done / (double)total));
+        }
     }
 
     /// <summary>把 package.Md5 里的 "asset:URL" 解析成真正的 32 位十六进制 MD5。</summary>

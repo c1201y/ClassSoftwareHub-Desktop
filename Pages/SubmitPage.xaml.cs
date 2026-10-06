@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -12,6 +13,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
 
@@ -24,9 +26,8 @@ namespace ClassSoftwareHub.Desktop.Pages;
 /// </summary>
 public sealed partial class SubmitPage : Page
 {
-    /// <summary>提交入口：先试 CDN 新域，再试 CF 直连（与网页版一致）。</summary>
-    private static readonly string[] SubmitEndpoints = { "https://cshapi.132614.xyz", "https://submit.132614.xyz" };
-    private const int SubmitTimeoutMs = 10000;
+    /// <summary>提交入口与选路逻辑都在 <see cref="Services.SubmitEndpoint"/>：投稿与 OSS 直传签名共用一份。</summary>
+    private static int SubmitTimeoutMs => Services.SubmitEndpoint.TimeoutMs;
     /// <summary>站点仓库的 submissions 目录（兜底走 GitHub 新建文件页）。</summary>
     private const string RepoNewFileUrl = "https://github.com/c1201y/ClassSoftwareHub/new/main/submissions";
     /// <summary>合法校验值位数：32=MD5 / 40=SHA-1 / 56=SHA-224 / 64=SHA-256 / 96=SHA-384 / 128=SHA-512</summary>
@@ -35,7 +36,6 @@ public sealed partial class SubmitPage : Page
     private static readonly HttpClient Http = new();
 
     private static string DataDir => Core.AppPaths.DataDir;
-    private static string EndpointFile => System.IO.Path.Combine(DataDir, "submit-endpoint.txt");
     private static string DraftFile => System.IO.Path.Combine(DataDir, "submit-draft.json");
 
     private sealed class DownloadDraft
@@ -98,7 +98,55 @@ public sealed partial class SubmitPage : Page
         row.Children.Add(note);
         stack.Children.Add(row);
 
-        stack.Children.Add(Field("下载直链 *", "https://…/setup.exe", null, value => draft.Url = value));
+        // 直链一行：输入框占满，上传按钮贴在它右侧（排法照「从 GitHub 读取」那一行）
+        var urlBar = new ProgressBar
+        {
+            Height = 4,
+            Minimum = 0,
+            Maximum = 1,
+            Visibility = Visibility.Collapsed,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        // 说明行**不能**塞进 TextBox.Description —— 那样按钮的「底边对齐」会跟着一起被顶下去，
+        // 看起来就跟输入框错位了（2026-10-06 Nick 抓的）。它得是这一行的独立兄弟，且要跟输入框贴紧。
+        var urlHint = new TextBlock
+        {
+            FontSize = 12,
+            Opacity = 0.7,
+            TextWrapping = TextWrapping.Wrap,
+            Text = "没有自己的网盘就点右侧按钮，把文件传到本站存储；上传成功后这行会锁住。",
+        };
+
+        var urlGrid = new Grid { ColumnSpacing = 10 };
+        urlGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        urlGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var urlBox = Field("下载直链 *", "https://…/setup.exe", null, value => draft.Url = value);
+
+        var uploadButton = new Button { Content = "上传", MinWidth = 90, VerticalAlignment = VerticalAlignment.Bottom };
+        Grid.SetColumn(uploadButton, 1);
+        uploadButton.Click += async (_, _) =>
+        {
+            var picked = await PickFileAsync("选择要上传到本站的文件", new[] { "*" });
+            if (picked is null) return;
+
+            await UploadToSiteAsync(picked.Path, Services.OssPurpose.File, uploadButton, urlBar, urlHint, url =>
+            {
+                draft.Url = url;
+                urlBox.Text = url;
+                // 键是服务端生成的，手改一个字符就失效 ⇒ 锁住（跟网页版一样）
+                urlBox.IsReadOnly = true;
+            });
+        };
+
+        urlGrid.Children.Add(urlBox);
+        urlGrid.Children.Add(uploadButton);
+        // 输入框行 + 进度条 + 说明/状态行三件贴成一小块（间距 4，跟 TextBox 自带说明行的观感一致）
+        var urlBlock = new StackPanel { Spacing = 4 };
+        urlBlock.Children.Add(urlGrid);
+        urlBlock.Children.Add(urlBar);
+        urlBlock.Children.Add(urlHint);
+        stack.Children.Add(urlBlock);
         stack.Children.Add(Field("校验值（选填，用于防篡改）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value));
 
         var card = new Border
@@ -147,6 +195,130 @@ public sealed partial class SubmitPage : Page
     }
 
     private Brush Res(string key) => Services.ThemeBrush.Get(this, key);
+
+    // ══════════ 上传到本站（OSS 直传，与网页版同一套协议） ══════════
+    //
+    // 链路：向 /api/oss-sign 要一条一次性预签名 PUT 地址 → 客户端直传 OSS（进度就是这一步的）
+    //       → 回填对象键。软件包落 upload/ 前缀、下载时走票据闸门；图标落 icon/ 前缀、公开只读。
+    // 为什么要它：投稿人不必自己准备网盘或 GitHub Releases，站点代管文件本体。
+
+    /// <summary>图标：选本地图片 → 本地压到 128 px → 上传 → 回填公开只读地址。</summary>
+    private async void IconUpload_Click(object sender, RoutedEventArgs e)
+    {
+        var picked = await PickFileAsync("选择图标图片",
+            new[] { ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".ico" }, PickerLocationId.PicturesLibrary);
+        if (picked is null) return;
+
+        long size = 0;
+        try { size = (long)(await picked.GetBasicPropertiesAsync()).Size; } catch { /* 拿不到大小就照常往下走 */ }
+        if (size > Services.OssUpload.IconInputMaxBytes)
+        {
+            IconUploadHint.Text = $"这张图有 {HumanSize(size)}，请换一张小一些的"
+                                  + $"（上限 {HumanSize(Services.OssUpload.IconInputMaxBytes)}）。";
+            IconUploadHint.Visibility = Visibility.Visible;
+            return;
+        }
+
+        // 缩不了（不是图片 / 编解码器不认 / 压完更大）就用原文件 —— 压缩只是优化，不是门槛
+        var shrunken = await Services.IconResize.ShrinkToTempAsync(picked.Path);
+        try
+        {
+            await UploadToSiteAsync(shrunken ?? picked.Path, Services.OssPurpose.Icon,
+                IconUploadButton, null, IconUploadHint, url => IconBox.Text = url);
+        }
+        finally
+        {
+            if (shrunken is not null)
+            {
+                try { File.Delete(shrunken); } catch { /* 删不掉就留给系统清临时目录 */ }
+            }
+        }
+    }
+
+    /// <summary>把文件传到站点 OSS，并把进度、结果、失败原因都写到给定的控件上。</summary>
+    private async Task UploadToSiteAsync(
+        string filePath,
+        Services.OssPurpose purpose,
+        Button button,
+        ProgressBar? bar,
+        TextBlock hint,
+        Action<string> onDone)
+    {
+        button.IsEnabled = false;
+        if (bar is not null)
+        {
+            bar.Value = 0;
+            bar.Visibility = Visibility.Visible;
+        }
+        hint.Visibility = Visibility.Visible;
+        hint.Text = "正在上传…";
+
+        try
+        {
+            var progress = new Progress<Services.UploadProgress>(p =>
+            {
+                if (bar is not null) bar.Value = p.Fraction;
+                hint.Text = $"正在上传 {HumanSize(p.Sent)} / {HumanSize(p.Total)}（{p.Fraction * 100:0}%）";
+            });
+
+            var result = await Services.OssUpload.UploadAsync(filePath, purpose, progress);
+            onDone(result.Url);
+            hint.Text = result.OrphanMinutes > 0
+                ? $"已上传，请在 {result.OrphanMinutes} 分钟内完成提交，否则会被自动清理。"
+                : "已上传。";
+        }
+        catch (Services.OssUploadException ex)
+        {
+            hint.Text = DescribeUploadError(ex);
+        }
+        catch (Exception ex)
+        {
+            hint.Text = "上传失败：" + ex.Message;
+        }
+        finally
+        {
+            if (bar is not null) bar.Visibility = Visibility.Collapsed;
+            button.IsEnabled = true;
+        }
+    }
+
+    /// <summary>上传失败的本地化说法（服务端的英文/XML 原始报错不适合直接甩给用户）。</summary>
+    private static string DescribeUploadError(Services.OssUploadException ex) => ex.Code switch
+    {
+        Services.OssUploadErrorCode.TooLarge =>
+            $"文件超过上限（{HumanSize(Services.OssUpload.MaxBytes)}），请改填官网或 GitHub Releases 直链。",
+        Services.OssUploadErrorCode.SignFailed => "站点没有接受这次上传：" + ex.Message,
+        Services.OssUploadErrorCode.Unreachable => "连不上提交服务，请检查网络后重试。",
+        Services.OssUploadErrorCode.Network => "传输中断，请检查网络后重试。",
+        Services.OssUploadErrorCode.Aborted => "已取消上传。",
+        _ => "站点拒绝了这次上传：" + ex.Message,
+    };
+
+    /// <summary>弹系统选文件框（unpackaged 应用必须先把它跟窗口关联起来）。</summary>
+    private static async Task<StorageFile?> PickFileAsync(
+        string commitText,
+        IReadOnlyList<string> filters,
+        PickerLocationId start = PickerLocationId.Downloads)
+    {
+        var picker = new FileOpenPicker
+        {
+            ViewMode = PickerViewMode.List,
+            SuggestedStartLocation = start,
+            CommitButtonText = commitText,
+        };
+        foreach (var filter in filters) picker.FileTypeFilter.Add(filter);
+
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow!));
+        return await picker.PickSingleFileAsync();
+    }
+
+    private static string HumanSize(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / 1073741824.0:0.##} GB",
+        >= 1L << 20 => $"{bytes / 1048576.0:0.#} MB",
+        >= 1L << 10 => $"{bytes / 1024.0:0.#} KB",
+        _ => bytes + " B",
+    };
 
     // ══════════ 从 GitHub 一键读取 ══════════
     private readonly Dictionary<string, string> _lastFilled = new();
@@ -604,30 +776,9 @@ public sealed partial class SubmitPage : Page
         return (null, null);
     }
 
-    private static List<string> OrderedEndpoints()
-    {
-        try
-        {
-            if (System.IO.File.Exists(EndpointFile))
-            {
-                var remembered = System.IO.File.ReadAllText(EndpointFile).Trim();
-                if (SubmitEndpoints.Contains(remembered))
-                    return new List<string> { remembered }.Concat(SubmitEndpoints.Where(item => item != remembered)).ToList();
-            }
-        }
-        catch { /* 读不到就用默认顺序 */ }
-        return SubmitEndpoints.ToList();
-    }
+    private static List<string> OrderedEndpoints() => Services.SubmitEndpoint.Ordered();
 
-    private static void RememberEndpoint(string baseUrl)
-    {
-        try
-        {
-            System.IO.Directory.CreateDirectory(DataDir);
-            System.IO.File.WriteAllText(EndpointFile, baseUrl);
-        }
-        catch { /* 记不上不影响提交 */ }
-    }
+    private static void RememberEndpoint(string baseUrl) => Services.SubmitEndpoint.Remember(baseUrl);
 
     // ══════════ 本机草稿（提交失败后不丢内容） ══════════
     private static void SaveDraft(Dictionary<string, object?> payload)
@@ -732,6 +883,11 @@ public sealed partial class SubmitPage : Page
                     if (cell is TextBox cellBox) boxes.Add(cellBox);
         }
         for (var i = 0; i < boxes.Count && i < values.Length; i++) boxes[i].Text = values[i];
+        // 本站上传回填的 `oss://` 键是服务端生成的，锁住别让人改坏（第 4 个框是「下载直链」）
+        if (boxes.Count > 3)
+        {
+            boxes[3].IsReadOnly = draft.Url.Trim().StartsWith("oss://", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     // ══════════ 兜底：下载 / 复制 / 去 GitHub ══════════

@@ -127,11 +127,17 @@
                                         <!-- ⚠️ NumberBox 的 Maximum 必须填：不填的话在框里粘一个大数字（比如一亿），
                                              后面 Enumerable.Range(Lo, size) 会瞬间申请几 GB → 界面冻死或直接 OOM。
                                              上限与浮窗版保持一致；代码里另有一道夹取兜底。 -->
+                                        <!-- ⚠️⛔ 步进一律用 **Inline**，别换回 Compact（2026-10-05 Nick 截图反馈）：
+                                             Compact 是"点一下才弹一个小面板"，触屏上那个浮层既取消不掉
+                                             （点别处不收起），里面的加/减也点不动 —— 等于这个框没法用。
+                                             Inline 把上/下按钮直接做进框里（常驻、整高），一次点到位。
+                                             宽度要跟着给足（104 → 124）：Inline 两个按钮各占约 32，窄了会把数字挤没。
+                                             （浮窗版 MiniPickNumber 一早就踩过同一个坑，同样用的 Inline。） -->
                                         <NumberBox x:Name="FromBox" Value="1" Minimum="0" Maximum="9999"
-                                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="104" />
+                                                   SmallChange="1" SpinButtonPlacementMode="Inline" Width="124" />
                                         <TextBlock Text="~" VerticalAlignment="Center" Opacity="0.6" />
                                         <NumberBox x:Name="ToBox" Value="50" Minimum="0" Maximum="9999"
-                                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="104" />
+                                                   SmallChange="1" SpinButtonPlacementMode="Inline" Width="124" />
                                     </StackPanel>
 
                                     <!-- 名单：导入 / 示例 / 查看修改 / 清空
@@ -163,8 +169,9 @@
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="抽取数量" FontSize="12" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" Margin="0,0,4,0" />
+                                        <!-- 步进用 Inline，理由同上（Compact 的浮层在触屏上点不动） -->
                                         <NumberBox x:Name="CountBox" Value="1" Minimum="1" Maximum="9999"
-                                                   SmallChange="1" SpinButtonPlacementMode="Compact" Width="104" />
+                                                   SmallChange="1" SpinButtonPlacementMode="Inline" Width="124" />
                                         <CheckBox x:Name="NoRepeatBox" Content="不重复" MinWidth="0"
                                                   Padding="6,0,0,0" VerticalAlignment="Center" Margin="8,0,0,0" />
                                     </StackPanel>
@@ -246,8 +253,9 @@
                                 <StackPanel Orientation="Horizontal" Spacing="12">
                                     <ComboBox x:Name="GroupModeBox" Header="分组方式" MinWidth="150"
                                               VerticalAlignment="Bottom" />
+                                    <!-- 步进用 Inline（Compact 的弹出浮层触屏点不动，见上方注释） -->
                                     <NumberBox x:Name="GroupValueBox" Value="4" Minimum="1"
-                                               Maximum="9999" SmallChange="1" SpinButtonPlacementMode="Compact"
+                                               Maximum="9999" SmallChange="1" SpinButtonPlacementMode="Inline"
                                                Width="150" VerticalAlignment="Bottom" />
                                     <Button x:Name="GroupButton" Content="开始分组"
                                             Style="{StaticResource AccentButtonStyle}" Click="Group_Click"

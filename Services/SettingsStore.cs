@@ -262,6 +262,23 @@ public sealed class AppSettings
     /// 开着的场合，投影出来的计时盘跟教室那块全屏时钟长一样，不会一边一个画风。
     /// </summary>
     public bool TimerUseClockBackground { get; set; }
+
+    // ── 下载路径（2026-10-05 Nick：设置 → 软件内容 →「GitHub 下载体验优化」）────────
+
+    /// <summary>
+    /// GitHub 下载链接走哪条路，取值见 <see cref="GithubRoutes"/>：
+    /// <list type="bullet">
+    ///   <item><c>github</c>（**默认**，2026-10-05 Nick 定）= GitHub 源：原样直连，不做任何改写；</item>
+    ///   <item><c>auto</c> = 下载前各探一下速度，挑快的那条；它失败会自动换另一条；</item>
+    ///   <item><c>selfhosted</c> = 自建加速服务（实验性）：GitHub 链接一律交由社区自建节点中转；
+    ///         ⚠️ 节点远端未就绪时（现在，见 <see cref="GithubRoute.AcceleratorReady"/>）等价于 GitHub 源，
+    ///         设置页会给一条红色警告。</item>
+    /// </list>
+    /// ⚠️ 默认是「官方直连」而不是「自动」：加速节点是实验性的，不该替所有用户先探一遍外网。
+    /// ⚠️ 这是**存档格式**的一部分：值只能加、不能改字面量（认不出的值一律当 GitHub 源，见
+    ///    <see cref="GithubRoutes.Normalize"/>）。
+    /// </summary>
+    public string GithubDownloadRoute { get; set; } = GithubRoutes.Official;
 }
 
 /// <summary>设置存储：%LOCALAPPDATA%\ClassSoftwareHub\settings.json</summary>

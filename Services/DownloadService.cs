@@ -126,6 +126,10 @@ public static class DownloadService
     /// <summary>
     /// 下载到 <paramref name="directory"/>（默认「下载」文件夹）。
     /// 文件名优先用 <paramref name="suggestedName"/>，否则从 URL 猜；重名自动加 (1)(2)。
+    ///
+    /// ⚠️ 真的去抓哪条链接，由「GitHub 下载体验优化」这个设置决定（见 <see cref="GithubRoute"/>）：
+    ///    GitHub 上的文件可能换成自建加速服务或自动挑快的；非 GitHub 链接原样直连。
+    ///    自动/自建两种模式都带一条兜底 —— 前一条失败会换另一条，**用户主动取消不算失败**。
     /// </summary>
     public static async Task<DownloadedFile> DownloadAsync(
         string url,
@@ -140,11 +144,50 @@ public static class DownloadService
         var dir = string.IsNullOrWhiteSpace(directory) ? DefaultDir : directory!;
         Directory.CreateDirectory(dir);
 
-        var fileName = ResolveFileName(url, suggestedName);
+        // 候选按优先级排（通常 1 条，自动/自建模式是 2 条）。文件名一律按**原始链接**定，
+        // 不按加速链接 —— 前缀拼出来的地址里文件名虽然一样，但那是巧合，别依赖它。
+        var candidates = await GithubRoute.ResolveAsync(url, ct).ConfigureAwait(false);
+
+        Exception? lastError = null;
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                return await FetchAsync(candidates[i], url, suggestedName, dir, progress, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;                                   // 用户自己取消的，不是这条路不行
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                if (i < candidates.Count - 1)
+                {
+                    Core.AppLog.Info("download", $"{candidates[i]} 失败（{ex.Message}），改用 {candidates[i + 1]}");
+                    progress?.Report(new DownloadProgress(0, 0, 0));
+                }
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException("下载失败。");
+    }
+
+    /// <summary>真正抓一条链接并写盘（一次只试一条；失败/取消都把 .part 删掉再往外抛）。</summary>
+    private static async Task<DownloadedFile> FetchAsync(
+        string fetchUrl,
+        string originalUrl,
+        string? suggestedName,
+        string dir,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken ct)
+    {
+        var fileName = ResolveFileName(originalUrl, suggestedName);
         var target = UniquePath(dir, fileName);
         var part = target + ".part";
 
-        using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct)
+        using var response = await Http.GetAsync(fetchUrl, HttpCompletionOption.ResponseHeadersRead, ct)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
