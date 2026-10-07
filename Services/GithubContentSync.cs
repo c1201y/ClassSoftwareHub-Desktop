@@ -250,6 +250,14 @@ public static class GithubContentSync
         return (list, truncated);
     }
 
+    /// <summary>
+    /// 给同源服务复用这条接口通道（见 <see cref="NewlyAddedService"/>）：走同一套入口回退，
+    /// 也共用「上次成功的入口」的记忆 —— 一条路通了，两边都跟着走那条。
+    /// ⚠️ 会吃未登录的 60 次/小时配额，调用方自己掂量频率。
+    /// </summary>
+    internal static Task<string> GetApiTextAsync(string apiPath, CancellationToken ct)
+        => GetApiAsync(apiPath, ct);
+
     /// <summary>走 GitHub 接口（api.github.com → 镜像）取一段 JSON 文本。</summary>
     private static async Task<string> GetApiAsync(string apiPath, CancellationToken ct)
     {

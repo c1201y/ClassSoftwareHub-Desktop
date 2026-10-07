@@ -9,7 +9,7 @@
     <Page.Resources>
         <!-- 快捷入口两套模板：颜色全走 {ThemeResource}（它认识"这棵树"的主题，浅色/深色自己会变） -->
         <DataTemplate x:Key="QuickLinkNormal">
-            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95" />
@@ -20,7 +20,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="QuickLinkAccent">
-            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                     Background="{ThemeResource AccentFillColorDefaultBrush}">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
@@ -39,6 +39,35 @@
         <Style x:Key="InfoRowDivider" TargetType="Border">
             <Setter Property="Height" Value="1" />
             <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+        </Style>
+
+        <!-- ===== 功能卡片（2026-10-06 起：裸图标 + 标题 + 副标题 + 右箭头）=====
+             图标**不再套方块底**（Nick 2026-10-06：不要"框套框"）—— 直接给裸 FontIcon，
+             字号放大到 20 顶住原来的视觉重量（FluentFlyout 首页同款做法）。 -->
+        <Style x:Key="CardIcon" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        </Style>
+
+        <Style x:Key="CardTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <!-- ⚠️ 刻意**不设 FontWeight**：Nick 2026-10-06 要求卡片内文字不要粗体。
+                 层级靠字号（14/12）＋副标题降透明度拉开就够了；加粗反而显"重"，不是 WinUI 观感。 -->
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style x:Key="CardSubtitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.68" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style x:Key="CardChevron" TargetType="FontIcon">
+            <Setter Property="Glyph" Value="&#xE76C;" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.55" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </Page.Resources>
 
@@ -59,29 +88,29 @@
                 <ColumnDefinition Width="24" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="14">
+            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="8">
 
-            <!-- 更新待装横幅：后台下载完成后每次启动都提醒，装上新版本后自检清除 -->
-            <InfoBar x:Name="UpdateReadyBar" Severity="Informational" IsOpen="False"
-                     Title="新版本已下载就绪"
-                     Message="安装包已通过校验，可立即安装；继续使用当前版本也不受影响。">
-                <InfoBar.ActionButton>
-                    <Button Content="立即安装" Click="InstallPending_Click" />
-                </InfoBar.ActionButton>
-            </InfoBar>
+            <!-- 首页大标题。2026-10-07 Nick：字号从 40 收一点（40 → 36），副名从「桌面版」改回英文「- Desktop」
+                 （与站点/仓库的英文口径一致，也跟右边那张 banner 里的英文对得上）。
+                 随后他看了实机说"还是太大" ⇒ 再压到 **24**。 -->
+            <TextBlock Text="ClassSoftwareHub - Desktop" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" />
 
-            <TextBlock Text="ClassSoftwareHub" FontSize="40" FontWeight="Bold" />
+            <!-- 「已收录 XX 款软件」原来就挂在大标题下面这一行。2026-10-07 Nick 说位置太隐蔽，
+                 已**整行挪进**「设置」卡片下面那条 InfoBar（见 CollectedBar），和「今日新增」住一起。
+                 ⛔ 别再往大标题底下补回任何数字行。 -->
 
-            <TextBlock x:Name="HomeTitleText" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
+            <!-- ⚠️ 这里原来还有一行站点名副标题（HomeTitleText，内容＝"电教委员常用软件下载站"），
+                 已按 Nick 2026-10-06 要求整行删除 —— 大标题已经写明"桌面版"，下面再挂一行站点名纯属重复。
+                 它的 code-behind 赋值也一并清掉了，别再补回来。 -->
 
-            <!-- 图片（高 140，宽按比例）+ 版本号（左）+ 代号 Panorama（右，别跟版本号挤一起） -->
+            <!-- 图片（高 140，宽按比例，圆角 12）+ 版本号（图片右侧·左上）+ 代号（图片右侧·右上） -->
             <Grid ColumnSpacing="20" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border CornerRadius="4" BorderThickness="1"
+                <Border CornerRadius="12" BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <Image x:Name="Banner" Height="140" Stretch="Uniform" />
@@ -94,98 +123,186 @@
                     <TextBlock x:Name="ShellVersionText" FontSize="28" FontWeight="Bold" />
                 </StackPanel>
 
-                <!-- 应用代号：贴右（跟顶上那串版本号岔开，不打架） -->
-                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <TextBlock Text="代号" FontSize="12" Opacity="0.6" HorizontalAlignment="Right" />
+                <!-- 应用代号：与左上角的版本号同一水平线、贴右端（左右各占一头，不打架）。
+                     ⚠️ 别再往它上面补「代号」两个字 —— Nick 2026-10-06 说那行中文莫名其妙，只要英文代号本身。 -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Right">
                     <TextBlock x:Name="CodeNameText" Text="Panorama" FontSize="28" FontWeight="Bold"
                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                 </StackPanel>
             </Grid>
 
+            <!-- 顶部那张独立的「更新状态卡片」已于 2026-10-06 **并入下方快速开始的主题色卡**
+                 （Nick：「图片卡已经有一个查看更新内容，你上面那个就删掉」）——
+                 版本状态文案改在「查看更新内容」那张卡上显示，卡片自带的 banner 缩略图一并取消。
+                 ⚠️ 状态逻辑没有删！还活在 code-behind 的 RefreshUpdateCard() 里，
+                    只是目标元素从 UpdateCard* 换成了 ChangelogCardTitle / ChangelogCardSubtitle。 -->
+
             <TextBlock Text="快速开始" FontSize="20" FontWeight="Bold" Margin="0,20,0,4" />
 
-            <!-- 更宽的一行：体验网页版（主题色底） -->
-            <Border x:Name="WebCard" Tag="web" Height="60" CornerRadius="4" Padding="20,0"
-                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                    PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
-                    Tapped="Card_Tapped">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE774;" FontSize="20" VerticalAlignment="Center"
-                              Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                    <TextBlock Grid.Column="1" Text="访问网页版" FontSize="14" FontWeight="Bold"
-                               VerticalAlignment="Center"
-                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                    <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="12" VerticalAlignment="Center"
-                              Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                </Grid>
-            </Border>
-
-            <!-- 两张等大卡片 -->
-            <Grid ColumnSpacing="16" Height="60">
+            <!-- 主题色一行两张：访问网页版 / 查看更新内容（Nick 2026-10-06：全宽卡对半切开，
+                 右半张换成更新日志入口）。两张都跟下面的普通卡片**同规格**：标题 + 副标题 + 右端指示符。
+                 ⚠️ 底色与文字色必须成对用 Accent / TextOnAccent 画刷，别写死色值（浅色主题会自动翻深字）。
+                 ⚠️ 高度**只靠 Padding 撑，不写 Height** —— 两列同处一个 Grid，天然自动等高。 -->
+            <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Tag="apps" CornerRadius="4" Padding="20,0"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                <Border x:Name="WebCard" Grid.Column="0" Tag="web" CornerRadius="8" Padding="16,18"
+                        Background="{ThemeResource AccentFillColorDefaultBrush}"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                         Tapped="Card_Tapped">
-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE896;" FontSize="20" />
-                        <TextBlock Text="下载首页" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE774;" FontSize="20" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="访问网页版" FontSize="14"
+                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                            <TextBlock Text="在浏览器中打开完整站点" FontSize="12" Opacity="0.78"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="12" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                    </Grid>
                 </Border>
 
-                <Border Grid.Column="1" Tag="tools" CornerRadius="4" Padding="20,0"
+                <!-- 「查看更新内容」：图标口径跟导航栏那条「更新日志」一致（E81C = 时钟/历史）。
+                     副标题＝版本状态，原本挂在顶部那张更新卡片上，2026-10-06 随卡片一起并到这里；
+                     文案由 code-behind 的 RefreshUpdateCard() 按「待装 / 已是最新」两态填。 -->
+                <Border x:Name="ChangelogCard" Grid.Column="1" Tag="changelog" CornerRadius="8" Padding="16,18"
+                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="ChangelogCard_Tapped">
+                    <Grid ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE81C;" FontSize="20" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock x:Name="ChangelogCardTitle" Text="查看更新内容" FontSize="14"
+                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="ChangelogCardSubtitle" FontSize="12" Opacity="0.78"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        </StackPanel>
+                        <FontIcon x:Name="ChangelogChevron" Grid.Column="2" Glyph="&#xE8A7;" FontSize="12"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <!-- 待装态：右端指示符让位给「立即安装」 -->
+                        <Button x:Name="UpdateInstallButton" Grid.Column="2" VerticalAlignment="Center"
+                                Content="立即安装" Visibility="Collapsed" Click="InstallPending_Click" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- 两张等大卡片 -->
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Tag="apps" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                         Tapped="Card_Tapped">
-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE71D;" FontSize="20" />
-                        <TextBlock Text="内置工具" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE896;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="下载首页" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="浏览并下载常用软件" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Column="1" Tag="tools" CornerRadius="8" Padding="14,18"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE71D;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="内置工具" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="常用小工具集合" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
                 </Border>
             </Grid>
 
             <!-- 第二行快速入口：侧边布局 / 实验性功能（跟上面一排同样的两张等大卡片、同样的图标口径） -->
-            <Grid ColumnSpacing="16" Height="60">
+            <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Tag="sidebar" CornerRadius="4" Padding="20,0"
+                <Border Grid.Column="0" Tag="sidebar" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                         Tapped="Card_Tapped">
-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE8A0;" FontSize="20" />
-                        <TextBlock Text="侧边布局" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8A0;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="侧边布局" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="调整侧边栏的位置与模式" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
                 </Border>
 
                 <!--
                   实验性功能：**故意不列它下面有什么**（Nick 2026-09-26）——
                   首页卡片只说"这里有一组还没成熟的功能"，具体内容进去看。
+                  所以副标题也保持中性口径，不剧透任何条目名。
                 -->
-                <Border Grid.Column="1" Tag="experimental" CornerRadius="4" Padding="20,0"
+                <Border Grid.Column="1" Tag="experimental" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                         Tapped="Card_Tapped">
-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xEA80;" FontSize="20" />
-                        <TextBlock Text="实验性功能" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xEA80;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="实验性功能" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="尚未成熟的新功能" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
                 </Border>
             </Grid>
 
@@ -195,47 +312,85 @@
               ⚠️ 约定：导航栏上半区有什么，首页就得有对应的卡片（除非特别说明）；
                  所以挨着「侧边布局」后面补的「实验性功能」，以及下半区的「提交软件」「反馈中心」。
             -->
-            <Grid ColumnSpacing="16" Height="60">
+            <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Tag="submit" CornerRadius="4" Padding="20,0"
+                <Border Grid.Column="0" Tag="submit" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                         Tapped="Card_Tapped">
-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE898;" FontSize="20" />
-                        <TextBlock Text="提交软件" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE898;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="提交软件" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="把手上的软件推给更多同学" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
                 </Border>
 
                 <!-- 反馈中心：图标口径跟导航栏那条一致（E939 = 人 + 对话泡） -->
-                <Border Grid.Column="1" Tag="feedback" CornerRadius="4" Padding="20,0"
+                <Border Grid.Column="1" Tag="feedback" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                         Tapped="Card_Tapped">
-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE939;" FontSize="20" />
-                        <TextBlock Text="反馈中心" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE939;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="反馈中心" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="问题与建议都写在这里" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
                 </Border>
             </Grid>
 
             <!-- 设置：必须永远在最后一张，反馈中心进来后这一行放不下第三个，所以它单独占一行 -->
-            <Border Tag="settings" Height="60" CornerRadius="4" Padding="20,0"
+            <Border Tag="settings" CornerRadius="8" Padding="14,18"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                     Tapped="Card_Tapped">
-                <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE713;" FontSize="20" />
-                    <TextBlock Text="设置" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                </StackPanel>
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE713;" Style="{StaticResource CardIcon}" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock Text="设置" Style="{StaticResource CardTitle}" />
+                        <TextBlock Text="更新、内容源与外观" Style="{StaticResource CardSubtitle}" />
+                    </StackPanel>
+                    <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                </Grid>
             </Border>
+
+            <!-- ===== 收录情况（InfoBar，2026-10-07 第二版）=====
+                 Nick：「把已收录 87 款软件也移到 InfoBar」「使用内置提示的组件，加在首页的那个设置卡片的下面」。
+                 ⇒ 「已收录」和「今日新增」现在**同住这一条**，贴在**设置卡片正下方**、快捷入口之上。
+                 标题 = 已收录 N 款软件（常驻：只要清单同步下来就显示）；
+                 正文 = 今日新增 N 款：具体是哪几款（只有算出 >0 时才有，平时是空串）。
+                 ⚠️ IsClosable=False —— 这是常驻信息，关掉就没地方看数字了。
+                 ⚠️ 默认 IsOpen=False，开不开由 code-behind 的 RefreshCollectedCount() 按"清单到没到"决定。
+                 ⛔ 不摆「今日新增 0 款」这种占位。 -->
+            <InfoBar x:Name="CollectedBar" IsOpen="False" IsClosable="False"
+                     Severity="Informational" Margin="0,4,0,0" />
 
             <!-- ===== 一行快捷入口：图标在上、文字在下（不用卡片、不加标题） ===== -->
             <GridView x:Name="QuickGrid" Margin="0,14,0,0" Padding="0" SelectionMode="None"

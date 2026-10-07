@@ -1,5 +1,13 @@
 using ClassSoftwareHub.Desktop.Services;
+using Microsoft.UI.Input;                 // PointerUpdateKind / PointerPoint（WinUI 3 在这一族命名空间下）
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using System.Linq;
+using System.Threading.Tasks;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace ClassSoftwareHub.Desktop;
 
@@ -26,10 +34,528 @@ public partial class App : Application
     /// <summary>软件内容（原生界面用）。启动时 Load 一次，内含容错解析与问题清单。</summary>
     public static Core.ContentStore Content { get; } = new();
 
+    // ── 文本框右键菜单（2026-10-06 补）─────────────────────────────────
+    //
+    // 症状：WinUI 3 的 TextBox 本该自带「剪切 / 复制 / 粘贴 / 全选 / 撤销」，
+    // 但本机（WindowsAppSDK 2.5.1 自包含 + Windows 11 Insider 26220）实测**一个都不弹**。
+    //
+    // ✅ 根因已查明（实据，不是推断）：**菜单对象一直都在，断的是"触发"那一环。**
+    //    进程内自测读**已加载**控件的属性，结果是：树里每个 TextBox 的 `ContextFlyout`
+    //    都是 `TextCommandBarFlyout`（系统那个原生菜单，图标横排 + 「…」溢出）。
+    //    ⇒ TextBox 内部的文本区是独立的内容岛（ContentIsland），右键在岛内就被吃掉了，
+    //      XAML 侧的 ContextRequested 传不出去，模板里挂好的菜单于是永远没机会弹。
+    //    ⛔⛔ 别再拿"新建 TextBox 的 ContextFlyout 是 null"当证据 —— `ContextFlyout` 是**模板
+    //       Setter** 挂的，控件没进树 / 模板没应用之前必然是 null，什么都证明不了（我为它白绕两圈）。
+    //
+    // ✅ 现在的做法：**自己接触发，弹的是系统那个原生菜单**（见 TryOpenTextMenu）——
+    //    优先 `tb.ContextFlyout.ShowAt(...)`，长相 100% 原生；
+    //    只有它真的为 null 时才退回下面自建的 `_textEditMenu`（兜底，正常用不到）。
+    //    ⚠️ 触屏长按走同一个入口（RightTapped 是平台合成的统一手势，见 OnRootRightTapped）；
+    //      但**合成触摸在本机跑不通**（SM_DIGITIZER 说有线触摸屏，InjectTouchInput 却恒返 0x57
+    //      ERROR_INVALID_PARAMETER，沙箱内外一样），所以长按那一下只能真机手测。
+    //
+    // ⛔⛔ 自建那套（`MenuFlyout`）**只能在代码里建**，不能写进 App.xaml —— 两条都是实测撞出来的：
+    //   ① 在 App.xaml 里写 Click / Opening → 编译失败
+    //      （WMC1005: Events cannot be set in the Application class XAML file）；
+    //   ② 把 MenuFlyout / 隐式 Style 声明在 App.xaml → **应用启动即崩**，且 crash.log 零新增
+    //      （死在 InitializeComponent，UnhandledException 都来不及挂）。挪到这里就能 try/catch。
+    //
+    // ⚠️ 自建菜单是**一个实例**，全应用的 TextBox 共用。同一时刻只可能打开一个
+    //    ⇒ "当前目标"用 _textMenuTarget 静态字段传。
+    //    ⛔ 别改用 MenuFlyoutItem.Parent 往上找 —— 它指向 MenuFlyoutPresenter，不是 TextBox。
+    //
+    // ⚠️⚠️ 关不掉的坑（2026-10-07 Nick 实测）：菜单弹出来后点别处，它会**闪一下**（收起又自己弹回来），
+    //    得再点一下才真的消失。已排除"我们的触发重复"—— 每次右键在 ui.log 里都只有一条记录；
+    //    那一下自己弹回来是**平台侧**的（TextCommandBarFlyout 本来就支持"选区/焦点变化时主动弹出"，
+    //    见官方文档 proactive invocation），与我们请求的那次无关。
+    //    ⇒ 第二版做法：**点别处时我们主动收**，并在随后一小段时间里压掉平台的重开，见 <see cref="AttachFlyoutGuard"/>。
+
+    private static MenuFlyout? _textEditMenu;
+    private static TextBox? _textMenuTarget;
+    // 之所以是 FrameworkElement 而不是 UIElement：命中测试要读 ActualWidth / ActualHeight。
+    private static FrameworkElement? _contentRoot;
+
+    // 鼠标右键"按下待兑现"标记：按下时记下，抬起时兑现。
+    private static bool _rightButtonDown;
+    // 去重：同一次操作有可能既走"鼠标抬起"又走 RightTapped（笔的桶键就是两条都报）。
+    private static long _menuOpenedTicks;
+    private static Windows.Foundation.Point _menuOpenedAt;
+
+    // 当前**打开着**的那个菜单弹层 —— "用户点了别处"时靠它定向收起（别的弹层此刻没开，不用管）。
+    private static FlyoutBase? _openFlyout;
+    // 已经挂过守卫的弹层。每个 TextBox 的 ContextFlyout 是各自一个实例 ⇒ 按引用记，挂过就不重复挂。
+    private static readonly HashSet<FlyoutBase> _guardedFlyouts = new();
+    // 「点了别处之后」的压制窗（存过期时刻，0 = 不压制）：这段时间里平台若把菜单弹回来，一律收起。
+    private static long _suppressReopenUntilTicks;
+
+    /// <summary>
+    /// 建**兜底**菜单本体（一项 = 一条命令）。正常情况用不到它 —— 见 <see cref="TryOpenTextMenu"/>：
+    /// 优先弹 TextBox 自带的 <c>TextCommandBarFlyout</c>，只有它真的为 null 才退回这套。
+    /// 失败只记日志：菜单没有不影响任何别的东西。
+    /// </summary>
+    private void SetupTextEditContextMenu()
+    {
+        try
+        {
+            var menu = new MenuFlyout();
+            menu.Opening += TextEditMenu_Opening;
+            menu.Items.Add(MakeTextMenuItem("剪切", "cut", "\uE8C6", "Ctrl+X"));
+            menu.Items.Add(MakeTextMenuItem("复制", "copy", "\uE8C8", "Ctrl+C"));
+            menu.Items.Add(MakeTextMenuItem("粘贴", "paste", "\uE77F", "Ctrl+V"));
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(MakeTextMenuItem("全选", "selectall", "\uE8B3", "Ctrl+A"));
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(MakeTextMenuItem("撤销", "undo", "\uE7A7", "Ctrl+Z"));
+            _textEditMenu = menu;
+
+            // ⛔⛔ 别再想着"给 TextBox 挂个隐式样式、让 ContextFlyout 自动生效"：
+            //   ① `Resources[typeof(TextBox)] = style` 在 WinUI 3 里**不生效**
+            //      （ResourceDictionary 不认 C# 传进去的 Type 键）；
+            //   ② 就算挂上也照样不弹 —— 菜单对象本来就在模板里挂着（实测 `ContextFlyout` 就是
+            //      `TextCommandBarFlyout`），断的是"触发"那一环：TextBox 内部的内容岛把右键吃掉，
+            //      ContextRequested 传不出来。
+            //   所以唯一有效的路是 TryOpenTextMenu 那条"按坐标命中测试 → 手动 ShowAt"。
+
+            Core.AppLog.Info("ui", "文本框右键菜单：兜底菜单已就绪（正常走系统自带的那个）");
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Error("ui", $"文本框右键菜单构建失败：{ex.GetType().Name} 0x{ex.HResult:X8} {ex.Message}");
+        }
+    }
+
+    private MenuFlyoutItem MakeTextMenuItem(string text, string tag, string glyph, string accel)
+    {
+        var item = new MenuFlyoutItem
+        {
+            Text = text,
+            Tag = tag,
+            Icon = new FontIcon { Glyph = glyph },
+        };
+
+        // ⛔ 只能用它来"显示"提示文字。换成 KeyboardAccelerator 会真的注册加速键，
+        //    与 TextBox 内置的 Ctrl+X/C/V 撞车、动作被执行两遍。
+        item.KeyboardAcceleratorTextOverride = accel;
+        item.Click += TextEditMenu_Click;
+        return item;
+    }
+
+    private void TextEditMenu_Opening(object? sender, object e)
+    {
+        if (sender is not MenuFlyout flyout) return;
+
+        var tb = flyout.Target as TextBox;
+        _textMenuTarget = tb;
+        if (tb is null) return;
+
+        var hasSelection = tb.SelectionLength > 0;
+
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem mi || mi.Tag is not string tag) continue;
+
+            mi.IsEnabled = tag switch
+            {
+                "cut" => hasSelection && !tb.IsReadOnly,
+                "copy" => hasSelection,
+                "paste" => !tb.IsReadOnly,
+                "selectall" => tb.Text.Length > 0,
+                "undo" => tb.CanUndo,
+                _ => true,
+            };
+        }
+    }
+
+    private async void TextEditMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem mi || mi.Tag is not string tag) return;
+        if (_textMenuTarget is not { } tb) return;
+
+        // ⚠️⚠️ WinUI 3 的 TextBox **没有** Cut() / Copy() / Paste() 方法
+        //      （编译期实测：CS1061 找不到 Cut/Copy；Paste 只是个事件）。
+        //      所以这里只能自己走剪贴板 + SelectedText。
+        switch (tag)
+        {
+            case "cut":
+                if (tb.SelectionLength == 0 || tb.IsReadOnly) break;
+                CopyToClipboard(tb.SelectedText);
+                tb.SelectedText = "";            // 给 SelectedText 赋空串 = 删掉选区
+                break;
+
+            case "copy":
+                if (tb.SelectionLength == 0) break;
+                CopyToClipboard(tb.SelectedText);
+                break;
+
+            case "paste":
+                if (tb.IsReadOnly) break;
+                await PasteFromClipboardAsync(tb);
+                break;
+
+            case "selectall":
+                tb.SelectAll();
+                break;
+
+            case "undo":
+                tb.Undo();
+                break;
+        }
+
+        // 动作做完把焦点还回去，否则光标消失、接着打字没反应
+        tb.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>
+    /// 全应用文本框的右键菜单入口：在内容根上盯「鼠标右键 / 手指长按」。
+    ///
+    /// ⛔ 为什么系统自己的触发不管用：TextBox 内部那块文本区是**独立的内容岛**（ContentIsland），
+    ///    右键在岛内就被吃掉了，ContextRequested 传不到 XAML 侧的 ContextFlyout
+    ///    —— 菜单对象明明挂在模板上（实测就是 `TextCommandBarFlyout`），却永远没机会弹。
+    ///    ⇒ 所以这一层只负责**接触发**，弹的还是系统那个菜单（见 <see cref="TryOpenTextMenu"/>）。
+    ///
+    /// ⛔⛔ **鼠标和触摸必须走两条不同的路**（2026-10-06 实测踩出来的，别合并）：
+    ///   · **触摸（长按）只能靠 <see cref="OnRootRightTapped"/>** —— 长按不是"按键"，没有按钮可读，
+    ///     平台把它合成成 RightTapped，这是唯一入口。
+    ///   · **鼠标不能再靠 RightTapped** —— 它是个**手势**，判定要求按下与抬起之间"基本没动"
+    ///     （系统拖拽阈值 SM_CXDRAG/SM_CYDRAG，默认 4 px）。真手上按一下就抖掉几个像素很常见
+    ///     （高 DPI 鼠标更容易），于是手势判不成"点按"，**RightTapped 干脆不触发** ⇒ 表现为"右键没反应"。
+    ///     👉 症状特征：注入式右键（零位移）能弹，真人右键不弹；触摸长按（按住不动）反而正常。
+    ///   ⇒ 鼠标改读**指针本身的按钮状态**：<see cref="OnRootPointerPressed"/> 记下右键按下，
+    ///     <see cref="OnRootPointerReleased"/> 见到"右键释放"就兑现。这条与位移无关，抖多少都算数。
+    ///
+    /// ⚠️ 目标文本框靠**自己遍历视觉树 + 矩形包含**找，见 <see cref="HitTestTextBox"/>。
+    /// </summary>
+    private void OnRootRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (_contentRoot is null) return;
+
+        try
+        {
+            // 触摸长按 / 笔的桶键走这里（鼠标那条见 OnRootPointerReleased）
+            if (TryOpenTextMenu(e.GetPosition(_contentRoot), "触摸长按")) e.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Error("ui", "文本框右键菜单弹出失败（RightTapped）：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 鼠标：记下"右键是否按下"，抬起时才知道这次是不是右键。
+    /// 顺带处理「点别处关菜单」：这一次按下的如果不是右键，就当用户想走开 ——
+    /// 主动把菜单收掉，并设一道压制窗拦住平台随后的"自己弹回来"（见 <see cref="AttachFlyoutGuard"/>）。
+    /// </summary>
+    private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_contentRoot is null) return;
+
+        try
+        {
+            _rightButtonDown = e.GetCurrentPoint(_contentRoot).Properties.IsRightButtonPressed;
+        }
+        catch
+        {
+            _rightButtonDown = false;      // 读不到就当不是右键，⛔ 不要抛（会打断正常的指针处理）
+        }
+
+        try
+        {
+            if (_rightButtonDown)
+                _suppressReopenUntilTicks = 0;      // 用户又按右键了：解除压制，别妨碍这一次正常弹出
+            else
+                DismissTextMenuBecauseClickAway();
+        }
+        catch { /* 收菜单失败不能打断输入 */ }
+    }
+
+    /// <summary>
+    /// 用户点了别处（非右键的那一次指针按下）：**我们主动**把菜单收干净，
+    /// 并留一道 600ms 的压制窗 —— 平台随后还会自作主张地 Opening 一次，那一次由守卫收掉。
+    ///
+    /// ⛔ 不会误伤"点菜单里的菜单项"：菜单本体在 Popup 里，指针事件不经过 <see cref="_contentRoot"/>，
+    ///    所以这里收到的一定是"点在菜单外面"。
+    /// </summary>
+    private static void DismissTextMenuBecauseClickAway()
+    {
+        var flyout = _openFlyout;
+        if (flyout is null) return;
+
+        _suppressReopenUntilTicks = Environment.TickCount64 + 600;
+
+        if (!flyout.IsOpen) return;      // 平台可能已经先收掉了；压制窗照样留着拦重开
+
+        try { flyout.Hide(); }
+        catch { /* 收不回去也只是多个弹层，别为它打断输入 */ }
+    }
+
+    /// <summary>
+    /// 鼠标：靠 `PointerUpdateKind` 认"右键释放"，与这次点击有没有位移无关。
+    /// ⛔ 触摸的抬指也会走到这里，但那时 _rightButtonDown 是 false，直接让开。
+    /// </summary>
+    private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_rightButtonDown) return;
+        _rightButtonDown = false;
+
+        if (_contentRoot is null) return;
+
+        try
+        {
+            var pt = e.GetCurrentPoint(_contentRoot);
+            if (pt.Properties.PointerUpdateKind != PointerUpdateKind.RightButtonReleased) return;
+
+            TryOpenTextMenu(pt.Position, "鼠标");
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Error("ui", "文本框右键菜单弹出失败（指针）：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 两条入口的合流处：按坐标命中文本框 → 弹菜单。返回是否真的弹了。
+    ///
+    /// ⛔ 找目标文本框这条路，试过两条都是死路，别再回头：
+    ///   ① `e.OriginalSource` 沿 VisualTreeHelper.GetParent 往上找 —— 实测它给回来的是个
+    ///      FrameworkElement，一路上去碰不到 TextBox；
+    ///   ② `VisualTreeHelper.FindElementsInHostCoordinates(pt, root)` —— 实测同样返空。
+    ///   真因：TextBox 里那块文本区是**独立的内容岛**（ContentIsland），不属于 XAML 视觉树，
+    ///   所有走 XAML 命中测试的路子都够不着它。
+    ///   ⇒ 所以改成自己**遍历视觉树 + 矩形包含判断**（见 <see cref="HitTestTextBox"/>）。
+    /// </summary>
+    private bool TryOpenTextMenu(Windows.Foundation.Point pt, string source)
+    {
+        if (_contentRoot is null) return false;
+
+        // 去重：同一次操作被两条钩子各报一次时，只认先到的那个（笔的桶键最容易撞）
+        var now = Environment.TickCount64;
+        if (now - _menuOpenedTicks < 400 &&
+            Math.Abs(pt.X - _menuOpenedAt.X) < 8 &&
+            Math.Abs(pt.Y - _menuOpenedAt.Y) < 8)
+        {
+            return false;
+        }
+
+        var tb = HitTestTextBox(_contentRoot, pt);
+        if (tb is null)
+        {
+            // 点在空白/说明文字上：不接管，保持默认行为
+            Core.AppLog.Info("ui", $"右键菜单：来源={source} 点={pt.X:F0},{pt.Y:F0} 命中=（无）");
+            return false;
+        }
+
+        Core.AppLog.Info("ui",
+            $"右键菜单：来源={source} 点={pt.X:F0},{pt.Y:F0} 命中={tb.Name} "
+            + $"自带菜单={tb.ContextFlyout?.GetType().Name ?? "（null）"}");
+
+        try
+        {
+            // 菜单的 Position 是**相对目标元素**的偏移 ⇒ 换算一下，落到鼠标那一点上
+            var tl = tb.TransformToVisual(_contentRoot).TransformPoint(new Windows.Foundation.Point(0, 0));
+            var pos = new Windows.Foundation.Point(pt.X - tl.X, pt.Y - tl.Y);
+
+            // ── 优先用 TextBox **自己模板里那个**菜单（2026-10-06）────────────────────
+            // 实测定性的结论：**菜单对象一直都在，断的只是"触发"那一环**。
+            // 树里每个 TextBox 的 ContextFlyout 都是 `TextCommandBarFlyout`（系统那个原生菜单，
+            // 图标横排 + 「…」溢出），而 TextBox 内部的内容岛把右键吃掉了，ContextRequested
+            // 传不到 XAML 侧 ⇒ 模板挂好的菜单永远没机会弹。
+            // ⇒ 这里只做"接触发"：把那个原生菜单 ShowAt 出来，长相 / 命令启用逻辑 100% 系统原生。
+            //    自建的那个 `MenuFlyout` **不插手**，只当 ContextFlyout 真的为 null 时的兜底。
+            var native = tb.ContextFlyout;
+
+            if (native is null)
+            {
+                native = _textEditMenu;          // 兜底：自建那套
+                _textMenuTarget = tb;
+            }
+            else
+            {
+                // 原生那套的按钮启用态是按"这个框的选区 / 焦点"算的 ⇒ 先给它焦点（用 Pointer 态，
+                // 与真实右键一致，不会把选区清掉）
+                try { tb.Focus(FocusState.Pointer); } catch { /* 焦点给不上也照弹 */ }
+            }
+
+            if (native is null) return false;
+
+            _menuOpenedTicks = now;
+            _menuOpenedAt = pt;
+
+            AttachFlyoutGuard(native);        // 关不掉的坑，见那个方法的注释
+
+            // ⛔⛔ 千万别在这里**同步** ShowAt（2026-10-06 踩了两次）：
+            //    此刻我们还堵在"指针抬起 / 长按"的派发过程中，弹层刚建好就被这次输入
+            //    当成"点在弹层外面"给 light-dismiss 掉 —— 表现就是"右键没反应"，
+            //    而同一次操作从**定时器**里 ShowAt 却能稳定停住（自测那版就是定时器，所以它一直是好的）。
+            //    ⇒ 推到 DispatcherQueue 尾部：等这次输入彻底处理完，再弹。
+            var toShow = native;
+            if (!_contentRoot.DispatcherQueue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        toShow.ShowAt(tb, new FlyoutShowOptions { Position = pos });
+                        _openFlyout = toShow;      // 记下"当前开着的是它"，点别处时定向收起
+                    }
+                    catch (Exception ex)
+                    {
+                        Core.AppLog.Error("ui", "文本框右键菜单弹出失败：" + ex.Message);
+                    }
+                }))
+            {
+                Core.AppLog.Warning("ui", "文本框右键菜单：DispatcherQueue 满了，这次没弹");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Error("ui", "文本框右键菜单弹出失败：" + ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 给弹层挂一道「点别处就收干净」的守卫（2026-10-07 **第二版**）。
+    ///
+    /// **症状**：菜单弹出来后点一下别处 → 它**闪一下**（收起又自己弹回来），得再点一下才真的消失。
+    /// **成因**：平台上会额外发一次 Opening（<c>TextCommandBarFlyout</c> 支持"选区 / 焦点变化时主动弹出"，
+    /// 官方文档里的 proactive invocation），与我们请求的那次无关。"我们的触发重复"已排除。
+    ///
+    /// ⛔⛔ 第一版（"一次性令牌，只放行我们请求的那一次"）**已实测报废，别再回去**：
+    ///    平台上每次弹出都会**多发一次** Opening —— ui.log 里"我们请求"那条之后 ~52ms 必跟一条无令牌 Opening。
+    ///    令牌被前一个 Opening 吃掉 ⇒ 真正该打开的那次被判成"系统自己重开"给 Hide 掉 ⇒ **菜单完全不弹**
+    ///    （2026-10-07 00:57 Nick 实测：「右键不生效了，没有菜单」）。
+    ///    根子在于"光看 Opening 本身分辨不出哪次是我们请求的"，所以任何按次计数 / 一次性令牌都靠不住。
+    ///
+    /// ✅ 这一版只做**定向压制**：
+    ///   · 正常弹出 **一律放行**（不看令牌、不看时间）—— 保证菜单一定弹得出来；
+    ///   · 只有我们**主动收起**过（用户点了别处，见 <see cref="DismissTextMenuBecauseClickAway"/>），
+    ///     才在随后 600ms 内把 Opening 压掉。用户下一次按右键时压制窗立刻清零 ⇒ 手多快都不误伤。
+    ///
+    /// ⛔ 别在 Opening 里**同步** Hide()：那一刻弹层还没真正打开，调用会被忽略 ⇒ 推到队列尾部再收。
+    /// </summary>
+    private static void AttachFlyoutGuard(FlyoutBase flyout)
+    {
+        if (!_guardedFlyouts.Add(flyout)) return;      // 同一个弹层只挂一次
+
+        try
+        {
+            flyout.Opening += (_, _) =>
+            {
+                // 正常弹出：什么都不做、直接放行（⛔ 别在这里加任何"这次是不是我们请求的"判断）
+                if (Environment.TickCount64 >= _suppressReopenUntilTicks) return;
+
+                var queue = _contentRoot?.DispatcherQueue;
+                if (queue is null) return;
+
+                queue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        if (!flyout.IsOpen) return;
+                        flyout.Hide();
+                        Core.AppLog.Info("ui", "右键菜单：点别处之后平台又把它弹回来了，已收起");
+                    }
+                    catch
+                    {
+                        // 收不回去就算了，别为它把应用带崩
+                    }
+                });
+            };
+
+            flyout.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_openFlyout, flyout)) _openFlyout = null;
+            };
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Error("ui", "右键菜单：关闭守卫挂载失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 走一遍视觉树，返回「包含该点、且面积最小」的那个 TextBox（嵌套时取最内层）。
+    /// 纯矩形判断，不依赖任何 XAML 命中测试 API —— 那套够不着 TextBox 内部的内容岛。
+    /// </summary>
+    private static TextBox? HitTestTextBox(DependencyObject node, Windows.Foundation.Point pt)
+    {
+        TextBox? best = null;
+        var bestArea = double.MaxValue;
+
+        void Walk(DependencyObject n)
+        {
+            if (n is TextBox tb && _contentRoot is not null)
+            {
+                try
+                {
+                    var tl = tb.TransformToVisual(_contentRoot).TransformPoint(new Windows.Foundation.Point(0, 0));
+                    var rect = new Windows.Foundation.Rect(tl.X, tl.Y, tb.ActualWidth, tb.ActualHeight);
+
+                    if (rect.Contains(pt))
+                    {
+                        var area = tb.ActualWidth * tb.ActualHeight;
+                        if (area < bestArea)
+                        {
+                            bestArea = area;
+                            best = tb;
+                        }
+                    }
+                }
+                catch
+                {
+                    // 元素还没挂进树时 TransformToVisual 会抛 —— 跳过就是了
+                }
+            }
+
+            var count = VisualTreeHelper.GetChildrenCount(n);
+            for (var i = 0; i < count; i++) Walk(VisualTreeHelper.GetChild(n, i));
+        }
+
+        Walk(node);
+        return best;
+    }
+
+    private static void CopyToClipboard(string text)
+    {
+        try
+        {
+            var dp = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+            dp.SetText(text);
+            Clipboard.SetContent(dp);
+        }
+        catch
+        {
+            // 剪贴板被别的程序占着是常态，静默放弃即可，别为它崩掉
+        }
+    }
+
+    private static async Task PasteFromClipboardAsync(TextBox tb)
+    {
+        try
+        {
+            var view = Clipboard.GetContent();
+            if (view is null || !view.Contains(StandardDataFormats.Text)) return;
+
+            var text = await view.GetTextAsync();
+            if (string.IsNullOrEmpty(text)) return;
+
+            // 有选区就替换选区，没选区就插在光标处 —— 两种情况都是这一个赋值
+            tb.SelectedText = text;
+        }
+        catch
+        {
+        }
+    }
+
     public App()
     {
         InitializeComponent();
         UnhandledException += OnUnhandledException;
+
+        // 文本框右键菜单：⛔ 必须在代码里建，不能声明在 App.xaml（原因见 App.xaml 那段注释）
+        // ⛔ 也不能在这里建 —— 构造函数期间连 Application.Resources 都读不了（E_UNEXPECTED）。
+        //    改到 OnLaunched 里做，见那儿的调用。
 
         // 单实例。这个命名的互斥体同时也是安装程序 [Setup] AppMutex 用的名字 —— 装/升级时 Inno 靠它
         // 判断"应用还在跑"，所以进程活着期间必须一直持有，不能释放。
@@ -135,6 +661,12 @@ public partial class App : Application
     {
         Settings.Load();
 
+        // ⛔⛔ 文本框右键菜单**只能在这里**装，不能挪进构造函数：实测构造函数期间访问
+        //     Application.Resources 直接抛 COMException 0x8000FFFF(E_UNEXPECTED)，
+        //     而这里（OnLaunched）资源字典已经就绪。放在 MainWindow 创建之前 ⇒ 页面里的
+        //     TextBox 一出生就带着菜单。
+        SetupTextEditContextMenu();
+
         // 数据目录分区：日志 → logs\，内嵌解包的图片/图标缓存 → cache\（旧版全堆在根上）。
         // 尽早搬 —— 后面任何模块一写日志就落到新位置了。
         try
@@ -182,6 +714,39 @@ public partial class App : Application
         catch (Exception ex)
         {
             Services.ScreenCapture.Log("[startup] 主窗口 Activate 失败: " + ex);
+        }
+
+        // 文本框右键菜单：三条钩子挂在内容根上，handledEventsToo=true。
+        // ⛔⛔ 为什么是三条而不是一条：**鼠标右键和触摸长按走的不是同一条路**
+        //    （鼠标那条依赖"按下/抬起"的按钮状态，触摸长按没有按钮可读、只能靠 RightTapped 合成手势），
+        //    详见 OnRootRightTapped 的注释。少挂哪条，对应的那种输入就"右键没反应"。
+        // 因为 TextBox 内部的文本控件自己处理右键，ContextRequested 传不到外面的 ContextFlyout。
+        try
+        {
+            if (MainWindow?.Content is FrameworkElement contentRoot)
+            {
+                _contentRoot = contentRoot;      // 命中测试要用它当坐标系
+
+                // 触摸长按 / 笔桶键
+                contentRoot.AddHandler(UIElement.RightTappedEvent,
+                                       new RightTappedEventHandler(OnRootRightTapped), true);
+
+                // 鼠标右键：按下记标记、抬起兑现（不看位移，手抖也算）
+                contentRoot.AddHandler(UIElement.PointerPressedEvent,
+                                       new PointerEventHandler(OnRootPointerPressed), true);
+                contentRoot.AddHandler(UIElement.PointerReleasedEvent,
+                                       new PointerEventHandler(OnRootPointerReleased), true);
+
+                Core.AppLog.Info("ui", "文本框右键菜单：已挂右键钩子（鼠标=按下/抬起，触摸=长按）");
+            }
+            else
+            {
+                Core.AppLog.Warning("ui", "文本框右键菜单：MainWindow.Content 不是 UIElement，兜底钩子没挂上");
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Error("ui", "文本框右键菜单兜底挂载失败：" + ex.Message);
         }
 
         // 走到这儿 MainWindow 还是 null，说明应用会停在「只有侧边栏、没有主界面」的状态。

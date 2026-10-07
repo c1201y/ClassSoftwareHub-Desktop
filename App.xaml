@@ -251,6 +251,14 @@
             <SolidColorBrush x:Key="GridViewItemBorderBrushSelected" Color="Transparent" />
             <SolidColorBrush x:Key="GridViewItemBorderBrushSelectedPointerOver" Color="Transparent" />
             <SolidColorBrush x:Key="GridViewItemBorderBrushSelectedPressed" Color="Transparent" />
+
+            <!-- 文本框右键菜单：⛔ 不在这里声明，改在 App.xaml.cs 的 SetupTextEditContextMenu() 里建。
+                 两个理由，都是实测撞出来的：
+                   ① 这里写 Click / Opening 事件 → 编译直接失败
+                      （WMC1005: Events cannot be set in the Application class XAML file）；
+                   ② 把 MenuFlyout / 隐式 Style 写在这里 → **应用启动即崩**，而且 crash.log 零新增
+                      （死在 InitializeComponent，连 UnhandledException 都来不及挂，查都没法查）。
+                 挪进代码后能 try/catch + 记日志，最坏也只是菜单不出现，不会拖垮整个应用。 -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>
