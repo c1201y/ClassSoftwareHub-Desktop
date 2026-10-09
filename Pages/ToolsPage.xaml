@@ -33,7 +33,7 @@
 
             <TextBlock Text="内置工具" FontSize="30" FontWeight="Bold" />
 
-            <!-- 6 个工具：卡片 462 + 间距 16 = 478，960 里正好两列。
+            <!-- 5 个工具：卡片 462 + 间距 16 = 478，960 里正好两列。
                  2026-09-29：加上一句话说明（ToolDef.Desc 一直有这个字段，之前没显示）——
                  光看工具名猜不出点进去能干什么，用户得挨个试一遍。 -->
             <GridView x:Name="ToolGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"

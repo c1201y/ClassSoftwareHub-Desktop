@@ -155,45 +155,9 @@ public sealed class AppSettings
     /// </summary>
     public int SidebarModulesRevision { get; set; }
 
-    // ── 虚拟键盘（实验性功能，2026-10-01 从零重写那版）──────────
-    // ⚠️ 总开关默认**关**：它要装全局触摸钩子、跑 UIA 探测，属于"用户明确想要才开"的功能，
-    //    不能替所有人默认打开。关着的时候整套东西一行系统 API 都不会碰。
-
-    /// <summary>启用虚拟键盘（会装触摸监听 + 落点判定）。</summary>
-    public bool VirtualKeyboardEnabled { get; set; }
-
-    /// <summary>
-    /// 接管系统触摸键盘：写 <c>HKCU\...\TabletTip\1.7\EnableDesktopModeAutoInvoke = 0</c>，
-    /// 让系统那个别在桌面模式下自动弹。
-    /// ⛔ **默认关** —— 它是这套功能里**唯一会动注册表**的地方，得用户显式同意；
-    ///    开启前会自动备份原值，关掉功能或取消勾选时原样还原。
-    /// </summary>
-    public bool VirtualKeyboardCaptureSystem { get; set; }
-
-    /// <summary>布局模式：<c>full</c>（完整，**默认**）/ <c>compact</c>（精简）。见 <c>Data.KeyboardLayouts</c>。</summary>
-    public string VirtualKeyboardMode { get; set; } = Data.KeyboardLayouts.ModeFull;
-
-    /// <summary>当前层：letters / symbols / numpad。</summary>
-    public string VirtualKeyboardLayer { get; set; } = Data.KeyboardLayouts.Letters;
-
-    /// <summary>键帽缩放（0.7 ~ 1.6），连续可调。</summary>
-    public double VirtualKeyboardScale { get; set; } = 1.0;
-
-    /// <summary>键盘宽度占工作区的比例（0.35 ~ 1.0）。</summary>
-    public double VirtualKeyboardWidthRatio { get; set; } = 1.0;
-
-    /// <summary>键帽文字缩放（0.8 ~ 1.3）。</summary>
-    public double VirtualKeyboardFontScale { get; set; } = 1.0;
-
-    /// <summary>键盘底色：<c>system</c>（跟随系统）/ <c>light</c> / <c>dark</c>。颜色本体一律走主题画刷。</summary>
-    public string VirtualKeyboardTheme { get; set; } = "system";
-
-    /// <summary>排列方式：true = 自由悬浮（位置记在下面两个），false = 贴屏幕底边。</summary>
-    public bool VirtualKeyboardFloating { get; set; }
-
-    /// <summary>悬浮时的窗口左上角（物理像素）；负值 = 还没摆过，按贴底算。</summary>
-    public double VirtualKeyboardFloatX { get; set; } = -1;
-    public double VirtualKeyboardFloatY { get; set; } = -1;
+    // ⚠️ 这里原本还有 11 项虚拟键盘设置（VirtualKeyboardEnabled / 布局 / 缩放 / 悬浮坐标……）。
+    //    该功能 2026-10-09 整体下线，字段一并删掉 —— 老存档里的这些键会被 JsonSerializer
+    //    静默忽略（JsonOpts 没开严格模式），读取不受影响。
 
     public string WebView2MissingChoice { get; set; } = "";    // "" | install | browser
 
@@ -269,12 +233,11 @@ public sealed class AppSettings
     /// GitHub 下载链接走哪条路，取值见 <see cref="GithubRoutes"/>：
     /// <list type="bullet">
     ///   <item><c>github</c>（**默认**，2026-10-05 Nick 定）= GitHub 源：原样直连，不做任何改写；</item>
-    ///   <item><c>auto</c> = 下载前各探一下速度，挑快的那条；它失败会自动换另一条；</item>
-    ///   <item><c>selfhosted</c> = 自建加速服务（实验性）：GitHub 链接一律交由社区自建节点中转；
-    ///         ⚠️ 节点远端未就绪时（现在，见 <see cref="GithubRoute.AcceleratorReady"/>）等价于 GitHub 源，
-    ///         设置页会给一条红色警告。</item>
+    ///   <item><c>auto</c> = 自建节点 / 各条公益镜像 / GitHub 源一起探速，按快慢排候选，结果缓存 8 分钟；</item>
+    ///   <item><c>selfhosted</c> = 自建加速服务：先换一条自建节点的限时签名链接（Worker 代签）并固定首选，
+    ///         取不到签名自动退公益镜像、再退 GitHub 源。</item>
     /// </list>
-    /// ⚠️ 默认是「官方直连」而不是「自动」：加速节点是实验性的，不该替所有用户先探一遍外网。
+    /// ⚠️ 默认是「官方直连」而不是「自动」：不该替所有用户先探一遍外网。
     /// ⚠️ 这是**存档格式**的一部分：值只能加、不能改字面量（认不出的值一律当 GitHub 源，见
     ///    <see cref="GithubRoutes.Normalize"/>）。
     /// </summary>
@@ -364,6 +327,9 @@ public sealed class SettingsStore
     ///   · revision 1（音量调节）：插在讲台动作类前面（工具 → 音量 → 动作），不打断用户已经排好的顺序；
     ///   · revision 2（屏幕亮度，2026-09-26）：紧挨着音量后面放（这俩是一对儿），
     ///     用户如果自己把音量删了，就还是插在动作类前面。
+    ///   · revision 3（虚拟键盘）：**已作废** —— 功能在 2026-10-09 整体下线，不再补入，直接跳到 4。
+    ///   · revision 4（2026-10-09）：反过来做，把已下线的模块（keyboard / mirror-download）
+    ///     从用户清单里**剔除**（见下面那一段）。
     /// </summary>
     private void EnsureNewSidebarModules()
     {
@@ -420,27 +386,32 @@ public sealed class SettingsStore
             changed = true;
         }
 
-        if (Current.SidebarModulesRevision < 3)
+        // revision 3（虚拟键盘，2026-10-01）原本是往讲台动作类最前面插 "keyboard"。
+        // ⚠️ 2026-10-09：虚拟键盘整体下线，这一批**不再补入**（还没迁到 3 的老用户直接跳过 ——
+        //    那个模块已经不存在，补进去只会得到一条死 id）。
+        if (Current.SidebarModulesRevision < 4)
         {
-            // revision 3（虚拟键盘，2026-10-01）：放在讲台动作类最前面 —— 键盘是上课最常用的那一下。
+            // revision 4（2026-10-09）：把**已下线的模块**从用户自己那份清单里剔掉。
+            // 跟别的功能不同，侧边栏模块是用户勾选 + 排序出来的：功能删了之后，存档里那条 id
+            // 会被 SidebarModules.Find 跳过（不会崩），但用户在「侧边布局」页里再也看不到它，
+            // 也就永远删不掉 —— 留在这儿只是一条谁也管不着的死条目。这里替他收干净。
             try
             {
                 var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
 
-                if (!list.Contains("keyboard"))
+                var removed = list.RemoveAll(id => id is "keyboard" or "mirror-download");
+                if (removed > 0)
                 {
-                    var at = list.FindIndex(id => Data.SidebarModules.Find(id)?.Kind == Data.SidebarModuleKinds.Action);
-                    if (at < 0) list.Add("keyboard");
-                    else list.Insert(at, "keyboard");
                     Current.SidebarModuleIds = list.ToArray();
+                    Log($"侧边栏清单已剔除 {removed} 个下线模块（虚拟键盘 / 系统镜像下载）");
                 }
             }
             catch (Exception ex)
             {
-                Log($"补侧边栏新模块失败: {ex.Message}");
+                Log($"清理下线模块失败: {ex.Message}");
             }
 
-            Current.SidebarModulesRevision = 3;
+            Current.SidebarModulesRevision = 4;
             changed = true;
         }
 

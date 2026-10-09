@@ -2117,11 +2117,12 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void FinishExit()
     {
-        // ① 先摘钩子 / 还原注册表（虚拟键盘）。必须在任何硬退兜底之前 —— 硬退会跳过清理，
-        //    把"系统键盘不自动弹"这种脏状态留在用户机器上。
-        try { Services.VirtualKeyboard.VirtualKeyboardService.Stop(); } catch { }
+        // ⚠️ 2026-10-09：虚拟键盘整体下线，这里原本的
+        //    Services.VirtualKeyboard.VirtualKeyboardService.Stop()（摘全局触摸钩子 /
+        //    还原注册表）已随功能删除。注册表现在由 App 启动时的
+        //    Services.VirtualKeyboardRetire.Run() 做一次性还原，不再有"退出时要清"的东西。
 
-        // ② 显式关掉我们自己建的每一个窗口，再请 Application 退出。
+        // ① 显式关掉我们自己建的每一个窗口，再请 Application 退出。
         //    ⛔ 不能只依赖 Application.Exit()，2026-10-04 实测（logs\exit.log）它：
         //       · **不走 AppWindow.Closing** —— 所以"关掉=收起来"那套既拦不住它、也感知不到它在关窗；
         //       · 且**只关掉一部分窗口**，剩下没关掉的窗口把消息循环撑住，
@@ -2139,7 +2140,7 @@ public sealed partial class MainWindow : Window
         Core.AppLog.Info("exit", "Application.Exit() 已返回（若进程仍在 = 消息循环没退）");
 
         // ③ 最后一道保险：Application.Exit() 偶尔仍会让消息循环卡住不退。
-        //    1.5 秒还没走就硬退 —— 走到这里该做的清理都已做完（设置已存、托盘已摘、键盘钩子已还原），硬退是安全的。
+        //    1.5 秒还没走就硬退 —— 走到这里该做的清理都已做完（设置已存、托盘已摘），硬退是安全的。
         new System.Threading.Thread(() =>
         {
             System.Threading.Thread.Sleep(1500);

@@ -94,7 +94,7 @@
                 </NavigationViewItem>
                 <!--
                   内置工具：和「实验性功能」一样是分组父项 —— 点它 = 进工具索引页 + 展开/收起分组，
-                  子项（图片取色 / 随机抽号 / 课堂计时器 / 全屏时钟 / 编码哈希 / 系统镜像）直达各自页面。
+                  子项（图片取色 / 随机抽号 / 课堂计时器 / 全屏时钟 / 编码哈希）直达各自页面。
                   子项由 ShellPage 构造时按 ToolCatalog.All 动态生成（tag = ToolDef.Id），
                   ⛔ 别在 XAML 里手写 —— 工具清单只有 ToolCatalog 一份，手写会变成两处维护。
                   父项自己也是入口（进 ToolsPage），不进 NavigationView 的选中体系（原因同实验性功能）。
@@ -160,15 +160,13 @@
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
                         <!--
-                          虚拟键盘：自绘触屏键盘，取代系统触摸键盘的使用体验。
-                          ⚠️ 为什么塞进实验性：它要装全局触摸钩子、跑 UIA 落点判定，还要（可选地）
-                             改一个注册表键 —— 而且"手指点在输入框上才弹"这套判定在真实课堂里的
-                             误判率还没底（不同输入法、不同自绘输入框的表现不完全一致）。
-                          源码：Services/VirtualKeyboard/* + Views/VirtualKeyboardWindow.*
+                          自动关机：按星期（周一~周日）设关机时间点，到点自动关机。
+                          ⚠️ 为啥塞进实验性：真会关机、且依赖本程序常驻；放学场景的误伤面还没摸清。
+                          ⚠️ 图标用日历（E787）不用电源（E7E8）—— 后者与上面「程序专杀」撞脸。
                         -->
-                        <NavigationViewItem Content="虚拟键盘" Tag="virtualkeyboard">
+                        <NavigationViewItem Content="自动关机" Tag="autoshutdown">
                             <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE765;" />
+                                <FontIcon Glyph="&#xE787;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
                         <!--

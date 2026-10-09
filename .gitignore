@@ -16,6 +16,9 @@ artifacts/
 settings.json
 crash.log
 
+## GitHub 加速节点密钥（⛔ 绝不入库：本仓库公开。发布时由打包流程从仓库外注入到 exe 同目录）
+gh-node-key.txt
+
 ## 其它
 Thumbs.db
 desktop.ini

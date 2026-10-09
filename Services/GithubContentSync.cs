@@ -20,7 +20,7 @@ public sealed record RepoContentResult(bool Ok, bool Updated, int Files, string 
 ///
 /// 为什么不用站点的 content/manifest.json：那份清单站点一直没发布（404），
 /// 但仓库里「软件数据/apps/*.json + categories.json」就是原文，公开仓库不用令牌也能读。
-/// 桌面端要用的其它内容（系统镜像清单）同样放在「软件数据/」下，跟着一起同步 ——
+/// 桌面端要用的其它内容（分类、清单版本、站点文字）同样放在「软件数据/」下，跟着一起同步 ——
 /// 这是"安装包不自带内容、一切从网络取"之后唯一的数据来源（2026-10-05）。
 ///
 /// 做法（尽量省请求 —— 未登录的 GitHub 接口只有 60 次/小时，机房还是同一个出口 IP）：

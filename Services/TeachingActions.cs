@@ -33,13 +33,15 @@ public static class TeachingActions
             switch (id)
             {
                 case "mag": ToggleSystemMagnifier(); break;
-                case "keyboard": Views.VirtualKeyboardWindow.Toggle(); break;
                 case "taskview": TaskView(); break;
                 case "showdesktop": ShowDesktop(); break;
                 case "minall": MinimizeAll(); break;
                 case "closefg": CloseForegroundApp(); break;
                 case "closeall": return PrepareCloseAll();
                 case "screenshot": return StartScreenshot();
+                // 取消关机：返回值就是给用户看的一句话（「已取消」或「当前没有待执行的关机」），
+                // 侧边栏会拿它弹一个原生提示浮层（见 ToolSidebarWindow.Tool_Click 里 hint 那一段）。
+                case "cancelshutdown": return Data.AutoShutdown.CancelPending();
                 default: Log($"不认识的动作: {id}"); break;
             }
         }

@@ -403,8 +403,7 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// 把当前这条路径具体怎么干说清楚（选项名太短，说不清"首次慢、之后快"这种差别），
-    /// 并顺带管那条红色警告 —— 只有「选了自建加速服务」**且**「节点还没架设好」时才弹。
+    /// 把当前这条路径具体怎么干说清楚（选项名太短，说不清「取不到签名会退镜像」这种差别）。
     /// </summary>
     private void UpdateGithubRouteHint()
     {
@@ -413,17 +412,14 @@ public sealed partial class SettingsPage : Page
         GithubRouteHint.Text = current switch
         {
             Services.GithubRoutes.SelfHosted =>
-                "自建加速服务：GitHub 链接统一交由社区自建节点中转（实验性）。节点命中缓存后速率提升明显。",
+                "自建加速服务：向社区自建节点换取限时签名链接后中转下载，国内网络下更稳；"
+                + "签名取不到时自动改用公益镜像，均不可用再回落 GitHub 源。",
             Services.GithubRoutes.Official =>
                 "GitHub 源：直接访问 github.com，不作任何改写（国内网络环境中速率可能偏低或中断）。",
             _ =>
-                "自动：下载前分别探测各条路径的速率，择其较优者使用；首选路径不可用时自动改用另一条。"
-                + "探测结果保留 10 分钟。",
+                "自动：下载前并行探测自建节点、各条公益镜像与 GitHub 源的速率，择快者使用；"
+                + "首选不可用时自动换下一条。探测结果保留 8 分钟。",
         };
-
-        // 服务端状态提示，不是能让用户消掉的通知 ⇒ 只跟着选择开合，不给关闭按钮
-        GithubRouteWarning.IsOpen =
-            current == Services.GithubRoutes.SelfHosted && !Services.GithubRoute.AcceleratorReady;
     }
 
     // ══════════════════════════ 更新 ══════════════════════════

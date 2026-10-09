@@ -47,7 +47,23 @@ public sealed partial class SubmitPage : Page
         public string Hash = "";
     }
 
+    /// <summary>
+    /// 一张下载项卡片里的五个输入框。
+    /// ⛔ 存引用而不是「遍历卡片按顺序取第 N 个」—— 直链那行外面多包了一层 StackPanel，
+    /// 早期按遍历顺序取会把直链填进校验值框（2026-10-09 用户报的恢复草稿错位）。
+    /// </summary>
+    private sealed class DownloadFields
+    {
+        public TextBox Platform = null!;
+        public TextBox Size = null!;
+        public TextBox Note = null!;
+        public TextBox Url = null!;
+        public TextBox Hash = null!;
+    }
+
     private readonly List<DownloadDraft> _downloads = new();
+    /// <summary>每张下载项卡片里五个输入框的引用，**按字段语义**存，⛔别再靠遍历顺序取第 N 个。</summary>
+    private readonly List<DownloadFields> _fields = new();
     private readonly List<Border> _cards = new();
     private readonly List<TextBlock> _titles = new();
     private bool _busy;
@@ -87,15 +103,17 @@ public sealed partial class SubmitPage : Page
         head.Children.Add(remove);
         stack.Children.Add(head);
 
-        stack.Children.Add(Field("平台（如 Windows x64 安装版）", "Windows x64 安装版", null, value => draft.Platform = value));
+        var platformBox = Field("平台（如 Windows x64 安装版）", "Windows x64 安装版", null, value => draft.Platform = value);
+        stack.Children.Add(platformBox);
 
         var row = new Grid { ColumnSpacing = 14 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.Children.Add(Field("体积", "如 1.6 MB", null, value => draft.Size = value));
-        var note = Field("备注", "如 便携版 / 需要管理员权限", null, value => draft.Note = value);
-        Grid.SetColumn(note, 1);
-        row.Children.Add(note);
+        var sizeBox = Field("体积", "如 1.6 MB", null, value => draft.Size = value);
+        var noteBox = Field("备注", "如 便携版 / 需要管理员权限", null, value => draft.Note = value);
+        row.Children.Add(sizeBox);
+        Grid.SetColumn(noteBox, 1);
+        row.Children.Add(noteBox);
         stack.Children.Add(row);
 
         // 直链一行：输入框占满，上传按钮贴在它右侧（排法照「从 GitHub 读取」那一行）
@@ -147,7 +165,8 @@ public sealed partial class SubmitPage : Page
         urlBlock.Children.Add(urlBar);
         urlBlock.Children.Add(urlHint);
         stack.Children.Add(urlBlock);
-        stack.Children.Add(Field("校验值（选填，用于防篡改）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value));
+        var hashBox = Field("校验值（选填，用于防篡改）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value);
+        stack.Children.Add(hashBox);
 
         var card = new Border
         {
@@ -160,6 +179,7 @@ public sealed partial class SubmitPage : Page
         };
 
         _cards.Add(card);
+        _fields.Add(new DownloadFields { Platform = platformBox, Size = sizeBox, Note = noteBox, Url = urlBox, Hash = hashBox });
         _titles.Add(title);
         DownloadsHost.Children.Add(card);
         RenumberDownloads();
@@ -171,6 +191,7 @@ public sealed partial class SubmitPage : Page
         var index = _downloads.IndexOf(draft);
         if (index < 0) return;
         _downloads.RemoveAt(index);
+        _fields.RemoveAt(index);
         DownloadsHost.Children.Remove(_cards[index]);
         _cards.RemoveAt(index);
         _titles.RemoveAt(index);
@@ -555,6 +576,7 @@ public sealed partial class SubmitPage : Page
     private void SetDownloads(List<(string Platform, string Note, string Size, string Url, string Hash)> items)
     {
         _downloads.Clear();
+        _fields.Clear();
         _cards.Clear();
         _titles.Clear();
         DownloadsHost.Children.Clear();
@@ -568,7 +590,7 @@ public sealed partial class SubmitPage : Page
             draft.Size = item.Size;
             draft.Url = item.Url;
             draft.Hash = item.Hash;
-            FillCard(_cards[^1], draft);
+            FillCard(_fields[^1], draft);
         }
         if (_downloads.Count == 0) AddDownload();
         _lastDownloadUrls = string.Join("\n", _downloads.Select(item => item.Url.Trim()));
@@ -841,6 +863,7 @@ public sealed partial class SubmitPage : Page
 
         // 下载项整段重建
         _downloads.Clear();
+        _fields.Clear();
         _cards.Clear();
         _titles.Clear();
         DownloadsHost.Children.Clear();
@@ -856,7 +879,7 @@ public sealed partial class SubmitPage : Page
                 item.Note = JsonText(element, "note");
                 item.Url = JsonText(element, "url");
                 item.Hash = JsonText(element, "hash");
-                FillCard(_cards[^1], item);
+                FillCard(_fields[^1], item);
             }
         }
         if (_downloads.Count == 0) AddDownload();
@@ -869,25 +892,16 @@ public sealed partial class SubmitPage : Page
     private static string JsonText(JsonElement element, string key)
         => element.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
 
-    /// <summary>把下载项的值写回界面（恢复草稿用）。</summary>
-    private static void FillCard(Border card, DownloadDraft draft)
+    /// <summary>把下载项的值写回界面（恢复草稿 / 一键读取都用它）。</summary>
+    private static void FillCard(DownloadFields fields, DownloadDraft draft)
     {
-        if (card.Child is not StackPanel stack) return;
-        var values = new[] { draft.Platform, draft.Size, draft.Note, draft.Url, draft.Hash };
-        var boxes = new List<TextBox>();
-        foreach (var child in stack.Children)
-        {
-            if (child is TextBox box) boxes.Add(box);
-            else if (child is Grid row)
-                foreach (var cell in row.Children)
-                    if (cell is TextBox cellBox) boxes.Add(cellBox);
-        }
-        for (var i = 0; i < boxes.Count && i < values.Length; i++) boxes[i].Text = values[i];
-        // 本站上传回填的 `oss://` 键是服务端生成的，锁住别让人改坏（第 4 个框是「下载直链」）
-        if (boxes.Count > 3)
-        {
-            boxes[3].IsReadOnly = draft.Url.Trim().StartsWith("oss://", StringComparison.OrdinalIgnoreCase);
-        }
+        fields.Platform.Text = draft.Platform;
+        fields.Size.Text = draft.Size;
+        fields.Note.Text = draft.Note;
+        fields.Url.Text = draft.Url;
+        fields.Hash.Text = draft.Hash;
+        // 本站上传回填的 `oss://` 键是服务端生成的，锁住别让人改坏
+        fields.Url.IsReadOnly = draft.Url.Trim().StartsWith("oss://", StringComparison.OrdinalIgnoreCase);
     }
 
     // ══════════ 兜底：下载 / 复制 / 去 GitHub ══════════

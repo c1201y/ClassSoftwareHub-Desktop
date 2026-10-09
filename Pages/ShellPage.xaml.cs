@@ -292,8 +292,8 @@ public sealed partial class ShellPage : UserControl
             case "procguard":
                 ContentFrame.Navigate(typeof(ProcessGuardPage));
                 return;
-            case "virtualkeyboard":
-                ContentFrame.Navigate(typeof(VirtualKeyboardPage));
+            case "autoshutdown":
+                ContentFrame.Navigate(typeof(AutoShutdownPage));
                 return;
             case "logs":
                 ContentFrame.Navigate(typeof(LogViewerPage));

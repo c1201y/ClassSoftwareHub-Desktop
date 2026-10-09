@@ -128,8 +128,10 @@ public static class DownloadService
     /// 文件名优先用 <paramref name="suggestedName"/>，否则从 URL 猜；重名自动加 (1)(2)。
     ///
     /// ⚠️ 真的去抓哪条链接，由「GitHub 下载体验优化」这个设置决定（见 <see cref="GithubRoute"/>）：
-    ///    GitHub 上的文件可能换成自建加速服务或自动挑快的；非 GitHub 链接原样直连。
-    ///    自动/自建两种模式都带一条兜底 —— 前一条失败会换另一条，**用户主动取消不算失败**。
+    ///    GitHub 上的文件可能换自建加速节点或公益镜像，也可能自动挑快的；非 GitHub 链接原样直连。
+    ///    候选链里每条都带一条兜底 —— 前一条失败会换下一条，**用户主动取消不算失败**。
+    ///    自建节点的签名链接要求带 Referer（还可能要 X-Api-Key），这些头挂在候选上，
+    ///    抓取时经 <see cref="DownloadCandidate.ApplyTo"/> 一起发出去。
     /// </summary>
     public static async Task<DownloadedFile> DownloadAsync(
         string url,
@@ -144,8 +146,9 @@ public static class DownloadService
         var dir = string.IsNullOrWhiteSpace(directory) ? DefaultDir : directory!;
         Directory.CreateDirectory(dir);
 
-        // 候选按优先级排（通常 1 条，自动/自建模式是 2 条）。文件名一律按**原始链接**定，
-        // 不按加速链接 —— 前缀拼出来的地址里文件名虽然一样，但那是巧合，别依赖它。
+        // 候选按优先级排（通常 1 条，自建/自动模式是多条）。文件名一律按**原始链接**定，
+        // 不按加速链接 —— 前缀拼出来的地址里文件名虽然一样，但那是巧合，别依赖它；
+        // 自建节点的签名链接更是完全看不出原始文件名。
         var candidates = await GithubRoute.ResolveAsync(url, ct).ConfigureAwait(false);
 
         Exception? lastError = null;
@@ -165,7 +168,7 @@ public static class DownloadService
                 lastError = ex;
                 if (i < candidates.Count - 1)
                 {
-                    Core.AppLog.Info("download", $"{candidates[i]} 失败（{ex.Message}），改用 {candidates[i + 1]}");
+                    Core.AppLog.Info("download", $"{candidates[i].Url} 失败（{ex.Message}），改用 {candidates[i + 1].Url}");
                     progress?.Report(new DownloadProgress(0, 0, 0));
                 }
             }
@@ -176,7 +179,7 @@ public static class DownloadService
 
     /// <summary>真正抓一条链接并写盘（一次只试一条；失败/取消都把 .part 删掉再往外抛）。</summary>
     private static async Task<DownloadedFile> FetchAsync(
-        string fetchUrl,
+        DownloadCandidate candidate,
         string originalUrl,
         string? suggestedName,
         string dir,
@@ -187,7 +190,11 @@ public static class DownloadService
         var target = UniquePath(dir, fileName);
         var part = target + ".part";
 
-        using var response = await Http.GetAsync(fetchUrl, HttpCompletionOption.ResponseHeadersRead, ct)
+        using var request = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
+        // 自建加速节点按 Referer 白名单放行，签名还可能绑了密钥 —— 候选带什么头就原样发什么
+        candidate.ApplyTo(request);
+
+        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 

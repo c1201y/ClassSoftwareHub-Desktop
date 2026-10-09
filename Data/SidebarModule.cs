@@ -74,7 +74,8 @@ public static class SidebarModules
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
         new() { Id = "image-color", Name = "图片取色", ShortName = "取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
         new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", Glyph = "\uE943", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.EncodingToolPage) },
-        new() { Id = "mirror-download", Name = "系统镜像下载", ShortName = "镜像", Glyph = "\uE896", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.MirrorToolPage) },
+        // ⚠️ 原来这里还有一项「系统镜像下载（mirror-download）」：2026-10-09 该功能整体下线，一并删除。
+        //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
 
         // ── 挨着边条弹浮窗的单滑块面板 ──
         // 音量：点一下在边条内侧弹一栏（边条不收起）—— 竖向排「数值 + 垂直滑块 + 静音 + 展开」，
@@ -86,12 +87,17 @@ public static class SidebarModules
 
         // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
         new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },
-        new() { Id = "keyboard", Name = "打开键盘", ShortName = "键盘", Glyph = "\uE765", Kind = SidebarModuleKinds.Action, Note = "在屏幕底边摆出自绘虚拟键盘（再单击收起）。键盘是独立浮窗，不切换主界面、显示时不抢焦点；「只有触摸才弹」等行为在「实验性功能 → 虚拟键盘」里设" },
+        // ⚠️ 原来这里还有一项「打开键盘（keyboard）」：2026-10-09 虚拟键盘整体下线，一并删除。
+        //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
         new() { Id = "screenshot", Name = "截屏贴图", ShortName = "截屏", Glyph = "\uE722", Kind = SidebarModuleKinds.Action, Note = "框选区域后在编辑窗中标注：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克，并支持撤销与重做；随后可复制到剪贴板 / 保存到本地 / 钉图（钉图按 1:1 显示，拖动边框可缩放，双击或右键关闭）" },
         new() { Id = "taskview", Name = "任务视图", ShortName = "任务", Glyph = "\uE7C4", Kind = SidebarModuleKinds.Action, Note = "等同 Win+Tab" },
         new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次单击即可还原（不关闭任何程序）" },
         new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同单击标题栏 ×，会提示是否保存，不强制结束）" },
         new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中的所有窗口（含最小化窗口）。防误触：首次单击仅计数，再次单击才会执行；均为正常关闭，不强制结束" },
+        // ⚠️ 取消关机：只在用户**自己把它加到侧边栏**之后才出现。刻意**不**走 SidebarModulesRevision 补入 ——
+        //    「自动关机」是实验性功能且默认关闭，往所有人侧边栏上塞一颗多数人用不上的按钮不合理。
+        //    添加入口在「自动关机」页上（一个按钮追加到末尾），也可以在「侧边布局」页里手动勾。
+        new() { Id = "cancelshutdown", Name = "取消关机", ShortName = "撤关机", Glyph = "\uE7E8", Kind = SidebarModuleKinds.Action, Note = "撤回还没执行的自动关机（等同系统的取消关机命令）。当前没有待执行的关机时，只会提示一句" },
         // 「最小化全部窗口」已删（2026-09-25）：「回到桌面」在 Windows 上做的事跟它一模一样（都是把窗口全收起来、再按一次还原），
         // 两个按钮一个效果，留着只会让人问「有区别吗」。要恢复就把这行抄回去。
     };

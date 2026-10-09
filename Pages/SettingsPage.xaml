@@ -275,27 +275,13 @@
                                 <TextBlock Text="自动" />
                             </ComboBoxItem>
                             <ComboBoxItem Tag="selfhosted">
-                                <TextBlock>
-                                    <Run Text="自建加速服务" />
-                                    <Run Text="（Experimental）"
-                                         Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                </TextBlock>
+                                <TextBlock Text="自建加速服务" />
                             </ComboBoxItem>
                             <ComboBoxItem Tag="github">
                                 <TextBlock Text="GitHub 源" />
                             </ComboBoxItem>
                         </ComboBox>
                     </controls:SettingsCard>
-
-                    <!-- 自建加速服务未就绪时的红警告（2026-10-06 Nick）：选中那一项就弹出来。
-                         Severity=Error 就是 WinUI 的红；不可关闭 —— 它反映的是服务端状态，
-                         不是一条能让用户点掉的通知。就绪后（GithubRoute.AcceleratorReady=true）自然不再出现。 -->
-                    <InfoBar x:Name="GithubRouteWarning"
-                             Severity="Error"
-                             IsClosable="False"
-                             IsOpen="False"
-                             Title="当前加速服务不可用"
-                             Message="远端服务器正在架设中，此时下载仍走 GitHub 源。" />
 
                 </StackPanel>
 

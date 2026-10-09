@@ -770,13 +770,28 @@ public partial class App : Application
         Data.EasiNoteGuard.Start();
         Data.ProcessGuard.Start();
 
-        // 虚拟键盘（实验性功能）：总开关是单一的 —— 关着的时候 Start() 第一句就 return，
-        // 触摸钩子、UIA 探测、注册表接管一个都不会上电（见 VirtualKeyboardService）。
-        Services.VirtualKeyboard.VirtualKeyboardService.Start();
+        // 「自动关机」的到点巡检（2026-10-10 新增的实验性功能）。同样靠本进程内的定时器：
+        //   本程序没在跑就不会关，没往系统里装计划任务（与上面两个专杀同一套口径）。
+        //   ⚠️ 它排下去的 shutdown /s /t 是**由 Windows 自己数秒**的 —— 这中间退掉本程序，
+        //      到点仍会关机；要反悔走侧边栏那颗「取消关机」（shutdown /a）。
+        Data.AutoShutdown.Start();
+
+        // 虚拟键盘（实验性功能）已于 2026-10-09 **整体下线** —— 原来这儿是
+        //   Services.VirtualKeyboard.VirtualKeyboardService.Start();
+        // 只留下一句收尾：虚拟键盘是那套功能里唯一写注册表的地方（把系统触摸键盘的
+        // 桌面模式自动弹出关掉），功能删了之后就没人还原它了。Run() 按旧备份还原一次，
+        // 幂等 —— 没有备份文件就什么都不碰。
+        Services.VirtualKeyboardRetire.Run();
 
         // 更新安装包自动清理：updates 目录只留最近 N 个（默认 3），更早的删掉。
         // 走后台线程，不沾首帧；新版本装完后的第一次启动正好把旧包收掉。
         Services.Updating.InstallerCleanup.Start();
+
+        // GitHub 加速节点的密钥就位情况 —— 只写一行日志，**绝不打印密钥本身**。
+        // 密钥按设计不在仓库里（见 Services/MirrorSign.cs 的「密钥从哪来」），
+        // 所以得有这么一句，才能一眼看出「这版包到底带没带钥匙」。
+        // 没带 = 下载仍可用，只是绕过节点走公益镜像。
+        Services.MirrorSign.LogKeyStatus();
     }
 
     /// <summary>

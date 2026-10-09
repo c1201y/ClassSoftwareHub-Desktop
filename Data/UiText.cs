@@ -7,7 +7,8 @@ namespace ClassSoftwareHub.Desktop.Data;
 ///
 /// ⚠️ **现实是这份文件当前根本不存在，所有取值都走硬编码兜底**（2026-10-05）：
 ///   安装包不再自带内容包之后，桌面端的内容只从站点仓库的「软件数据/」同步，
-///   而那里**只放了 <c>text/mirror-sites.json</c>，没有 ui.json**。
+///   而那里**没有放 ui.json**（原先一起同步的 <c>text/mirror-sites.json</c> 是给已下线的
+///   「系统镜像下载」用的，2026-10-09 起也不再需要）。
 ///   原因：桌面端真正用到的只有 4 个 key（app.title / detail.pending / detail.hash-copied /
 ///   about.qq-group-url），兜底值本来就写死在调用点，而"抄一份站点文案进仓库"会随站点改文字而
 ///   悄悄过期 —— 2026-10-04 正是因为这个（读到的 app.version 停在 v2.3.2）才把站点版本号改成编译期常量。

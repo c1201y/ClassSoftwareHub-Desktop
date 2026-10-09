@@ -97,7 +97,7 @@ public sealed class UpdateService
     /// 校验不过会删掉文件并抛 ChecksumMismatchException。
     ///
     /// ⚠️ 走哪条链接由「GitHub 下载体验优化」设置决定（见 <see cref="GithubRoute"/>）——
-    ///    更新包与普通下载共用同一份设置与同一份探速结果；自建加速节点失败会自动回落官方直链。
+    ///    更新包与普通下载共用同一份设置与同一份探速结果；自建节点取不到签名会依次回落到公益镜像、官方直链。
     ///    走加速不影响安全：下面的 MD5 / SHA256 校验照常执行，改包会被当场拦下。
     ///    （只加速安装包本体；那个几百字节的 .md5 校验文件仍直接问 GitHub，不值得为它换路。）
     /// </summary>
@@ -138,7 +138,7 @@ public sealed class UpdateService
                 if (i < candidates.Count - 1)
                 {
                     progress?.Report(0);
-                    AppLog.Info("update", $"更新包 {candidates[i]} 下载失败（{ex.Message}），改用 {candidates[i + 1]}");
+                    AppLog.Info("update", $"更新包 {candidates[i].Url} 下载失败（{ex.Message}），改用 {candidates[i + 1].Url}");
                 }
             }
         }
@@ -189,14 +189,16 @@ public sealed class UpdateService
     }
 
     /// <summary>
-    /// 真正抓一条链接到 <paramref name="temp"/>，边下边喂两个哈希。
+    /// 一次性抓一条链接到 <paramref name="temp"/>，边下边喂两个哈希。
     /// 一次只试一条；失败/取消都把 .part 删掉再往外抛（重试由调用方换下一条候选）。
+    /// 候选自带的头（自建节点的 Referer / X-Api-Key）必须原样发出去 —— 漏了直接 403。
     /// </summary>
     private static async Task FetchPackageAsync(
-        string url, UpdatePackage package, string temp,
+        DownloadCandidate candidate, UpdatePackage package, string temp,
         IncrementalHash md5, IncrementalHash sha, IProgress<double>? progress, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        using var req = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
+        candidate.ApplyTo(req);
         using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         resp.EnsureSuccessStatusCode();
         var total = resp.Content.Headers.ContentLength ?? package.Size;
