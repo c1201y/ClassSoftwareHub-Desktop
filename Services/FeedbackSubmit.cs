@@ -59,8 +59,16 @@ public static class FeedbackSubmit
         string title, string detail, string contact,
         CancellationToken ct = default)
     {
+        // ── 链路日志（2026-10-11）：提交失败以前只在界面上弹一句话，日志里查不到。
+        //    ⛔ 只记标题、**绝不记正文与联系方式**（联系方式是按隐私约定要密文外发的）。
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Core.AppLog.Begin("submit", $"提交反馈 · 类型={kind}/{subKind} · 标题「{title}」");
+
         if (title.Trim().Length == 0 || detail.Trim().Length == 0)
+        {
+            Core.AppLog.Warn("submit", "标题或正文为空，本次没有发出去");
             return new Result(false, "内容不完整，无法提交。", null);
+        }
 
         var payload = JsonSerializer.Serialize(
             new { kind, subKind, appId, title, detail, contact }, JsonOpts);
@@ -69,8 +77,15 @@ public static class FeedbackSubmit
             .PostAsync(Route, payload, "已提交，维护者会尽快处理。", ct)
             .ConfigureAwait(false);
 
-        return reply is null
-            ? new Result(false, "连不上提交服务（网络或地区限制），可改用旁边的方式提交。", null)
-            : new Result(reply.Ok, reply.Message, reply.Url);
+        if (reply is null)
+        {
+            Core.AppLog.Fail("submit", "提交反馈失败：所有入口都不通（网络或地区限制）");
+            return new Result(false, "连不上提交服务（网络或地区限制），可改用旁边的方式提交。", null);
+        }
+
+        if (reply.Ok) Core.AppLog.Done("submit", $"反馈已提交 · 服务端回应「{reply.Message}」", sw.Elapsed);
+        else Core.AppLog.Fail("submit", $"服务端没有接受这条反馈：{reply.Message}");
+
+        return new Result(reply.Ok, reply.Message, reply.Url);
     }
 }

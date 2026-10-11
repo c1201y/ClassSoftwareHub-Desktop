@@ -23,7 +23,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.1.3-insider1.0"
+  #define DesktopVersion "1.1.3-insider1.1"
 #endif
 
 #define AppName "ClassSoftwareHub"
@@ -55,6 +55,19 @@ UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName} dv{#DesktopVersion}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+
+; ── 安装时展示三份条款（用户协议 / 隐私政策 / 免责声明）────────────────────
+; 内容与站点同源：站点仓库根目录 `法律文本.ts`（站点「条款」页 #/agreement 与站点设置页
+; 「关于」区都用它）⇒ 桌面端设置页「条款与声明」用的 Core/LegalText.cs、以及**这一页**用的
+; installer/Legal.rtf，都由本仓库 tools/sync-legal.mjs 从同一份源生成。
+;   ⇒ 要改条款：改站点那份 TS，再跑 `node tools/sync-legal.mjs`。⛔ 别手改 Legal.rtf。
+;
+; ⚠️ 用 RTF 而不是 txt：Inno 的**纯文本**许可文件「不会自动换行」，得自己按列硬换行，
+;    中文按字符算宽度更是一团糟；RTF 交给 RichEdit 排版，自带换行与字体。
+;    （生成物里的中文全走 \uNNNN? 转义 ⇒ 文件本身是纯 ASCII，没有编码问题。）
+; ⚠️ 静默安装（更新器用的 /SP- /SILENT …）会**跳过许可页并视为已接受**，
+;    所以升级流程不会被这一页打断。
+LicenseFile=Legal.rtf
 ; ⚠️⚠️ 这里**故意不设 AppMutex**（原值 `{#AppName}.Desktop.SingleInstance`）：
 ;     Inno 一启动就会查这个 Mutex，查到应用还在跑就直接拒装，而那个框又会被
 ;     /SUPPRESSMSGBOXES 自动按「取消」→ 静默失败、用户零提示。

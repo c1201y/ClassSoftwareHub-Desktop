@@ -283,6 +283,18 @@ public sealed partial class SidebarLayoutPage : Page
                 if (SidebarModeCombo.SelectedIndex != index) SidebarModeCombo.SelectedIndex = index;
             }
 
+            // 大小样式 / 工具每行几个（2026-10-11 Nick：嫌默认那套按钮太大、单列太占地方）
+            if (SidebarDensityCombo is not null)
+            {
+                var index = s.SidebarDensity == "compact" ? 1 : 0;
+                if (SidebarDensityCombo.SelectedIndex != index) SidebarDensityCombo.SelectedIndex = index;
+            }
+            if (SidebarColumnsCombo is not null)
+            {
+                var index = s.SidebarColumns == 3 ? 1 : 0;
+                if (SidebarColumnsCombo.SelectedIndex != index) SidebarColumnsCombo.SelectedIndex = index;
+            }
+
             // 「动画方案」：拖放卡片的落位收尾用哪种（两种都保留，Nick 2026-10-01 定）
             _dropDip = DropDipScale(s.SidebarDropAnim);
             if (DropAnimCombo is not null)
@@ -2246,6 +2258,34 @@ public sealed partial class SidebarLayoutPage : Page
         App.Settings.Save();
 
         if (s.SidebarEnabled) ToolSidebarWindow.ApplySetting();
+    }
+
+    /// <summary>
+    /// 大小样式（标准 / 紧凑）。
+    /// ⚠️ 改了要**整个重建**侧边栏（按钮尺寸、图标、字号、底排都跟着换），不是只重排位置 ——
+    ///    <c>ToolSidebarWindow.ApplySetting()</c> 里走的就是重建那条路。
+    /// </summary>
+    private void SidebarDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_toolSync) return;
+        if (SidebarDensityCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string style) return;
+
+        App.Settings.Current.SidebarDensity = style;
+        App.Settings.Save();
+
+        if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplySetting();
+    }
+
+    /// <summary>工具每行几个（1 / 3）。贴上/下边时不生效（横条永远一排到底，见 ToolSidebarWindow.Columns）。</summary>
+    private void SidebarColumns_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_toolSync) return;
+        if (SidebarColumnsCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag) return;
+
+        App.Settings.Current.SidebarColumns = tag == "3" ? 3 : 1;
+        App.Settings.Save();
+
+        if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplySetting();
     }
 
     // ── 动画方案（2026-10-01：两种落位收尾都挺好，留给用户自己挑） ──────────

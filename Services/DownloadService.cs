@@ -146,10 +146,17 @@ public static class DownloadService
         var dir = string.IsNullOrWhiteSpace(directory) ? DefaultDir : directory!;
         Directory.CreateDirectory(dir);
 
+        // ── 链路日志（2026-10-11）：下载是用户最常撞坑、也最难自证的一条链路。
+        //    以前失败时只把 ex.Message 弹到界面上，日志里一个字都没有；现在每一步都留痕。 ──
+        var label = string.IsNullOrWhiteSpace(suggestedName) ? ResolveFileName(url, null) : suggestedName!.Trim();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Core.AppLog.Begin("download", $"下载「{label}」开始 · 线路=" + GithubRoute.DisplayName(GithubRoute.Current));
+
         // 候选按优先级排（通常 1 条，自建/自动模式是多条）。文件名一律按**原始链接**定，
         // 不按加速链接 —— 前缀拼出来的地址里文件名虽然一样，但那是巧合，别依赖它；
         // 自建节点的签名链接更是完全看不出原始文件名。
         var candidates = await GithubRoute.ResolveAsync(url, ct).ConfigureAwait(false);
+        Core.AppLog.Step("download", $"原始链接 {url}");
 
         Exception? lastError = null;
         for (var i = 0; i < candidates.Count; i++)
@@ -157,7 +164,10 @@ public static class DownloadService
             ct.ThrowIfCancellationRequested();
             try
             {
-                return await FetchAsync(candidates[i], url, suggestedName, dir, progress, ct).ConfigureAwait(false);
+                var file = await FetchAsync(candidates[i], url, suggestedName, dir, progress, ct).ConfigureAwait(false);
+                Core.AppLog.Done("download",
+                    $"下载「{label}」完成 · {Core.AppLog.Size(file.Bytes)} · {file.Path}", sw.Elapsed);
+                return file;
             }
             catch (OperationCanceledException)
             {
@@ -168,13 +178,17 @@ public static class DownloadService
                 lastError = ex;
                 if (i < candidates.Count - 1)
                 {
-                    Core.AppLog.Info("download", $"{candidates[i].Url} 失败（{ex.Message}），改用 {candidates[i + 1].Url}");
+                    // ⚠️ 客气地叫「警告」而不是「错误」：换路是**设计内的正常降级**，
+                    //    只有全都试完还不行才是真失败（见循环外那条 Fail）。
+                    Core.AppLog.Warn("download", $"候选 {i + 1}/{candidates.Count} 不可用（{ex.Message}）→ 换下一条");
                     progress?.Report(new DownloadProgress(0, 0, 0));
                 }
             }
         }
 
-        throw lastError ?? new InvalidOperationException("下载失败。");
+        var final = lastError ?? new InvalidOperationException($"下载「{label}」失败：{candidates.Count} 条候选全部不可用。");
+        Core.AppLog.Fail("download", final, $"下载「{label}」失败（{candidates.Count} 条候选全部试过）");
+        throw final;
     }
 
     /// <summary>真正抓一条链接并写盘（一次只试一条；失败/取消都把 .part 删掉再往外抛）。</summary>

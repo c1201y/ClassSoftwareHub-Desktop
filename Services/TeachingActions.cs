@@ -32,6 +32,12 @@ public static class TeachingActions
         {
             switch (id)
             {
+                // 系统快捷三件套（2026-10-11）：任务管理器 / 剪贴板历史 / 安全选项里的那几项
+                case "taskmgr": OpenTaskManager(); break;
+                case "clipboard": ClipboardHistory(); break;
+                case "lock": LockScreen(); break;
+                case "switchuser": SwitchUser(); break;
+                case "logout": return PrepareLogout();
                 case "mag": ToggleSystemMagnifier(); break;
                 case "taskview": TaskView(); break;
                 case "showdesktop": ShowDesktop(); break;
@@ -86,7 +92,7 @@ public static class TeachingActions
     /// （比如截屏启动失败 `return "截屏启动失败，看日志"`），那种没什么可确认的。
     /// 以后再加"要先问一句"的动作，记得往这里补 id。
     /// </summary>
-    public static bool AsksFirst(string id) => id == "closeall";
+    public static bool AsksFirst(string id) => id is "closeall" or "logout";
 
     /// <summary>
     /// 焦点观察器（保留）：只在"确实是个能用的应用窗口"时才记一下。
@@ -145,6 +151,154 @@ public static class TeachingActions
             Log("回桌面（COM）失败，改用 Win+D: " + ex.Message);
         }
         SendWinChord(VkD);
+    }
+
+    // ── 系统快捷三件套（2026-10-11）────────────────────────────
+
+    /// <summary>
+    /// 任务管理器：直接调起 Windows 自带的 <c>taskmgr.exe</c>（等同 Ctrl+Shift+Esc）。
+    /// 已经在跑的话系统会把它那个窗口带到前台（它自己就是单实例）。
+    /// </summary>
+    private static void OpenTaskManager()
+    {
+        try
+        {
+            var exe = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), "taskmgr.exe");
+            if (!System.IO.File.Exists(exe))
+            {
+                Log("任务管理器：找不到 " + exe);
+                return;
+            }
+
+            _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+            Log("任务管理器：已调起");
+        }
+        catch (Exception ex)
+        {
+            Log("任务管理器失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 剪贴板历史（等同 Win+V）—— 只能模拟按键，系统没给对应的 API。
+    ///
+    /// ⚠️ 发键**之前**必须先把焦点还回"用户刚才在用的那个窗口"：剪贴板面板挑中一条之后，
+    ///    内容是往**打开面板时的活动窗口**里粘的；焦点要是还杵在侧边栏上，粘过去就掉进侧边栏了。
+    ///    还焦点是异步排队的（见 <see cref="ReturnFocus"/>），所以这里再隔一拍才发键。
+    /// </summary>
+    private static void ClipboardHistory()
+    {
+        RefocusPrevious();
+
+        var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (queue is null)
+        {
+            SendWinChord(VkV);
+            return;
+        }
+
+        var timer = queue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(150);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            try
+            {
+                timer.Stop();
+                var sent = SendWinChord(VkV);
+                Log($"剪贴板历史：SendInput 插入 {sent} 个事件" + (sent == 0 ? $"（被拦了？err={Marshal.GetLastWin32Error()}）" : ""));
+            }
+            catch { }
+        };
+        timer.Start();
+    }
+
+    /// <summary>锁定电脑：Win+L 用的就是这个 API，它也是 Ctrl+Alt+Del 界面上的第一项。</summary>
+    private static void LockScreen()
+    {
+        try
+        {
+            var ok = LockWorkStation();
+            Log("锁定电脑：" + (ok ? "已下发" : $"失败 err={Marshal.GetLastWin32Error()}"));
+        }
+        catch (Exception ex)
+        {
+            Log("锁定电脑失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 切换用户：用系统自带的 <c>tsdiscon.exe</c>（它做的就是"断开当前会话"= 回到登录界面选别的账户）。
+    /// ⚠️ 这一步系统可能要求提权，失败就照实写日志 —— 别自己去提 UAC（讲台上弹权限框最烦人）。
+    /// </summary>
+    private static void SwitchUser()
+    {
+        try
+        {
+            var exe = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), "tsdiscon.exe");
+            if (!System.IO.File.Exists(exe))
+            {
+                Log("切换用户：找不到 " + exe);
+                return;
+            }
+
+            _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+            Log("切换用户：已调起 tsdiscon.exe");
+        }
+        catch (Exception ex)
+        {
+            Log("切换用户失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>「注销」第一步：**只点数**，把要问用户的那句话返回去（真注销在 ConfirmPending("logout") 里）。</summary>
+    private static string? PrepareLogout() =>
+        "注销当前用户\n所有程序都会被关掉，没有保存的内容会丢失";
+
+    /// <summary>真注销：<c>ExitWindowsEx(EWX_LOGOFF)</c>。⚠️ 调它得先拿到 SeShutdownPrivilege 特权。</summary>
+    private static string? ExecuteLogout()
+    {
+        try
+        {
+            _ = EnableShutdownPrivilege();       // 拿不到也照样试一下（有些账户本来就有）
+            var ok = ExitWindowsEx(EWX_LOGOFF, 0);
+            Log("注销：" + (ok ? "已下发" : $"失败 err={Marshal.GetLastWin32Error()}"));
+        }
+        catch (Exception ex)
+        {
+            Log("注销失败: " + ex.Message);
+        }
+
+        return null;
+    }
+
+    /// <summary>注销 / 关机前要拿的系统特权（SeShutdownPrivilege）。</summary>
+    private static bool EnableShutdownPrivilege()
+    {
+        const uint TokenAdjustPrivileges = 0x0020;
+        const uint TokenQuery = 0x0008;
+        const uint SePrivilegeEnabled = 0x0002;
+
+        var token = IntPtr.Zero;
+        try
+        {
+            if (!OpenProcessToken(GetCurrentProcess(), TokenAdjustPrivileges | TokenQuery, out token)) return false;
+            if (!LookupPrivilegeValue(null, "SeShutdownPrivilege", out var luid)) return false;
+
+            var tp = new TOKEN_PRIVILEGES { PrivilegeCount = 1, Luid = luid, Attributes = SePrivilegeEnabled };
+            return AdjustTokenPrivileges(token, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)
+                   && Marshal.GetLastWin32Error() == 0;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            if (token != IntPtr.Zero) CloseHandle(token);
+        }
     }
 
     /// <summary>任务视图：等于 Win+Tab。</summary>
@@ -307,6 +461,7 @@ public static class TeachingActions
             return id switch
             {
                 "closeall" => ExecuteCloseAll(),
+                "logout" => ExecuteLogout(),
                 _ => null,
             };
         }
@@ -497,6 +652,8 @@ public static class TeachingActions
     private const ushort VkControl = 0x11;
     private const ushort VkMenu = 0x12;      // Alt
     private const ushort VkL = 0x4C;
+    private const ushort VkV = 0x56;         // V（Win+V = 剪贴板历史）
+    private const uint EWX_LOGOFF = 0x00000000;
     private const uint InputKeyboard = 1;
     private const uint KeyEventKeyUp = 0x0002;
 
@@ -559,6 +716,45 @@ public static class TeachingActions
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    // ── 锁定 / 注销（系统快捷三件套）──
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool LockWorkStation();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ExitWindowsEx(uint uFlags, uint dwReason);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LUID
+    {
+        public uint LowPart;
+        public int HighPart;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TOKEN_PRIVILEGES
+    {
+        public uint PrivilegeCount;
+        public LUID Luid;
+        public uint Attributes;
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out IntPtr tokenHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool LookupPrivilegeValue(string? systemName, string name, out LUID luid);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool AdjustTokenPrivileges(IntPtr tokenHandle, bool disableAllPrivileges,
+        ref TOKEN_PRIVILEGES newState, uint bufferLength, IntPtr previousState, IntPtr returnLength);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr hObject);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);

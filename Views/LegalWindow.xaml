@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.LegalWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      条款阅读窗（独立 AppWindow，2026-10-11）。
+
+      来由：网站新增了《用户协议》《隐私政策》《免责声明》三份条款（站点根目录
+      `法律文本.ts` 是唯一真源，站点「条款」页 #/agreement 与站点设置页「关于」区都用它）。
+      Nick 要求桌面端同步：① 设置页给个入口；② 安装程序也要显示。
+
+      这一扇窗 = 站点那个「条款」页的桌面版：
+        · 顶部：文档标题 + 「版本 v1.0 · 生效日期 …」副标题 + 三档切换（SelectorBar，
+          文字直接取文档 title，跟站点标签一致）；
+        · 正文：按「小节标题 + 逐条」渲染，**可选中可复制**（条款这东西用户会想复制）；
+        · 内容全部来自 Core/LegalText.cs（由 tools/sync-legal.mjs 从站点那份 TS 生成）⇒ **离线可见，不联网**。
+
+      ⚠️ 正文用代码往 BodyHost 里塞（不是 DataTemplate）：结构就是「节 → 条」两层、
+         样式三种，代码直白得多，也免了嵌套 ItemsControl 的模板麻烦。
+      ⚠️ 用**系统标题栏**（没有自绘标题栏那一套）：这就是个读文档的窗，系统原生最省事也最像样。
+    -->
+
+    <Grid x:Name="Root">
+        <Grid.Resources>
+            <!-- 小节标题（「一、服务内容」这种） -->
+            <Style x:Key="LegalHeadingStyle" TargetType="TextBlock"
+                   BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="IsTextSelectionEnabled" Value="True" />
+                <Setter Property="Margin" Value="0,18,0,2" />
+            </Style>
+
+            <!-- 单条条款 -->
+            <Style x:Key="LegalBodyStyle" TargetType="TextBlock"
+                   BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="IsTextSelectionEnabled" Value="True" />
+                <Setter Property="LineHeight" Value="21" />
+            </Style>
+
+            <!-- 引言段：比正文淡一点，跟站点一个观感 -->
+            <Style x:Key="LegalIntroStyle" TargetType="TextBlock"
+                   BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="IsTextSelectionEnabled" Value="True" />
+                <Setter Property="LineHeight" Value="21" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="Margin" Value="0,2,0,4" />
+            </Style>
+        </Grid.Resources>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 头部：标题 / 版本行 / 三档切换 -->
+        <StackPanel Grid.Row="0" Margin="28,22,28,10" Spacing="4">
+            <TextBlock x:Name="DocTitle" FontSize="26" FontWeight="Bold" TextWrapping="Wrap" />
+            <TextBlock x:Name="DocVersion" FontSize="12" Opacity="0.75" />
+            <!-- 档位文字在代码里按 Core/LegalText.cs 的 title 生成（⛔ 别在 XAML 写死） -->
+            <SelectorBar x:Name="DocSelector" Margin="0,8,0,0" HorizontalAlignment="Left"
+                         SelectionChanged="DocSelector_SelectionChanged" />
+        </StackPanel>
+
+        <!-- ⛔ 不在 ScrollViewer 上写 Padding：底部不参与滚动范围，滚到底最后一条会被裁（WinUI 3 已知坑）。
+             间距一律写在里面那个 StackPanel 的 Margin 上。 -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <!-- 正文限宽居中：条款一行太长没法读（本机窗口 ~920dip，正文 ~820） -->
+            <StackPanel x:Name="BodyHost" Margin="28,2,28,44" MaxWidth="820" />
+        </ScrollViewer>
+    </Grid>
+</Window>

@@ -55,7 +55,13 @@ internal static class SubmitClient
                 var root = doc.RootElement;
                 var ok = root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True;
                 var hasError = root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String;
-                if (!ok && !hasError) continue;   // 不是这个接口的响应（回源还没生效时会返回 nginx 错误页）
+                if (!ok && !hasError)
+                {
+                    // 不是这个接口的响应（回源还没生效时会返回 nginx 错误页）→ 换下一个入口。
+                    // ⚠️ 这条是**期望内的回退**（部署期间常出现），所以记「信息」不记「警告」。
+                    Core.AppLog.Step("submit", $"入口 {baseUrl} 回的不是提交服务响应 → 换下一个");
+                    continue;
+                }
 
                 ShellConfig.RememberSubmitEndpoint(baseUrl);
 
@@ -76,12 +82,17 @@ internal static class SubmitClient
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
-                // 连不上 / 超时 / 响应不是 JSON（路由还没上）→ 换下一个入口
+                // 连不上 / 超时 / 响应不是 JSON（路由还没上）→ 换下一个入口。
+                // ⛔ 这里以前是**裸的 `catch {}`** —— 于是"提交失败"在日志里一个字都没有，
+                //    这正是一次审计里数出来的 269 个静默 catch 之一（2026-10-11 补日志时改掉）。
+                Core.AppLog.Warn("submit",
+                    $"入口 {baseUrl} 提交失败（{ex.GetType().Name}: {ex.Message}）→ 试下一个");
             }
         }
 
+        Core.AppLog.Warn("submit", "所有提交入口都不通（网络或地区限制）");
         return null;
     }
 

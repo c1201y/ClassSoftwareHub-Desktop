@@ -9,12 +9,19 @@
           PointerMoved="Root_PointerMoved" PointerPressed="Root_PointerMoved"
           Tapped="Root_Tapped">
         <Border x:Name="Veil" />
+        <!--
+          ⚠️ Typography.NumeralAlignment="Tabular" 是**必须**的，不是装饰（2026-10-11 Nick 反馈"秒数跳的时候整行一直抖"）：
+             大号时间居中排，字体默认是比例字宽 —— Bahnschrift 里 `1` 只有 `4` 的一半宽，
+             秒数一跳整行宽度就变一次，居中的结果就是数字左右横跳。
+             打开 tnum（等宽数字）后每个数字占同样宽度，整行宽度恒定 ⇒ 完全不抖。
+             三个全屏窗口 + 工具页预览 + 浮窗挂件，凡显示时间的都要带这个属性。
+        -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <TextBlock x:Name="TimeText" Text="00:00" FontSize="220" FontWeight="Bold"
-                           FontFamily="Bahnschrift" />
+                           FontFamily="Bahnschrift" Typography.NumeralAlignment="Tabular" />
                 <TextBlock x:Name="SecText" Text=":00" FontSize="90" FontWeight="SemiBold"
-                           Opacity="0.85" VerticalAlignment="Bottom" />
+                           Opacity="0.85" VerticalAlignment="Bottom" Typography.NumeralAlignment="Tabular" />
             </StackPanel>
             <TextBlock x:Name="DateText" FontSize="40" Opacity="0.9" HorizontalAlignment="Center" />
         </StackPanel>

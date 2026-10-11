@@ -288,11 +288,15 @@ public sealed class DownloadManager
         catch (OperationCanceledException)
         {
             task.State = DownloadState.Canceled;              // 自己取消的，不打扰
+            Core.AppLog.Info("download", $"用户取消下载「{task.Title}」");
         }
         catch (Exception ex)
         {
             task.Error = ex.Message;
             task.State = DownloadState.Failed;
+            // ⚠️ 这里**不重复记异常** —— DownloadService.DownloadAsync 已经带着完整堆栈记过了。
+            //    这条是"任务面板上它落到失败态"的收尾标记，顺带兜住"异常抛在 DownloadService 之前"的情况。
+            Core.AppLog.Info("download", $"任务「{task.Title}」以失败结束：{ex.Message}");
             Finished?.Invoke(task);
         }
         finally

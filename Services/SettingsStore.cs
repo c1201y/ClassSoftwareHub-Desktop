@@ -147,6 +147,25 @@ public sealed class AppSettings
     public bool SidebarFooterEnabled { get; set; } = true;
 
     /// <summary>
+    /// 侧边栏展开面板的**大小样式**（2026-10-11 Nick：有用户嫌默认那套悬浮按钮太大）：
+    /// <list type="bullet">
+    ///   <item><c>standard</c>（默认）= 现在这套：宽 92 dip 的竖条，按钮 52 高、图标 20、图标下面带短名。</item>
+    ///   <item><c>compact</c> = 紧凑：细条 + 小图标小字，但**按钮本身的点击区域不跟着缩到底**
+    ///         （否则细条上的键点不准，2026-10-11 Nick 特意提的）。</item>
+    /// </list>
+    /// ⚠️ 认不出的值一律当 <c>standard</c>（见 <c>ToolSidebarWindow.IsCompact</c>）。
+    /// </summary>
+    public string SidebarDensity { get; set; } = "standard";
+
+    /// <summary>
+    /// 侧边栏工具区**每行摆几个**（2026-10-11 Nick：单列排下来太占地方，想要能折行）：
+    /// <c>1</c>（默认）= 单列竖着排；<c>3</c> = 每行三个、满了自动折行。
+    /// ⚠️ 只对**贴左右两边**（竖条）生效 —— 贴上/下边是横条，本来就是横向排一排，这个值不参与。
+    /// ⚠️ 只认 1 / 3，别的值一律当 1（见 <c>ToolSidebarWindow.Columns</c>）。
+    /// </summary>
+    public int SidebarColumns { get; set; } = 1;
+
+    /// <summary>
     /// 侧边栏「新模块补入」的批次号。
     /// 设置里存的是一份**用户自己勾选好的**模块清单，光在代码里加新模块它不会自己冒出来，
     /// 于是升级后用户会发现"我要的东西没在侧边栏上"。靠这个标记做**一次性**补入
@@ -187,6 +206,20 @@ public sealed class AppSettings
     /// 使用处会自行夹取（见 InstallerCleanup.Clean），存档里不夹是为了老档里出现怪值时也不至于越界。
     /// </summary>
     public int InstallerKeepCount { get; set; } = 3;
+
+    /// <summary>
+    /// 素材缓存保留数量（1~10，默认 3）：启动时自动清理 <c>cache</c> 下「按版本分的子目录」，
+    /// 按目录名里的时间从新到旧留 N 个、其余删掉。**当前正在用的那个版本目录永不删**。
+    /// 使用处会自行夹取（见 CacheHome.Clean），存档里不夹是为了老档出现怪值时不至于越界。
+    /// </summary>
+    public int CacheKeepCount { get; set; } = 3;
+
+    /// <summary>
+    /// 日志保留天数（默认 7；<c>0</c> = 永不删除）：启动时自动清理 <c>logs</c> 下
+    /// 「启动时间早于 今天-N 天」的会话目录。**当前正在运行的那个会话目录永不删**。
+    /// 会话化日志见 <see cref="LogHome"/>：一次启动一个目录，所以"过期"就是整目录一起收。
+    /// </summary>
+    public int LogKeepDays { get; set; } = 7;
 
     /// <summary>
     /// 后台下载完成的更新安装包绝对路径（空 = 没有）。下载校验通过就记下，
@@ -330,6 +363,8 @@ public sealed class SettingsStore
     ///   · revision 3（虚拟键盘）：**已作废** —— 功能在 2026-10-09 整体下线，不再补入，直接跳到 4。
     ///   · revision 4（2026-10-09）：反过来做，把已下线的模块（keyboard / mirror-download）
     ///     从用户清单里**剔除**（见下面那一段）。
+    ///   · revision 5（2026-10-11）：系统快捷三件套（任务管理器 / 安全选项 / 剪贴板历史），
+    ///     三个一起插在讲台动作组最前面。
     /// </summary>
     private void EnsureNewSidebarModules()
     {
@@ -412,6 +447,34 @@ public sealed class SettingsStore
             }
 
             Current.SidebarModulesRevision = 4;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 5)
+        {
+            // revision 5（2026-10-11）：系统快捷三件套 —— 任务管理器 / 安全选项 / 剪贴板历史。
+            // 三个一起插在**讲台动作组最前面**（跟 rev1 递音量同一个位置约定）；
+            // 每插一个就把落点往后挪一格，保证它们仨的先后顺序就是 taskmgr → security → clipboard。
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+                var at = list.FindIndex(id => Data.SidebarModules.Find(id)?.Kind == Data.SidebarModuleKinds.Action);
+
+                foreach (var id in new[] { "taskmgr", "security", "clipboard" })
+                {
+                    if (list.Contains(id)) continue;            // 用户自己已经加过了，别插重复
+                    if (at < 0) { list.Add(id); at = list.Count; }
+                    else { list.Insert(at, id); at++; }
+                }
+
+                Current.SidebarModuleIds = list.ToArray();
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 5;
             changed = true;
         }
 

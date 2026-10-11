@@ -81,24 +81,48 @@ public sealed partial class VolumeWindow : Window
     }
 
     /// <summary>开 / 关（再点一次同一个模块就收起来；点另一个模块就换成那一栏）。</summary>
-    public static void Toggle(Target target)
+    /// <param name="fromEdge">
+    /// **是哪条边条上的键被按的**（left / right / top / bottom）。
+    /// ⚠️ 2026-10-11 修 Nick 报的「贴靠模式 + 左右都开，点左边的音量、浮窗从右边弹出来」：
+    ///    浮窗以前自己问 <see cref="ToolSidebarWindow.CurrentEdge"/> 该贴哪边，而那个属性在双边模式下
+    ///    **优先返回右边** ⇒ 无论点哪条边，浮窗都跑右边去。现在改成"谁开的就贴谁那边"。
+    ///    传 null 时才退回"猜一条边"的旧行为（目前没有这种调用方）。
+    /// </param>
+    public static void Toggle(Target target, string? fromEdge = null)
     {
         try
         {
             _instance ??= new VolumeWindow();
             var w = _instance;
 
-            if (w._visible && w._target == target)
+            var edge = fromEdge ?? ToolSidebarWindow.CurrentEdge;
+            var moved = w._originEdge != edge;      // 这次是从**另一条**边条点过来的
+
+            // 同一个模块、**同一条边**再点一次 = 收起来。
+            // ⚠️ "同模块但换了边"绝不能当收起：用户点的是另一条边条上的键，他要的是浮窗挪过来。
+            if (w._visible && w._target == target && !moved)
             {
                 w.HideSelf();
                 return;
             }
 
+            // 换边时先把合成器收掉：它的落点是按"主音量在哪"算的，主音量一挪它就吊在旧位置了。
+            // ⚠️ 必须在改 _originEdge **之前**调 —— 它的滑出方向也是读 Edge 算的，
+            //    先改边会让它朝着新边滑出去（反方向）。
+            if (moved && VolumeMixerWindow.IsVisible) VolumeMixerWindow.CloseIfOpen();
+
+            w._originEdge = edge;
+
             var switched = w._target != target;
             w._target = target;
             if (switched) w.ApplyTarget();
 
-            if (w._visible) w.Reposition();      // 已经开着：按新内容重新量一遍尺寸挪一下（不重播滑入）
+            if (w._visible)
+            {
+                // 换了边 ⇒ 重播一次滑入（从新边"长出来"）；只换 target ⇒ 原地挪，别重播（会像闪了两下）。
+                if (moved) w.MoveToEdge();
+                else w.Reposition();
+            }
             else w.ShowSelf();
         }
         catch (Exception ex)
@@ -119,11 +143,25 @@ public sealed partial class VolumeWindow : Window
 
     /// <summary>
     /// 侧边栏贴哪条边（跟侧边栏同一个设置）。竖/横版、滑入方向、合成器排哪儿全靠它。
-    /// ⚠️ 一律问边条**当前实际**贴的边（<see cref="ToolSidebarWindow.CurrentEdge"/>），
-    ///    别读死 <c>App.Settings.SidebarEdge</c>：自由模式下那条可能是旧值、用户还能把边条拖到任意一边。
+    ///
+    /// ⚠️ 一律问**开它的那条边条**（<see cref="_originEdge"/>，由 <see cref="Toggle"/> 记下），
+    ///    ⛔ 不要再去问 <see cref="ToolSidebarWindow.CurrentEdge"/> —— 那边是"猜一条边"，
+    ///    双边模式下优先猜右边 ⇒ 点左边的音量、浮窗从右边弹出来（2026-10-11 Nick 报的）。
+    ///    只有记的那条边已经不在了（自由模式拖换过边、边条重建成别的边）才退回 CurrentEdge 兜底。
+    ///
+    /// ⚠️ 也**别**读死 <c>App.Settings.SidebarEdge</c>：自由模式下那条可能是旧值。
     ///    读错方向 = 浮窗排到边条另一侧（屏幕外）→ 夹回屏幕边 → 压住边条（2026-10-01 修）。
     /// </summary>
-    public static string Edge => ToolSidebarWindow.CurrentEdge;
+    public static string Edge => _instance?.MyEdge ?? ToolSidebarWindow.CurrentEdge;
+
+    /// <summary>本条浮窗该贴的边：优先"是谁开的"，那条边没了才猜。</summary>
+    private string MyEdge =>
+        _originEdge.Length > 0 && ToolSidebarWindow.IsEdgePresent(_originEdge)
+            ? _originEdge
+            : ToolSidebarWindow.CurrentEdge;
+
+    /// <summary>开这条浮窗的边条贴在哪条边（left / right / top / bottom；空 = 还没定过）。</summary>
+    private string _originEdge = "";
 
     /// <summary>主音量浮窗当前在屏幕上的矩形（给合成器浮窗「贴着它排」用）。</summary>
     public static RectInt32? CurrentRect => _instance?._chrome.CurrentRect;
@@ -259,8 +297,9 @@ public sealed partial class VolumeWindow : Window
     {
         try
         {
+            var edge = MyEdge;                          // ⚠️ 只取一次：动画中途别的代码改了边会前后不一致
             ApplyTarget();                              // 文案 / 图标 / 第二颗键的显隐，先按当前 target 摆好
-            ApplyOrientation(EdgeGeometry.IsFlat(Edge));
+            ApplyOrientation(EdgeGeometry.IsFlat(edge));
 
             var scale = _chrome.Scale;
             var work = DisplayArea.Primary.WorkArea;
@@ -270,9 +309,9 @@ public sealed partial class VolumeWindow : Window
             var w = (int)Math.Round(dip.X * scale);
             var h = (int)Math.Round(dip.Y * scale);
 
-            // 锚点 = 边条（挨着它长）；边条拿不到就当成贴屏幕边
-            var anchor = ToolSidebarWindow.CurrentRect ?? EdgeGeometry.EdgeBar(Edge, work);
-            var (start, final) = EdgeGeometry.BesideAnchor(Edge, anchor, work, w, h, scale);
+            // 锚点 = **开它的那条**边条（挨着它长）；那条边条拿不到就当成贴屏幕边
+            var anchor = ToolSidebarWindow.RectOf(edge) ?? EdgeGeometry.EdgeBar(edge, work);
+            var (start, final) = EdgeGeometry.BesideAnchor(edge, anchor, work, w, h, scale);
             _finalRect = new RectInt32(final.X, final.Y, w, h);   // 给合成器当锚（别让它锚半路上的实时位置）
 
             _chrome.Present(start, w, h);
@@ -299,12 +338,11 @@ public sealed partial class VolumeWindow : Window
 
         try
         {
-            var scale = _chrome.Scale;
+            var edge = MyEdge;
             var size = _chrome.AppWindow.Size;
-            var work = DisplayArea.Primary.WorkArea;
 
             var from = _chrome.AppWindow.Position;
-            var to = EdgeGeometry.FullyOut(from, Edge, EdgeGeometry.Thickness(Edge, size.Width, size.Height));
+            var to = EdgeGeometry.FullyOut(from, edge, EdgeGeometry.Thickness(edge, size.Width, size.Height));
 
             _slide.Run(_chrome.AppWindow, from, to, FlyoutSlider.SlideOutMs, () =>
             {
@@ -322,11 +360,13 @@ public sealed partial class VolumeWindow : Window
     /// <summary>
     /// 已经开着的时候换 target（音量 ↔ 亮度）：面板高度可能不一样（亮度少一颗键），
     /// 所以按新内容重新量一遍尺寸再挪过去 —— 不重播滑入动画，免得看着像"闪了两下"。
+    /// ⚠️ 只管**同一条边**内的挪动；换边走 <see cref="MoveToEdge"/>。
     /// </summary>
     private void Reposition()
     {
         try
         {
+            var edge = MyEdge;
             var scale = _chrome.Scale;
             var work = DisplayArea.Primary.WorkArea;
 
@@ -334,8 +374,8 @@ public sealed partial class VolumeWindow : Window
             var w = (int)Math.Round(dip.X * scale);
             var h = (int)Math.Round(dip.Y * scale);
 
-            var anchor = ToolSidebarWindow.CurrentRect ?? EdgeGeometry.EdgeBar(Edge, work);
-            var (_, final) = EdgeGeometry.BesideAnchor(Edge, anchor, work, w, h, scale);
+            var anchor = ToolSidebarWindow.RectOf(edge) ?? EdgeGeometry.EdgeBar(edge, work);
+            var (_, final) = EdgeGeometry.BesideAnchor(edge, anchor, work, w, h, scale);
             _finalRect = new RectInt32(final.X, final.Y, w, h);
 
             _chrome.Present(final, w, h);
@@ -343,6 +383,31 @@ public sealed partial class VolumeWindow : Window
         catch (Exception ex)
         {
             ScreenCapture.Log("浮窗改尺寸失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 已经开着的时候**换到另一条边条**（贴靠模式左右都开：从左边条的键点过来、浮窗得挪到左边）。
+    ///
+    /// ⚠️ 为什么不复用 <see cref="HideSelf"/> + <see cref="ShowSelf"/>：HideSelf 会滑出屏幕
+    ///    并调 <c>OnAnyHidden</c> 放开边条，而这条浮窗其实**一直开着**，中间那一瞬边条会缩回去。
+    ///    所以这里直接 <c>HideDirect</c>（不做滑出）→ 重新量尺寸算新落点 → 重播一次滑入，
+    ///    看着就是"这条边上重新长出来一栏"。
+    ///
+    /// ⚠️ 别为了"省事"改成一句 MoveAndResize 硬挪：横跨整屏的那一下会先画出窗口停在半路，
+    ///    再叠加滑入，观感是"闪一下"。本方法全程只在两个明确位置之间切，不经过中间帧。
+    /// </summary>
+    private void MoveToEdge()
+    {
+        try
+        {
+            ApplyOrientation(EdgeGeometry.IsFlat(MyEdge));
+            _chrome.HideDirect();          // ⛔ 不要走 HideSelf：那条路会放开边条
+            ShowSelf();                    // 重新量尺寸 + 按新边算落点 + 播滑入（顺便 HoldSidebar 重新按住）
+        }
+        catch (Exception ex)
+        {
+            ScreenCapture.Log("音量浮窗换边失败: " + ex.Message);
         }
     }
 

@@ -4,23 +4,32 @@
     NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:ClassSoftwareHub.Desktop.Pages"
+    xmlns:svc="using:ClassSoftwareHub.Desktop.Services"
     Background="{x:Null}">
 
     <!--
-      日志查看（2026-10-02 四改）。
+      日志查看（2026-10-11 八改：工具栏并进标题行 + 多选芯片独占一行）。
 
-      骨架 = 「工具条 → 内容卡片」两层：
-        · 工具条：左边「看哪个文件」（收紧靠左），右边动作按钮 + 「文件说明」；
-          每个文件是干嘛的不单独占一行（Nick：太浪费空间），点「文件说明」弹窗里看；
-        · 卡片：筛选 / 列头 / 表格 / 状态行全部关进同一张卡片，
-          用 CardBackgroundFillColorDefaultBrush + 8px 圆角从背景里"浮"出来（与全站其它卡片同款）。
+      骨架只有 4 行，**不套卡片** —— 原来「工具条 + 一整张大卡片（筛选/列头/表格/状态行
+      全关在里面）」那种写法，光是内边距和两行工具栏就吃掉大半个屏，正文只剩一小条
+      （Nick 2026-10-11：「整个页面的真正有用的利用率非常低」）。
+
+        0 标题行：左「日志」+ 会话 / 文件 / 搜索，右 = 动作按钮组（详细视图 + 4 个图标钮）
+        1 芯片行：**只有**那排级别芯片 —— 独占一行才摆得开（Nick 2026-10-11：芯片别跟选择器挤）
+        2 表格  ：唯一一个 `*` 行 —— 页面剩下的高度全给它
+        3 统计行：一条把"这次运行到底有多少东西"讲清楚的动态统计
+
+      ⚠️⚠️ **窄窗口不许吞控件**（Nick 2026-10-11 明确提的）：
+        第 0 行左边那条（标题 + 两个下拉 + 搜索）与第 1 行整条，都放进**横向滚动容器**里。
+        被挤的时候表现是"这条能横向滚过去"，而不是控件被裁掉、点都点不着。
+        右侧动作钮所在的列是 `Auto`，永远完整可见 —— ⛔ 反过来写就会先吞按钮。
 
       其它约束：
-        · 本页不套 ScrollViewer —— 表格自己滚，页面空间全给正文；
-        · 级别颜色不能写在 XAML 里（SystemFillColor* 这批画刷 XAML 取不到，§D-3），
+        · 本页不套 ScrollViewer —— 表格自己滚；
+        · 级别颜色不能写在行模板的 XAML 里（SystemFillColor* 按项取不到，§D-3），
           统一在 ContainerContentChanging 里按项查表赋值；
-        · 级别筛选用系统原生 SelectorBar（单选的段控），不再用一排 ToggleButton。
+        · 级别筛选用「计数芯片」（Controls/LevelChipBar）：**多选**，⛔ 不用 SelectorBar / Pivot；
+        · ⛔ 没有"自动刷新"开关了（Nick 2026-10-11 要求去掉）：只在"停在末尾"时静默跟随。
     -->
 
     <Page.Resources>
@@ -29,17 +38,19 @@
              叫 LevelText 时 XamlCompiler 在 codegen 阶段直接崩，报出来的却是"资源缺失"这种假错误。
              所以元素名一律带 Label/Icon 后缀，与数据属性错开。
         -->
-        <DataTemplate x:Key="LogRowTemplate" x:DataType="local:LogEntry">
+        <DataTemplate x:Key="LogRowTemplate" x:DataType="svc:LogEntry">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="160" />
-                    <ColumnDefinition Width="68" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="96" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 时间：等宽且纯 ASCII（不触发字体回退），三列才能对齐 -->
+                <!-- 时间：等宽且纯 ASCII（不触发字体回退），各列才能对齐 -->
                 <TextBlock Text="{x:Bind Time}" FontSize="12" FontFamily="Consolas"
-                           VerticalAlignment="Top" Margin="0,2,8,0"
+                           VerticalAlignment="Top" Margin="0,2,8,0" TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="{x:Bind Stamp}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5"
@@ -48,18 +59,32 @@
                     <TextBlock x:Name="LevelLabel" Text="{x:Bind LevelText}" FontSize="12" />
                 </StackPanel>
 
+                <!-- 模块：行内标签，单独一列，方便一眼看出是谁写的 -->
+                <TextBlock Grid.Column="2" Text="{x:Bind ModuleText}" FontSize="12" FontFamily="Consolas"
+                           VerticalAlignment="Top" Margin="0,2,8,0" TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="{x:Bind Module}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
                 <!-- 内容用系统 UI 字体：日志以中文为主，Consolas 没有汉字会触发字体回退，字重字距都会错位 -->
-                <TextBlock Grid.Column="2" Text="{x:Bind Message}" FontSize="13"
+                <TextBlock Grid.Column="3" Text="{x:Bind Message}" FontSize="13"
                            TextWrapping="Wrap" IsTextSelectionEnabled="True"
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             </Grid>
         </DataTemplate>
+
+        <!-- 动作图标钮：一行 5 个也要压得住，所以统一 32×32、无内边距以外的装饰 -->
+        <Style x:Key="IconActionStyle" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
     </Page.Resources>
 
-    <!-- 根 Grid 不带 Margin：间距放进中间列，让表格拿到整页高度约束。
-         ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
-            Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
-         本页最后一行是日志内容卡片（自带边框）→ 写 44，否则卡片外框贴到窗口下边框。 -->
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -67,145 +92,164 @@
             <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="12" Margin="0,36,0,44">
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="10" Margin="0,32,0,28">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />  <!-- 0 标题 -->
-                <RowDefinition Height="Auto" />  <!-- 1 工具条 -->
-                <RowDefinition Height="*" />     <!-- 2 内容卡片 -->
+                <RowDefinition Height="Auto" />  <!-- 0 标题 + 会话/文件/搜索 + 动作 -->
+                <RowDefinition Height="Auto" />  <!-- 1 级别芯片（独占一行） -->
+                <RowDefinition Height="*" />     <!-- 2 表格（占满剩余高度） -->
+                <RowDefinition Height="Auto" />  <!-- 3 统计行 -->
             </Grid.RowDefinitions>
 
-            <!-- ===== 0 标题 ===== -->
-            <StackPanel Grid.Row="0" Spacing="6">
-                <TextBlock Text="日志查看" FontSize="28" FontWeight="Bold" />
-                <TextBlock Text="查看应用运行日志。本页只读，不会写入、删除或清空任何日志。"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-
-            <!--
-              ===== 1 工具条：左=看哪个文件（收紧靠左），右=动作 =====
-              ⚠️ 外列必须保持「* + Auto」：若整条改「Auto + *」且下拉项很长（如 clock-presets.log
-                 全屏时钟预设），右对齐的按钮组溢出时是从**左边**裁 —— 表现就是"刷新"被切成"新"。
-              下拉框自身 HorizontalAlignment=Left 才是收紧靠左（Nick 点名）：跟着内容走，
-              不许在 * 列里 Stretch 撑满。
-            -->
-            <Grid Grid.Row="1" ColumnSpacing="12">
+            <!-- ===== 0 标题 + 选择 + 搜索 + 动作 ===== -->
+            <Grid Grid.Row="0" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <ComboBox x:Name="FileBox" MinWidth="180"
-                          HorizontalAlignment="Left" VerticalAlignment="Center"
-                          SelectionChanged="FileBox_SelectionChanged" />
+                <!-- 左条：横向可滚（窄窗口兜底，见文件头注释） -->
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                              VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="日志" FontSize="28" FontWeight="Bold"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" />
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
-                            HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Button Content="刷新" Click="Refresh_Click" />
+                        <!-- 一级：哪一次运行 -->
+                        <ComboBox x:Name="SessionBox" MinWidth="140" MaxWidth="176"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="SessionBox_SelectionChanged" />
 
-                    <!-- 两个复制动作合成一个下拉，避免工具栏堆同权重的按钮 -->
-                    <DropDownButton Content="复制">
-                        <DropDownButton.Flyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem Text="复制选中行" Click="CopySelected_Click" />
-                                <MenuFlyoutItem Text="复制筛选结果" Click="CopyFiltered_Click" />
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
+                        <!-- 二级：该次运行里的哪个文件（app.log / crash.log） -->
+                        <ComboBox x:Name="FileBox" MinWidth="102" MaxWidth="142"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="FileBox_SelectionChanged" />
 
-                    <Button Content="导出全部日志" Click="Export_Click" />
-                    <Button Content="打开日志文件夹" Click="OpenFolder_Click" />
+                        <AutoSuggestBox x:Name="FilterBox" Width="176" VerticalAlignment="Center"
+                                        PlaceholderText="筛选日志…"
+                                        QueryIcon="Find"
+                                        TextChanged="FilterBox_TextChanged" />
+                    </StackPanel>
+                </ScrollViewer>
 
-                    <!-- 自动刷新是"模式开关"，做成 ToggleButton 才能跟旁边按钮同高同款 -->
-                    <ToggleButton x:Name="AutoToggle" Content="自动刷新" IsChecked="True"
-                                  MinWidth="0"
-                                  Checked="AutoToggle_Toggled" Unchecked="AutoToggle_Toggled" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+                            VerticalAlignment="Center">
+                    <Button x:Name="DetailButton" Click="Detail_Click"
+                            Padding="10,5,12,5" Margin="0,0,6,0"
+                            ToolTipService.ToolTip="在独立窗口里打开详细视图：全量行、毫秒时间、序号、原始堆栈">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <FontIcon Glyph="&#xE8A7;" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock Text="详细视图" FontSize="12.5" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
 
-                    <!-- 文件说明：弹窗逐个讲每个 log 是干嘛的（Nick：不单独占一行，太浪费空间） -->
-                    <Button Content="文件说明" Click="FilesHelp_Click" />
+                    <Button Style="{StaticResource IconActionStyle}" Click="Refresh_Click"
+                            ToolTipService.ToolTip="重新读取当前文件">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                    </Button>
+
+                    <Button Style="{StaticResource IconActionStyle}" Click="Export_Click"
+                            ToolTipService.ToolTip="把本机全部会话日志打成一个压缩包（交给开发者最省事的一步）">
+                        <FontIcon Glyph="&#xE896;" FontSize="14" />
+                    </Button>
+
+                    <Button Style="{StaticResource IconActionStyle}" Click="OpenFolder_Click"
+                            ToolTipService.ToolTip="打开日志根目录，每个子文件夹就是一次运行">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="14" />
+                    </Button>
+
+                    <Button Style="{StaticResource IconActionStyle}" Click="FilesHelp_Click"
+                            ToolTipService.ToolTip="这些日志文件分别是干什么的">
+                        <FontIcon Glyph="&#xE946;" FontSize="14" />
+                    </Button>
                 </StackPanel>
             </Grid>
 
-            <!-- ===== 2 内容卡片 ===== -->
-            <Border Grid.Row="2" CornerRadius="4"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1">
+            <!-- ===== 1 级别芯片 =====
+                 单选 → 多选，并去掉「全部」（全勾即全部）。
+                 整条横向可滚：窗口拉窄时是"能滚过去"，⛔ 不是芯片被裁掉。 -->
+            <ScrollViewer Grid.Row="1"
+                          HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                          VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
+                <StackPanel x:Name="ChipHost" Orientation="Horizontal" Spacing="4"
+                            VerticalAlignment="Center" />
+            </ScrollViewer>
+
+            <!-- ===== 2 表格 =====
+                 这里不放卡片、不放内边距：就是一条细边框 + 列头 + 列表。
+                 ⛔ 列宽必须跟上面 LogRowTemplate 一模一样。 -->
+            <Border Grid.Row="2" CornerRadius="4" BorderThickness="1"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />  <!-- 筛选行 -->
-                        <RowDefinition Height="Auto" />  <!-- 分隔线 -->
                         <RowDefinition Height="Auto" />  <!-- 列头 -->
                         <RowDefinition Height="Auto" />  <!-- 分隔线 -->
-                        <RowDefinition Height="*" />     <!-- 日志表格 -->
-                        <RowDefinition Height="Auto" />  <!-- 分隔线 -->
-                        <RowDefinition Height="Auto" />  <!-- 状态行（卡片脚） -->
+                        <RowDefinition Height="*" />     <!-- 日志 -->
                     </Grid.RowDefinitions>
 
-                    <!-- 筛选行：左=级别（原生段控），右=内容搜索 -->
-                    <Grid Grid.Row="0" Margin="14,12" ColumnSpacing="12">
+                    <Grid Grid.Row="0" Margin="12,0" Padding="0,8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <SelectorBar x:Name="LevelBar" VerticalAlignment="Center"
-                                     SelectionChanged="LevelBar_SelectionChanged">
-                            <SelectorBarItem Text="全部" Tag="all" />
-                            <SelectorBarItem Text="调试" Tag="debug" />
-                            <SelectorBarItem Text="信息" Tag="info" />
-                            <SelectorBarItem Text="警告" Tag="warning" />
-                            <SelectorBarItem Text="错误" Tag="error" />
-                        </SelectorBar>
-
-                        <AutoSuggestBox Grid.Column="1" x:Name="FilterBox" Width="260"
-                                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                                        PlaceholderText="按内容筛选"
-                                        QueryIcon="Find"
-                                        TextChanged="FilterBox_TextChanged" />
-                    </Grid>
-
-                    <Rectangle Grid.Row="1" Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
-
-                    <!-- 列头：表格感的来源。列宽必须跟 LogRowTemplate 保持一致 -->
-                    <Grid Grid.Row="2" Margin="14,0" Padding="0,9">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="160" />
-                            <ColumnDefinition Width="68" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="96" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="时间" Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="1" Text="级别" Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="2" Text="内容" Style="{StaticResource CaptionTextBlockStyle}"
+                        <TextBlock Grid.Column="2" Text="模块" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="3" Text="内容" Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
 
-                    <Rectangle Grid.Row="3" Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+                    <Rectangle Grid.Row="1" Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
 
-                    <ListView Grid.Row="4" x:Name="LogList" SelectionMode="Extended"
+                    <!-- 空表提示：白色表格最让人发懵（是没内容？还是被我筛没了？），
+                         所以"为什么空"必须写出来。文案在 UpdateEmptyHint 里拼。 -->
+                    <TextBlock Grid.Row="2" x:Name="EmptyHint" Visibility="Collapsed"
+                               Margin="14,22,14,14" TextWrapping="Wrap"
+                               HorizontalAlignment="Left" VerticalAlignment="Top"
+                               IsHitTestVisible="False"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                    <!--
+                      复制动作走右键菜单 + Ctrl+C，**不再占工具条**（Nick 2026-10-11：
+                      工具条上的按钮要压到最轻）。右键菜单同时也是"去详细视图"的第二条入口。
+                    -->
+                    <ListView Grid.Row="2" x:Name="LogList" SelectionMode="Extended"
                               Background="Transparent"
                               ItemTemplate="{StaticResource LogRowTemplate}"
+                              KeyDown="LogList_KeyDown"
                               ContainerContentChanging="LogList_ContainerContentChanging">
+                        <ListView.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="复制选中行" Click="CopySelected_Click" />
+                                <MenuFlyoutItem Text="复制筛选结果" Click="CopyFiltered_Click" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="在详细视图中打开" Click="Detail_Click" />
+                            </MenuFlyout>
+                        </ListView.ContextFlyout>
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
-                                <Setter Property="MinHeight" Value="28" />
+                                <Setter Property="MinHeight" Value="26" />
                                 <Setter Property="Margin" Value="0" />
                                 <!-- 左边距必须跟上面列头的 Margin 一致，否则表头和内容会错开 -->
-                                <Setter Property="Padding" Value="14,3" />
+                                <Setter Property="Padding" Value="12,3" />
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             </Style>
                         </ListView.ItemContainerStyle>
                     </ListView>
-
-                    <Rectangle Grid.Row="5" Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
-
-                    <TextBlock Grid.Row="6" x:Name="StatusText" Margin="14,9" TextWrapping="Wrap"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
             </Border>
+
+            <!-- ===== 3 统计行 =====
+                 开发者一眼要看的东西：这次运行有多少条、分布在哪些模块、跨多长时间、
+                 文件多大、这份是不是被截断过的。模块分布全量挂在 ToolTip 上。 -->
+            <TextBlock Grid.Row="3" x:Name="StatusText" TextWrapping="Wrap"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
         </Grid>
     </Grid>

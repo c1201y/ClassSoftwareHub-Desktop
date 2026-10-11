@@ -16,8 +16,10 @@
         <Border x:Name="BgVeil" IsHitTestVisible="False" />
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18">
+            <!-- Typography.NumeralAlignment="Tabular"：等宽数字，否则倒计时跳动时整行会左右抖（见全屏时钟里的说明） -->
             <TextBlock x:Name="TimeText" Text="00:00" FontSize="300" FontWeight="Bold"
-                       FontFamily="Bahnschrift" Foreground="#FFF2F4F7" HorizontalAlignment="Center" />
+                       FontFamily="Bahnschrift" Foreground="#FFF2F4F7" HorizontalAlignment="Center"
+                       Typography.NumeralAlignment="Tabular" />
             <!-- 进度条：剩余时间的直觉读法（满 → 空） -->
             <ProgressBar x:Name="Bar" Width="620" Minimum="0" Maximum="100" Value="100"
                          Height="6" CornerRadius="3"

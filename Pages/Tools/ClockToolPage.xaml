@@ -67,10 +67,12 @@
                                     <Border x:Name="VeilHost" />
                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
                                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                            <!-- 预览必须跟全屏窗口同样带 Tabular，否则预览里能看到的抖，全屏里也在抖 -->
                                             <TextBlock x:Name="TimeText" Text="00:00" FontSize="64" FontWeight="Bold"
-                                                       FontFamily="Bahnschrift" />
+                                                       FontFamily="Bahnschrift" Typography.NumeralAlignment="Tabular" />
                                             <TextBlock x:Name="SecText" Text=":00" FontSize="30" FontWeight="SemiBold"
-                                                       Opacity="0.85" VerticalAlignment="Bottom" Margin="0,0,0,10" />
+                                                       Opacity="0.85" VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                                       Typography.NumeralAlignment="Tabular" />
                                         </StackPanel>
                                         <TextBlock x:Name="DateText" FontSize="14" Opacity="0.85"
                                                    HorizontalAlignment="Center" />

@@ -5,9 +5,13 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using ClassSoftwareHub.Desktop.Controls;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Services;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
@@ -15,133 +19,100 @@ using Windows.ApplicationModel.DataTransfer;
 namespace ClassSoftwareHub.Desktop.Pages;
 
 /// <summary>
-/// 表格里的一行日志。
-/// ⚠️ <see cref="LevelGlyph"/> / <see cref="LevelText"/> 只管"是什么"，颜色由
-/// <see cref="LogViewerPage.LogList_ContainerContentChanging"/> 按级别查主题画刷赋值 ——
-/// SystemFillColor* 那批画刷 XAML 里取不到（§D-3），所以颜色不走绑定。
-/// </summary>
-public sealed class LogEntry
-{
-    /// <summary>原始时间戳文本（保持日志原样，不重排版）。</summary>
-    public string Time { get; init; } = "";
-    public LogLevel Level { get; init; } = LogLevel.Info;
-    public string Message { get; init; } = "";
-
-    public string LevelText => Level switch
-    {
-        LogLevel.Debug => "调试",
-        LogLevel.Warning => "警告",
-        LogLevel.Error => "错误",
-        _ => "信息",
-    };
-
-    public string LevelGlyph => Level switch
-    {
-        LogLevel.Debug => "\uE721",   // 放大镜（诊断）
-        LogLevel.Warning => "\uE7BA", // 警告三角
-        LogLevel.Error => "\uE783",   // 错误圆标
-        _ => "\uE946",                // 信息圆标
-    };
-}
-
-/// <summary>
-/// 日志查看（实验 → 2026-10-02 起入口改到 设置 → 诊断，Nick：这不是实验功能）。
+/// 日志查看（入口：设置 → 诊断）。
 ///
-/// 数据目录已分区（见 <see cref="AppLog"/>）：日志在 <c>%LOCALAPPDATA%\ClassSoftwareHub\logs\</c>。
+/// ⚠️ 2026-10-11 起日志是「**启动一次 = 一个目录**」（见 <see cref="LogHome"/>）：
+///   日志在 <c>%LOCALAPPDATA%\ClassSoftwareHub\logs\{启动时间}\</c>，
+///   每个会话目录里正常只有 <c>app.log</c>（日常全部）与 <c>crash.log</c>（崩溃堆栈）。
+///   所以控制行有两级下拉：**会话 → 文件**，默认落在「本次运行」。
+///
+/// 本页的定位是「**概览**」：够用的上下文 + 筛选 + 统计，一眼看清这次运行发生了什么。
+/// 要逐行啃、看毫秒时间与完整堆栈、对照原始行号 ⇒ 交给 <c>LogDetailWindow</c>（「详细视图」）。
+/// 解析/统计全走 <see cref="LogReader"/>，两个视图共用同一份，结果不会漂移。
 ///
 /// 四条设计约束：
-///   ① **文件不写死**：进页面扫目录里的 <c>*.log</c>，新加的日志自动出现；
-///      下拉项直接带用途说明（Nick：用户不知道一堆 log 是干嘛的）。
-///   ② **只读**：绝不写、不删、不清空 —— 排障工具自己把现场改了就没法查了。
-///      （所以没有 ClassIsland 那个「清空日志」按钮，是有意的。）
-///   ③ **大文件也不能卡**：只读末尾 512 KB / 2000 行；要完整内容走「导出全部日志」。
-///   ④ **新格式 + 旧格式都能解析**：新格式 <c>[时间] [级别] 消息</c>（<see cref="AppLog"/>）；
-///      旧格式 <c>[时间] 消息</c> 按关键词推断级别；堆栈等缩进行归并进上一条。
-///
-/// 版面骨架（2026-10-02 四改）：工具条（页面级）→ 内容卡片（区块级）。
-/// 文件用途说明收进「文件说明」按钮的弹窗（Nick：单独占一行太浪费空间）；
-/// 级别筛选用系统原生 <see cref="SelectorBar"/>（**单选**：全部 / 调试 / 信息 / 警告 / 错误）——
-/// 段控是原生控件里唯一"看着像筛选器、又不像一排按钮"的东西；代价是失去了多选组合。
+///   ① **只读**：绝不写、不删、不清空 —— 排障工具自己把现场改了就没法查了。
+///      （真正的清理在设置 → 存储，按「日志保留天数」整目录回收。）
+///   ② **大文件也不能卡**：只读末尾 512 KB / 2000 行；要完整内容走「详细视图」或「导出」。
+///   ③ **新格式 + 旧格式都能解析**：交给 <see cref="LogReader.Parse"/>。
+///   ④ **没有"自动刷新"开关**（Nick 2026-10-11 定）：只在用户**停在末尾**时静默跟随，
+///      一旦往上翻就完全不动 —— 既看得见新日志，又不会在读的时候被顶走。
+///   ⑤ **级别筛选是多选**（Nick 2026-10-11 定）：芯片各自独立开合，全勾 = 全部，
+///      所以没有「全部」那颗；一个都不勾就是"什么都别看"，页面用空表提示引导勾回来。
 /// </summary>
 public sealed partial class LogViewerPage : Page
 {
-    /// <summary>单个文件最多显示多少行 / 读多少字节。</summary>
-    private const int MaxLines = 2000;
-    private const int MaxBytes = 512 * 1024;
-
-    /// <summary>自动刷新间隔。日志是本地文件，读一次很便宜，但没必要更密。</summary>
-    private const int AutoRefreshMs = 2000;
+    /// <summary>静默跟随的间隔。本地文件读一次很便宜，但没必要更密。</summary>
+    private const int FollowMs = 2000;
 
     /// <summary>距底部这个距离以内就认为"用户看着末尾"，刷新后自动跟着滚。</summary>
     private const double NearBottomPx = 40;
 
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoTimer;
+    private readonly LevelChipBar _chips;
+    private DispatcherQueueTimer? _followTimer;
     private bool _suppress;
-    private List<string> _names = new();
     private List<LogEntry> _all = new();
-    private List<LogEntry> _filtered = new();
-    private ScrollViewer? _listScroll;
-    private bool _atBottom = true;
 
     /// <summary>
-    /// 文件用途说明。键是文件名（忽略大小写），值是「短名 + 整句」：
-    ///   · 短名进下拉（<c>tray.log　托盘图标</c>），够短才扫得快；
-    ///   · 整句进「文件说明」弹窗，讲清"记什么、什么时候该看它"。
-    /// ⛔ 别再让短名和整句写成同一个词 —— 那样说明就只是在重复文件名（2026-10-02 改）。
-    /// 没登记的文件不会被隐藏，只标成「应用日志」。
+    /// 绑给 <see cref="LogList"/> 的筛选结果。⚠️ 用可观察集合 + **增量追加**：
+    /// 静默跟随时只往里加新行，绝不整体重建 —— 重建会清空再填满，每 2 秒一次就是闪烁。
     /// </summary>
-    private static readonly Dictionary<string, (string Short, string Long)> Known = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["crash.log"] = ("崩溃", "程序异常退出、页面加载失败 —— 出问题时第一个该看它，里面有完整堆栈"),
-        ["snip.log"] = ("截屏与启动", "截屏贴图、启动流程、单实例唤醒（点桌面图标把窗口叫回来那条链路）"),
-        ["perf.log"] = ("切页耗时", "切页与首帧耗时探针。只在 Debug 编译、或设了环境变量 CSH_PERF=1 时才写入"),
-        ["memory.log"] = ("内存回收", "每次回收前后的工作集与托管堆，以及「为什么这一轮没有回收」"),
-        ["settings.log"] = ("设置读写", "配置被判定为损坏、或某项值被重置到默认时看它"),
-        ["sidebar.log"] = ("工具侧边栏", "侧边栏的显示、收起、贴边、换边与重建"),
-        ["layout.log"] = ("侧边栏版式", "拖拽落位、尺寸、停靠与自由模式的几何记录"),
-        ["palette.log"] = ("工具浮窗", "常用工具浮窗的显示、收起与落位"),
-        ["tray.log"] = ("托盘图标", "托盘图标的创建、气泡通知与退出请求"),
-        ["chrome.log"] = ("窗口外观", "窗口圆角、边框、标题栏区域的诊断信息"),
-        ["theme.log"] = ("主题配色", "明暗主题切换时实际取到的主题资源快照"),
-        ["easiguard.log"] = ("白板专杀", "定时结束白板5（EasiNote 开头）驻留进程的执行记录"),
-        ["procguard.log"] = ("程序专杀", "定时结束所设程序驻留进程的执行记录"),
-        ["teaching.log"] = ("教学操作", "关前台应用、专注模式等教学动作的执行记录"),
-        ["brightness.log"] = ("屏幕亮度", "亮度读取与设置的每一步 —— 读不到亮度时看它卡在哪一步"),
-        ["clock-presets.log"] = ("全屏时钟预设", "全屏时钟预设的增删改"),
+    private readonly System.Collections.ObjectModel.ObservableCollection<LogEntry> _view = new();
 
-        // ── 以下为**历史遗留**：源码里已无任何写入点，只剩旧版本留下的文件 ──
-        // 留着不删（用户可能还在用旧版本、或文件里有旧现场），但要如实标出来 ——
-        // 否则「交给开发者」时会被当成真的活跃日志去分析。
-        ["confirm.log"] = ("历史遗留", "已停用：早期 XAML 资源缺失的崩溃堆栈"),
-        ["teachingbar.log"] = ("历史遗留", "已停用：旧版「手边条」的显示与收起记录"),
-        ["touchkbd.log"] = ("历史遗留", "已停用：虚拟键盘更早的名字（touchkbd）留下的日志；该功能已在 2026-10-09 整体下线"),
-        ["vkbd.log"] = ("历史遗留", "已停用：虚拟键盘已在 2026-10-09 整体下线，不再产生新日志；这里只有旧版本留下的现场"),
-        ["vol-verify.log"] = ("历史遗留", "已停用：一次性验证音量浮窗的落位坐标"),
-        ["wheel-diag.log"] = ("历史遗留", "已停用：一次性滚轮事件命中诊断"),
-    };
+    /// <summary>
+    /// 已经读进来的文件长度（字节）。⛔⛔ **必须自己记**：
+    /// <see cref="LogFile.Size"/> 是扫描那一刻的快照，永远不会自己更新，
+    /// 拿它当"有没有新内容"的基准 ⇒ 条件恒为真 ⇒ 每 2 秒重读一次 ⇒ 画面一直抖。
+    /// 这就是 Nick 2026-10-11 报的"一直刷新、又没有新内容"。
+    /// </summary>
+    private long _loadedSize = -1;
 
-    /// <summary>取用途说明；没登记的返回默认（宁可用户看到"应用日志"，也别显示空白）。</summary>
-    private static (string Short, string Long) Describe(string name) =>
-        Known.TryGetValue(name, out var d) ? d : ("应用日志", "应用日志。");
+    private ScrollViewer? _listScroll;
+    /// <summary>是否停在末尾（跟随的闸门）。初始 false = 打开时**从第 1 行看起**，
+    /// 第一轮 FollowTick 会按真实滚动位置重算，之后才可能开始跟随。</summary>
+    private bool _atBottom;
 
     public LogViewerPage()
     {
         InitializeComponent();
 
-        // 段控默认落在「全部」。不写在 XAML 里是因为 SelectorBar 的选中态要以
-        // SelectedItem 为准，XAML 的 IsSelected 在部分场景下不会回填到 SelectedItem。
-        try { LevelBar.SelectedItem = LevelBar.Items[0]; } catch { }
+        LogList.ItemsSource = _view;
+
+        _chips = new LevelChipBar(ChipHost);
+        _chips.SelectionChanged += ApplyFilter;
 
         Loaded += (_, _) =>
         {
-            if (_names.Count == 0) ReloadFiles(keepSelection: false);
-            // 自动刷新的开关状态以 ToggleButton 为准（它在 XAML 里默认选中）。
-            // ⚠️ 别再无条件 StartAuto()：那会让"开关显示关、定时器却在跑"。
-            if (AutoToggle.IsChecked == true) StartAuto();
+            if (SessionBox.ItemsSource is null) ReloadSessions();
+            StartFollow();
         };
     }
 
     // ── 数据 ────────────────────────────────────────────────
+
+    /// <summary>一次运行（一个会话目录）。</summary>
+    private sealed class LogSession
+    {
+        public string Name { get; init; } = "";
+        public string FullPath { get; init; } = "";
+        public DateTime Started { get; init; }
+        public long Bytes { get; init; }
+        public int Files { get; init; }
+        public bool IsCurrent { get; init; }
+        public bool IsLegacy { get; init; }
+
+        /// <summary>
+        /// 下拉里显示什么：当前那次标「本次运行」，升级前归档单独标一句，
+        /// 其余显示「月-日 时:分:秒 · N 个文件」。
+        /// ⚠️ 不显示完整目录名（<c>2026-10-11_00-13-41</c>）：太长会把控制行撑爆。
+        /// </summary>
+        public string Display =>
+            IsCurrent ? $"本次运行 · {Started:HH:mm:ss}"
+            : IsLegacy ? "升级前的历史日志"
+            : $"{Started:MM-dd HH:mm:ss} · {Files} 个文件";
+
+        public override string ToString() => Display;
+    }
 
     private sealed class LogFile
     {
@@ -151,27 +122,19 @@ public sealed partial class LogViewerPage : Page
         public DateTime Modified { get; init; }
 
         /// <summary>
-        /// 下拉里直接带用途短名（Nick：用户不知道一堆 log 是干嘛的）。
-        /// 只放短名 —— 整句太长，二十个文件的下拉会撑得没法扫；
-        /// 大小与时间也不放进下拉（它们随写入变化，摆快照值只会误导），实时值统一在卡片脚的状态行。
+        /// 下拉里直接带用途短名（用户不知道一堆 log 是干嘛的）。只放短名 —— 整句太长；
+        /// 大小与时间也不放进下拉（它们随写入变化，摆快照值只会误导）。
         /// </summary>
-        public string Display => $"{Name}　{Describe(Name).Short}";
+        public string Display => $"{Name}　{LogReader.Describe(Name).Short}";
         public override string ToString() => Display;
-
-        public static string SizeText(long bytes) => bytes switch
-        {
-            < 1024 => $"{bytes} B",
-            < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
-            _ => $"{bytes / 1048576.0:0.#} MB",
-        };
     }
 
-    private static List<LogFile> Scan()
+    /// <summary>会话目录下的 <c>*.log</c>（只扫顶层；会话目录里也放不下别的东西）。</summary>
+    private static List<LogFile> ScanFiles(string dir)
     {
         var list = new List<LogFile>();
         try
         {
-            var dir = AppLog.Dir;
             if (!Directory.Exists(dir)) return list;
 
             foreach (var path in Directory.GetFiles(dir, "*.log"))
@@ -192,14 +155,56 @@ public sealed partial class LogViewerPage : Page
         }
         catch { }
 
-        return list.OrderByDescending(f => f.Modified).ToList();
+        // app.log 恒排第一（它是主文件），其余按最后写入倒序
+        return list
+            .OrderByDescending(f => f.Name.Equals("app.log", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(f => f.Modified)
+            .ToList();
     }
 
-    /// <summary>重新扫目录 + 重建下拉。keepSelection=true 时尽量留在原来那个文件上。</summary>
+    /// <summary>重建会话下拉，并尽量留在原来那个会话上（默认「本次运行」）。</summary>
+    private void ReloadSessions()
+    {
+        var wanted = (SessionBox.SelectedItem as LogSession)?.Name;
+
+        List<LogSession> items;
+        try
+        {
+            items = LogHome.Scan()
+                .Select(s => new LogSession
+                {
+                    Name = s.Name,
+                    FullPath = s.FullPath,
+                    Started = s.StartedLocal,
+                    Bytes = s.Bytes,
+                    Files = s.FileCount,
+                    IsCurrent = s.IsCurrent,
+                    IsLegacy = s.IsLegacy,
+                })
+                .ToList();
+        }
+        catch
+        {
+            items = new List<LogSession>();
+        }
+
+        _suppress = true;
+        SessionBox.ItemsSource = items;
+        SessionBox.SelectedItem = (wanted is null ? null : items.FirstOrDefault(s => s.Name == wanted))
+                                  ?? items.FirstOrDefault();
+        _suppress = false;
+
+        ReloadFiles(keepSelection: false);
+    }
+
+    /// <summary>重建文件下拉（限定在当前选中的会话里）。keepSelection=true 时尽量留在原来那个文件上。</summary>
     private void ReloadFiles(bool keepSelection)
     {
         var wanted = keepSelection ? (FileBox.SelectedItem as LogFile)?.Name : null;
-        var items = Scan();
+
+        var items = SessionBox.SelectedItem is LogSession s
+            ? ScanFiles(s.FullPath)
+            : new List<LogFile>();
 
         _suppress = true;
         FileBox.ItemsSource = items;
@@ -207,7 +212,11 @@ public sealed partial class LogViewerPage : Page
                                ?? items.FirstOrDefault();
         _suppress = false;
 
-        _names = items.Select(f => f.Name).ToList();
+        // 下拉宽度有限，用途整句放不下 —— 挂在 ToolTip 上，鼠标一悬停就看得全
+        ToolTipService.SetToolTip(FileBox, FileBox.SelectedItem is LogFile sel
+            ? $"{sel.Name}：{LogReader.Describe(sel.Name).Long}"
+            : "");
+
         LoadCurrent();
     }
 
@@ -216,16 +225,127 @@ public sealed partial class LogViewerPage : Page
         if (FileBox.SelectedItem is not LogFile f)
         {
             _all = new List<LogEntry>();
+            _loadedSize = -1;
             ApplyFilter();
-            StatusText.Text = "本机还没有产生任何日志文件。";
+
+            StatusText.Text = SessionBox.SelectedItem is null
+                ? "本机还没有产生任何日志文件。"
+                : "这个会话里没有可读的日志文件。";
+            StatusText.ClearValue(ToolTipService.ToolTipProperty);
             return;
         }
 
-        var keepBottom = _atBottom;
-        var (text, truncated) = ReadTail(f.Path);
-
+        // ⚠️ 先量长度、再读内容：万一读的这一刻文件还在长，长度会大于实际解析到的内容，
+        //    下一轮就会因为"又长了"再跟一次；反过来（先读后量）会把这批新增**永久漏掉**。
         long size = 0;
-        var modified = DateTime.MinValue;
+        try { size = new FileInfo(f.Path).Length; } catch { }
+
+        var (text, _) = LogReader.ReadTail(f.Path, LogReader.ListMaxBytes, LogReader.ListMaxLines);
+        _loadedSize = size;
+
+        // 该会话里逐行没带模块名的（旧格式、或堆栈行）用文件名兜底
+        _all = LogReader.Parse(text, Path.GetFileNameWithoutExtension(f.Name));
+        ApplyFilter();
+
+        // ⚠️ 必须碰一下 ListScroll：它是"用户有没有停在末尾"的唯一数据源，属性里才挂 ViewChanged。
+        _ = ListScroll;
+
+        // 统计行 / 芯片计数 / ToolTip 由 ApplyFilter → RefreshStats 统一刷新，这里不再重复设。
+        // ⚠️ 刻意**不**在这里滚到底：打开 / 刷新 / 换文件时应该从第 1 行看起。
+        //    只有静默跟随（用户本来就停在末尾）才滚到底，见 FollowTick。
+    }
+
+    /// <summary>
+    /// 统计行：把「这次运行到底有多少东西」讲清楚 ——
+    /// 条数 / 模块分布 / 时间跨度 / 文件大小 / 有没有被截断。
+    /// ⛔ 不再是原来那句"共 N 行"了（Nick：太笼统）。
+    /// </summary>
+    private string BuildStatus(LogFile f, long size, DateTime modified, bool truncated)
+    {
+        var stats = LogReader.Compute(_all, _view.Count);
+        var sb = new StringBuilder();
+
+        var where = SessionBox.SelectedItem is LogSession s
+            ? s.IsCurrent ? "本次运行" : s.IsLegacy ? "升级前的历史日志" : s.Name
+            : "";
+        if (where.Length > 0) sb.Append(where).Append(" · ");
+        sb.Append(f.Name).Append(" · ").Append(LogReader.SizeText(size)).Append(" · ");
+
+        sb.Append(stats.Total.ToString("N0")).Append(" 行");
+        if (stats.Filtered != stats.Total) sb.Append("（当前显示 ").Append(stats.Filtered.ToString("N0")).Append(" 行）");
+        if (_chips.AllOff) sb.Append("　未勾选任何级别");
+
+        sb.Append(" · ").Append(stats.ModuleCount).Append(" 个模块");
+        if (stats.TopModule.Length > 0)
+            sb.Append("（最多 ").Append(stats.TopModule).Append(' ').Append(stats.TopModuleCount.ToString("N0")).Append(" 条）");
+
+        var bad = new List<string>();
+        if (stats.Error > 0) bad.Add($"错误 {stats.Error}");
+        if (stats.Warning > 0) bad.Add($"警告 {stats.Warning}");
+        if (bad.Count > 0) sb.Append(" · ").Append(string.Join("　", bad)).Append(" 条");
+
+        if (stats.MultiLineCount > 0) sb.Append(" · 含堆栈 ").Append(stats.MultiLineCount).Append(" 条");
+
+        if (stats.FirstStamp.Length > 0 && stats.LastStamp.Length > 0)
+            sb.Append(" · 时间跨度 ").Append(stats.FirstStamp).Append(" → ").Append(stats.LastStamp);
+
+        sb.Append(" · 最后写入 ").Append(modified.ToString("HH:mm:ss"));
+        if (truncated)
+            sb.Append(" · 已截断：只读末尾 ").Append(LogReader.ListMaxLines).Append(" 行，完整内容请用「详细视图」");
+
+        return sb.ToString();
+    }
+
+    /// <summary>统计行的 ToolTip：把模块分布全量摊开 —— 排查时"哪个模块在狂写"是第一条线索。</summary>
+    private string BuildStatusTooltip(LogFile f, long size, DateTime modified, bool truncated)
+    {
+        var stats = LogReader.Compute(_all, _view.Count);
+        var sb = new StringBuilder();
+
+        sb.AppendLine(f.Path);
+        sb.AppendLine($"级别：调试 {stats.Debug:N0} · 信息 {stats.Info:N0} · 警告 {stats.Warning:N0} · 错误 {stats.Error:N0}");
+        sb.AppendLine($"文件：{LogReader.SizeText(size)} · 最后写入 {modified:yyyy-MM-dd HH:mm:ss}");
+        if (truncated) sb.AppendLine($"⚠ 只读了末尾 {LogReader.ListMaxLines:N0} 行（完整内容请在「详细视图」里看）");
+
+        if (stats.Modules.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("模块分布：");
+            foreach (var (module, count) in stats.Modules)
+                sb.AppendLine($"    {module}　{count:N0}");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    // ── 筛选 ────────────────────────────────────────────────
+
+    private void ApplyFilter()
+    {
+        // 芯片是**多选**：AllOn 时 FilterLevels 返回 null（= 不按级别筛）
+        var list = LogReader.Filter(_all, _chips.FilterLevels, FilterBox.Text ?? "");
+
+        // ⚠️ 整表重建只发生在"用户主动改筛选 / 换文件 / 手动刷新"这三种时刻。
+        //    静默跟随走 AppendNew()，只追加新行，绝不重建（否则画面一抖一抖）。
+        _view.Clear();
+        foreach (var e in list) _view.Add(e);
+
+        RefreshStats(FileBox.SelectedItem as LogFile);
+    }
+
+    /// <summary>
+    /// 统计行 + 芯片计数 + 空表提示 —— 数据变了就调一次。**不碰列表内容**，
+    /// 所以静默跟随可以放心调它（改文本不会有"重建"那种闪烁）。
+    /// </summary>
+    private void RefreshStats(LogFile? f)
+    {
+        _chips.SetCounts(LogReader.Compute(_all, _view.Count));
+        UpdateEmptyHint();
+
+        if (f is null) return;
+
+        long size = f.Size;
+        var modified = f.Modified;
         try
         {
             var info = new FileInfo(f.Path);
@@ -234,227 +354,38 @@ public sealed partial class LogViewerPage : Page
         }
         catch { }
 
-        _all = ParseLog(text);
-        ApplyFilter();
-
-        StatusText.Text = $"{f.Name} · {LogFile.SizeText(size)} · 最后写入 {modified:yyyy-MM-dd HH:mm:ss}"
-                          + (truncated ? $" · 只显示末尾 {MaxLines} 行（要完整内容请导出）" : "");
-
-        if (keepBottom) ScrollToEnd();
+        var truncated = _all.Count >= LogReader.ListMaxLines;
+        StatusText.Text = BuildStatus(f, size, modified, truncated);
+        StatusText.SetValue(ToolTipService.ToolTipProperty, BuildStatusTooltip(f, size, modified, truncated));
     }
-
-    // ── 解析 ────────────────────────────────────────────────
 
     /// <summary>
-    /// 把日志文本拆成条目。这些形态都能吃：
-    ///   · 新格式：<c>[2026-10-02 14:00:00.123] [警告] 消息</c>（<see cref="AppLog"/>）；
-    ///   · 旧格式：<c>[2026-10-02 14:00:00] 消息</c> —— 级别按关键词推断；
-    ///   · 只有时间的方括号：<c>[15:07:30.950] 消息</c>（layout.log 等）；
-    ///   · 裸前缀时间：<c>16:33:15.765 消息</c>（theme.log）；
-    ///   · 缩进行（异常堆栈）→ 归并进上一条；其它无法识别的行 → 独立成条。
-    /// ⚠️ 老日志首行可能带 **UTF-8 BOM**（早期用 Encoding.UTF8 写入留下的），
-    ///    不剥掉的话 <c>\uFEFF[2026-...]</c> 匹配不上时间戳，首行会显示成一条"没有时间"的怪行。
+    /// 空表提示。**三种空法必须分开说**，否则一张白表读不出该改哪儿：
+    ///   ① 文件本来就没内容；② 一个级别都没勾（芯片被点空了）；③ 被关键字筛没了。
     /// </summary>
-    private static List<LogEntry> ParseLog(string text)
+    private void UpdateEmptyHint()
     {
-        var list = new List<LogEntry>();
-        if (text.Length == 0) return list;
+        if (EmptyHint is null) return;
 
-        foreach (var rawLine in text.Replace("\r\n", "\n").Split('\n'))
-        {
-            var line = rawLine.TrimEnd();
-            if (line.Length > 0 && line[0] == '\uFEFF') line = line[1..];
-            if (line.Length == 0) continue;
+        var kw = (FilterBox.Text ?? "").Trim();
 
-            // 缩进行 = 上一条的延续（异常堆栈）
-            if (char.IsWhiteSpace(line[0]))
-            {
-                if (list.Count > 0)
-                {
-                    var last = list[^1];
-                    // ⚠️ 级别取"更强的那一个"：堆栈行里才会出现 Exception / 异常 字样，
-                    //    标题行反而可能只是一句普通描述 —— 只按首行判的话，
-                    //    crash.log 的崩溃条目会被标成"信息"（2026-10-02 实测踩到）。
-                    var lv = GuessLevel(line);
-                    var level = Rank(lv) > Rank(last.Level) ? lv : last.Level;
-                    list[^1] = new LogEntry { Time = last.Time, Level = level, Message = last.Message + "\n" + line };
-                }
-                else
-                {
-                    list.Add(new LogEntry { Time = "", Level = GuessLevel(line), Message = line });
-                }
-                continue;
-            }
+        string? hint =
+            _all.Count == 0 ? "这个文件里没有可显示的内容。"
+            : _chips.AllOff ? "没有勾选任何级别 —— 点上面的「调试 / 信息 / 警告 / 错误」，把要看的勾回来。"
+            : _view.Count == 0 ? $"没有匹配「{kw}」的日志。"
+            : null;
 
-            // ① 方括号时间戳
-            if (line[0] == '[')
-            {
-                var close = line.IndexOf(']');
-                if (close > 0 && TryParseStamp(line[1..close], out var time))
-                {
-                    var rest = line[(close + 1)..].TrimStart();
-
-                    // 第二个方括号若是级别标签就是新格式；否则（如 crash 旧格式的 [where]）整段当消息
-                    var level = LogLevel.Info;
-                    if (rest.Length > 0 && rest[0] == '[')
-                    {
-                        var close2 = rest.IndexOf(']');
-                        if (close2 > 0)
-                        {
-                            var tag = rest[1..close2];
-                            var mapped = MapTag(tag);
-                            if (mapped is { } lv)
-                            {
-                                level = lv;
-                                rest = rest[(close2 + 1)..].TrimStart();
-                            }
-                        }
-                    }
-
-                    if (level == LogLevel.Info) level = GuessLevel(rest);
-                    list.Add(new LogEntry { Time = time, Level = level, Message = rest });
-                    continue;
-                }
-            }
-
-            // ② 裸前缀时间戳（theme.log 这类）
-            if (TryParseBareStamp(line, out var bareTime, out var bareRest))
-            {
-                list.Add(new LogEntry { Time = bareTime, Level = GuessLevel(bareRest), Message = bareRest });
-                continue;
-            }
-
-            // perf 行等没有时间前缀的 —— 独立成条
-            list.Add(new LogEntry { Time = "", Level = GuessLevel(line), Message = line });
-        }
-
-        return list;
-    }
-
-    /// <summary>把方括号里的时间戳原文转成显示文本（认不出就返回 false，整行当消息兜底）。</summary>
-    private static bool TryParseStamp(string stamp, out string display)
-    {
-        // 2026-10-02 14:00:00 / 2026-10-02 14:00:00.123 / 2026-10-02T14:00:00 / 15:07:30.950
-        display = stamp.Trim().Replace('T', ' ');
-        var dot = display.IndexOf('.');
-        if (dot > 0) display = display[..dot];
-
-        if (display.Length >= 16 && char.IsDigit(display[0]) && display[4] == '-' && display[7] == '-')
-            return true;
-
-        // 只有时间、没有日期 —— 不少模块的日志是这个形态
-        if (IsClock(display)) return true;
-
-        display = "";
-        return false;
-    }
-
-    /// <summary>裸前缀时间：<c>16:33:15.765 正文</c>（theme.log 用的就是这个格式）。</summary>
-    private static bool TryParseBareStamp(string line, out string time, out string rest)
-    {
-        time = "";
-        rest = line;
-
-        // 必须 HH:mm:ss.fff 紧跟空白或行尾 —— 收紧了才不会把普通正文误判成时间
-        if (line.Length < 12) return false;
-        if (!IsClock(line[..8])) return false;
-        if (line[8] != '.') return false;
-        if (!(char.IsDigit(line[9]) && char.IsDigit(line[10]) && char.IsDigit(line[11]))) return false;
-        if (line.Length > 12 && !char.IsWhiteSpace(line[12])) return false;
-
-        time = line[..8];
-        rest = line.Length > 12 ? line[13..].TrimStart() : "";
-        return true;
-    }
-
-    /// <summary>是不是 <c>HH:mm:ss</c> 这 8 个字符。</summary>
-    private static bool IsClock(string s) =>
-        s.Length == 8 && s[2] == ':' && s[5] == ':'
-        && char.IsAsciiDigit(s[0]) && char.IsAsciiDigit(s[1])
-        && char.IsAsciiDigit(s[3]) && char.IsAsciiDigit(s[4])
-        && char.IsAsciiDigit(s[6]) && char.IsAsciiDigit(s[7]);
-
-    private static LogLevel? MapTag(string tag) => tag switch
-    {
-        "调试" => LogLevel.Debug,
-        "信息" => LogLevel.Info,
-        "警告" => LogLevel.Warning,
-        "错误" => LogLevel.Error,
-        _ => null,
-    };
-
-    /// <summary>
-    /// 旧格式行没有级别 —— 按关键词推断。关键词收得保守：
-    /// 宁可漏报成"信息"也别把正常行报成"错误"吓人；新格式写入后不再走这里。
-    /// </summary>
-    private static LogLevel GuessLevel(string message)
-    {
-        if (message.Contains("Exception", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("异常") || message.Contains("崩溃") || message.Contains("堆栈"))
-        {
-            return LogLevel.Error;
-        }
-        if (ContainsAny(message, "失败", "错误", "无法", "超时", "警告", "error", "warn"))
-        {
-            return LogLevel.Warning;
-        }
-        return LogLevel.Info;
-    }
-
-    /// <summary>级别强弱排序（归并堆栈行时用来取更强的那个）。</summary>
-    private static int Rank(LogLevel level) => level switch
-    {
-        LogLevel.Error => 3,
-        LogLevel.Warning => 2,
-        LogLevel.Info => 1,
-        _ => 0,
-    };
-
-    private static bool ContainsAny(string text, params string[] keys)
-    {
-        foreach (var k in keys)
-        {
-            if (text.Contains(k, StringComparison.OrdinalIgnoreCase)) return true;
-        }
-        return false;
-    }
-
-    // ── 筛选 ────────────────────────────────────────────────
-
-    /// <summary>段控当前选中的级别；null = 全部（不按级别筛）。</summary>
-    private LogLevel? SelectedLevel()
-    {
-        var tag = (LevelBar.SelectedItem as SelectorBarItem)?.Tag as string;
-        return tag switch
-        {
-            "debug" => LogLevel.Debug,
-            "info" => LogLevel.Info,
-            "warning" => LogLevel.Warning,
-            "error" => LogLevel.Error,
-            _ => null,
-        };
-    }
-
-    private void ApplyFilter()
-    {
-        var level = SelectedLevel();
-        var keyword = (FilterBox.Text ?? "").Trim();
-        var keywordEmpty = keyword.Length == 0;
-
-        _filtered = _all.Where(e => (level is null || e.Level == level)
-                                    && (keywordEmpty || e.Message.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
-                        .ToList();
-
-        LogList.ItemsSource = _filtered;
+        EmptyHint.Text = hint ?? "";
+        EmptyHint.Visibility = hint is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ScrollToEnd()
     {
-        if (_filtered.Count == 0) return;
+        if (_view.Count == 0) return;
         try
         {
             LogList.UpdateLayout();
-            LogList.ScrollIntoView(_filtered[^1]);
+            LogList.ScrollIntoView(_view[^1]);
         }
         catch { }
     }
@@ -470,7 +401,7 @@ public sealed partial class LogViewerPage : Page
             {
                 // ⚠️ WinUI 的 ViewChanged 参数上没有偏移属性，要从 ScrollViewer 本身读。
                 //    只在滚动稳定（!IsIntermediate）时判定 —— ScrollIntoView 的滚动动画
-                //    中途 offset 还没到底，会误判成"用户翻上去了"，把自动跟随掐断。
+                //    中途 offset 还没到底，会误判成"用户翻上去了"，把跟随掐断。
                 _listScroll.ViewChanged += (_, e) =>
                 {
                     if (e.IsIntermediate) return;
@@ -485,10 +416,10 @@ public sealed partial class LogViewerPage : Page
     {
         while (node is not null)
         {
-            var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+            var count = VisualTreeHelper.GetChildrenCount(node);
             for (var i = 0; i < count; i++)
             {
-                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i);
+                var child = VisualTreeHelper.GetChild(node, i);
                 if (child is ScrollViewer sv) return sv;
                 var deep = FindDescendantScrollViewer(child);
                 if (deep is not null) return deep;
@@ -498,69 +429,7 @@ public sealed partial class LogViewerPage : Page
         return null;
     }
 
-    // ── 读取 ────────────────────────────────────────────────
-
-    /// <summary>
-    /// 读文件末尾。⚠️ 一定要带 <c>FileShare.ReadWrite | FileShare.Delete</c> ——
-    /// 这个文件此刻很可能正被本进程的其他线程写着，用默认共享模式打开会自己把自己锁住。
-    /// </summary>
-    private static (string Text, bool Truncated) ReadTail(string path)
-    {
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
-                                          FileShare.ReadWrite | FileShare.Delete);
-
-            var length = fs.Length;
-            var take = (int)Math.Min(length, MaxBytes);
-            fs.Seek(-take, SeekOrigin.End);
-
-            var buffer = new byte[take];
-            var read = 0;
-            while (read < take)
-            {
-                var n = fs.Read(buffer, read, take - read);
-                if (n <= 0) break;
-                read += n;
-            }
-
-            var text = Encoding.UTF8.GetString(buffer, 0, read);
-
-            // 从中间切进来的第一行多半是半截 → 丢掉（只有确实截断过才需要）
-            if (take < length)
-            {
-                var nl = text.IndexOf('\n');
-                if (nl >= 0) text = text[(nl + 1)..];
-            }
-
-            var lines = text.Replace("\r\n", "\n").Split('\n');
-            var truncated = take < length || lines.Length > MaxLines;
-            if (lines.Length > MaxLines) lines = lines[^MaxLines..];
-
-            return (string.Join("\n", lines).TrimEnd(), truncated);
-        }
-        catch (Exception ex)
-        {
-            return ($"（读取失败：{ex.Message}）", false);
-        }
-    }
-
-    // ── 主题画刷查表（SystemFillColor* XAML 取不到，§D-3） ─────
-
-    private Brush? _debugBrush, _infoBrush, _warningBrush, _errorBrush;
-
-    private Brush BrushOf(LogLevel level) => level switch
-    {
-        LogLevel.Debug => _debugBrush ??= Look("TextFillColorTertiaryBrush"),
-        LogLevel.Warning => _warningBrush ??= Look("SystemFillColorCautionBrush"),
-        LogLevel.Error => _errorBrush ??= Look("SystemFillColorCriticalBrush"),
-        _ => _infoBrush ??= Look("TextFillColorSecondaryBrush"),
-    };
-
-    private static Brush Look(string key) =>
-        Application.Current.Resources.TryGetValue(key, out var value) && value is Brush b
-            ? b
-            : (Brush)Application.Current.Resources[key];
+    // ── 主题画刷查表（SystemFillColor* 按项取不到，§D-3） ─────
 
     private void LogList_ContainerContentChanging(object sender, ContainerContentChangingEventArgs args)
     {
@@ -568,61 +437,72 @@ public sealed partial class LogViewerPage : Page
 
         if (args.ItemContainer.ContentTemplateRoot is Grid root)
         {
-            if (root.FindName("LevelIcon") is FontIcon icon) icon.Foreground = BrushOf(entry.Level);
-            if (root.FindName("LevelLabel") is TextBlock text) text.Foreground = BrushOf(entry.Level);
+            var brush = LogReader.BrushOf(entry.Level);
+            if (root.FindName("LevelIcon") is FontIcon icon) icon.Foreground = brush;
+            if (root.FindName("LevelLabel") is TextBlock text) text.Foreground = brush;
         }
     }
 
     // ── 文件说明弹窗 ────────────────────────────────────────
 
     /// <summary>
-    /// 「文件说明」弹窗：逐个讲本机现有的每个 log 是干嘛的。
-    /// ⚠️ 只列磁盘上**真实存在**的文件 —— 讲一堆不存在的文件反而让人困惑；
-    ///    没登记用途的标「应用日志」兜底。ContentDialog 至少给一个关闭钮（§D-⑫）。
+    /// 「说明」弹窗：讲清当前会话里的每个文件是干嘛的。
+    /// ⚠️ 只列磁盘上**真实存在**的文件 —— 讲一堆不存在的文件反而让人困惑。
+    /// ContentDialog 至少给一个关闭钮（§D-⑫）。
     /// </summary>
     private void FilesHelp_Click(object sender, RoutedEventArgs e)
     {
         var host = new StackPanel { Spacing = 12 };
+        var session = SessionBox.SelectedItem as LogSession;
+
+        host.Children.Add(new TextBlock
+        {
+            Text = session switch
+            {
+                { IsCurrent: true } => "日志按「启动一次 = 一个文件夹」保存。下面这些是本次运行的文件。",
+                { IsLegacy: true } => "这是升级之前那批「一个模块一个文件」的旧日志，原样归档在这儿。",
+                null => "本机还没有产生任何日志文件。",
+                _ => $"这是 {session.Started:yyyy-MM-dd HH:mm:ss} 那次运行留下的文件。",
+            },
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = LogReader.BrushOf(LogLevel.Info),
+        });
 
         var items = (FileBox.ItemsSource as IEnumerable<LogFile>)?.ToList() ?? new List<LogFile>();
-        if (items.Count == 0)
+        foreach (var f in items)
         {
-            host.Children.Add(new TextBlock
+            var d = LogReader.Describe(f.Name);
+            host.Children.Add(new StackPanel
             {
-                Text = "本机还没有产生任何日志文件。",
-                TextWrapping = TextWrapping.Wrap,
+                Spacing = 2,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"{f.Name}　{d.Short}",
+                        Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+                    },
+                    new TextBlock
+                    {
+                        Text = d.Long,
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = LogReader.BrushOf(LogLevel.Info),
+                    },
+                },
             });
         }
-        else
+
+        host.Children.Add(new TextBlock
         {
-            foreach (var f in items)
-            {
-                var d = Describe(f.Name);
-                host.Children.Add(new StackPanel
-                {
-                    Spacing = 2,
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = $"{f.Name}　{d.Short}",
-                            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-                        },
-                        new TextBlock
-                        {
-                            Text = d.Long,
-                            TextWrapping = TextWrapping.Wrap,
-                            Foreground = Look("TextFillColorSecondaryBrush"),
-                        },
-                    },
-                });
-            }
-        }
+            Text = "每个文件夹是一次运行，可在「设置 → 存储 → 本地日志」里按天保留或单独删除。",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = LogReader.BrushOf(LogLevel.Info),
+        });
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "每个日志文件是干什么的",
+            Title = "这些日志文件是干什么的",
             Content = new ScrollViewer
             {
                 MaxHeight = 460,
@@ -640,14 +520,17 @@ public sealed partial class LogViewerPage : Page
 
     // ── 事件 ────────────────────────────────────────────────
 
+    private void SessionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress) return;
+        ReloadFiles(keepSelection: false);
+    }
+
     private void FileBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppress) return;
         LoadCurrent();
     }
-
-    private void LevelBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
-        => ApplyFilter();
 
     /// <summary>
     /// ⚠️ 只在 <see cref="AutoSuggestionBoxTextChangeReason.UserInput"/> 时重筛：
@@ -660,14 +543,24 @@ public sealed partial class LogViewerPage : Page
 
     private void Refresh_Click(object sender, RoutedEventArgs e)
     {
-        ReloadFiles(keepSelection: true);
+        // 连会话列表一起重建（清理器可能在上一轮删掉了旧目录）
+        ReloadSessions();
+    }
+
+    /// <summary>开独立窗的「详细视图」，落在与主页面相同的会话 / 文件上。</summary>
+    private void Detail_Click(object sender, RoutedEventArgs e)
+    {
+        Views.LogDetailWindow.Show(
+            (SessionBox.SelectedItem as LogSession)?.Name,
+            (FileBox.SelectedItem as LogFile)?.Name);
     }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            var dir = AppLog.Dir;
+            // 开**日志根目录**：每个子文件夹就是一次运行，便于自己翻或清理
+            var dir = AppLog.Root;
             Directory.CreateDirectory(dir);
             Process.Start(new ProcessStartInfo
             {
@@ -679,6 +572,25 @@ public sealed partial class LogViewerPage : Page
         catch { }
     }
 
+    /// <summary>
+    /// Ctrl+C 复制选中行 —— 控制行上不再有"复制"按钮了（Nick 2026-10-11 要压按钮），
+    /// 所以快捷键得自己顶上（右键菜单里也有同样两项）。
+    /// </summary>
+    private void LogList_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.C) return;
+
+        var ctrl = Microsoft.UI.Input.InputKeyboardSource
+            .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control);
+        if ((ctrl & Windows.UI.Core.CoreVirtualKeyStates.Down) == 0) return;
+
+        var picked = LogList.SelectedItems.OfType<LogEntry>().ToList();
+        if (picked.Count == 0) return;
+
+        CopyEntries(picked, $"已复制选中的 {picked.Count} 行到剪贴板。");
+        e.Handled = true;
+    }
+
     private void CopySelected_Click(object sender, RoutedEventArgs e)
     {
         var picked = LogList.SelectedItems.OfType<LogEntry>().ToList();
@@ -688,23 +600,16 @@ public sealed partial class LogViewerPage : Page
 
     private void CopyFiltered_Click(object sender, RoutedEventArgs e)
     {
-        if (_filtered.Count == 0) { Say("当前筛选下没有内容可复制。"); return; }
-        CopyEntries(_filtered, $"已复制筛选结果 {_filtered.Count} 行到剪贴板。");
+        if (_view.Count == 0) { Say("当前筛选下没有内容可复制。"); return; }
+        CopyEntries(_view, $"已复制筛选结果 {_view.Count} 行到剪贴板。");
     }
 
-    private void CopyEntries(List<LogEntry> entries, string done)
+    private void CopyEntries(IReadOnlyList<LogEntry> entries, string done)
     {
         try
         {
-            var sb = new StringBuilder();
-            foreach (var en in entries)
-            {
-                var time = en.Time.Length == 0 ? "" : en.Time + "  ";
-                sb.AppendLine($"{time}[{en.LevelText}] {en.Message}");
-            }
-
             var dp = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
-            dp.SetText(sb.ToString());
+            dp.SetText(LogReader.ToText(entries));
             Clipboard.SetContent(dp);
             Clipboard.Flush();      // 不加这句，应用一退出剪贴板里就空了
             Say(done);
@@ -715,17 +620,23 @@ public sealed partial class LogViewerPage : Page
         }
     }
 
-    /// <summary>把目录下所有 .log 打成一个 zip 放到桌面 —— 这是"交给开发者"最省事的一步。</summary>
+    /// <summary>
+    /// 把**全部会话**打成一个 zip 放到桌面 —— 这是"交给开发者"最省事的一步。
+    /// zip 里保留会话目录这一层（<c>2026-10-11_00-13-41/app.log</c>），
+    /// 这样"哪天出的问题"一眼可见，不会几份 app.log 混成一锅。
+    /// </summary>
     private void Export_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            var dir = AppLog.Dir;
-            var files = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.log") : Array.Empty<string>();
-            if (files.Length == 0) { Say("没有可导出的日志。"); return; }
+            var root = AppLog.Root;
+            if (!Directory.Exists(root)) { Say("没有可导出的日志。"); return; }
+
+            var sessions = LogHome.Scan();
+            if (sessions.Count == 0) { Say("没有可导出的日志。"); return; }
 
             var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            if (string.IsNullOrEmpty(desktop)) desktop = dir;
+            if (string.IsNullOrEmpty(desktop)) desktop = root;
 
             var zip = Path.Combine(desktop, $"ClassSoftwareHub-日志-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
             if (File.Exists(zip)) File.Delete(zip);
@@ -733,22 +644,25 @@ public sealed partial class LogViewerPage : Page
             var count = 0;
             using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
             {
-                foreach (var file in files)
+                foreach (var s in sessions)
                 {
-                    try
+                    foreach (var file in ScanFiles(s.FullPath))
                     {
-                        using var src = new FileStream(file, FileMode.Open, FileAccess.Read,
-                                                       FileShare.ReadWrite | FileShare.Delete);
-                        var entry = archive.CreateEntry(Path.GetFileName(file), CompressionLevel.Optimal);
-                        using var dst = entry.Open();
-                        src.CopyTo(dst);
-                        count++;
+                        try
+                        {
+                            using var src = new FileStream(file.Path, FileMode.Open, FileAccess.Read,
+                                                           FileShare.ReadWrite | FileShare.Delete);
+                            var entry = archive.CreateEntry($"{s.Name}/{file.Name}", CompressionLevel.Optimal);
+                            using var dst = entry.Open();
+                            src.CopyTo(dst);
+                            count++;
+                        }
+                        catch { /* 个别文件被独占就跳过，别让整次导出失败 */ }
                     }
-                    catch { /* 个别文件被独占就跳过，别让整次导出失败 */ }
                 }
             }
 
-            Say($"已导出 {count} 个日志文件到：{zip}");
+            Say($"已导出 {sessions.Count} 次运行的 {count} 个日志文件到：{zip}");
         }
         catch (Exception ex)
         {
@@ -756,65 +670,103 @@ public sealed partial class LogViewerPage : Page
         }
     }
 
-    private void AutoToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (AutoToggle.IsChecked == true) StartAuto(); else StopAuto();
-    }
+    // ── 静默跟随（取代原来的"自动刷新"开关） ────────────────
 
-    private void StartAuto()
+    private void StartFollow()
     {
-        StopAuto();
+        StopFollow();
 
         var queue = DispatcherQueue;
         if (queue is null) return;
 
-        _autoTimer = queue.CreateTimer();
-        _autoTimer.Interval = TimeSpan.FromMilliseconds(AutoRefreshMs);
-        _autoTimer.Tick += (_, _) => AutoTick();
-        _autoTimer.Start();
+        _followTimer = queue.CreateTimer();
+        _followTimer.Interval = TimeSpan.FromMilliseconds(FollowMs);
+        _followTimer.Tick += (_, _) => FollowTick();
+        _followTimer.Start();
     }
 
-    private void StopAuto()
+    private void StopFollow()
     {
-        try { _autoTimer?.Stop(); } catch { }
-        _autoTimer = null;
+        try { _followTimer?.Stop(); } catch { }
+        _followTimer = null;
     }
 
     /// <summary>
-    /// 自动刷新：文件名集合变了就重建下拉（新日志出现 / 旧的被删），
-    /// 否则只在当前文件**真的长了**才重读 —— 每次无条件重设会打断用户正在做的文本选中与滚动。
+    /// 静默跟随：**只跟"本次运行"那个会话**，且**只在你停在末尾时**才动手。
+    ///   · 历史会话的文件已经不会再长了，不跟；
+    ///   · 你正往上翻 = 在读，**一个字都不动**（原来那个自动刷新开关最烦人的就是这个）。
+    /// ⚠️ 刻意**不重扫会话列表**：会话目录在本次运行期间是固定的（只有清理器会删旧的），
+    ///    每 2 秒全盘统计一遍纯属浪费。
+    ///
+    /// ⛔⛔ 两条铁律（2026-10-11 Nick 报"一直抖、又没有新内容"，就是这两条的锅）：
+    ///   ① **基准长度必须是自己记的 <see cref="_loadedSize"/>**。用 <c>LogFile.Size</c>
+    ///      （扫描时的快照、永不更新）当基准，条件恒为真 ⇒ 每 2 秒重读一次；
+    ///   ② **有新增时只追加，不重建**（<see cref="AppendNew"/>）。整表重建 = 清空再填满，
+    ///      每 2 秒来一次就是肉眼可见的闪烁。
     /// </summary>
-    private void AutoTick()
+    private void FollowTick()
     {
         try
         {
-            if (_suppress) return;
-
-            var currentName = (FileBox.SelectedItem as LogFile)?.Name;
-            var items = Scan();
-
-            if (!items.Select(f => f.Name).SequenceEqual(_names))
+            // ⚠️ "是否停在末尾"每轮**重新算一遍**，别只依赖 ViewChanged：
+            //    内容短于视口时根本不会触发滚动事件，那样就永远跟不上了；
+            //    反过来 ScrollToEnd 之后布局还没跟上，读到的旧 offset 会误判成"翻上去了"，
+            //    所以下一轮再算一次就能自愈。
+            // ⛔ ViewportHeight==0 = 还没布局完，此时 ExtentHeight 也是 0，
+            //    "装得下"那条会**误判为真** ⇒ 打开页面就自己滚到末尾（2026-10-11 实测踩到）。
+            if (ListScroll is { ViewportHeight: > 0 } sv)
             {
-                _suppress = true;
-                FileBox.ItemsSource = items;
-                FileBox.SelectedItem = (currentName is null ? null : items.FirstOrDefault(f => f.Name == currentName))
-                                       ?? items.FirstOrDefault();
-                _suppress = false;
-
-                _names = items.Select(f => f.Name).ToList();
-                LoadCurrent();
-                return;
+                _atBottom = (sv.ExtentHeight > 0 && sv.ExtentHeight <= sv.ViewportHeight + 1)
+                            || sv.ScrollableHeight - sv.VerticalOffset < NearBottomPx;
             }
 
+            if (_suppress) return;
+            if (!_atBottom) return;
+            if (SessionBox.SelectedItem is not LogSession { IsCurrent: true }) return;
             if (FileBox.SelectedItem is not LogFile cur) return;
 
             long size = 0;
-            try { size = new FileInfo(cur.Path).Length; } catch { }
-            if (size != cur.Size) LoadCurrent();
+            try { size = new FileInfo(cur.Path).Length; } catch { return; }
+
+            if (size == _loadedSize) return;   // 没长 ⇒ 什么都不做（绝大多数 tick 都走这条）
+
+            // 变短（被清空 / 换了文件）或续接不上（读取上限截断、文件被重写）⇒ 只能整套重来
+            if (size < _loadedSize || !AppendNew(cur, size)) LoadCurrent();
+
+            ScrollToEnd();
         }
-        catch { /* 自动刷新出问题就安静跳过，等下一个 tick */ }
+        catch { /* 跟随出问题就安静跳过，等下一个 tick */ }
+    }
+
+    /// <summary>
+    /// 增量续读：只把文件里**新多出来的那几行**解析出来追加进列表。
+    /// 返回 false = 新内容和旧的对不上，调用方要整套重读。
+    /// </summary>
+    private bool AppendNew(LogFile f, long size)
+    {
+        var (text, truncated) = LogReader.ReadTail(f.Path, LogReader.ListMaxBytes, LogReader.ListMaxLines);
+        if (truncated) return false;
+
+        // 序号接着老条目往下编：续读出来那截前缀的序号是重编的，我们只用它的 Raw 比对，不看序号
+        var fresh = LogReader.Parse(text, Path.GetFileNameWithoutExtension(f.Name), _all.Count + 1);
+        if (!LogReader.IsExtensionOf(_all, fresh)) return false;
+
+        var levels = _chips.FilterLevels;
+        var kw = FilterBox.Text ?? "";
+
+        for (var i = _all.Count; i < fresh.Count; i++)
+        {
+            var e = fresh[i];
+            _all.Add(e);
+            // 新增行单独过一遍筛选 —— 和整表用的是同一个 Filter，口径不会漂
+            if (LogReader.Filter(new[] { e }, levels, kw).Count > 0) _view.Add(e);
+        }
+
+        _loadedSize = size;
+        RefreshStats(f);
+        return true;
     }
 
     /// <summary>页面被缓存（NavigationCacheMode=Enabled），切走时必须停掉定时器。</summary>
-    protected override void OnNavigatingFrom(NavigatingCancelEventArgs e) => StopAuto();
+    protected override void OnNavigatingFrom(NavigatingCancelEventArgs e) => StopFollow();
 }

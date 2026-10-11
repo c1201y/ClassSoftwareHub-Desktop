@@ -96,6 +96,12 @@ public static class MemoryTrimmer
     private static DateTimeOffset _lastObserve = DateTimeOffset.MinValue;
     private static DateTimeOffset _lastBaseline = DateTimeOffset.MinValue;
 
+    /// <summary>当前是否处于「窗口不可见」的连续回收段（只记第一枪与最后汇总，中间静默）。</summary>
+    private static bool _hiddenTrimActive;
+
+    /// <summary>该段里被静默掉的回收次数（回到可见时汇总成一条日志）。</summary>
+    private static int _hiddenQuietCount;
+
     /// <summary>
     /// 软水位的**自适应下限**：回收完工作集仍然高于水位，说明那部分是刚需
     /// （内容包 / WebView2 常驻之类），就把水位抬上去。
@@ -172,8 +178,33 @@ public static class MemoryTrimmer
 
         if (hidden)
         {
-            Run("窗口不可见", CooldownHiddenMs);
+            // ⛔⛔ 降噪（2026-10-11）：窗口不可见时每 5 秒就能收一次，以前**每次都记一条** ——
+            //     实测一个会话 137 行里 100 行是「第 N 次（窗口不可见）」，占 **72%**，
+            //     把真正有用的东西全冲掉了（这也是 Nick 问"这些日志够吗"的由头之一）。
+            //     现在：**只在刚切到不可见时记一条**（那是"什么时候开始看不见"的锚点），
+            //     之后照常回收但日志静默；等回到可见再汇总记一次次数。
+            //     ⚠️ 回收本身一次都没少 —— 静默的只是日志。
+            if (!_hiddenTrimActive)
+            {
+                if (Run("窗口不可见", CooldownHiddenMs))
+                {
+                    _hiddenTrimActive = true;
+                    _hiddenQuietCount = 0;
+                }
+            }
+            else if (Run("窗口不可见", CooldownHiddenMs, quiet: true))
+            {
+                _hiddenQuietCount++;
+            }
             return;
+        }
+
+        if (_hiddenTrimActive)
+        {
+            _hiddenTrimActive = false;
+            if (_hiddenQuietCount > 0)
+                Log($"窗口不可见期间另静默回收 {_hiddenQuietCount} 次（同一种情况不再逐条记录）");
+            _hiddenQuietCount = 0;
         }
 
         if (ws < _softFloor) return;
@@ -229,22 +260,26 @@ public static class MemoryTrimmer
     /// <summary>切页回收本体（节流走 <see cref="Run"/> 那个共享的"上次回收时间"，不会跟别的路重复收）。</summary>
     private static void OnNavigated() => Run("切页", NavCooldownMs);
 
-    /// <summary>过节流就真收（换后台线程做）。</summary>
-    private static void Run(string reason, int cooldownMs)
+    /// <summary>
+    /// 过节流就真收（换后台线程做）。返回 <c>true</c> = 这次真的收了（没过节流）。
+    /// <paramref name="quiet"/> = 收但**不写日志**（只用于"窗口不可见"那种反复触发的场合）。
+    /// </summary>
+    private static bool Run(string reason, int cooldownMs, bool quiet = false)
     {
         lock (Gate)
         {
             var now = DateTimeOffset.Now;
-            if ((now - _last).TotalMilliseconds < cooldownMs) return;
+            if ((now - _last).TotalMilliseconds < cooldownMs) return false;
             _last = now;
             TrimCount++;
         }
 
         // 换后台线程做：GC / EmptyWorkingSet 都不需要 UI 线程，别在这儿堵界面
-        System.Threading.Tasks.Task.Run(() => DoTrim(reason));
+        System.Threading.Tasks.Task.Run(() => DoTrim(reason, quiet));
+        return true;
     }
 
-    private static void DoTrim(string reason)
+    private static void DoTrim(string reason, bool quiet = false)
     {
         try
         {
@@ -265,8 +300,10 @@ public static class MemoryTrimmer
 
             // 工作集是**真实占用**，托管堆只是其中一部分 —— 两个数都记，
             // 才能分清"内存被托管对象占着"（GC 能收回来）还是"被非托管/常驻模块占着"（收了也不降）。
-            Log($"第 {TrimCount} 次（{reason}）：工作集 {Mb(wsBefore):0.#} → {Mb(wsAfter):0.#} MB，" +
-                $"托管堆 {Mb(before):0.#} → {Mb(after):0.#} MB");
+            // ⚠️ quiet 的一枪不写这一行（见 Run 的注释）；失败那条仍然照写，不受 quiet 影响。
+            if (!quiet)
+                Log($"第 {TrimCount} 次（{reason}）：工作集 {Mb(wsBefore):0.#} → {Mb(wsAfter):0.#} MB，" +
+                    $"托管堆 {Mb(before):0.#} → {Mb(after):0.#} MB");
 
             RaiseFloorIfNeeded(wsAfter);
         }
@@ -393,7 +430,11 @@ public static class MemoryTrimmer
     {
         try
         {
-            Core.AppLog.Info("memory", message);
+            // ⚠️ 走「调试」而不是「信息」（2026-10-11 降噪）：内存回收每次切页都写，
+            //    以前是全部日志里最大的一头（存档统计 memory.log 单独 2.6 MB）。
+            //    它不是"发生了什么"，而是"探针读数" —— 归到调试级别，
+            //    日志页点「信息」就能把它滤掉，需要深挖时再切回「全部」。
+            Core.AppLog.Debug("memory", message);
         }
         catch { }
     }

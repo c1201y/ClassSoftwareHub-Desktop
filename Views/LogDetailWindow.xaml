@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.LogDetailWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:ClassSoftwareHub.Desktop.Services">
+
+    <!--
+      日志「详细视图」（独立 AppWindow，2026-10-11 Nick 要求）。
+
+      定位：**给开发者定位问题用**，跟主界面那个概览日志页是两回事。
+        · 主日志页 = 概览（够用的上下文 + 筛选 + 统计）；
+        · 本窗口   = 逐行啃（序号 / 毫秒时间 / 完整不截断 / 原始堆栈 / 全量统计）。
+      所以这里可以牺牲视觉：没有大标题、没有卡片内边距、字号压到 12，
+      把每一寸都让给正文 —— 但**排版必须是对的**（列宽对齐、能选中复制、能滚）。
+
+      列宽必须与下面 DetailRowTemplate 完全一致：
+          # 56 | 时间 168 | 级别 70 | 模块 120 | 内容 *
+      右边常驻「原文」面板：表格里看到的是解析后的字段，面板里是**文件里那一行的原文**，
+      排障时经常要的就是这个（比如把整段堆栈原样贴给上游）。
+
+      ⚠️ 资源挂在**根 Grid** 上，不是 <Window.Resources> ——
+         WinUI 3 的 Window 不是 FrameworkElement，没有 Resources 属性。
+         挂在根 Grid 上，子树里的 StaticResource 照样找得到。
+    -->
+
+    <Grid x:Name="Root" IsTabStop="True" KeyDown="Root_KeyDown"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+        <Grid.Resources>
+            <DataTemplate x:Key="DetailRowTemplate" x:DataType="svc:LogEntry">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="168" />
+                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 序号：对照原文用 -->
+                    <TextBlock Text="{x:Bind IndexText}" FontSize="12" FontFamily="Consolas"
+                               VerticalAlignment="Top" Margin="0,2,8,0"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
+                    <!-- 毫秒时间（主页面为了等宽去掉了毫秒，这里保留） -->
+                    <TextBlock Grid.Column="1" Text="{x:Bind Stamp}" FontSize="12" FontFamily="Consolas"
+                               VerticalAlignment="Top" Margin="0,2,8,0" TextTrimming="CharacterEllipsis"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5"
+                                VerticalAlignment="Top" Margin="0,1,0,0">
+                        <FontIcon x:Name="LevelIcon" Glyph="{x:Bind LevelGlyph}" FontSize="12" />
+                        <TextBlock x:Name="LevelLabel" Text="{x:Bind LevelText}" FontSize="12" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="3" Text="{x:Bind ModuleText}" FontSize="12" FontFamily="Consolas"
+                               VerticalAlignment="Top" Margin="0,2,8,0" TextTrimming="CharacterEllipsis"
+                               ToolTipService.ToolTip="{x:Bind Module}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
+                    <TextBlock Grid.Column="4" Text="{x:Bind Message}" FontSize="12"
+                               TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                </Grid>
+            </DataTemplate>
+
+            <Style x:Key="IconActionStyle" TargetType="Button">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+        </Grid.Resources>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />  <!-- 0 自绘标题栏 -->
+            <RowDefinition Height="Auto" />  <!-- 1 控制行 -->
+            <RowDefinition Height="Auto" />  <!-- 2 级别芯片 + 统计条 -->
+            <RowDefinition Height="*" />     <!-- 3 主区 -->
+        </Grid.RowDefinitions>
+
+        <!-- 自绘标题栏（SetTitleBar 就是这一块） -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="32" Padding="12,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE9D9;" FontSize="13" Opacity="0.85" />
+                <TextBlock Text="日志 · 详细视图" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ===== 1 控制行 ===== -->
+        <Grid Grid.Row="1" Padding="12,10,12,6" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Left" VerticalAlignment="Center">
+                <ComboBox x:Name="SessionBox" MinWidth="168" MaxWidth="240"
+                          SelectionChanged="SessionBox_SelectionChanged" />
+                <ComboBox x:Name="FileBox" MinWidth="108" MaxWidth="160"
+                          SelectionChanged="FileBox_SelectionChanged" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                <AutoSuggestBox x:Name="FilterBox" Width="236" VerticalAlignment="Center"
+                                PlaceholderText="筛选日志…" QueryIcon="Find"
+                                TextChanged="FilterBox_TextChanged" />
+
+                <Button Style="{StaticResource IconActionStyle}" Click="Copy_Click"
+                        ToolTipService.ToolTip="复制筛选结果（整段原文）">
+                    <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                </Button>
+                <Button Style="{StaticResource IconActionStyle}" Click="Export_Click"
+                        ToolTipService.ToolTip="把本机全部会话日志打成一个压缩包">
+                    <FontIcon Glyph="&#xE896;" FontSize="14" />
+                </Button>
+                <Button Style="{StaticResource IconActionStyle}" Click="OpenFolder_Click"
+                        ToolTipService.ToolTip="打开日志根目录，每个子文件夹就是一次运行">
+                    <FontIcon Glyph="&#xE8B7;" FontSize="14" />
+                </Button>
+                <Button Style="{StaticResource IconActionStyle}" Click="Refresh_Click"
+                        ToolTipService.ToolTip="重新读取当前文件">
+                    <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ===== 2 级别芯片 + 全量统计 =====
+             芯片列 `*`、统计列 `Auto`：
+               · 窗口宽 ⇒ 芯片靠左、统计靠右，中间留白（工具栏的正常观感）；
+               · 窗口窄 ⇒ **芯片列自己缩、里面横向滚**，⛔ 不是芯片被裁掉
+                 （Nick 2026-10-11 明确说过窄窗口被吞的问题）；
+               · 统计用**可换行**的富文本（不是一排小 StackPanel）：数字一多就折行，
+                 ⛔ 不会像右对齐的 StackPanel 那样把最左边那组数字顶出可视区。 -->
+        <Grid Grid.Row="2" Padding="12,0,12,8" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                          VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
+                <StackPanel x:Name="ChipHost" Orientation="Horizontal" Spacing="4"
+                            VerticalAlignment="Center" />
+            </ScrollViewer>
+
+            <TextBlock x:Name="MetricBar" Grid.Column="1" MaxWidth="860" TextWrapping="Wrap"
+                       TextAlignment="Right" VerticalAlignment="Center" />
+        </Grid>
+
+        <Rectangle Grid.Row="2" Height="1" VerticalAlignment="Bottom"
+                   Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+        <!-- ===== 3 主区：表格 | 原文 ===== -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="400" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 表格 -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Padding="12,7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="168" />
+                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="#" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               ToolTipService.ToolTip="本视图内的行序号（文件被截断时，不等于文件的真实行号）" />
+                    <TextBlock Grid.Column="1" Text="时间" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="2" Text="级别" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="3" Text="模块" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="4" Text="内容" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+
+                <Rectangle Grid.Row="1" Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+                <ListView Grid.Row="2" x:Name="LogList" SelectionMode="Extended"
+                          Background="Transparent"
+                          ItemTemplate="{StaticResource DetailRowTemplate}"
+                          SelectionChanged="LogList_SelectionChanged"
+                          KeyDown="LogList_KeyDown"
+                          ContainerContentChanging="LogList_ContainerContentChanging">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="MinHeight" Value="24" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="Padding" Value="12,2" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="复制选中行（原文）" Click="CopySelected_Click" />
+                            <MenuFlyoutItem Text="复制筛选结果（原文）" Click="Copy_Click" />
+                        </MenuFlyout>
+                    </ListView.ContextFlyout>
+                </ListView>
+            </Grid>
+
+            <Rectangle Grid.Column="1" Width="1" VerticalAlignment="Stretch"
+                       Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+            <!-- 原文面板 -->
+            <Grid Grid.Column="2" Padding="12,10,12,12" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="RawTitle" Text="原文" FontSize="13" FontWeight="SemiBold"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="1" Content="复制原文" Click="CopyRaw_Click" Padding="10,3,10,3" />
+                </Grid>
+
+                <Border Grid.Row="1" CornerRadius="4" BorderThickness="1"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="10,8">
+                        <TextBlock x:Name="RawText" FontFamily="Consolas" FontSize="12" LineHeight="18"
+                                   TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   Text="在上面的表格里选中一条日志，这里会显示它在文件里的原始内容。" />
+                    </ScrollViewer>
+                </Border>
+
+                <TextBlock Grid.Row="2" x:Name="StatusText" TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

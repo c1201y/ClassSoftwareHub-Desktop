@@ -19,9 +19,10 @@
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="2">
                 <TextBlock x:Name="TimeText" Text="00:00" FontSize="54" FontWeight="SemiBold"
-                           FontFamily="Bahnschrift" />
+                           FontFamily="Bahnschrift" Typography.NumeralAlignment="Tabular" />
                 <TextBlock x:Name="CsText" Text=".00" FontSize="24" FontWeight="SemiBold" Opacity="0.8"
-                           FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,8" />
+                           FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,8"
+                           Typography.NumeralAlignment="Tabular" />
             </StackPanel>
             <TextBlock x:Name="StateText" FontSize="11.5" Opacity="0.65" TextAlignment="Center"
                        Text="未开始" Margin="0,2,0,0" />

@@ -24,6 +24,28 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _settleTimer;
 
+    /// <summary>
+    /// 「本地缓存」「本地日志」两个列表的分页：每页最多这么多条。
+    /// 2026-10-11 Nick：展开后一屏拉不到头，改成翻页。数量不超一页时整条分页栏收起来。
+    /// </summary>
+    private const int ListPageSize = 10;
+
+    private int _cachePage = 1;
+    private int _logPage = 1;
+    private int _installerPage = 1;
+    private int _localHistoryPage = 1;
+    private int _historyPage = 1;
+
+    /// <summary>
+    /// 「从仓库装回旧版本」加载过的那一份（最多 20 条）。
+    /// ⚠️ 翻页**只翻这份缓存**，⛔不重新打网络 —— GitHub 那一步又慢又容易被限流，
+    ///    点一下「下一页」就重新拉一次，体验会很糟。要刷新得再点那颗「从仓库加载」按钮。
+    /// </summary>
+    private IReadOnlyList<UpdateRelease>? _historyReleases;
+
+    /// <summary>「从仓库装回旧版本」列表末尾那句说明（稳定通道只列正式版）；没有就不显示。</summary>
+    private string? _historyNote;
+
     public SettingsPage()
     {
         InitializeComponent();
@@ -81,6 +103,10 @@ public sealed partial class SettingsPage : Page
         AutoCheckSwitch.IsOn = s.AutoCheckUpdate;
         // 安装包保留数量：下拉项 1~10 与索引一一对应；存档里的怪值夹回 1~10 再定位
         KeepCombo.SelectedIndex = Math.Clamp(s.InstallerKeepCount, 1, 10) - 1;
+        // 缓存保留数量：同款下拉（1~10 与索引一一对应）
+        CacheKeepCombo.SelectedIndex = Math.Clamp(s.CacheKeepCount, 1, 10) - 1;
+        // 日志保留天数：3/7/15/30/永不（Tag 存天数，0 = 永不删除）；存档里出现别的值一律落回「7 天」
+        LogKeepCombo.SelectedIndex = LogKeepIndex(s.LogKeepDays);
         UpdateCurrent.Text = $"当前版本：{ShellConfig.VersionPrefix}{ShellConfig.ShellVersion}· 更新源：{UpdateService.CreateDefault().Source.DisplayName}";
 
         RefreshContentInfo();
@@ -92,6 +118,8 @@ public sealed partial class SettingsPage : Page
         // ⚠️ 只在 XAML 里写 IsExpanded="False" 不够 —— 实测加载过程中仍会被撑开，这里再压一次。
         HistoryExpander.IsExpanded = false;
         InstallerExpander.IsExpanded = false;
+        CacheExpander.IsExpanded = false;
+        LogExpander.IsExpanded = false;
         CollapseEchoCave();
 
         // ⚠️ SettingsExpander 起手是摊开的（模板铺好那一刻内层 Expander 默认 IsExpanded=true，
@@ -108,9 +136,10 @@ public sealed partial class SettingsPage : Page
             _settleTimer.Stop();
             RootScroll.ChangeView(null, 0, null, true);
 
-            // 三个折叠区在导航后 200ms（早已过布局）再压一次，防"首帧摊开"。
+            // 折叠区在导航后 200ms（早已过布局）再压一次，防"首帧摊开"。
             HistoryExpander.IsExpanded = false;
             InstallerExpander.IsExpanded = false;
+            LogExpander.IsExpanded = false;
             CollapseEchoCave();
         };
         _settleTimer.Start();
@@ -156,6 +185,9 @@ public sealed partial class SettingsPage : Page
         // 以前读内容包的 app.version，而那份 text/ 不联网更新、装机即冻结，一直显示装机那天那版（实测停在 v2.3.2）。
         // 详见 ShellConfig.SiteVersionDisplay 的注释。
         AboutSiteVersion.Text = $"站点版本：{ShellConfig.SiteVersionDisplay}";
+
+        // 条款与声明：三张卡片的标题 / 说明也走同一份数据（站点改了条款，这里跟着变）
+        RefreshLegalCards();
     }
 
     private void UpdateMinimizeAvailability()
@@ -387,6 +419,43 @@ public sealed partial class SettingsPage : Page
         Frame.Navigate(typeof(LogViewerPage));
     }
 
+    // ══════════ 条款与声明（用户协议 / 隐私政策 / 免责声明）══════════
+    //
+    // 三份内容与站点同源：站点仓库根目录 `法律文本.ts` ⇒ Core/LegalText.cs
+    // （由 tools/sync-legal.mjs 生成；安装程序那一页 installer/Legal.rtf 同一次生成）。
+    // ⇒ 卡片文字**不许在 XAML 写死**，一律按这份数据刷，站点改条款桌面端自然跟着变。
+
+    /// <summary>按 Core/LegalText.cs 刷三张卡片的标题与说明（每份文档的版本 / 生效日期也在里面）。</summary>
+    private void RefreshLegalCards()
+    {
+        try
+        {
+            Bind(LegalAgreementCard, "agreement", "使用本站（网站与桌面客户端）前请完整阅读");
+            Bind(LegalPrivacyCard, "privacy", "本站怎么处理你的信息、哪些存在本机");
+            Bind(LegalDisclaimerCard, "disclaimer", "软件来源、下载安装风险与责任范围");
+
+            void Bind(CommunityToolkit.WinUI.Controls.SettingsCard card, string key, string blurb)
+            {
+                var doc = LegalText.Find(key);
+                if (doc is null) return;
+                card.Header = doc.Title;
+                card.Description = $"{blurb} · {doc.VersionLine}";
+                card.Tag = doc.Key;                       // 以数据为准（XAML 里也写了，防手误不一致）
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warning("legal", "条款卡片刷新失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>三张卡片共用一个处理：按 Tag 上的 key 打开阅读窗对应那一档。</summary>
+    private void OpenLegal_Click(object sender, RoutedEventArgs e)
+    {
+        var key = (sender as FrameworkElement)?.Tag as string;
+        Views.LegalWindow.Show(key);
+    }
+
     // ══════════ GitHub 下载体验优化（下载路径的全局默认；设置 → 软件内容）══════════
 
     private void GithubRoute_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -507,7 +576,7 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
-            var path = Services.EmbeddedAssets.ExtractToCache("AppIcon-512.png", "AppIcon-512.png");
+            var path = Services.EmbeddedAssets.ExtractToCache("AppIcon-512.png", "app-icon.png");
             if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
                 AboutIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
         }
@@ -536,15 +605,32 @@ public sealed partial class SettingsPage : Page
     /// ⚠️ 签名写成 (object, EventArgs) 而不是 (SettingsExpander, ...)：事件参数类型无论哪个派生类都能接，
     /// 省得把 Toolkit 的内部事件参数类型引进来。
     /// </summary>
-    private void History_Expanded(object sender, EventArgs args) => LoadLocalHistory();
+    private void History_Expanded(object sender, EventArgs args)
+    {
+        _localHistoryPage = 1;          // 重新展开＝从第一页看起
+        LoadLocalHistory();
+    }
+
+    private void LocalHistoryPrev_Click(object sender, RoutedEventArgs args)
+    {
+        _localHistoryPage--;
+        LoadLocalHistory();
+    }
+
+    private void LocalHistoryNext_Click(object sender, RoutedEventArgs args)
+    {
+        _localHistoryPage++;
+        LoadLocalHistory();
+    }
 
     /// <summary>本机记录：这台电脑运行过哪些版本（启动时自动记的），不是仓库的 Release 列表。</summary>
     private void LoadLocalHistory()
     {
-        LocalHistoryList.Children.Clear();
         var records = Services.VersionHistory.Load();
         if (records.Count == 0)
         {
+            LocalHistoryList.Children.Clear();
+            LocalHistoryPager.Visibility = Visibility.Collapsed;
             LocalHistoryList.Children.Add(new TextBlock
             {
                 Text = "本机还没有版本记录（这次启动就会记下第一条）。",
@@ -555,31 +641,89 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        var current = Core.ShellConfig.ShellVersion;
-        foreach (var record in records)
-        {
-            var isCurrent = string.Equals(record.Version, current, StringComparison.OrdinalIgnoreCase);
-            var channel = record.Channel.Length > 0 ? $"  [{record.Channel}]" : "";
+        _localHistoryPage = RenderPagedList(LocalHistoryList, records, _localHistoryPage, LocalHistoryRow,
+                                            LocalHistoryPager, LocalHistoryPageText,
+                                            LocalHistoryPrevButton, LocalHistoryNextButton);
+    }
 
-            var row = new StackPanel { Spacing = 2, Padding = new Thickness(0, 4, 0, 4) };
-            row.Children.Add(new TextBlock
-            {
-                Text = Services.VersionHistory.Display(record) + channel + (isCurrent ? "  ·  当前版本" : ""),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                TextWrapping = TextWrapping.Wrap,
-            });
-            row.Children.Add(new TextBlock
-            {
-                Text = $"首次运行 {record.FirstSeen:yyyy-MM-dd HH:mm} · 最近一次 {record.LastSeen:yyyy-MM-dd HH:mm}",
-                FontSize = 12,
-                Opacity = 0.65,
-                TextWrapping = TextWrapping.Wrap,
-            });
-            LocalHistoryList.Children.Add(row);
-        }
+    /// <summary>本机记录单行：版本号 + [通道] + 「当前版本」，下面一行首次／最近运行时间。</summary>
+    private static StackPanel LocalHistoryRow(Services.VersionRecord record)
+    {
+        var current = Core.ShellConfig.ShellVersion;
+        var isCurrent = string.Equals(record.Version, current, StringComparison.OrdinalIgnoreCase);
+        var channel = record.Channel.Length > 0 ? $"  [{record.Channel}]" : "";
+
+        var row = new StackPanel { Spacing = 2, Padding = new Thickness(0, 4, 0, 4) };
+        row.Children.Add(new TextBlock
+        {
+            Text = Services.VersionHistory.Display(record) + channel + (isCurrent ? "  ·  当前版本" : ""),
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = $"首次运行 {record.FirstSeen:yyyy-MM-dd HH:mm} · 最近一次 {record.LastSeen:yyyy-MM-dd HH:mm}",
+            FontSize = 12,
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        return row;
     }
 
     // ── 历史版本（回滚） ──────────────────────────────────────
+
+    private void HistoryPrev_Click(object sender, RoutedEventArgs args)
+    {
+        _historyPage--;
+        RenderHistoryPage();
+    }
+
+    private void HistoryNext_Click(object sender, RoutedEventArgs args)
+    {
+        _historyPage++;
+        RenderHistoryPage();
+    }
+
+    /// <summary>
+    /// 画「从仓库装回旧版本」的**当前页**。翻页也走这里，用的是 <see cref="_historyReleases"/> 那份缓存，
+    /// ⛔不会再打一次网络（GitHub 那步慢且易限流，点一下「下一页」就重拉一次体验很糟）。
+    /// </summary>
+    private void RenderHistoryPage()
+    {
+        var releases = _historyReleases;
+
+        HistoryList.Children.Clear();
+
+        if (releases is null || releases.Count == 0)
+        {
+            HistoryPager.Visibility = Visibility.Collapsed;
+            HistoryList.Children.Add(new TextBlock
+            {
+                Text = _updater.Source.IsConfigured ? "没查到版本（仓库里还没发过 Release）。" : "还没配置更新仓库地址。",
+                FontSize = 12,
+                Opacity = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
+        _historyPage = RenderPagedList(HistoryList, releases, _historyPage, HistoryRow,
+                                       HistoryPager, HistoryPageText, HistoryPrevButton, HistoryNextButton);
+
+        // 尾注不属于数据行：正式版用户看不到预览版，说清楚免得以为列表缺斤少两。
+        // ⚠️ 必须排在 RenderPagedList 之后 —— 它开头会 Clear 一次。
+        if (_historyNote is { Length: > 0 })
+        {
+            HistoryList.Children.Add(new TextBlock
+            {
+                Text = _historyNote,
+                FontSize = 12,
+                Opacity = 0.6,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 8, 0, 0),
+            });
+        }
+    }
 
     private async void LoadHistory_Click(object sender, RoutedEventArgs e)
     {
@@ -589,40 +733,26 @@ public sealed partial class SettingsPage : Page
         HistoryRing.Visibility = Visibility.Visible;
         HistoryRing.IsActive = true;
         HistoryList.Children.Clear();
+        HistoryPager.Visibility = Visibility.Collapsed;
 
         try
         {
             var rollbackChannel = UpdateChannels.Parse(App.Settings.Current.UpdateChannel);
-            var releases = await _updater.GetHistoryAsync(rollbackChannel, 20);
-            if (releases.Count == 0)
-            {
-                HistoryList.Children.Add(new TextBlock
-                {
-                    Text = _updater.Source.IsConfigured ? "没查到版本（仓库里还没发过 Release）。" : "还没配置更新仓库地址。",
-                    FontSize = 12,
-                    Opacity = 0.7,
-                    TextWrapping = TextWrapping.Wrap,
-                });
-                return;
-            }
-            foreach (var release in releases)
-                HistoryList.Children.Add(HistoryRow(release));
 
-            // 正式版用户看不到预览版：说清楚，免得以为列表缺斤少两
-            if (rollbackChannel == UpdateChannel.Stable)
-            {
-                HistoryList.Children.Add(new TextBlock
-                {
-                    Text = "当前是稳定通道，只列正式版；想看 Insider 版（Beta）就先在上面把更新通道切成 Insider 再加载。",
-                    FontSize = 12,
-                    Opacity = 0.6,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 8, 0, 0),
-                });
-            }
+            _historyNote = rollbackChannel == UpdateChannel.Stable
+                ? "当前是稳定通道，只列正式版；想看 Insider 版（Beta）就先在上面把更新通道切成 Insider 再加载。"
+                : null;
+
+            _historyReleases = await _updater.GetHistoryAsync(rollbackChannel, 20);
+            _historyPage = 1;                     // 重新加载＝回第一页
+            RenderHistoryPage();
         }
         catch (Exception ex)
         {
+            _historyReleases = null;
+            _historyNote = null;
+            HistoryPager.Visibility = Visibility.Collapsed;
+            HistoryList.Children.Clear();
             HistoryList.Children.Add(new TextBlock
             {
                 Text = "加载失败：" + ex.Message,
@@ -724,16 +854,33 @@ public sealed partial class SettingsPage : Page
         });
     }
 
-    private void Installer_Expanded(object sender, EventArgs args) => RefreshInstallerList();
+    private void Installer_Expanded(object sender, EventArgs args)
+    {
+        _installerPage = 1;             // 重新展开＝从第一页看起
+        RefreshInstallerList();
+    }
+
+    private void InstallerPrev_Click(object sender, RoutedEventArgs args)
+    {
+        _installerPage--;
+        RefreshInstallerList();
+    }
+
+    private void InstallerNext_Click(object sender, RoutedEventArgs args)
+    {
+        _installerPage++;
+        RefreshInstallerList();
+    }
 
     private void RefreshInstallerList()
     {
-        InstallerList.Children.Clear();
         InstallerDirText.Text = $"存放位置：{InstallerCleanup.InstallerDirectory}";
 
         var files = InstallerCleanup.Scan();
         if (files.Count == 0)
         {
+            InstallerList.Children.Clear();
+            InstallerPager.Visibility = Visibility.Collapsed;
             InstallerList.Children.Add(new TextBlock
             {
                 Text = "本地暂无安装包。更新完成后会自动存放于此。",
@@ -744,8 +891,8 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        foreach (var f in files)
-            InstallerList.Children.Add(BuildInstallerRow(f));
+        _installerPage = RenderPagedList(InstallerList, files, _installerPage, BuildInstallerRow,
+                                         InstallerPager, InstallerPageText, InstallerPrevButton, InstallerNextButton);
     }
 
     /// <summary>单行：左边名称 + 大小/时间，右边「覆盖安装」「删除」。实例方法 —— Click 里要用 this.XamlRoot。</summary>
@@ -857,11 +1004,362 @@ public sealed partial class SettingsPage : Page
         RefreshInstallerList();
     }
 
+    // ── 素材缓存（cache 目录，按版本分目录，见 CacheHome） ─────────────────────────
+
+    /// <summary>保留数量改动：存档 + 后台立刻清一轮（不用等下次启动），列表摊开着就跟着刷新。</summary>
+    private void CacheKeepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (CacheKeepCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag) return;
+        if (!int.TryParse(tag, out var keep)) return;
+
+        App.Settings.Current.CacheKeepCount = Math.Clamp(keep, 1, 10);
+        App.Settings.Save();
+
+        var target = App.Settings.Current.CacheKeepCount;
+        _ = Task.Run(() =>
+        {
+            try { Services.CacheHome.Clean(target); }
+            catch { /* 清理失败不打扰界面，下次启动会再试 */ }
+        }).ContinueWith(_ =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (CacheExpander.IsExpanded) RefreshCacheList();
+            });
+        });
+    }
+
+    private void Cache_Expanded(object sender, EventArgs args)
+    {
+        _cachePage = 1;                 // 重新展开＝从第一页看起
+        RefreshCacheList();
+    }
+
+    private void CachePrev_Click(object sender, RoutedEventArgs args)
+    {
+        _cachePage--;
+        RefreshCacheList();
+    }
+
+    private void CacheNext_Click(object sender, RoutedEventArgs args)
+    {
+        _cachePage++;
+        RefreshCacheList();
+    }
+
+    private void OpenCacheDir_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Services.CacheHome.Root);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Services.CacheHome.Root}\"") { UseShellExecute = true });
+        }
+        catch { /* 打不开就算了，本来只是给个方便 */ }
+    }
+
+    private void RefreshCacheList()
+    {
+        var items = Services.CacheHome.Scan();
+        var (bytes, files) = Services.CacheHome.Measure();
+
+        CacheDirText.Text = $"存放位置：{Services.CacheHome.Root}";
+        CacheSummaryText.Text = items.Count == 0
+            ? "还没有版本缓存目录（用到素材时会自动建立）。"
+            : $"共 {items.Count} 个版本目录 · {FormatSize(bytes)} · {files} 个文件";
+
+        _cachePage = RenderPagedList(CacheList, items, _cachePage, BuildCacheRow,
+                                     CachePager, CachePageText, CachePrevButton, CacheNextButton);
+    }
+
+    /// <summary>单行：左边目录名 + 占用/时间，右边「打开」「删除」（当前正在用的那个不给删）。</summary>
+    private StackPanel BuildCacheRow(Services.CacheInstanceInfo inst)
+    {
+        var meta = $"{FormatSize(inst.Bytes)}　·　{inst.FileCount} 个文件　·　建立于 {inst.CreatedLocal:yyyy-MM-dd HH:mm}"
+                   + (inst.IsCurrent ? "　·　当前正在使用" : "");
+
+        var name = new TextBlock
+        {
+            Text = inst.Name,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var sub = new TextBlock
+        {
+            Text = meta,
+            FontSize = 12,
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        var open = new Button { Content = "打开" };
+        ToolTipService.SetToolTip(open, "在文件资源管理器中打开这个缓存目录。");
+        open.Click += (_, _) =>
+        {
+            try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{inst.FullPath}\"") { UseShellExecute = true }); }
+            catch { /* 打不开就算了 */ }
+        };
+
+        var del = new Button { Content = "删除" };
+        if (inst.IsCurrent)
+        {
+            del.IsEnabled = false;
+            ToolTipService.SetToolTip(del, "当前正在使用的版本目录，不能删除。");
+        }
+        else
+        {
+            ToolTipService.SetToolTip(del, "删掉这个版本的素材缓存；素材在下次用到时会自动重新解包。");
+            del.Click += async (_, _) => await DeleteCacheInstanceAsync(inst);
+        }
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        actions.Children.Add(open);
+        actions.Children.Add(del);
+
+        var left = new StackPanel { Spacing = 2 };
+        left.Children.Add(name);
+        left.Children.Add(sub);
+
+        var grid = new Grid { ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        left.VerticalAlignment = VerticalAlignment.Center;
+        actions.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(left, 0);
+        Grid.SetColumn(actions, 1);
+        grid.Children.Add(left);
+        grid.Children.Add(actions);
+
+        return new StackPanel { Spacing = 0, Children = { grid } };
+    }
+
+    private async Task DeleteCacheInstanceAsync(Services.CacheInstanceInfo inst)
+    {
+        var confirm = new ContentDialog
+        {
+            XamlRoot = this.XamlRoot,
+            Title = "删除缓存目录",
+            Content = $"删除 {inst.Name}？\n\n里面的素材在下次用到时会自动重新解包，不影响设置与任何数据。",
+            PrimaryButtonText = "删除",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        Services.CacheHome.TryDelete(inst.Name);
+        RefreshCacheList();
+    }
+
+    /// <summary>
+    /// 把 <paramref name="items"/> 的第 <paramref name="page"/> 页填进 <paramref name="host"/>，并同步分页栏。
+    /// 「本地缓存」和「本地日志」结构一模一样，就这一份逻辑共用。
+    ///
+    /// ⚠️ 返回值是**夹紧后**的页码，调用方必须写回自己的字段：删掉最后一页最后一条时页码会超界，
+    ///    不写回的话下一轮刷新会从空页算起。
+    /// ⚠️ 条数不超一页时整条分页栏 Collapsed —— 只有两三条也顶一排翻页按钮太闹。
+    /// </summary>
+    private static int RenderPagedList<T>(
+        StackPanel host,
+        IReadOnlyList<T> items,
+        int page,
+        Func<T, UIElement> buildRow,
+        StackPanel pager,
+        TextBlock pageText,
+        Button prev,
+        Button next)
+    {
+        var pageCount = Math.Max(1, (items.Count + ListPageSize - 1) / ListPageSize);
+        page = Math.Clamp(page, 1, pageCount);
+
+        host.Children.Clear();
+        var from = (page - 1) * ListPageSize;
+        var to = Math.Min(items.Count, from + ListPageSize);
+        for (var i = from; i < to; i++) host.Children.Add(buildRow(items[i]));
+
+        pager.Visibility = items.Count > ListPageSize ? Visibility.Visible : Visibility.Collapsed;
+        pageText.Text = $"第 {page} / {pageCount} 页　·　共 {items.Count} 条";
+        prev.IsEnabled = page > 1;
+        next.IsEnabled = page < pageCount;
+        return page;
+    }
+
     private static string FormatSize(long bytes)
     {
         if (bytes >= 1024 * 1024 * 1024) return $"{bytes / 1024.0 / 1024 / 1024:0.0#} GB";
         if (bytes >= 1024 * 1024) return $"{bytes / 1024.0 / 1024:0.0#} MB";
         if (bytes >= 1024) return $"{bytes / 1024.0:0} KB";
         return $"{bytes} B";
+    }
+
+    // ── 会话日志（logs 目录，按启动时间分目录，见 LogHome） ─────────────────────────
+
+    /// <summary>「日志保留天数」下拉的索引：3/7/15/30 天 + 永不删除（0）。</summary>
+    private static int LogKeepIndex(int days) => days switch
+    {
+        3 => 0,
+        15 => 2,
+        30 => 3,
+        0 => 4,     // 永不删除
+        _ => 1,     // 7 天（默认；存档里的怪值也落这里）
+    };
+
+    /// <summary>保留天数改动：存档 + 后台立刻清一轮（不用等下次启动），列表摊开着就跟着刷新。</summary>
+    private void LogKeepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (LogKeepCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag) return;
+        if (!int.TryParse(tag, out var days)) return;
+
+        App.Settings.Current.LogKeepDays = days <= 0 ? 0 : days;
+        App.Settings.Save();
+
+        var target = App.Settings.Current.LogKeepDays;
+        _ = Task.Run(() =>
+        {
+            try { Services.LogHome.Clean(target); }
+            catch { /* 清理失败不打扰界面，下次启动会再试 */ }
+        }).ContinueWith(_ =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (LogExpander.IsExpanded) RefreshLogList();
+            });
+        });
+    }
+
+    private void Log_Expanded(object sender, EventArgs args)
+    {
+        _logPage = 1;                   // 重新展开＝从第一页看起
+        RefreshLogList();
+    }
+
+    private void LogPrev_Click(object sender, RoutedEventArgs args)
+    {
+        _logPage--;
+        RefreshLogList();
+    }
+
+    private void LogNext_Click(object sender, RoutedEventArgs args)
+    {
+        _logPage++;
+        RefreshLogList();
+    }
+
+    private void OpenLogDir_Click(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Services.LogHome.Root);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Services.LogHome.Root}\"") { UseShellExecute = true });
+        }
+        catch { /* 打不开就算了，本来只是给个方便 */ }
+    }
+
+    private void RefreshLogList()
+    {
+        var items = Services.LogHome.Scan();
+        var (bytes, files) = Services.LogHome.Measure();
+
+        LogDirText.Text = $"存放位置：{Services.LogHome.Root}";
+        LogSummaryText.Text = items.Count == 0
+            ? "还没有日志目录（应用启动时会自动建立）。"
+            : $"共 {items.Count} 次运行 · {FormatSize(bytes)} · {files} 个文件";
+
+        _logPage = RenderPagedList(LogList, items, _logPage, BuildLogRow,
+                                   LogPager, LogPageText, LogPrevButton, LogNextButton);
+    }
+
+    /// <summary>单行：左边会话名 + 占用/时间，右边「打开」「删除」（当前正在运行的那次不给删）。</summary>
+    private StackPanel BuildLogRow(Services.LogSessionInfo s)
+    {
+        var title = s.IsLegacy
+            ? "升级前的历史日志"
+            : $"{s.StartedLocal:yyyy-MM-dd HH:mm:ss} 那次运行";
+
+        var meta = $"{FormatSize(s.Bytes)}　·　{s.FileCount} 个文件"
+                   + (s.IsLegacy ? "　·　旧版按模块分的日志，已归档" : "")
+                   + (s.IsCurrent ? "　·　当前正在运行" : "");
+
+        var name = new TextBlock
+        {
+            Text = title,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var sub = new TextBlock
+        {
+            Text = meta,
+            FontSize = 12,
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        var open = new Button { Content = "打开" };
+        ToolTipService.SetToolTip(open, "在文件资源管理器中打开这次运行的日志目录。");
+        open.Click += (_, _) =>
+        {
+            try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{s.FullPath}\"") { UseShellExecute = true }); }
+            catch { /* 打不开就算了 */ }
+        };
+
+        var del = new Button { Content = "删除" };
+        if (s.IsCurrent)
+        {
+            del.IsEnabled = false;
+            ToolTipService.SetToolTip(del, "当前正在运行的那份日志，不能删除。");
+        }
+        else
+        {
+            ToolTipService.SetToolTip(del, "删掉这次运行留下的全部日志。");
+            del.Click += async (_, _) => await DeleteLogSessionAsync(s);
+        }
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        actions.Children.Add(open);
+        actions.Children.Add(del);
+
+        var left = new StackPanel { Spacing = 2 };
+        left.Children.Add(name);
+        left.Children.Add(sub);
+
+        var grid = new Grid { ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        left.VerticalAlignment = VerticalAlignment.Center;
+        actions.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(left, 0);
+        Grid.SetColumn(actions, 1);
+        grid.Children.Add(left);
+        grid.Children.Add(actions);
+
+        return new StackPanel { Spacing = 0, Children = { grid } };
+    }
+
+    private async Task DeleteLogSessionAsync(Services.LogSessionInfo s)
+    {
+        var confirm = new ContentDialog
+        {
+            XamlRoot = this.XamlRoot,
+            Title = "删除日志",
+            Content = $"删除「{s.StartedLocal:yyyy-MM-dd HH:mm:ss}」这次运行的日志？\n\n"
+                      + $"{FormatSize(s.Bytes)}、{s.FileCount} 个文件，删掉就找不回来了。",
+            PrimaryButtonText = "删除",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        Services.LogHome.TryDelete(s.Name);
+        RefreshLogList();
     }
 }

@@ -308,9 +308,9 @@ public sealed partial class WelcomePage : Page
         try
         {
             // 换 banner 时这里和 csproj 的 EmbeddedResource 一起改。
-            // ⚠️ 缓存文件名也带上版本号：ExtractToCache 靠"长度不同"判过期，
-            //    万一同尺寸换图会被判成没过期，带上版本号就不会串图。
-            var path = EmbeddedAssets.ExtractToCache("dv1.1.png", "banner-dv1.1.png");
+            // ⚠️ 输出名固定 banner.png：缓存已按版本分目录（见 CacheHome），同名也不会串到别的版本，
+            //    所以不再需要以前那套「文件名带版本号防串图」。
+            var path = EmbeddedAssets.ExtractToCache("dv1.1.png", "banner.png");
             if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
             {
                 // DecodePixelHeight：图是 1512×720，实际只按高度 140 显示。

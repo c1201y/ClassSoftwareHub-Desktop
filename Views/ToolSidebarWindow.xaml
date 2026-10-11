@@ -16,7 +16,12 @@
         <Border x:Name="Panel" CornerRadius="8" BorderThickness="1"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <Grid x:Name="BarHost">
-                    <!-- 收起状态：短短一截抓手（整条窗口都是点击区，也是拖拽区） -->
+                    <!--
+                      收起状态：短短一截抓手 —— 只负责画那根线。
+                      指针输入/提示就挂在这一层：窗口尺寸＝这片小条的尺寸（2026-10-11 二次定稿，
+                      "判定区那圈"已按 Nick 要求取消），这层铺满整窗 ＝ 铺满小条，点哪儿都算数。
+                      ⚠️ 它的显示/隐藏跟着收起/展开走（见 FinishCollapse / Expand），别另开一层。
+                    -->
                     <Grid x:Name="CollapsedView" Background="Transparent"
                           ToolTipService.ToolTip="点一下展开；按住可以拖到别处/别的边"
                           PointerPressed="Strip_PointerPressed"
@@ -47,17 +52,27 @@
                             <ScrollViewer x:Name="ToolsScroll"
                                           VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="ToolStack" Orientation="Vertical" Spacing="3" />
+                                <!--
+                                  工具区是个 Grid：行列由 BuildToolButtons 按「每行几个」现摆
+                                  （竖条＝每行 1 个或 3 个并自动折行；横条＝一排到底），间距由 ApplyEdgeLayout 设。
+                                  ⚠️ 别改回 StackPanel —— 折行排不出来。
+                                -->
+                                <Grid x:Name="ToolStack" />
                             </ScrollViewer>
 
                             <Border x:Name="Sep" Height="1" Margin="2,3" Opacity="0.2"
                                     Background="{ThemeResource TextFillColorSecondaryBrush}" />
 
                             <!--
-                              底下这几个按钮。内容由代码按贴的边决定（ApplyFooterContent）：
+                              底下这几个按钮（俗称「五大金刚」）。内容由代码按贴的边决定（ApplyFooterContent）：
                               贴左右（竖条）= 图标在上、文字在下；贴上/下（横条）= 左图标、右文字（横条矮，竖排会被裁）。
+
+                              ⚠️ 是个 **Grid**，行列由 <c>LayFooter</c> 按「每行几个」现摆：
+                                 竖条单列 = 竖着排一列；竖条三列 = 跟着工具区一起折行（5 颗 → 3+2 两行）；
+                                 横条 = 横向一排到底（跟工具行同一套逻辑）。
+                              ⛔ 别改回 StackPanel —— 折行排不出来（StackPanel 没有行列概念）。
                             -->
-                            <StackPanel x:Name="FooterStack" Orientation="Vertical" Spacing="2">
+                            <Grid x:Name="FooterStack">
                                 <Button x:Name="FoldButton" Click="Collapse_Click" MinWidth="0" MinHeight="44"
                                         Padding="0,6" Background="Transparent" BorderThickness="0"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
@@ -85,7 +100,7 @@
                                         Padding="0,6" Background="Transparent" BorderThickness="0"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         ToolTipService.ToolTip="打开应用主界面（主窗口在托盘里或最小化时，点它叫出来）" />
-                            </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Grid>
                 </Grid>

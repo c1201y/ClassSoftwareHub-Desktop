@@ -86,6 +86,15 @@ public static class SidebarModules
         new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节屏幕亮度（笔记本内屏可用，外接显示器通常不可用）。面板中的「自动亮度」按钮需设备具备环境光传感器才能使用" },
 
         // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
+
+        // 系统快捷三件套（2026-10-11 Nick 要）：任务管理器 / 安全选项 / 剪贴板历史。
+        // 都插在动作组最前面（跟 rev1 递音量同一个位置约定），紧挨着工具组下沿，好找。
+        new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", Glyph = "\uE9F3", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
+        // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起
+        //    （否则钓鱼程序可以伪造一个一模一样的界面骗密码）。这里给的是它上面的那几个操作本身。
+        new() { Id = "security", Name = "安全选项", ShortName = "安全", Glyph = "\uEA18", Kind = SidebarModuleKinds.Action, Note = "等同 Ctrl+Alt+Del 那个界面上能做的事：锁定电脑 / 切换用户 / 注销（该界面的本体属系统安全桌面，普通程序无法直接调起，这里给的是其中的各个操作）" },
+        new() { Id = "clipboard", Name = "剪贴板历史", ShortName = "剪贴板", Glyph = "\uE8C8", Kind = SidebarModuleKinds.Action, Note = "等同 Win+V：打开剪贴板历史，挑一条粘到刚才那个窗口里（需先在系统「设置 → 系统 → 剪贴板」里打开剪贴板历史）" },
+
         new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },
         // ⚠️ 原来这里还有一项「打开键盘（keyboard）」：2026-10-09 虚拟键盘整体下线，一并删除。
         //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。

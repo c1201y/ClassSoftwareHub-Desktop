@@ -553,6 +553,18 @@ public partial class App : Application
         InitializeComponent();
         UnhandledException += OnUnhandledException;
 
+        // ⛔⛔ 另外三个全局钩子（2026-10-11 补，Nick 问"这些日志够吗"之后加的第一件事）：
+        //   只挂 WinUI 的 UnhandledException 有个巨大盲区 —— **非 UI 线程崩了连 crash.log 都不留**，
+        //   而"应用突然自己消失了"恰恰是最需要日志的那类问题。
+        //   三个各有各的盲区：AppDomain = 非 UI 线程的终止级异常；UnobservedTask = 后台 Task 静默失败；
+        //   ProcessExit = 正常终止的终局标记（反过来说，"最后一行不是它"就说明上次是被杀/崩的）。
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+
+        // 让每条异常日志自动带上"当时在哪一页、窗口多大"（Core 层不引用 Pages 层，所以用委托注入）
+        Core.AppLog.ContextProvider = CurrentScene;
+
         // 文本框右键菜单：⛔ 必须在代码里建，不能声明在 App.xaml（原因见 App.xaml 那段注释）
         // ⛔ 也不能在这里建 —— 构造函数期间连 Application.Resources 都读不了（E_UNEXPECTED）。
         //    改到 OnLaunched 里做，见那儿的调用。
@@ -607,7 +619,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             _activateSignal = null;
-            Services.ScreenCapture.Log("[single] 叫醒事件建不出来: " + ex.Message);
+            Core.AppLog.Info("single", "叫醒事件建不出来: " + ex.Message);
         }
     }
 
@@ -636,7 +648,7 @@ public partial class App : Application
             catch (Exception ex)
             {
                 // 打不开又不是"不存在"（多半是权限）→ 保守当作对方活着，别冒险双开
-                Services.ScreenCapture.Log("[single] 叫醒事件打不开: " + ex.Message);
+                Core.AppLog.Info("single", "叫醒事件打不开: " + ex.Message);
                 return true;
             }
         }
@@ -667,14 +679,21 @@ public partial class App : Application
         //     TextBox 一出生就带着菜单。
         SetupTextEditContextMenu();
 
-        // 数据目录分区：日志 → logs\，内嵌解包的图片/图标缓存 → cache\（旧版全堆在根上）。
-        // 尽早搬 —— 后面任何模块一写日志就落到新位置了。
+        // 数据目录分区（Nick 2026-10-10 / 2026-10-11）：
+        //   ① LegacyCleanup 收掉旧结构遗留在根上的死文件（旧素材副本 / 旧日志 / 调试 dump），
+        //      并让 cache\ 根下只剩「版本目录」；
+        //   ② LogHome 把上一版「按模块平铺的 logs\*.log」归档，再定下本次运行的**会话目录**
+        //      （一次启动一个目录，日志页只展示该会话）；
+        //   ③ CacheHome.Ensure 定下本次运作用哪个版本目录，之后解包的素材都落进去。
+        // 必须尽早 —— 后面任何模块一写日志、一解包素材就按新位置走了。
         try
         {
-            Core.AppLog.MigrateLegacyFiles();
-            Services.EmbeddedAssets.MigrateLegacyCache();
+            Services.LegacyCleanup.Run();
+            Services.LogHome.MigrateLegacy();
+            Services.LogHome.Ensure();
+            Services.CacheHome.Ensure();
         }
-        catch { /* 迁移失败不影响启动，文件留在原地 */ }
+        catch { /* 清理/建目录失败不影响启动 */ }
 
         Telemetry = new NoopTelemetryService(Settings);
         Telemetry.Track("app_launch", new Dictionary<string, object?>
@@ -704,7 +723,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Services.ScreenCapture.Log("[startup] 主窗口构造失败: " + ex);
+            Core.AppLog.Info("startup", "主窗口构造失败: " + ex);
         }
 
         try
@@ -713,7 +732,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Services.ScreenCapture.Log("[startup] 主窗口 Activate 失败: " + ex);
+            Core.AppLog.Info("startup", "主窗口 Activate 失败: " + ex);
         }
 
         // 文本框右键菜单：三条钩子挂在内容根上，handledEventsToo=true。
@@ -752,7 +771,7 @@ public partial class App : Application
         // 走到这儿 MainWindow 还是 null，说明应用会停在「只有侧边栏、没有主界面」的状态。
         // 这条日志就是给那个场景留的指纹 —— 没有它，日志里只剩下一句"收到唤醒请求"。
         if (MainWindow is null)
-            Services.ScreenCapture.Log("[startup] 主窗口未能建立，应用将停在「只有侧边栏」的状态");
+            Core.AppLog.Info("startup", "主窗口未能建立，应用将停在「只有侧边栏」的状态");
 
         // 兜底：Activate() 返回 ≠ 窗口已经显示出来。隔一拍核一次可见性，
         //   不可见就再亮一次并把结果写进日志 —— 这条链路以后出问题能一眼定位。
@@ -786,6 +805,14 @@ public partial class App : Application
         // 更新安装包自动清理：updates 目录只留最近 N 个（默认 3），更早的删掉。
         // 走后台线程，不沾首帧；新版本装完后的第一次启动正好把旧包收掉。
         Services.Updating.InstallerCleanup.Start();
+
+        // 素材缓存自动清理：cache\ 下按版本分目录，同样只留最近 N 个（默认 3）。
+        // 当前正在用的那个版本目录永远不删（见 CacheHome.Clean）。
+        Services.CacheHome.Start();
+
+        // 会话日志自动清理：logs\ 下按「启动时间」分目录，留最近 N 天（默认 7，0 = 永不删除）。
+        // 当前正在运行的这个会话目录永远不删（见 LogHome.Clean）。
+        Services.LogHome.Start();
 
         // GitHub 加速节点的密钥就位情况 —— 只写一行日志，**绝不打印密钥本身**。
         // 密钥按设计不在仓库里（见 Services/MirrorSign.cs 的「密钥从哪来」），
@@ -824,7 +851,7 @@ public partial class App : Application
                 }
 
                 // 落一条日志：这条链路出问题时，日志是唯一能分辨"根本没收到"还是"收到了但窗口没出来"的依据
-                Services.ScreenCapture.Log("[single] 收到唤醒请求，把主窗口叫出来");
+                Core.AppLog.Info("single", "收到唤醒请求，把主窗口叫出来");
 
                 queue.TryEnqueue(() =>
                 {
@@ -836,7 +863,7 @@ public partial class App : Application
                     //    于是「点桌面图标没反应」这条悬案根本分不出是"敲门没人听"还是"听见了但窗口没出来"。
                     if (win is null)
                     {
-                        Services.ScreenCapture.Log("[single] 主窗口不存在，唤醒请求无人处理（见同日的 [startup] 记录）");
+                        Core.AppLog.Info("single", "主窗口不存在，唤醒请求无人处理（见同日的 [startup] 记录）");
                         return;
                     }
 
@@ -846,7 +873,7 @@ public partial class App : Application
                     }
                     catch (Exception ex)
                     {
-                        Services.ScreenCapture.Log("[single] 叫醒主窗口失败: " + ex.Message);
+                        Core.AppLog.Info("single", "叫醒主窗口失败: " + ex.Message);
                     }
                 });
             }
@@ -859,6 +886,66 @@ public partial class App : Application
         listener.Start();
     }
 
+    /// <summary>
+    /// 「当时在哪一页、窗口多大」—— 崩溃 / 布局问题的第一现场。
+    /// 挂到 <see cref="Core.AppLog.ContextProvider"/> 上之后，**每一条异常日志都会自动带上它**。
+    /// ⚠️ 全程 try/catch：崩溃那一刻什么状态都有可能，取不到就当没有，绝不能再抛。
+    /// </summary>
+    private static string CurrentScene()
+    {
+        try
+        {
+            var s = "page=" + Pages.ShellPage.CurrentTag;
+            if (MainWindow?.AppWindow is { } win) s += $" window={win.Size.Width}x{win.Size.Height}";
+            return s;
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>
+    /// 非 UI 线程上没人接的异常。CLR 从 .NET Core 起**没有"忽略并继续"这回事** ——
+    /// 它一定会终止进程，所以这里做的是"临死前把现场留下来"，不是"救回来"。
+    /// </summary>
+    private static void OnDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+    {
+        try
+        {
+            var tail = $"CLR 未处理异常（即将终止={e.IsTerminating}）";
+            if (e.ExceptionObject is Exception ex) Core.AppLog.Exception("crash", ex, tail);
+            else Core.AppLog.Error("crash", tail + "：" + e.ExceptionObject);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 后台 <see cref="Task"/> 里**没人 await** 的异常。CLR 默认既不崩也不报、直接丢掉 ——
+    /// 那是最糟的一种"功能悄悄坏了"。所以：记一条，再 <c>SetObserved</c> 免得它升级成进程级。
+    /// </summary>
+    private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        try { Core.AppLog.Exception("crash", e.Exception, "后台任务未观察异常（已吞，不升级为进程级）"); }
+        catch { }
+        try { e.SetObserved(); } catch { }
+    }
+
+    /// <summary>
+    /// 进程走完了**正常终止**路径（区别于被 taskkill / 被杀软 / 被崩溃带走）。
+    /// 它的真正价值是"缺席即证据"：会话目录里最后一行不是它 ⇒ 上次没走正常流程。
+    ///
+    /// ⚠️ 单实例那条"敲门后自退"的分支（<c>Environment.Exit(0)</c>）也会触发它 ——
+    ///    用 <see cref="Services.LogHome.Established"/> 挡掉，否则用户每点一次图标就会
+    ///    多出一个只写了一行的空会话目录。
+    /// </summary>
+    private static void OnProcessExit(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (!Services.LogHome.Established) return;
+            Core.AppLog.Info("exit", $"进程正常终止（退出码 {Environment.ExitCode}）");
+        }
+        catch { }
+    }
+
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         // ⚠️ 2026-09-29：「页面布局循环」（LayoutCycleException）不是致命错误 —— WinUI 会放弃本次布局、
@@ -869,22 +956,11 @@ public partial class App : Application
         try
         {
             Telemetry.TrackException(e.Exception, "xaml_unhandled");
-            var dir = SettingsStore.Dir;
-            Directory.CreateDirectory(dir);
 
-            // 排障信息：当时停在哪一页 + 窗口多大。
-            // 「布局循环」这类问题只在特定尺寸下冒出来，没有这两个数根本无从复现。
-            var where = "page=" + Pages.ShellPage.CurrentTag;
-            try
-            {
-                if (MainWindow?.AppWindow is { } win)
-                    where += $" window={win.Size.Width}x{win.Size.Height}";
-            }
-            catch { /* 拿不到窗口尺寸不影响记录 */ }
-            if (layoutCycle) where += " ignored=1";
-
-            Core.AppLog.Write("crash", Core.LogLevel.Error,
-                $"[{where}] {e.Message}\n{e.Exception}");
+            // 排障信息（当时停在哪一页 + 窗口多大）由 AppLog.ContextProvider 自动附上 ——
+            // 「布局循环」这类问题只在特定尺寸下冒出来，没有那两个数根本无从复现。
+            Core.AppLog.Exception("crash", e.Exception,
+                layoutCycle ? "XAML 布局循环（可忽略，不致命）" : "XAML 未处理异常");
         }
         catch { /* 记录失败也不影响 */ }
 

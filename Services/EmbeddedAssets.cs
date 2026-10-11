@@ -57,9 +57,9 @@ public static class EmbeddedAssets
                 .FirstOrDefault(n => n.EndsWith(fileNameEndingWith, StringComparison.OrdinalIgnoreCase));
             if (name is null) return null;
 
-            // ⚠️ 缓存统一进 cache\ 子目录（Nick 2026-10-02：数据根目录里日志、截图、图标、配置
-            //    混作一团太乱）。日志在 logs\，图片/图标缓存在 cache\，根目录只留配置。
-            var cacheDir = Path.Combine(SettingsStore.Dir, "cache");
+            // ⚠️ 缓存统一进「按版本分的子目录」：cache\dv{版本}-{yyyyMMddHHmm}\（见 CacheHome）。
+            //    以前全堆在 cache\ 根下、靠文件名区分版本，越攒越乱、也没法按版本回收。
+            var cacheDir = CacheHome.InstanceDir;
             Directory.CreateDirectory(cacheDir);
             var outPath = Path.Combine(cacheDir, outFileName);
 
@@ -82,34 +82,4 @@ public static class EmbeddedAssets
         }
     }
 
-    /// <summary>
-    /// 旧版把内嵌解包的图片 / 图标直接堆在数据根目录。搬进 <c>cache\</c> ——
-    /// 只在**目标不存在**时移动，绝不覆盖；搬不动就留在原地（不影响功能）。
-    /// 应用启动早期调一次即可。
-    /// </summary>
-    public static void MigrateLegacyCache()
-    {
-        try
-        {
-            var root = SettingsStore.Dir;
-            if (!Directory.Exists(root)) return;
-            var cacheDir = Path.Combine(root, "cache");
-
-            foreach (var pattern in new[] { "*.png", "*.ico" })
-            {
-                foreach (var file in Directory.GetFiles(root, pattern))
-                {
-                    try
-                    {
-                        var target = Path.Combine(cacheDir, Path.GetFileName(file));
-                        if (File.Exists(target)) continue;
-                        Directory.CreateDirectory(cacheDir);
-                        File.Move(file, target);
-                    }
-                    catch { /* 被占用 —— 留在原地 */ }
-                }
-            }
-        }
-        catch { }
-    }
 }

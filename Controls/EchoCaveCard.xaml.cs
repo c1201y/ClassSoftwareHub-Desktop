@@ -140,7 +140,7 @@ public sealed partial class EchoCaveCard : UserControl
         catch (Exception ex)
         {
             // ⛔ 卡面永远只显示字条本身：取数异常只写日志，不在这一片留任何文字。
-            ScreenCapture.Log("[echo-cave] 读取失败: " + ex.Message);
+            Core.AppLog.Info("echo-cave", "读取失败: " + ex.Message);
         }
         finally
         {
@@ -257,7 +257,7 @@ public sealed partial class EchoCaveCard : UserControl
         }
         catch (Exception ex)
         {
-            ScreenCapture.Log("[echo-cave] 打开投稿页失败: " + ex.Message);
+            Core.AppLog.Info("echo-cave", "打开投稿页失败: " + ex.Message);
             return false;
         }
     }

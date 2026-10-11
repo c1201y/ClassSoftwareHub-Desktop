@@ -216,6 +216,126 @@
 
                 </StackPanel>
 
+                <!-- ================= 存储 ================= -->
+                <!-- 2026-10-10：素材缓存改成「按版本分目录」（cache\dv{版本}-{yyyyMMddHHmm}\）。
+                     2026-10-11：日志改成「启动一次一个目录」（logs\{启动时间}\）——
+                     两套都在这儿给一个看得见的入口 + 保留策略，做法完全同构。
+                     ⚠️「本地缓存」「本地日志」必须保持 IsExpanded="False" —— 实测置 True 会让 Expander 在
+                        XAML 解析途中就展开、抢跑 Expanded 事件，那时 x:Name 字段还没绑完 ⇒ 空引用崩页。 -->
+                <TextBlock Text="存储" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+
+                    <controls:SettingsCard Header="缓存保留数量"
+                                           Description="每个版本的应用素材（图标、首页大图、引导图、铃声…）各存一份，保留最近几个，更早的启动时自动清理。正在使用的那个版本永不清理。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE74D;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <ComboBox x:Name="CacheKeepCombo" MinWidth="170" SelectionChanged="CacheKeepCombo_SelectionChanged">
+                            <ComboBoxItem Content="1 个" Tag="1" />
+                            <ComboBoxItem Content="2 个" Tag="2" />
+                            <ComboBoxItem Content="3 个" Tag="3" />
+                            <ComboBoxItem Content="4 个" Tag="4" />
+                            <ComboBoxItem Content="5 个" Tag="5" />
+                            <ComboBoxItem Content="6 个" Tag="6" />
+                            <ComboBoxItem Content="7 个" Tag="7" />
+                            <ComboBoxItem Content="8 个" Tag="8" />
+                            <ComboBoxItem Content="9 个" Tag="9" />
+                            <ComboBoxItem Content="10 个" Tag="10" />
+                        </ComboBox>
+                    </controls:SettingsCard>
+
+                    <!-- 本地缓存：列表在展开时现读（平时折叠，不占加载时间）。 -->
+                    <controls:SettingsExpander x:Name="CacheExpander" Header="本地缓存"
+                                               Description="各版本留下的素材缓存，可打开目录查看，也可单独删除某个版本。"
+                                               IsExpanded="False"
+                                               Expanded="Cache_Expanded">
+                        <controls:SettingsExpander.HeaderIcon>
+                            <FontIcon Glyph="&#xE8B7;" />
+                        </controls:SettingsExpander.HeaderIcon>
+                        <controls:SettingsExpander.Items>
+                            <controls:SettingsCard Header="缓存目录">
+                                <controls:SettingsCard.Description>
+                                    <StackPanel Spacing="6" Margin="0,4,0,0">
+                                        <TextBlock x:Name="CacheDirText" TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="CacheSummaryText" TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button Content="打开缓存目录" Click="OpenCacheDir_Click" />
+                                        </StackPanel>
+                                        <StackPanel x:Name="CacheList" Spacing="6" />
+                                        <!-- 2026-10-11 Nick：展开后的列表太长，改成分页，每页最多 10 条。
+                                             ⚠️ 不用自己画页码条 —— 就是系统 Button + 一行说明文字，
+                                                条数不超一页时整条 Collapsed（见 RenderPagedList）。 -->
+                                        <StackPanel x:Name="CachePager" Orientation="Horizontal" Spacing="8"
+                                                    Margin="0,4,0,0" Visibility="Collapsed">
+                                            <Button x:Name="CachePrevButton" Content="上一页" Click="CachePrev_Click" />
+                                            <TextBlock x:Name="CachePageText" VerticalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Button x:Name="CacheNextButton" Content="下一页" Click="CacheNext_Click" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </controls:SettingsCard.Description>
+                            </controls:SettingsCard>
+                        </controls:SettingsExpander.Items>
+                    </controls:SettingsExpander>
+
+                    <controls:SettingsCard Header="日志保留天数"
+                                           Description="应用每启动一次就单独存一份日志。这里设定这些日志留多久，超期的启动时自动清理。正在运行的那一份永不清理。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE81C;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <ComboBox x:Name="LogKeepCombo" MinWidth="170" SelectionChanged="LogKeepCombo_SelectionChanged">
+                            <ComboBoxItem Content="3 天" Tag="3" />
+                            <ComboBoxItem Content="7 天" Tag="7" />
+                            <ComboBoxItem Content="15 天" Tag="15" />
+                            <ComboBoxItem Content="30 天" Tag="30" />
+                            <ComboBoxItem Content="永不删除" Tag="0" />
+                        </ComboBox>
+                    </controls:SettingsCard>
+
+                    <!-- 本地日志：列表在展开时现读（平时折叠，不占加载时间）。 -->
+                    <controls:SettingsExpander x:Name="LogExpander" Header="本地日志"
+                                               Description="每次运行留下的日志目录，可展开目录查看，也可单独删除某一次。"
+                                               IsExpanded="False"
+                                               Expanded="Log_Expanded">
+                        <controls:SettingsExpander.HeaderIcon>
+                            <FontIcon Glyph="&#xE7C3;" />
+                        </controls:SettingsExpander.HeaderIcon>
+                        <controls:SettingsExpander.Items>
+                            <controls:SettingsCard Header="日志目录">
+                                <controls:SettingsCard.Description>
+                                    <StackPanel Spacing="6" Margin="0,4,0,0">
+                                        <TextBlock x:Name="LogDirText" TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="LogSummaryText" TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button Content="打开日志目录" Click="OpenLogDir_Click" />
+                                        </StackPanel>
+                                        <StackPanel x:Name="LogList" Spacing="6" />
+                                        <!-- 同「本地缓存」：日志一多就摊成一大片，这里也是每页 10 条。 -->
+                                        <StackPanel x:Name="LogPager" Orientation="Horizontal" Spacing="8"
+                                                    Margin="0,4,0,0" Visibility="Collapsed">
+                                            <Button x:Name="LogPrevButton" Content="上一页" Click="LogPrev_Click" />
+                                            <TextBlock x:Name="LogPageText" VerticalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Button x:Name="LogNextButton" Content="下一页" Click="LogNext_Click" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </controls:SettingsCard.Description>
+                            </controls:SettingsCard>
+                        </controls:SettingsExpander.Items>
+                    </controls:SettingsExpander>
+
+                </StackPanel>
+
                 <!-- ================= 软件内容 ================= -->
                 <!-- 2026-10-01：原「常用工具」整组（浮窗置顶 / 屏幕边缘侧边栏 / 放置模式 / 贴哪条边）
                      与「截图」两项，都搬去了「侧边布局」页 —— 那页本就是侧边栏与常用工具的布置中心。 -->
@@ -438,6 +558,15 @@
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <StackPanel x:Name="InstallerList" Spacing="6" />
+                                        <!-- 分页同「本地缓存」「本地日志」：见 RenderPagedList（每页 10 条）。 -->
+                                        <StackPanel x:Name="InstallerPager" Orientation="Horizontal" Spacing="8"
+                                                    Margin="0,4,0,0" Visibility="Collapsed">
+                                            <Button x:Name="InstallerPrevButton" Content="上一页" Click="InstallerPrev_Click" />
+                                            <TextBlock x:Name="InstallerPageText" VerticalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Button x:Name="InstallerNextButton" Content="下一页" Click="InstallerNext_Click" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </controls:SettingsCard.Description>
                             </controls:SettingsCard>
@@ -463,6 +592,15 @@
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <StackPanel x:Name="LocalHistoryList" Spacing="6" />
+                                        <!-- 本机版本记录会一直攒（每次启动一条），最容易长到翻页。 -->
+                                        <StackPanel x:Name="LocalHistoryPager" Orientation="Horizontal" Spacing="8"
+                                                    Margin="0,4,0,0" Visibility="Collapsed">
+                                            <Button x:Name="LocalHistoryPrevButton" Content="上一页" Click="LocalHistoryPrev_Click" />
+                                            <TextBlock x:Name="LocalHistoryPageText" VerticalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Button x:Name="LocalHistoryNextButton" Content="下一页" Click="LocalHistoryNext_Click" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </controls:SettingsCard.Description>
                             </controls:SettingsCard>
@@ -481,12 +619,61 @@
                                                           IsActive="False" Visibility="Collapsed" />
                                         </StackPanel>
                                         <StackPanel x:Name="HistoryList" Spacing="6" />
+                                        <!-- 「从仓库装回旧版本」列表：一次最多拉 20 条 ⇒ 分两页。
+                                             ⚠️ 翻页**不再打网络**，用的是一次加载缓存在 _historyReleases 里的那份。 -->
+                                        <StackPanel x:Name="HistoryPager" Orientation="Horizontal" Spacing="8"
+                                                    Margin="0,4,0,0" Visibility="Collapsed">
+                                            <Button x:Name="HistoryPrevButton" Content="上一页" Click="HistoryPrev_Click" />
+                                            <TextBlock x:Name="HistoryPageText" VerticalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Button x:Name="HistoryNextButton" Content="下一页" Click="HistoryNext_Click" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </controls:SettingsCard.Description>
                             </controls:SettingsCard>
 
                         </controls:SettingsExpander.Items>
                     </controls:SettingsExpander>
+
+                </StackPanel>
+
+                <!-- ================= 条款与声明 ================= -->
+                <!--
+                  2026-10-11：网站新增了三份条款（《用户协议》《隐私政策》《免责声明》），
+                  桌面端同步 —— 这里是入口，点开是原生阅读窗（Views/LegalWindow）。
+
+                  ⚠️ 三份内容与站点**同源**：站点仓库根目录 `法律文本.ts`（站点「条款」页
+                     #/agreement 与站点设置页「关于」区都用它）⇒ 本仓库 Core/LegalText.cs，
+                     由 tools/sync-legal.mjs 生成；安装程序里那一页（installer/Legal.rtf）
+                     也是同一次生成出来的。要改条款请改站点那份 TS，别改这三处。
+                  ⚠️ 卡片的 Header / Description 在代码里按同一份数据刷（RefreshLegalCards），
+                     ⛔ 别在 XAML 里写死文档名与版本号 —— 站点改了条款，这里要跟着变。
+                  ⚠️ 右侧**不要**自己放箭头：IsClickEnabled=True 时 SettingsCard 自带 Chevron。
+                -->
+                <TextBlock Text="条款与声明" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+
+                    <controls:SettingsCard x:Name="LegalAgreementCard" Header="用户协议"
+                                           IsClickEnabled="True" Click="OpenLegal_Click" Tag="agreement">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8A5;" />
+                        </controls:SettingsCard.HeaderIcon>
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="LegalPrivacyCard" Header="隐私政策"
+                                           IsClickEnabled="True" Click="OpenLegal_Click" Tag="privacy">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE72E;" />
+                        </controls:SettingsCard.HeaderIcon>
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="LegalDisclaimerCard" Header="免责声明"
+                                           IsClickEnabled="True" Click="OpenLegal_Click" Tag="disclaimer">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE7BA;" />
+                        </controls:SettingsCard.HeaderIcon>
+                    </controls:SettingsCard>
 
                 </StackPanel>
 

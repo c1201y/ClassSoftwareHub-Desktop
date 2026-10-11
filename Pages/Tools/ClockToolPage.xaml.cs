@@ -139,9 +139,10 @@ public sealed partial class ClockToolPage : Page
         Stage.Background = HasPhoto ? PhotoBrush() : ClockRender.BaseBrush(_settings, Dark);
         VeilHost.Background = ClockRender.VeilBrush(_settings);
 
-        TimeText.FontFamily = new FontFamily(_settings.FontFamily);
-        SecText.FontFamily = new FontFamily(_settings.FontFamily);
-        DateText.FontFamily = new FontFamily(_settings.FontFamily);
+        var faceFont = new FontFamily(ClockRender.NormalizeFont(_settings.FontFamily));
+        TimeText.FontFamily = faceFont;
+        SecText.FontFamily = faceFont;
+        DateText.FontFamily = faceFont;
 
         TimeText.FontSize = 64 * _settings.Scale;
         SecText.FontSize = 30 * _settings.Scale;
@@ -315,7 +316,9 @@ public sealed partial class ClockToolPage : Page
             VeilBox.SelectedIndex = (int)_settings.Veil;
             ToneBox.SelectedIndex = (int)_settings.Tone;
             InkBox.SelectedIndex = (int)_settings.Ink;
-            var fontIndex = Array.IndexOf(ClockRender.FontFamilies, _settings.FontFamily);
+            // 先规范化再找下标：旧存档里的 Georgia 已从候选表剔除，不折一下会掉到默认项上去（丢用户的字体选择）
+            var savedFont = ClockRender.NormalizeFont(_settings.FontFamily);
+            var fontIndex = Array.IndexOf(ClockRender.FontFamilies, savedFont);
             FontBox.SelectedIndex = fontIndex < 0 ? 1 : fontIndex;
             VeilSlider.Value = _settings.VeilStrength;
             ScaleSlider.Value = _settings.Scale;
@@ -390,19 +393,23 @@ public sealed partial class ClockToolPage : Page
         });
 
         var face = new SolidColorBrush(ClockRender.FaceColor(ps, Dark, hasPhoto));
-        var font = new FontFamily(ps.FontFamily);
+        var font = new FontFamily(ClockRender.NormalizeFont(ps.FontFamily));
 
         var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, HorizontalAlignment = HorizontalAlignment.Center };
-        line.Children.Add(new TextBlock
+        var hourBlock = new TextBlock
         {
             Text = "10:24",
             FontSize = Math.Clamp(26 * ps.Scale, 13, 38),
             FontWeight = FontWeights.Bold,
             FontFamily = font,
             Foreground = face,
-        });
+        };
+        // 卡片是"这套预设长什么样"的样板，得跟真身同一个字宽规则，否则缩略图上 `1` 的比例是假的
+        Microsoft.UI.Xaml.Documents.Typography.SetNumeralAlignment(hourBlock, FontNumeralAlignment.Tabular);
+        line.Children.Add(hourBlock);
         if (ps.ShowSeconds)
-            line.Children.Add(new TextBlock
+        {
+            var secBlock = new TextBlock
             {
                 Text = ":08",
                 FontSize = Math.Clamp(12 * ps.Scale, 8, 17),
@@ -412,7 +419,10 @@ public sealed partial class ClockToolPage : Page
                 Foreground = face,
                 VerticalAlignment = VerticalAlignment.Bottom,
                 Margin = new Thickness(0, 0, 0, 3),
-            });
+            };
+            Microsoft.UI.Xaml.Documents.Typography.SetNumeralAlignment(secBlock, FontNumeralAlignment.Tabular);
+            line.Children.Add(secBlock);
+        }
 
         var center = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Spacing = 1 };
         center.Children.Add(line);

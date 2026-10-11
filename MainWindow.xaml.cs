@@ -107,7 +107,7 @@ public sealed partial class MainWindow : Window
         //   · 只有 [startup] 构造失败 → 崩在上面 InitTray() 之后
         //     ⚠️ InitTray() 里已经把工具侧边栏显示出来了 —— 崩在它之后，正是
         //        「侧边栏挂在屏幕上、主窗口却没有」那种形态（2026-10-02 用户反馈）。
-        Services.ScreenCapture.Log("[startup] 主窗口构造完成");
+        Core.AppLog.Info("startup", "主窗口构造完成");
     }
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
@@ -156,12 +156,12 @@ public sealed partial class MainWindow : Window
         try
         {
             Views.ToolSidebarWindow.ApplySetting();
-            Services.ScreenCapture.Log("[startup] 工具侧边栏已挂出");
+            Core.AppLog.Info("startup", "工具侧边栏已挂出");
         }
         catch (Exception ex)
         {
             // 侧边栏挂不出来不影响主界面，但必须留痕 —— 别让它静默消失
-            Services.ScreenCapture.Log("[startup] 工具侧边栏挂出失败: " + ex.Message);
+            Core.AppLog.Info("startup", "工具侧边栏挂出失败: " + ex.Message);
         }
     }
 
@@ -197,7 +197,7 @@ public sealed partial class MainWindow : Window
                 try { guard.Stop(); } catch { }
             }
 
-            Services.ScreenCapture.Log($"[startup] 主窗口首帧就绪（{how}）→ 挂工具侧边栏");
+            Core.AppLog.Info("startup", $"主窗口首帧就绪（{how}）→ 挂工具侧边栏");
             StartToolSidebar();
         }
 
@@ -262,20 +262,20 @@ public sealed partial class MainWindow : Window
                 {
                     if (IsVisibleNow()) return;
 
-                    Services.ScreenCapture.Log("[startup] 主窗口 Activate 之后仍不可见，强制再显示一次");
+                    Core.AppLog.Info("startup", "主窗口 Activate 之后仍不可见，强制再显示一次");
                     ShowFromTray();
-                    Services.ScreenCapture.Log("[startup] 可见性兜底执行完毕，当前可见=" + IsVisibleNow());
+                    Core.AppLog.Info("startup", "可见性兜底执行完毕，当前可见=" + IsVisibleNow());
                 }
                 catch (Exception ex)
                 {
-                    Services.ScreenCapture.Log("[startup] 可见性兜底执行失败: " + ex.Message);
+                    Core.AppLog.Info("startup", "可见性兜底执行失败: " + ex.Message);
                 }
             };
             timer.Start();
         }
         catch (Exception ex)
         {
-            Services.ScreenCapture.Log("[startup] 可见性兜底装不上: " + ex.Message);
+            Core.AppLog.Info("startup", "可见性兜底装不上: " + ex.Message);
         }
     }
 
@@ -506,7 +506,7 @@ public sealed partial class MainWindow : Window
     /// <summary>图标文件：优先用内嵌的 AppIcon.ico（多尺寸），取不到就退回 exe 自己。</summary>
     private static string IconPath()
     {
-        var ico = EmbeddedAssets.ExtractToCache("AppIcon.ico", "AppIcon.ico");
+        var ico = EmbeddedAssets.ExtractToCache("AppIcon.ico", "app-icon.ico");
         if (!string.IsNullOrEmpty(ico) && System.IO.File.Exists(ico)) return ico;
         return Environment.ProcessPath ?? "";
     }
@@ -514,7 +514,7 @@ public sealed partial class MainWindow : Window
     /// <summary>「常用工具」托盘图标用的图标：扳手那个（跟主界面图标区分开）。</summary>
     private static string ToolIconPath()
     {
-        var ico = EmbeddedAssets.ExtractToCache("ToolIcon.ico", "ToolIcon.ico");
+        var ico = EmbeddedAssets.ExtractToCache("ToolIcon.ico", "tool-icon.ico");
         if (!string.IsNullOrEmpty(ico) && System.IO.File.Exists(ico)) return ico;
         return IconPath();
     }
@@ -896,7 +896,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var path = EmbeddedAssets.ExtractToCache("AppIcon-512.png", "AppIcon-512.png");
+            var path = EmbeddedAssets.ExtractToCache("AppIcon-512.png", "app-icon.png");
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
             LoadingIcon.Source = new BitmapImage(new Uri(path));
         }
@@ -2132,6 +2132,8 @@ public sealed partial class MainWindow : Window
         try { Views.ToolPaletteWindow.CloseForExit(); } catch { }
         try { Views.QqFeedbackGuideWindow.CloseForExit(); } catch { }
         try { Views.ToolSidebarWindow.CloseForExit(); } catch { }
+        try { Views.LogDetailWindow.CloseForExit(); } catch { }
+        try { Views.LegalWindow.CloseForExit(); } catch { }
         try { Close(); } catch { }
         Core.AppLog.Info("exit", "窗口已全部请求关闭");
 

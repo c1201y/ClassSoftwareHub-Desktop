@@ -24,9 +24,10 @@
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
                     <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center">
                         <TextBlock x:Name="TimeText" Text="00:00" FontSize="46" FontWeight="SemiBold"
-                                   FontFamily="Bahnschrift" />
+                                   FontFamily="Bahnschrift" Typography.NumeralAlignment="Tabular" />
                         <TextBlock x:Name="SecText" Text=":00" FontSize="18" FontWeight="SemiBold" Opacity="0.8"
-                                   FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,6" />
+                                   FontFamily="Bahnschrift" VerticalAlignment="Bottom" Margin="0,0,0,6"
+                                   Typography.NumeralAlignment="Tabular" />
                     </StackPanel>
                     <TextBlock x:Name="DateText" Text="" FontSize="11" Opacity="0.7"
                                HorizontalAlignment="Center" />

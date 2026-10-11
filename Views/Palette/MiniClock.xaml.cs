@@ -102,7 +102,7 @@ public sealed partial class MiniClock : UserControl
 
             VeilHost.Background = ClockRender.VeilBrush(_settings);
 
-            var font = new FontFamily(_settings.FontFamily);
+            var font = new FontFamily(ClockRender.NormalizeFont(_settings.FontFamily));
             TimeText.FontFamily = font;
             SecText.FontFamily = font;
             DateText.FontFamily = font;

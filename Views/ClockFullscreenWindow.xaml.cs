@@ -170,9 +170,11 @@ public sealed partial class ClockFullscreenWindow : Window
 
         Veil.Background = ClockRender.VeilBrush(_settings);
 
-        TimeText.FontFamily = new FontFamily(_settings.FontFamily);
-        SecText.FontFamily = new FontFamily(_settings.FontFamily);
-        DateText.FontFamily = new FontFamily(_settings.FontFamily);
+        // 走 NormalizeFont：旧存档里的 Georgia 已从候选表剔除，直接 new 出来还会继续抖（见 ClockRender.FontFamilies）
+        var faceFont = new FontFamily(ClockRender.NormalizeFont(_settings.FontFamily));
+        TimeText.FontFamily = faceFont;
+        SecText.FontFamily = faceFont;
+        DateText.FontFamily = faceFont;
     }
 
     private void Tick()

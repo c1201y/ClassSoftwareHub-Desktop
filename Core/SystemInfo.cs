@@ -640,6 +640,29 @@ public static class SystemInfo
     /// <summary>操作系统的完整显示名（如「Windows 11 专业版 25H2」）—— 反馈正文里用。</summary>
     public static string OsDisplay() => OsNameText();
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForSystem();
+
+    /// <summary>
+    /// 一行「显示器 / DPI」摘要（2026-10-11 加，日志横幅用）。
+    ///
+    /// ⚠️ 为什么要它：界面"错位 / 被截断 / 缩放发虚"这类问题**十有八九跟 DPI 和显示器数有关**，
+    ///    而这两个数用户从来不主动说 —— 每次启动自己记一行，出问题时就不用再问一遍。
+    /// </summary>
+    public static string DisplaySummary()
+    {
+        try
+        {
+            var monitors = GetSystemMetrics(80);   // SM_CMONITORS：当前接了几台
+            var w = GetSystemMetrics(0);           // SM_CXSCREEN
+            var h = GetSystemMetrics(1);           // SM_CYSCREEN
+            var dpi = GetDpiForSystem();
+            var scale = dpi > 0 ? dpi * 100 / 96 : 0;
+            return $"{monitors} 台／{w}x{h}／缩放 {scale}%";
+        }
+        catch { return "—"; }
+    }
+
     /// <summary>
     /// **具体**的内部版本号：<c>CurrentBuildNumber</c> + <c>UBR</c>（如 <c>26220.1234</c>）。
     /// ⚠️ 只给 <c>CurrentBuildNumber</c>（26220）是不够的 —— 同一个 build 上装没装某个累积更新

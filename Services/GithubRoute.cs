@@ -142,15 +142,35 @@ public static class GithubRoute
     {
         // 只有「GitHub 上的文件地址」才谈得上换路（官网直链、网盘、商店页一律不动）
         if (!Core.GithubMirror.IsMirrorableUrl(url))
+        {
+            Core.AppLog.Step("download-route", "非 GitHub 链接 → 原样直连（不改写）");
             return new[] { DownloadCandidate.Direct(url) };
+        }
 
         var official = DownloadCandidate.Direct(url);
         if (Current == GithubRoutes.Official)
+        {
+            Core.AppLog.Step("download-route", "线路=GitHub 源 → 直连，不探测不改写");
             return new[] { official };
+        }
 
-        return Current == GithubRoutes.SelfHosted
+        var list = Current == GithubRoutes.SelfHosted
             ? await SelfHostedAsync(url, official, ct).ConfigureAwait(false)
             : await AutoAsync(url, official, ct).ConfigureAwait(false);
+
+        // 一句"最后到底排成了什么样"：自动模式下面 AutoAsync 已经逐条报了实测速度，
+        // 这条是给**命中缓存**和**自建模式**补的（它们不走那段探速日志）。
+        Core.AppLog.Step("download-route",
+            $"线路={DisplayName(Current)} · 候选 {list.Count} 条 → "
+            + string.Join(" > ", list.Select(c => HostOf(c.Url))));
+
+        return list;
+    }
+
+    /// <summary>只取域名（日志里看"走了哪一家"就够，不必把带签名的整条 URL 铺进去）。</summary>
+    private static string HostOf(string url)
+    {
+        try { return new Uri(url).Host; } catch { return url; }
     }
 
     /// <summary>

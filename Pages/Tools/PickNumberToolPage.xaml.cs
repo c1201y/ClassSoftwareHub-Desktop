@@ -533,6 +533,20 @@ public sealed partial class PickNumberToolPage : Page
     /// </summary>
     private static Viewbox FitBox(string text, double fontSize, bool rolling)
     {
+        // Typography.NumeralAlignment=Tabular：等宽数字。
+        // 抽号结果是在 Viewbox 里等比缩放的，字体默认比例字宽时 —— 号码 `1` 比 `8` 窄 ⇒ 连**缩放比例**都跟着变，
+        // 滚动换号那几帧数字会忽大忽小、左右乱飘。开了 tnum 每个数字同宽，字号与位置全程稳定。
+        var tb = new TextBlock
+        {
+            Text = text,
+            FontSize = fontSize,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Opacity = rolling ? 0.72 : 1,
+            TextWrapping = TextWrapping.NoWrap,
+            TextAlignment = TextAlignment.Center,
+        };
+        Microsoft.UI.Xaml.Documents.Typography.SetNumeralAlignment(tb, FontNumeralAlignment.Tabular);
+
         return new Viewbox
         {
             Margin = new Thickness(10, 6, 10, 6),
@@ -540,15 +554,7 @@ public sealed partial class PickNumberToolPage : Page
             StretchDirection = StretchDirection.DownOnly,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = text,
-                FontSize = fontSize,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Opacity = rolling ? 0.72 : 1,
-                TextWrapping = TextWrapping.NoWrap,
-                TextAlignment = TextAlignment.Center,
-            },
+            Child = tb,
         };
     }
 
