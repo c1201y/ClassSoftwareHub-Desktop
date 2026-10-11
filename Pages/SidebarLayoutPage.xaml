@@ -152,15 +152,31 @@
                             </ComboBox>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="工具每行显示几个"
-                                               Description="「1 个」为单列竖向排列；「3 个」时每行三个、放满自动折行。仅在贴靠屏幕左右两边时生效，贴上边或下边时为横向单行。">
+                        <controls:SettingsCard Header="工具排列模式"
+                                               Description="「舒展模式」每行一个、自上而下竖排；「紧凑模式」每行三个、放满自动折行，同样长度里能放更多工具。仅在贴靠屏幕左右两边时生效，贴上边或下边时为横向单行。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8FD;" />
                             </controls:SettingsCard.HeaderIcon>
                             <ComboBox x:Name="SidebarColumnsCombo" MinWidth="170"
                                       SelectionChanged="SidebarColumns_SelectionChanged">
-                                <ComboBoxItem Content="1 个" Tag="1" />
-                                <ComboBoxItem Content="3 个" Tag="3" />
+                                <ComboBoxItem Content="舒展模式" Tag="1" />
+                                <ComboBoxItem Content="紧凑模式" Tag="3" />
+                            </ComboBox>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="收起时离屏幕边缘"
+                                               Description="侧边栏收起成那条小抓手时，与屏幕边缘之间留出的距离。选「0」即紧贴屏幕边缘。此项仅对收起状态生效，展开后的面板始终紧贴边缘。">
+                            <controls:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE71D;" />
+                            </controls:SettingsCard.HeaderIcon>
+                            <ComboBox x:Name="SidebarGapCombo" MinWidth="170"
+                                      SelectionChanged="SidebarGap_SelectionChanged">
+                                <ComboBoxItem Content="0（紧贴边缘）" Tag="0" />
+                                <ComboBoxItem Content="2" Tag="2" />
+                                <ComboBoxItem Content="4" Tag="4" />
+                                <ComboBoxItem Content="6（默认）" Tag="6" />
+                                <ComboBoxItem Content="10" Tag="10" />
+                                <ComboBoxItem Content="16" Tag="16" />
                             </ComboBox>
                         </controls:SettingsCard>
 

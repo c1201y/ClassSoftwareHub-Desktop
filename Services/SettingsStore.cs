@@ -166,6 +166,16 @@ public sealed class AppSettings
     public int SidebarColumns { get; set; } = 1;
 
     /// <summary>
+    /// 侧边栏**收起**时那条小抓手离屏幕边缘留多少 dip（2026-10-11 Nick：有用户不喜欢那道缝）。
+    /// <c>0</c> = 紧贴屏幕边缘；默认 <c>6</c>（与 <c>ToolSidebarWindow.CollapsedGapDip</c> 的默认值一致）。
+    ///
+    /// ⚠️ 只在**收起态**生效 —— 展开态的面板始终紧贴边缘（面板悬空一条缝很难看），这是刻意的行为差异。
+    /// ⚠️ 值会被夹到 0~24（见 <c>ToolSidebarWindow.CollapsedGapDip</c>）：存档里万一存了离谱的数，
+    ///    边条会被推到屏幕中间去，那就不是"贴边"了。
+    /// </summary>
+    public int SidebarCollapsedGap { get; set; } = 6;
+
+    /// <summary>
     /// 侧边栏「新模块补入」的批次号。
     /// 设置里存的是一份**用户自己勾选好的**模块清单，光在代码里加新模块它不会自己冒出来，
     /// 于是升级后用户会发现"我要的东西没在侧边栏上"。靠这个标记做**一次性**补入

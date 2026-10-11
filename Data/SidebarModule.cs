@@ -92,7 +92,8 @@ public static class SidebarModules
         new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", Glyph = "\uE9F3", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
         // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起
         //    （否则钓鱼程序可以伪造一个一模一样的界面骗密码）。这里给的是它上面的那几个操作本身。
-        new() { Id = "security", Name = "安全选项", ShortName = "安全", Glyph = "\uEA18", Kind = SidebarModuleKinds.Action, Note = "等同 Ctrl+Alt+Del 那个界面上能做的事：锁定电脑 / 切换用户 / 注销（该界面的本体属系统安全桌面，普通程序无法直接调起，这里给的是其中的各个操作）" },
+        // ⚠️ 短名用「安全项」不用「安全」（2026-10-12 Nick：只写「安全」两个字别人看不懂是干什么的）。
+        new() { Id = "security", Name = "安全选项", ShortName = "安全项", Glyph = "\uEA18", Kind = SidebarModuleKinds.Action, Note = "等同 Ctrl+Alt+Del 那个界面上能做的事：锁定电脑 / 切换用户 / 注销（该界面的本体属系统安全桌面，普通程序无法直接调起，这里给的是其中的各个操作）" },
         new() { Id = "clipboard", Name = "剪贴板历史", ShortName = "剪贴板", Glyph = "\uE8C8", Kind = SidebarModuleKinds.Action, Note = "等同 Win+V：打开剪贴板历史，挑一条粘到刚才那个窗口里（需先在系统「设置 → 系统 → 剪贴板」里打开剪贴板历史）" },
 
         new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },

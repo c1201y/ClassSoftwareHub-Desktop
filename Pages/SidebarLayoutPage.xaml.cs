@@ -283,7 +283,7 @@ public sealed partial class SidebarLayoutPage : Page
                 if (SidebarModeCombo.SelectedIndex != index) SidebarModeCombo.SelectedIndex = index;
             }
 
-            // 大小样式 / 工具每行几个（2026-10-11 Nick：嫌默认那套按钮太大、单列太占地方）
+            // 大小样式 / 工具排列模式（2026-10-11 Nick：嫌默认那套按钮太大、单列太占地方）
             if (SidebarDensityCombo is not null)
             {
                 var index = s.SidebarDensity == "compact" ? 1 : 0;
@@ -293,6 +293,11 @@ public sealed partial class SidebarLayoutPage : Page
             {
                 var index = s.SidebarColumns == 3 ? 1 : 0;
                 if (SidebarColumnsCombo.SelectedIndex != index) SidebarColumnsCombo.SelectedIndex = index;
+            }
+            if (SidebarGapCombo is not null)
+            {
+                var index = GapIndex(s.SidebarCollapsedGap);
+                if (SidebarGapCombo.SelectedIndex != index) SidebarGapCombo.SelectedIndex = index;
             }
 
             // 「动画方案」：拖放卡片的落位收尾用哪种（两种都保留，Nick 2026-10-01 定）
@@ -2276,7 +2281,7 @@ public sealed partial class SidebarLayoutPage : Page
         if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplySetting();
     }
 
-    /// <summary>工具每行几个（1 / 3）。贴上/下边时不生效（横条永远一排到底，见 ToolSidebarWindow.Columns）。</summary>
+    /// <summary>工具排列模式：舒展（1 列）/ 紧凑（3 列）。贴上/下边时不生效（横条永远一排到底，见 ToolSidebarWindow.Columns）。</summary>
     private void SidebarColumns_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_toolSync) return;
@@ -2287,6 +2292,37 @@ public sealed partial class SidebarLayoutPage : Page
 
         if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplySetting();
     }
+
+    /// <summary>
+    /// 侧边栏**收起**时那条小抓手离屏幕边缘多远（0 = 紧贴）。
+    /// 2026-10-11：原先写死 6 dip，有用户不喜欢那道缝，改成可选。
+    ///
+    /// ⚠️ 它只影响收起态的落位 ⇒ 调 <c>ApplyCollapsedGap()</c> 重新贴一次就够，
+    ///    ⛔ 别用 <c>ApplySetting()</c> —— 那是重建（要拆按钮、重排、重新显示），为挪几像素不值当。
+    /// ⚠️ 展开着的边条调完看不出变化（面板恒贴边缘），收起后才看得出来。
+    /// </summary>
+    private void SidebarGap_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_toolSync) return;
+        if (SidebarGapCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag) return;
+
+        App.Settings.Current.SidebarCollapsedGap = int.TryParse(tag, out var v) ? v : 6;
+        App.Settings.Save();
+
+        if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplyCollapsedGap();
+    }
+
+    /// <summary>「收起时离屏幕边缘」的存档值 → 下拉第几项；认不出的值落到默认那档（6）。</summary>
+    private static int GapIndex(int gap) => gap switch
+    {
+        0 => 0,
+        2 => 1,
+        4 => 2,
+        6 => 3,
+        10 => 4,
+        16 => 5,
+        _ => 3,
+    };
 
     // ── 动画方案（2026-10-01：两种落位收尾都挺好，留给用户自己挑） ──────────
 

@@ -683,6 +683,36 @@ public static class SystemInfo
         catch { return ""; }
     }
 
+    private static int? _osBuild;
+
+    /// <summary>
+    /// 系统 build 号（22000 是 Win11 的门槛）。读不到就给 0（= 当 Win10 处理）。
+    ///
+    /// ⛔⛔ 别用 <c>Environment.OSVersion.Version.Build</c> 判 Win11：.NET 5+ 上它返回的是
+    ///    **按应用清单声明支持的那个最高版本** —— 清单里没写 Win10/Win11 的 supportedOS，
+    ///    它就一直报 6.2（build 9200），判 Win11 会**恒为 false**，而且在本机根本试不出来
+    ///    （Win11 上跑也是 9200，看着"没启用"还以为是别的问题）。
+    ///    这里读注册表 <c>CurrentBuildNumber</c>（跟 <see cref="OsBuildEx"/> 同源），不受清单影响。
+    /// </summary>
+    public static int OsBuild()
+    {
+        if (_osBuild.HasValue) return _osBuild.Value;
+        try
+        {
+            using var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            var s = (k?.GetValue("CurrentBuildNumber") as string)?.Trim() ?? "";
+            _osBuild = int.TryParse(s, out var b) ? b : 0;
+        }
+        catch { _osBuild = 0; }
+        return _osBuild.Value;
+    }
+
+    /// <summary>
+    /// Win11 及以上（build ≥ 22000）。认不出（读到 0）时**保守按 Win10 算** ——
+    /// 走"自己给窗口裁圆角"那条路，最坏也只是圆角来源和 DWM 重复一次，不会缺圆角。
+    /// </summary>
+    public static bool IsWin11 => OsBuild() >= 22000;
+
     // ── 操作系统：名称 + 大版本号（如 Windows 11 专业版 24H2） ──
     private static string OsNameText()
     {

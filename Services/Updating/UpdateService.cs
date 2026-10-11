@@ -16,8 +16,24 @@ namespace ClassSoftwareHub.Desktop.Services.Updating;
 /// <summary>下载下来的包校验不过。</summary>
 public sealed class ChecksumMismatchException : Exception
 {
-    public ChecksumMismatchException(string algorithm, string expected, string actual)
-        : base($"{algorithm} 校验不通过：期望 {expected}，实际 {actual}") { }
+    /// <summary>哪个算法没过（"MD5" / "SHA256"）。</summary>
+    public string Kind { get; }
+
+    /// <summary>发布方给出的期望值。</summary>
+    public string Expected { get; }
+
+    /// <summary>这条线路上实际下到的值。</summary>
+    public string Actual { get; }
+
+    /// <param name="hint">可选：给用户看的一句处置建议（接在冒号那句后面）。</param>
+    public ChecksumMismatchException(string algorithm, string expected, string actual, string? hint = null)
+        : base($"{algorithm} 校验不通过：期望 {expected}，实际 {actual}"
+               + (string.IsNullOrEmpty(hint) ? "" : $"。{hint}"))
+    {
+        Kind = algorithm;
+        Expected = expected;
+        Actual = actual;
+    }
 }
 
 /// <summary>下载完成后的结果（含实际算出来的校验值）。</summary>
@@ -122,11 +138,15 @@ public sealed class UpdateService
 
     /// <summary>
     /// 下载安装包并校验。校验优先级：MD5（你要求的）→ SHA256（GitHub 自带的 digest）→ 都没有就只报"未校验"。
-    /// 校验不过会删掉文件并抛 ChecksumMismatchException。
+    ///
+    /// ⚠️⚠️ <b>校验不过 ⇒ 换下一条线路重下，不是"更新失败"</b>（2026-10-11 定案）。
+    ///    起因：自建节点的 spool 缓存把大包写坏了 —— 字节数一样、内容块顺序错乱，
+    ///    而带 Range 的探速请求走的是一条**不经过 spool** 的路、完全正常 ⇒
+    ///    「自动」选路每次都精准挑中这条唯一会发坏包的线路，用户端表现为「MD5 一直不过」。
+    ///    老逻辑在这里直接抛异常，明明候选列表末尾还挂着 GitHub 官方直连，更新却死了。
     ///
     /// ⚠️ 走哪条链接由「GitHub 下载体验优化」设置决定（见 <see cref="GithubRoute"/>）——
     ///    更新包与普通下载共用同一份设置与同一份探速结果；自建节点取不到签名会依次回落到公益镜像、官方直链。
-    ///    走加速不影响安全：下面的 MD5 / SHA256 校验照常执行，改包会被当场拦下。
     ///    （只加速安装包本体；那个几百字节的 .md5 校验文件仍直接问 GitHub，不值得为它换路。）
     /// </summary>
     public async Task<DownloadedPackage> DownloadAndVerifyAsync(
@@ -144,18 +164,39 @@ public sealed class UpdateService
         var sw = System.Diagnostics.Stopwatch.StartNew();
         AppLog.Begin("update", $"下载安装包「{package.Name}」· {package.Url}");
 
+        // 期望值与线路无关 ⇒ 循环外只取一次
+        // （原来是"先把包下完、回头再取校验值"：一条线路发坏包，整轮更新就死在这儿）
+        var expectedMd5 = await ResolveMd5Async(package, ct);
+        var expectedSha = package.Sha256;
+
+        if (expectedMd5.Length == 0 && expectedSha.Length == 0)
+            AppLog.Warn("update", $"更新包「{package.Name}」既未提供 MD5 也未提供 SHA256，本次无法校验（已跳过）");
+
         var candidates = await GithubRoute.ResolveAsync(package.Url.ToString(), ct);
+
+        // 上一轮发过坏包的线路排到最后：那种包重下第二遍纯属白费流量（一次 60+ MB）
+        var pending = new List<DownloadCandidate>();
+        var demoted = new List<DownloadCandidate>();
+        foreach (var c in candidates)
+            (IsRecentlyBad(c.Url) ? demoted : pending).Add(c);
+        pending.AddRange(demoted);
+        candidates = pending;
+        if (demoted.Count > 0)
+            AppLog.Step("update", $"最近发过坏包的线路排到最后：{string.Join("、", demoted.Select(c => HostOf(c.Url)))}");
+
         AppLog.Step("update", $"线路候选 {candidates.Count} 条 · 落盘 {destinationFile}");
 
         Exception? lastError = null;
+        ChecksumMismatchException? lastMismatch = null;
+
         for (var i = 0; i < candidates.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
+            var candidate = candidates[i];
             try
             {
-                await FetchPackageAsync(candidates[i], package, temp, md5, sha, progress, ct);
+                await FetchPackageAsync(candidate, package, temp, md5, sha, progress, ct);
                 lastError = null;
-                break;
             }
             catch (OperationCanceledException)
             {
@@ -172,70 +213,108 @@ public sealed class UpdateService
                 if (i < candidates.Count - 1)
                 {
                     progress?.Report(0);
-                    AppLog.Warn("update", $"更新包候选 {i + 1}/{candidates.Count} 不可用（{ex.Message}）→ 换下一条");
+                    AppLog.Warn("update",
+                        $"更新包候选 {i + 1}/{candidates.Count}（{HostOf(candidate.Url)}）不可用（{ex.Message}）→ 换下一条");
                 }
+                continue;
             }
+
+            var actualMd5 = Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
+            var actualSha = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
+
+            // ⚠️ 校验不过 = **这条线路给的包是坏的**，不是"更新失败" ⇒ 换下一条重下。
+            //    候选列表末尾永远挂着 GitHub 官方直连兜底，所以正常情况下总能拿到好包。
+            //    （2026-10-11：自建节点 spool 把大包写坏，老逻辑在这儿直接抛 ⇒ 用户看到"MD5 一直不过"。）
+            var mismatch = Verify(expectedMd5, expectedSha, actualMd5, actualSha);
+            if (mismatch is not null)
+            {
+                lastMismatch = mismatch;
+                MarkRecentlyBad(candidate.Url);
+                TryDelete(temp);
+                if (i < candidates.Count - 1)
+                {
+                    progress?.Report(0);
+                    AppLog.Warn("update",
+                        $"更新包候选 {i + 1}/{candidates.Count}（{HostOf(candidate.Url)}）给的包校验不过："
+                        + $"{mismatch.Message} → 换下一条重下");
+                }
+                continue;
+            }
+
+            var verified = expectedMd5.Length > 0 || expectedSha.Length > 0;
+            var note = expectedMd5.Length > 0
+                ? "MD5 已校验通过"
+                : expectedSha.Length > 0
+                    ? "SHA256 已校验通过（该发布未提供 MD5）"
+                    : "未提供校验值（已跳过校验）";
+
+            if (File.Exists(destinationFile)) File.Delete(destinationFile);
+            File.Move(temp, destinationFile);
+
+            long finalSize = 0;
+            try { finalSize = new FileInfo(destinationFile).Length; } catch { }
+            AppLog.Done("update",
+                $"更新包「{package.Name}」就绪 · {Core.AppLog.Size(finalSize)} · {note}"
+                + (i > 0 ? $"（第 {i + 1} 条线路）" : ""), sw.Elapsed);
+
+            return new DownloadedPackage(destinationFile, actualMd5, actualSha, verified, note);
         }
 
-        if (lastError is not null)
+        // 候选全部试完：能留下校验现场就报现场（诊断价值更高），否则报最后那条下载错误
+        if (lastMismatch is not null)
         {
-            AppLog.Fail("update", lastError, $"更新包「{package.Name}」下载失败（{candidates.Count} 条候选全部试过）");
-            throw lastError;
+            var final = new ChecksumMismatchException(
+                lastMismatch.Kind, lastMismatch.Expected, lastMismatch.Actual,
+                $"{candidates.Count} 条下载线路给的包都不可信；可在「设置 → 软件内容」把下载路径换成 GitHub 源后重试");
+            AppLog.Fail("update", final,
+                $"更新包「{package.Name}」校验不通过（{final.Kind}）—— {candidates.Count} 条线路全部试过");
+            throw final;
         }
 
-        var actualMd5 = Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
-        var actualSha = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
-
-        // 期望值：MD5 可能是 "<安装包>.md5 / checksums.md5" 这种校验文件，需要现拉
-        var expectedMd5 = await ResolveMd5Async(package, ct);
-        var expectedSha = package.Sha256;
-
-        var verified = false;
-        var note = "未提供校验值（已跳过校验）";
-
-        // 校验不过就把现场记全（期望值 / 实际值 / 哪个算法）—— 这类问题必须能事后复盘，
-        // 只往界面弹一句"校验失败"是查不出所以然的。
-        ChecksumMismatchException Mismatch(string kind, string expected, string actual)
-        {
-            var bad = new ChecksumMismatchException(kind, expected, actual);
-            TryDelete(temp);
-            AppLog.Fail("update", bad, $"更新包「{package.Name}」校验不通过（{kind}）");
-            return bad;
-        }
-
-        if (expectedMd5.Length > 0)
-        {
-            if (!string.Equals(expectedMd5, actualMd5, StringComparison.OrdinalIgnoreCase))
-                throw Mismatch("MD5", expectedMd5, actualMd5);
-            verified = true;
-            note = "MD5 已校验通过";
-            // 顺手把 SHA256 也比一下（有的话）
-            if (expectedSha.Length > 0 && !string.Equals(expectedSha, actualSha, StringComparison.OrdinalIgnoreCase))
-                throw Mismatch("SHA256", expectedSha, actualSha);
-        }
-        else if (expectedSha.Length > 0)
-        {
-            if (!string.Equals(expectedSha, actualSha, StringComparison.OrdinalIgnoreCase))
-                throw Mismatch("SHA256", expectedSha, actualSha);
-            verified = true;
-            note = "SHA256 已校验通过（该发布未提供 MD5）";
-        }
-        else
-        {
-            // 没校验值 = 走加速换过包也发现不了，属于"能用但不该这样"，记警告而不是错误
-            AppLog.Warn("update", $"更新包「{package.Name}」既未提供 MD5 也未提供 SHA256，本次无法校验（已跳过）");
-        }
-
-        if (File.Exists(destinationFile)) File.Delete(destinationFile);
-        File.Move(temp, destinationFile);
-
-        long finalSize = 0;
-        try { finalSize = new FileInfo(destinationFile).Length; } catch { }
-        AppLog.Done("update",
-            $"更新包「{package.Name}」就绪 · {Core.AppLog.Size(finalSize)} · {note}", sw.Elapsed);
-
-        return new DownloadedPackage(destinationFile, actualMd5, actualSha, verified, note);
+        lastError ??= new IOException("没有可用的下载线路");
+        AppLog.Fail("update", lastError, $"更新包「{package.Name}」下载失败（{candidates.Count} 条候选全部试过）");
+        throw lastError;
     }
+
+    /// <summary>
+    /// 校验口径集中在这一处：对不上就返回那个异常，全对返回 null。
+    /// 两个算法都给时都要过（SHA256 是 GitHub 自己算的 digest，白送的保险）。
+    /// </summary>
+    private static ChecksumMismatchException? Verify(string expectedMd5, string expectedSha, string actualMd5, string actualSha)
+    {
+        if (expectedMd5.Length > 0 && !string.Equals(expectedMd5, actualMd5, StringComparison.OrdinalIgnoreCase))
+            return new ChecksumMismatchException("MD5", expectedMd5, actualMd5);
+        if (expectedSha.Length > 0 && !string.Equals(expectedSha, actualSha, StringComparison.OrdinalIgnoreCase))
+            return new ChecksumMismatchException("SHA256", expectedSha, actualSha);
+        return null;
+    }
+
+    // ── "这条线路最近发过坏包"的记账（进程内，不落盘）──────────────────────────
+    //
+    // 为什么要有：坏包是**节点侧**的问题（2026-10-11：自建节点的 spool 把大包写坏，
+    // 字节数一样、内容块顺序错乱），同一条线路重下第二遍几乎必然还是坏包 ——
+    // 一个包 60+ MB，白下一遍纯属浪费流量和时间。
+    // 所以校验不过的那条线路，本次进程内**排到候选队尾**（不是删掉：别的都挂了它还能兜底）。
+    //
+    // ⚠️ 只按**主机名**记，不按完整 URL：坏的是那台机器，不是那一个文件。
+    // ⚠️ 不落盘 + 有 TTL（重启或半小时后自动忘掉）：节点修好了不该被永久拉黑；
+    //    而"永久黑名单"一旦误判（比如其实是我们自己取错了期望值）就再也没法自愈。
+
+    private static readonly Dictionary<string, DateTime> _badRouteUntil = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan BadRouteTtl = TimeSpan.FromMinutes(30);
+
+    /// <summary>日志里说"哪条线路"时用主机名 —— 完整 URL 太长，还带着签名参数。</summary>
+    private static string HostOf(string url)
+    {
+        try { return new Uri(url).Host; }
+        catch { return url.Length > 48 ? url[..48] + "…" : url; }
+    }
+
+    private static bool IsRecentlyBad(string url) =>
+        _badRouteUntil.TryGetValue(HostOf(url), out var until) && DateTime.Now < until;
+
+    private static void MarkRecentlyBad(string url) =>
+        _badRouteUntil[HostOf(url)] = DateTime.Now.Add(BadRouteTtl);
 
     /// <summary>
     /// 一次性抓一条链接到 <paramref name="temp"/>，边下边喂两个哈希。
@@ -267,6 +346,11 @@ public sealed class UpdateService
             done += read;
             if (total > 0) progress?.Report(Math.Min(1.0, done / (double)total));
         }
+
+        // 少一截就别往下走了：说了多少就得拿到多少。
+        // 在这里拦住，报的是"下载不完整"（比后面那句"校验不通过"好懂），也不会把半截包当成"这条线路给的包"。
+        if (total > 0 && done != total)
+            throw new IOException($"下载不完整：拿到 {done} 字节，应为 {total} 字节");
     }
 
     /// <summary>把 package.Md5 里的 "asset:URL" 解析成真正的 32 位十六进制 MD5。</summary>

@@ -251,6 +251,80 @@ public static class WindowChrome
         catch { }
     }
 
+    // ── Win10 的窗口圆角（2026-10-11）──────────────────────────────────────────
+    //
+    // 起因（Nick 在 Win10 上截图）：侧边栏收起那条小抓手**四角是方的**。
+    //   根因：这条的圆角在 Win11 上是 **DWM 把整个窗口裁圆**（DWMWA_WINDOW_CORNER_PREFERENCE，
+    //   见 <see cref="SetRounded"/>），而那个属性 **Win10 根本不认**（返回失败码，静默无效）。
+    //   XAML 里 Panel 的 CornerRadius=8 只圆了内容那一层，圆角外面露的仍是窗口自身的亚克力 ——
+    //   窗口是方的，亚克力就顶到方角，于是整条看着就是个方角块。
+    //
+    // Win10 上唯一能改窗口形状的就是 GDI 的**窗口区域**（SetWindowRgn）。
+    //
+    // ⚠️ 四条，改前先看：
+    //   1) 默认**只在 Win10 用**。Win11 上 DWM 的圆角带抗锯齿、还跟着系统设置走，比 region 好 ——
+    //      ⛔ 别拿 region 去顶掉它（两边都设会叠一层锯齿边）。
+    //      **例外（2026-10-12）**：侧边栏**收起态**那条（12dip 宽）在 Win11 上必须改用 region ——
+    //      因为 DWM 给"圆角窗口"画的那圈投影在这个尺寸下会右偏约 6px，看着像条右边多了一圈边框。
+    //      那时必须**先**把 DWM 圆角偏好设成 DONOTROUND（见 SetRounded(hwnd,false)）**再**设区域，
+    //      两边都设才不叠锯齿；展开态记得 SetRounded(hwnd,true) + ClearRoundRegion 还原。
+    //      详见 ToolSidebarWindow.ApplyRoundRegion 的注释。
+    //   2) 区域是**窗口相对坐标**：窗口挪位置不用重设，**尺寸一变必须重设**
+    //      （收起↔展开、横竖切换、紧凑档、DPI 变化）—— 所以调用方要在每次改尺寸之后调一次。
+    //   3) 区域**没有抗锯齿**，圆角边缘会有 1px 级锯齿（深色条贴深色壁纸基本看不出，浅色壁纸上要有心理准备）。
+    //   4) 一旦设过区域，切回"DWM 管圆角"时必须 <see cref="ClearRoundRegion"/> 清一次，
+    //      否则旧区域会继续按老尺寸裁着窗口。
+    //
+    // ⛔ 别再走"透明窗口 + 自己画圆角"那条路：那要靠 DwmExtendFrameIntoClientArea 撑，
+    //    而它会让 DWM 给整窗画一道边 —— 就是 Nick 2026-10-11 报的"判定区阴影"，两个开关是同一个。
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr hwnd, IntPtr hRgn, bool redraw);
+
+    /// <summary>
+    /// 把窗口裁成圆角矩形（物理像素）。
+    /// </summary>
+    /// <param name="widthPx">窗口宽（物理像素）⚠️ 传**目标尺寸**，别传读回来的旧尺寸。</param>
+    /// <param name="heightPx">窗口高（物理像素）。</param>
+    /// <param name="radiusPx">圆角半径（物理像素）；会夹到不超过短边的一半。</param>
+    public static void SetRoundRegion(IntPtr hwnd, int widthPx, int heightPx, int radiusPx)
+    {
+        if (hwnd == IntPtr.Zero || widthPx <= 0 || heightPx <= 0) return;
+        try
+        {
+            var r = Math.Clamp(radiusPx, 0, Math.Min(widthPx, heightPx) / 2);
+            if (r <= 0) return;
+
+            // GDI 的区域是**不含右下边界**的：右下各多给 1px，否则会削掉最后一行/一列。
+            var rgn = CreateRoundRectRgn(0, 0, widthPx + 1, heightPx + 1, r, r);
+            if (rgn == IntPtr.Zero) { ChromeLog("CreateRoundRectRgn 失败"); return; }
+
+            // ⚠️ SetWindowRgn 之后这个区域归**系统**所有（文档明确），⛔ 不要再 DeleteObject —— 二次释放会崩。
+            //    再设一次新区域时系统会自己换掉旧的。
+            if (SetWindowRgn(hwnd, rgn, true) == 0) ChromeLog("SetWindowRgn 失败");
+        }
+        catch (Exception ex)
+        {
+            ChromeLog("圆角区域失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 撤掉窗口上自己裁的区域（恢复成完整的矩形窗口）。跟 <see cref="SetRoundRegion"/> 成对使用：
+    /// 从"自己裁圆角"切回"DWM 管圆角"时必须清一次，否则旧区域会一直挂在窗口上，
+    /// 把窗口按**当时那一版的尺寸**继续裁着（尺寸一变就露馅）。
+    /// ⚠️ 传 <c>IntPtr.Zero</c> 是文档认可的清空方式，系统会回收旧区域，⛔ 别自己 DeleteObject。
+    /// </summary>
+    public static void ClearRoundRegion(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        try { SetWindowRgn(hwnd, IntPtr.Zero, true); }
+        catch (Exception ex) { ChromeLog("清圆角区域失败: " + ex.Message); }
+    }
+
     /// <summary>告诉 DWM 这个窗口是深色的（决定系统给它画浅色还是深色的框/材质）。</summary>
     public static void SetDarkMode(IntPtr hwnd, bool dark)
     {

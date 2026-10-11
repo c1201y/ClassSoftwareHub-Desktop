@@ -65,14 +65,38 @@ public sealed partial class ToolSidebarWindow : Window
     private const int CollapsedCompactLengthDip = 72;    // 紧凑档：长度
 
     /// <summary>
-    /// 收起态那颗悬浮按钮**离屏幕边缘留的空隙**（dip）—— 不贴死，看着更灵动，也好点
-    /// （Nick 2026-10-11：「可以离屏幕边缘有那么几个像素的距离」）。
+    /// 收起态那条离屏幕边缘留多少 dip —— **用户可改**（「侧边布局」页的「收起时离屏幕边缘」，
+    /// 见 <c>AppSettings.SidebarCollapsedGap</c>；2026-10-11：有用户不喜欢那道缝，做成可选）。
+    /// 原先是写死的 6，现在 <see cref="CollapsedGapDip"/> 读设置、这里只当**默认值**兜底。
     ///
     /// ⚠️ 只作用于**收起态**：展开态照旧紧贴（面板悬空一条缝会很难看）。
     /// ⚠️ 连带 <see cref="ConfirmPlacement"/> 里"这条边"的判定阈值必须跟着放宽 ——
     ///    它原来拿 `work.X + 8` 当"贴左"的判据，空隙一大就认不出来了。
     /// </summary>
     private const int CollapsedEdgeGapDip = 6;
+
+    /// <summary>离屏幕边缘最多能留多少（dip）—— 再大就不是"贴边"了。</summary>
+    private const int MaxCollapsedGapDip = 24;
+
+    /// <summary>
+    /// 当前该留的空隙（dip）：读设置并夹到 <c>0 ~ MaxCollapsedGapDip</c>。
+    /// ⚠️ 夹取不能省：存档里躺着一个离谱的值时，边条会被推到屏幕中间去。
+    /// </summary>
+    private static int CollapsedGapDip
+    {
+        get
+        {
+            try
+            {
+                var v = App.Settings.Current.SidebarCollapsedGap;
+                return v < 0 ? 0 : v > MaxCollapsedGapDip ? MaxCollapsedGapDip : v;
+            }
+            catch
+            {
+                return CollapsedEdgeGapDip;
+            }
+        }
+    }
 
     private const int PanelThicknessDip = 92;       // 展开后的厚度（竖着放时=宽）
     /// <summary>
@@ -82,6 +106,27 @@ public sealed partial class ToolSidebarWindow : Window
     private const int PanelLengthDip = 450;         // 展开后的长度（竖着放时=高）—— 旧算法的下限
     private const int PanelThicknessFlatDip = 112;  // 上/下边时：两行（工具一行、按钮一行）的高度
     private const int PanelLengthFlatDip = 470;     // 上/下边时：展开面板长度的**下限**（真实宽度按内容算，见 PlannedSize）
+
+    /// <summary>
+    /// 单列（竖着一条）时，展开面板最多能占工作区高度的几成（Nick 2026-10-11：「一列下来的时候还是
+    /// 长长的一长条，太长了，要加个限高」）。
+    ///
+    /// 为什么只管单列：每行三个时行数天然少（14 个模块也才 5 行），用不着限；横条是固定厚度，也不走这里。
+    /// 单列才是一路往下排、模块一多就顶到工作区下沿的那一种。
+    ///
+    /// ⚠️ 它**只是封顶，不是"给个固定高度"**：面板高度仍然由 <c>ExpandedHeight</c> 按内容 Measure 实测，
+    ///    模块少的时候该多矮就多矮（2026-10-11 才从"按个数算高度"改成实测 —— 那正是
+    ///    「模块少还空一大块」的根因，⛔ 别改回去）。超出的部分交给工具区滚动：
+    ///    <c>ApplyScrollLimit</c> 里的 <c>ToolsScroll.MaxHeight</c> 就是拿这个上限算出来的。
+    ///
+    /// ⚠️ 取值怎么定的（本机 125% 缩放、工作区 784 dip 实测）：
+    ///    底排五颗竖排自己就吃掉 ~228 dip，加标题/分隔线/内边距，"框架"就要 ~287 dip。
+    ///    · 0.60 → 上限 470：连**默认的四个模块**都开始滚动（它们自然高 507），不合格；
+    ///    · 0.65 → 上限 510：默认那档刚好放得下、不滚，模块堆满时封在占屏 65%；
+    ///    · 0.75 → 上限 588：占屏 75%，又偏长了。
+    ///    ⇒ 取 0.65。嫌长或嫌短就调这一个数（工具区可见行数跟着变）。
+    /// </summary>
+    private const double SingleColumnMaxHeightRatio = 0.65;
 
     /// <summary>
     /// 收起动画的第二段：面板滑出屏幕之后，**抓手从屏幕外滑回贴边位**要花的毫秒（2026-10-01）。
@@ -388,20 +433,30 @@ public sealed partial class ToolSidebarWindow : Window
     };
 
     /// <summary>
-    /// 音量浮窗（主音量 + 合成器）**全部收干净了**叫一声：边条这时候也该跟着收回去。
+    /// 边条旁边那些**临时浮层**（音量 / 亮度面板、确认面板、安全选项菜单）全收干净了叫一声：
+    /// 边条这时候也该跟着收回去。
     ///
-    /// 为什么必须有它：点「音量」时我们压住了自动收起（不然浮窗一抢焦点边条就缩），
-    /// 那份压制一旦放开，边条自己的"失焦收起"**早就在被压制时错过了**，
-    /// 结果就是"浮窗收了两键也缩了、边条却赖着不动"。所以在这儿显式叫它收。
+    /// 为什么必须有它：这些浮层弹出来的时候我们压住了自动收起（不然浮层一抢焦点边条就缩），
+    /// 而**那份压制一旦放开，边条自己那次"失焦收起"早就在被压制期间错过了** ——
+    /// <c>Activated</c> 只报**状态变化**，边条那时候就已经是 deactivated，不会再来第二次通知。
+    /// 光把压制解除是不够的，结果就是"浮层关掉了、边条却赖着不收"
+    /// （Nick 2026-10-12 报的「点『关全部』弹的确认框 / 「安全选项」菜单，点空白关掉之后
+    ///   再点别处边条再也不缩回去」就是这个）。所以凡是在"压制中弹过浮层"的地方，
+    /// 收尾都必须显式调一次它。
+    ///
+    /// ⚠️ 自己会判"还有没有别的浮层挂着"（<c>_confirmFlyout</c> / <c>_securityFlyout</c>）——
+    ///    点「注销」会先关安全菜单、紧接着弹确认面板，那种时候不能把边条收走
+    ///    （一收，确认面板的锚点按钮就跟着没了）。
     /// 钉了常驻（SidebarPinned）的不收 —— 用户明确要它留着。
     /// </summary>
-    public static void CollapseAfterVolumeFlyoutsClosed()
+    public static void CollapseAfterPopupsClosed()
     {
         foreach (var w in _pool.Values)
         {
             try
             {
                 if (!w._visible || !w._expanded) continue;
+                if (w._confirmFlyout is not null || w._securityFlyout is not null) continue;  // 还有浮层挂着，别收
                 if (App.Settings.Current.SidebarPinned) continue;
                 w.Collapse();
             }
@@ -445,6 +500,21 @@ public sealed partial class ToolSidebarWindow : Window
             // ⚠️ 这里必须**整个重建**（不是只 SnapToSetting）：大小样式 / 每行几个都会换掉
             //    工具区的行列结构与按钮尺寸，光重新排布是改不出来的。
             w.RebuildModules();
+        }
+    }
+
+    /// <summary>
+    /// 「收起时离屏幕边缘」改了：只要**重新落位**，不用重建按钮 ——
+    /// 按钮的行列结构一点没变，走 <see cref="ApplySetting"/> 那条重建的路反而会把边条当前状态打断。
+    ///
+    /// ⚠️ 展开态不吃这个值（面板始终紧贴边缘），所以展开着的边条调完看不出变化，收起后才看得出来。
+    /// </summary>
+    public static void ApplyCollapsedGap()
+    {
+        foreach (var w in _pool.Values)
+        {
+            try { w.SnapToSetting(); }
+            catch { }
         }
     }
 
@@ -558,8 +628,9 @@ public sealed partial class ToolSidebarWindow : Window
                 // 窗口那圈边的颜色也是跟着深浅色走的，换主题得重画一次
                 try
                 {
-                    WindowChrome.RemoveBorder(WindowNative.GetWindowHandle(this), rounded: true,
+                    WindowChrome.RemoveBorder(WindowNative.GetWindowHandle(this), rounded: _expanded,
                                               dark: Root.ActualTheme == ElementTheme.Dark);
+                    RefreshWindowShape();                  // RemoveBorder 会把圆角偏好改回 ROUND，按状态纠回来
                 }
                 catch { }
             };
@@ -603,7 +674,10 @@ public sealed partial class ToolSidebarWindow : Window
 
             MoveToEdge();
             // ⚠️ 外观要等窗口真显示出来之后再收尾（构造期改窗口样式会让窗口显示不出来）
-            WindowChrome.RemoveBorder(hwnd, rounded: true, dark: Root.ActualTheme == ElementTheme.Dark);
+            // ⚠️ rounded 得跟着当前状态走：启动是"收起"，要的是"直角窗口 + 自己裁圆角"
+            //    （见 ApplyRoundRegion 那段注释 —— Win11 的圆角窗口投影在这条窄条上会右偏成一圈假边框）
+            WindowChrome.RemoveBorder(hwnd, rounded: _expanded, dark: Root.ActualTheme == ElementTheme.Dark);
+            RefreshWindowShape();                          // RemoveBorder 会把圆角偏好改回 ROUND，这里按状态纠回来
         }
         catch (Exception ex)
         {
@@ -684,6 +758,8 @@ public sealed partial class ToolSidebarWindow : Window
 
         CollapsedView.Visibility = Visibility.Collapsed;
         ExpandedView.Visibility = Visibility.Visible;
+        // 展开态是"卡片"：恢复 1px 描边（与全站卡片同源的浅灰线）
+        Panel.BorderThickness = new Thickness(1);
         ApplyScrollLimit();                               // 先把滚动范围算好；尺寸交给滑入动画一帧设到位
 
         // ⚠️ 这里**不要**再单独 ApplySize() + MoveToEdge()：
@@ -729,6 +805,11 @@ public sealed partial class ToolSidebarWindow : Window
         // 先按住透明度，等落位之后再放出来 —— 顺序反了会先闪一帧不透明的小条
         if (fadeIn) SetPanelOpacity(0f);
 
+        // 收起态只是个抓手，不是卡片：去掉 Panel 的 1px 描边。
+        // 紧凑档条只有 12dip 宽，这圈浅灰描边沿圆角几乎绕满左右两侧，看着就像"右边还有一圈边框"
+        // （Nick 2026-10-12 报的）。标准档同样有，只是条宽不显眼 —— 两档一起去掉，收起/展开一个口径。
+        Panel.BorderThickness = new Thickness(0);
+
         ExpandedView.Visibility = Visibility.Collapsed;
         CollapsedView.Visibility = Visibility.Visible;
 
@@ -752,6 +833,7 @@ public sealed partial class ToolSidebarWindow : Window
                     : pos;
 
                 _appWindow.MoveAndResize(new RectInt32(startPos.X, startPos.Y, size.Width, size.Height));
+                ApplyRoundRegion(size);                    // 展开→收起尺寸变了，圆角区域跟着重裁
 
                 if (fadeIn)
                 {
@@ -841,6 +923,7 @@ public sealed partial class ToolSidebarWindow : Window
 
                 Log("兜底落位：尺寸/位置没对上，纠一次");
                 _appWindow.MoveAndResize(new RectInt32(pos.X, pos.Y, size.Width, size.Height));
+                ApplyRoundRegion(size);
             }
             catch (Exception ex)
             {
@@ -1310,6 +1393,10 @@ public sealed partial class ToolSidebarWindow : Window
                 if (ReferenceEquals(_confirmFlyout, flyout)) _confirmFlyout = null;
                 SuppressAutoCollapse = false;            // 面板没了 → 恢复自动收起
                 try { onClosed?.Invoke(); } catch (Exception ex) { Log("确认面板收尾失败: " + ex.Message); }
+
+                // ⚠️ 光解除压制不够：被压住的那段时间里，边条自己那次"失焦收起"已经被错过了
+                //    （原因见 CollapseAfterPopupsClosed 的注释）。不补这一下，面板一关边条就赖着不收。
+                CollapseAfterPopupsClosed();
             };
             danger.Click += (_, _) =>
             {
@@ -1432,10 +1519,19 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 if (ReferenceEquals(_securityFlyout, flyout)) _securityFlyout = null;
 
-                // 菜单收掉 = 用户没在继续操作 → 恢复自动收起。
-                // ⚠️ 例外：点「注销」会**紧接着**弹确认面板（那时 _confirmFlyout 已经挂上了），
-                //    这种情况不能解除压制，否则确认面板当场被收起来的边条一起带走。
-                if (_confirmFlyout is null) SuppressAutoCollapse = false;
+                // 菜单收掉 = 用户没在继续操作 → 恢复自动收起，并**补收一次**边条
+                //（被压住的这段时间它自己那次"失焦收起"已经错过了，见 CollapseAfterPopupsClosed）。
+                //
+                // ⚠️⚠️ 必须排到下一轮消息再判：点「注销」时是**先** HideSecurityFlyout、**紧接着**
+                //     才在 act() 里弹确认面板 —— 这一刻 _confirmFlyout 还是 null，
+                //     当场判会把边条误收、把确认面板的锚点按钮一起收走。
+                //     排到队尾之后 act() 已经跑完、面板挂上了，才能正确地把收尾交给它。
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_confirmFlyout is not null) return;     // 后面还跟着确认面板 → 由它收尾
+                    SuppressAutoCollapse = false;
+                    CollapseAfterPopupsClosed();
+                });
             };
 
             SuppressAutoCollapse = true;                // 菜单挂着的时候边条不许自己收
@@ -1493,8 +1589,8 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 var work = DisplayArea.Primary.WorkArea;
                 var tol = 8 + (AnchorInstance() is { } w
-                    ? (int)Math.Round(CollapsedEdgeGapDip * w.Scale())
-                    : CollapsedEdgeGapDip);
+                    ? (int)Math.Round(CollapsedGapDip * w.Scale())
+                    : CollapsedGapDip);
                 if (r.X <= work.X + tol) return FlyoutPlacementMode.Right;
                 if (r.X + r.Width >= work.X + work.Width - tol) return FlyoutPlacementMode.Left;
                 if (r.Y <= work.Y + tol) return FlyoutPlacementMode.Bottom;
@@ -1871,6 +1967,7 @@ public sealed partial class ToolSidebarWindow : Window
         // 中间那一帧会被系统画出来 —— 那就是"闪一下再滑"的来源（2026-09-26 优化）。
         try { _appWindow.MoveAndResize(new RectInt32(start.X, start.Y, size.Width, size.Height)); }
         catch (Exception ex) { Log("滑入落位失败: " + ex.Message); }
+        ApplyRoundRegion(size);                           // 收起→展开：这里一次把"起点 + 展开尺寸"设下去，区域同步
 
         TweenWindow(start, finalPos, 220);
     }
@@ -2362,9 +2459,11 @@ public sealed partial class ToolSidebarWindow : Window
 
         // ⚠️ 竖条的高度上限＝**工作区能给多少**，⛔别再拿"屏幕的 85%"当下限 ——
         //    那正是「模块少还空一大块」的根源（见 ExpandedHeight）。
+        // ⚠️ 单列再压一道：不限的话模块一多就顶到工作区下沿，成"长长的一长条"。
         var cols = Columns;
         var wantW = cols > 1 ? cols * CellWidth + (cols - 1) * ToolGap + 12 : BarWidth;
-        return (Math.Min(workW, wantW), workH);
+        var maxH = cols > 1 ? workH : workH * SingleColumnMaxHeightRatio;
+        return (Math.Min(workW, wantW), maxH);
     }
 
     /// <summary>工具区最多能占多高/多宽（面板高度 - 标题/分隔线/底排按钮）。</summary>
@@ -2409,12 +2508,79 @@ public sealed partial class ToolSidebarWindow : Window
         try
         {
             ApplyScrollLimit();
-            _appWindow.Resize(PlannedSize());
+            var size = PlannedSize();
+            _appWindow.Resize(size);
+            ApplyRoundRegion(size);                        // 尺寸变了，Win10 的圆角区域得跟着重裁
         }
         catch (Exception ex)
         {
             Log("改尺寸失败: " + ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 收起态小条自己裁圆角 + 把 **DWM 的窗口圆角偏好关掉**；展开态反过来交回给 DWM。
+    ///
+    /// ⛔⛔ 为什么 Win11 上也要自己裁（2026-10-12 逐像素查出来的）：
+    ///   收起态那条只有 12dip 宽，而 Win11 的"圆角窗口"投影是按 8dip 圆角模板画的 ——
+    ///   在这个尺寸下 **DWM 画出来的投影比窗口本身还宽、而且整体右偏约 6px**：
+    ///   紧贴条**右侧**的那 6px 没有投影（跟远处桌面一个亮度），再往外才是那圈暗影。
+    ///   于是条右边看着像"又套了一圈边框"（Nick 连报两次，截图里那条浅色月牙就是它）。
+    ///   实测把 `DWMWA_WINDOW_CORNER_PREFERENCE` 设成 DONOTROUND 后 → 那一圈**彻底消失**
+    ///   （同一位置逐像素扫，窗口两侧从 16px 到 44px 全是同一个值，再也扫不出暗环）。
+    ///   ⇒ 收起态：DWM 直角（不出投影）+ 我们用 GDI 裁圆角（外观跟以前一样是圆头小条）。
+    ///     展开态：还是 DWM 圆角 + 投影（那是个"卡片"，投影本来就该有）。
+    ///
+    ///   代价：收起态小条**没有系统投影**了（贴桌面，就是一枚"贴纸"）。
+    ///   ⚠️ 别把它扩展到展开态 —— 展开面板宽，那圈错位在宽面板上根本看不出来，
+    ///     反倒是投影没了会让卡片显得"贴"在页面上。
+    ///
+    /// Win10 本来就全靠自己裁（DWM 不认那个属性），照旧。
+    ///
+    /// ⚠️ 参数是**目标尺寸**（物理像素），⛔ 别读 <c>_appWindow.Size</c>：
+    ///    Resize / MoveAndResize 刚调完它还没更新，读它会拿旧尺寸裁出一个错的区域
+    ///    （跟 <see cref="MoveToEdge"/> 里那个坑同源）。
+    /// </summary>
+    private void ApplyRoundRegion(SizeInt32 size)
+    {
+        if (_appWindow is null) return;
+        try
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            var collapsed = !_expanded;
+
+            if (Core.SystemInfo.IsWin11 && !collapsed)
+            {
+                // 展开态：交回 DWM —— 圆角和投影都让它画（先把我们自己的区域撤掉）
+                Core.WindowChrome.ClearRoundRegion(hwnd);
+                Core.WindowChrome.SetRounded(hwnd, rounded: true);
+                return;
+            }
+
+            // 收起态（两个系统）都自己裁；Win11 还要顺手把 DWM 圆角关掉，否则那圈错位投影还在
+            if (Core.SystemInfo.IsWin11) Core.WindowChrome.SetRounded(hwnd, rounded: false);
+
+            var radius = (int)Math.Round(8 * Scale());     // 跟 XAML 里 Panel 的 CornerRadius=8 对齐
+            Core.WindowChrome.SetRoundRegion(hwnd, size.Width, size.Height, radius);
+        }
+        catch (Exception ex)
+        {
+            Log("圆角区域失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 按**当前收起/展开状态**把窗口形状（圆角偏好 + 自己裁的区域）重刷一遍。
+    ///
+    /// 什么时候需要它：<see cref="Core.WindowChrome.RemoveBorder"/> 里写死了
+    /// <c>DWMWA_WINDOW_CORNER_PREFERENCE</c>，调用方一不小心就把收起态改好的"直角"又刷成"圆角"，
+    /// 那圈错位投影立刻回来（见 <see cref="ApplyRoundRegion"/> 注释）。凡是本类里调过
+    /// RemoveBorder 的地方，后面都跟一句这个。
+    /// </summary>
+    private void RefreshWindowShape()
+    {
+        try { ApplyRoundRegion(_expanded ? PlannedSize() : CollapsedSize()); }
+        catch (Exception ex) { Log("刷新窗口形状失败: " + ex.Message); }
     }
 
     /// <summary>
@@ -2451,7 +2617,7 @@ public sealed partial class ToolSidebarWindow : Window
         // 收起态往屏幕**内侧**让出几个像素（Nick 2026-10-11：不贴死看着更灵动、也更好点）。
         // ⚠️ 只收起态让 —— 展开态的面板悬空一条缝很难看。
         // ⚠️ 连带 ConfirmPlacement 的"这条边"判定阈值也放宽了（见那里）。
-        var gap = _expanded ? 0 : (int)Math.Round(CollapsedEdgeGapDip * Scale());
+        var gap = _expanded ? 0 : (int)Math.Round(CollapsedGapDip * Scale());
 
         return edge switch
         {
