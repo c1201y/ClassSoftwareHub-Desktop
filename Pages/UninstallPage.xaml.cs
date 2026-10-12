@@ -61,6 +61,9 @@ public sealed partial class UninstallPage : Page
     public UninstallPage()
     {
         InitializeComponent();
+
+        // 两侧留白 / 标题行上的滚轮也转给应用列表（见 Core/WheelRelay.cs）
+        Core.WheelRelay.Attach(this, AppList);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)

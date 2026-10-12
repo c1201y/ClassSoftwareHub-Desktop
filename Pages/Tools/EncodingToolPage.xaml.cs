@@ -80,6 +80,11 @@ public sealed partial class EncodingToolPage : Page
     public EncodingToolPage()
     {
         InitializeComponent();
+
+        // 两侧留白 / 标题行上的滚轮也转给内容区（见 Core/WheelRelay.cs）：
+        // 两个滚动区互斥，指针压在哪个就转给哪个。
+        Core.WheelRelay.Attach(this, FileView, TextView);
+
         BuildHashRows(HashPanel, _fileRows);
         BuildHashRows(TextHashPanel, _textRows);
 

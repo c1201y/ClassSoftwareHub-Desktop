@@ -167,6 +167,11 @@ public sealed partial class SidebarLayoutPage : Page
     public SidebarLayoutPage()
     {
         InitializeComponent();
+
+        // 两侧留白 / 标题行上的滚轮也转给整页滚动区（见 Core/WheelRelay.cs）；
+        // 拖动期间滚动锁是 Disabled，ChangeView 自然不会生效。
+        Core.WheelRelay.Attach(this, PageScroll);
+
         LoadFromSettings();
 
         // ⚠️ 挂在根上、并且 handledEventsToo: true —— 触摸闸门要判断"手指到底动没动"，

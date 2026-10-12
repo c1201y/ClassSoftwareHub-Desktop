@@ -6,100 +6,127 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
-    <!-- 和首页 / 设置页 / 软件下载页同一套版式：内容钉在中间 960 宽，卡片固定 462 × 2 列。
-         ⛔ 2026-10-02 试过"卡片随窗口拉伸铺满"，Nick 当场否掉（「为什么这么丑，像其他页面一样
-            一个固定宽度」）—— 这页跟全站一样是固定宽内容区，别再改成自适应。 -->
-    <!-- 根 Grid 不带 Margin：间距放进中间列，让 GridView 拿到整页高度约束。
-         ⛔⛔ 中间列底部间距分两种写法（2026-10-03 定，别再一刀切）：
-             · 页面最后一行是「自滚容器」（Height="*" + 自带 Padding="0,2,0,44"）→ 底部写 0，
-               留白交给滚动内容自己；写 44 会把视口整体上提、够不到窗口底边，
-               底下空出一条页面底色带（Nick：「整个页面高度没用完，有个框给框起来了」）。
-             · 页面最后一行是「页脚 / 卡片」等非自滚元素 → 底部写 44，
-               否则页脚直接怼到窗口下边框（Nick：「下面那个东西直接贴到下边框了」）。
-         本页最后一行是「常用工具窗口」页脚卡片 → 底盘写 44。 -->
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="24" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="24" />
-        </Grid.ColumnDefinitions>
+    <!-- 和首页 / 设置页 / 实验性功能页同一套版式：ScrollViewer 在最外层（滚动条贴窗口最右），
+         内容钉在中间 960 宽。
+         ✅ 2026-10-13 由「根 Grid 骨架」迁到本骨架：两侧留白天然可滚，不再需要 Core/WheelRelay.cs 接力。
 
-        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+         ✅ 2026-10-13 卡片整段改成**照搬首页「快速开始」那套**（Nick：「直接复用首页卡片」）：
+            · 外观 = CshNavCardStyle（圆角 8 / Padding 14,18），标题 14 不加粗、
+              说明 12 / Opacity 0.78、右端 E8A7 指示符 —— 与首页逐项一致；
+            · 板式 = 左右两个 ItemsControl 各占一列（首页也是手写两列），
+              卡片宽度天然跟着列宽走 ⇒ 窗口再窄也是两列，不会掉成单列、右边留一大片空。
+         ⛔ 2026-10-02 否掉的是「卡片随窗口拉伸**铺满整页**」（= 放开 960 上限）—— 那个规矩没变。
 
-            <TextBlock Text="内置工具" FontSize="30" FontWeight="Bold" />
-
-            <!-- 5 个工具：卡片 462 + 间距 16 = 478，960 里正好两列。
-                 2026-09-29：加上一句话说明（ToolDef.Desc 一直有这个字段，之前没显示）——
-                 光看工具名猜不出点进去能干什么，用户得挨个试一遍。 -->
-            <GridView x:Name="ToolGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
-                      ItemClick="ToolGrid_ItemClick" Padding="0,2,0,44"
-                      ItemContainerStyle="{StaticResource CshCardItemStyle}">
-                <GridView.ItemTemplate>
-                    <DataTemplate x:DataType="data:ToolDef">
-                        <Border Style="{StaticResource CshCardStyle}" Width="462" Height="88" Padding="20,0" Margin="0,0,16,14"
-                                PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
-                            <Grid ColumnSpacing="14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="20" VerticalAlignment="Center" />
-                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="Bold"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Desc}" FontSize="12.5" Opacity="0.65"
-                                               TextWrapping="Wrap" MaxLines="2"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                                <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="13" Opacity="0.5"
-                                          VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </GridView.ItemTemplate>
-            </GridView>
-
-            <!-- ===== 常用工具窗口：开关就放这儿，跟首页「体验网页版」那张卡一个意思 ===== -->
-            <Border Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,4,0,0"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                <Grid ColumnSpacing="16" RowSpacing="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+         ⛔ 间距必须写在内部 Grid 的 Margin 上，不能写成 ScrollViewer 的 Padding：
+            WinUI 3 的 ScrollViewer.Padding 底部不参与滚动范围计算，滚到底最后一条内容仍被裁。
+         ⛔ 中间列底部间距：最后一行是「常用工具窗口」页脚卡片（非自滚元素）→ 写 44，
+            否则页脚直接怼到窗口下边框。 -->
+    <Page.Resources>
+        <!-- 首页「快速开始」那张卡：左右两列共用同一个模板 -->
+        <DataTemplate x:Key="NavCardTemplate" x:DataType="data:ToolDef">
+            <Border Style="{StaticResource CshNavCardStyle}"
+                    PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                    Tapped="Card_Tapped">
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-
-                    <FontIcon Glyph="&#xE71D;" FontSize="20" VerticalAlignment="Top" />
-                    <StackPanel Grid.Column="1" Spacing="3">
-                        <TextBlock Text="常用工具窗口" FontSize="15" FontWeight="Bold" />
-                        <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
-                                   Text="置顶小窗口，仅包含四项常用工具：随机抽号、课堂计时、秒表计时、全屏时钟。无需打开主界面：系统托盘提供独立图标，单击即可显示（窗口可拖动，按 Esc 收起）。屏幕边缘另提供「侧边栏」入口，全屏播放 PPT 时仍可单击。" />
-                        <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="侧边栏、窗口置顶等开关位于「设置 → 常用工具」中。" />
+                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="20" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock Text="{x:Bind Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind Desc}" FontSize="12" Opacity="0.78"
+                                   TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Button Grid.Column="2" Content="打开窗口" Style="{StaticResource AccentButtonStyle}"
-                            VerticalAlignment="Top" Click="OpenPalette_Click" />
-
-                    <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="28">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="关闭时收进系统托盘" FontSize="13" VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="TraySwitch" OnContent="开" OffContent="关" MinWidth="0"
-                                          Toggled="TraySwitch_Toggled" />
-                        </StackPanel>
-                    </StackPanel>
+                    <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="12" VerticalAlignment="Center" />
                 </Grid>
             </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,36,24,44">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 行高全 Auto：整页交给外层 ScrollViewer 滚，不再需要 `*` 行吸收高度 -->
+            <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="内置工具" FontSize="30" FontWeight="Bold" />
+
+                <!-- 两列（首页「快速开始」同款：列间距 8、行间距 8）：
+                     序号偶数的进左列、奇数的进右列，见 code-behind。
+                     2026-09-29：卡片上带一句话说明（ToolDef.Desc）—— 光看工具名猜不出点进去能干什么。 -->
+                <Grid Grid.Row="1" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ItemsControl x:Name="CardColumnLeft" Grid.Column="0"
+                                  ItemTemplate="{StaticResource NavCardTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <ItemsControl x:Name="CardColumnRight" Grid.Column="1"
+                                  ItemTemplate="{StaticResource NavCardTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </Grid>
+
+                <!-- ===== 常用工具窗口：开关就放这儿，跟首页「体验网页版」那张卡一个意思 ===== -->
+                <Border Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,20,0,0"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon Glyph="&#xE71D;" FontSize="20" VerticalAlignment="Top" />
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock Text="常用工具窗口" FontSize="15" FontWeight="Bold" />
+                            <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
+                                       Text="置顶小窗口，仅包含四项常用工具：随机抽号、课堂计时、秒表计时、全屏时钟。无需打开主界面：系统托盘提供独立图标，单击即可显示（窗口可拖动，按 Esc 收起）。屏幕边缘另提供「侧边栏」入口，全屏播放 PPT 时仍可单击。" />
+                            <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                       Text="侧边栏、窗口置顶等开关位于「设置 → 常用工具」中。" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="打开窗口" Style="{StaticResource AccentButtonStyle}"
+                                VerticalAlignment="Top" Click="OpenPalette_Click" />
+
+                        <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="28">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="关闭时收进系统托盘" FontSize="13" VerticalAlignment="Center" />
+                                <ToggleSwitch x:Name="TraySwitch" OnContent="开" OffContent="关" MinWidth="0"
+                                              Toggled="TraySwitch_Toggled" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
-    </Grid>
+    </ScrollViewer>
 </Page>

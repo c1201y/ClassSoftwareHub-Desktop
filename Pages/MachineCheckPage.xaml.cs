@@ -102,6 +102,9 @@ public sealed partial class MachineCheckPage : Page
     {
         InitializeComponent();
         BuildFilters();
+
+        // 两侧留白 / 标题行上的滚轮也转给卡片列表（见 Core/WheelRelay.cs）
+        Core.WheelRelay.Attach(this, ResultGrid);
     }
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)

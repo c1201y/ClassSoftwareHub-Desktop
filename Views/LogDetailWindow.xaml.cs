@@ -179,7 +179,7 @@ public sealed partial class LogDetailWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[log-detail] 标题栏定制不可用: " + ex.Message);
+            AppLog.Warn("logs", "日志详细视图标题栏定制不可用：" + ex.Message);
         }
 
         UpdateCaptionButtonColors();
@@ -233,7 +233,7 @@ public sealed partial class LogDetailWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[log-detail] 尺寸设置失败: " + ex.Message);
+            AppLog.Warn("logs", "日志详细视图尺寸设置失败：" + ex.Message);
         }
     }
 
@@ -250,7 +250,7 @@ public sealed partial class LogDetailWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[log-detail] 定位失败: " + ex.Message);
+            AppLog.Warn("logs", "日志详细视图定位失败：" + ex.Message);
         }
     }
 

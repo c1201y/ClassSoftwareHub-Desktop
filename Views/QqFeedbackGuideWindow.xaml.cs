@@ -149,7 +149,7 @@ public sealed partial class QqFeedbackGuideWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[qq-guide] 标题栏定制不可用: " + ex.Message);
+            Core.AppLog.Warn("qq-guide", "Q群反馈流程窗标题栏定制不可用：" + ex.Message);
         }
 
         UpdateCaptionButtonColors();
@@ -208,7 +208,7 @@ public sealed partial class QqFeedbackGuideWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[qq-guide] 尺寸设置失败: " + ex.Message);
+            Core.AppLog.Warn("qq-guide", "Q群反馈流程窗尺寸设置失败：" + ex.Message);
         }
     }
 
@@ -226,7 +226,7 @@ public sealed partial class QqFeedbackGuideWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[qq-guide] 定位失败: " + ex.Message);
+            Core.AppLog.Warn("qq-guide", "Q群反馈流程窗定位失败：" + ex.Message);
         }
     }
 
@@ -254,7 +254,8 @@ public sealed partial class QqFeedbackGuideWindow : Window
         }
         catch (Exception ex)
         {
-            ScreenCapture.Log("Q群反馈流程窗激活失败: " + ex.Message);
+            // ⛔ 别走 ScreenCapture.Log —— 那个会把模块名标成 snip（截屏模块），排查时看不出来是谁写的
+            Core.AppLog.Warn("qq-guide", "Q群反馈流程窗激活失败：" + ex.Message);
         }
     }
 
@@ -292,7 +293,7 @@ public sealed partial class QqFeedbackGuideWindow : Window
         catch (Exception ex)
         {
             // 图读不到就空着，别把整扇窗搞崩（同 FeedbackPage.LoadIcon 的处理）
-            Debug.WriteLine("[qq-guide] 截图加载失败 " + fileName + ": " + ex.Message);
+            Core.AppLog.Warn("qq-guide", "操作截图加载失败 " + fileName + "：" + ex.Message);
         }
     }
 

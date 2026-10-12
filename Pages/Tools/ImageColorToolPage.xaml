@@ -6,7 +6,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- 版式：标题行 / 内容（滚动，Grid 铺满 → 不会被 ScrollViewer 算歪）/ 状态行 -->
-    <Grid>
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，内容区纹丝不动（与首页手感不一致）。 -->
+    <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="1*" />
             <ColumnDefinition Width="998*" MaxWidth="1008" />
@@ -27,7 +29,7 @@
             </StackPanel>
 
             <!-- ═══ 内容 ═══ -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="ContentScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <!-- ⛔ 底部 Margin 是保险栓：外层 Grid 的 Padding 底部在滚动区**之外**，
                      实测滚到底仍会贴住窗口底边 —— 留白必须写在滚动区**里**。 -->
                 <Grid RowSpacing="14" Margin="0,0,0,20">

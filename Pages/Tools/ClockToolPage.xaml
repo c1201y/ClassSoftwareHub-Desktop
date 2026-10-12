@@ -13,7 +13,10 @@
               低频的「背景与材质」在后；每组之间拉一条**真的分隔线**，边界一眼可见；
            ② **组内一件事一行**，不再上下堆叠 —— 组标题 12.5 SemiBold、组内间距 10、组间 18；
            ③ 左栏预览从"半屏"加宽成主角（1.15 : 1），时钟本身才是这一页要看的东西。 -->
-    <Grid>
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，设置区纹丝不动（与首页手感不一致）。
+         本页真正的滚动区是中间那行（Grid.Row=1 的 RootScroll），标题行/两侧留白都靠接力兜。 -->
+    <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="1*" />
             <ColumnDefinition Width="998*" MaxWidth="1008" />

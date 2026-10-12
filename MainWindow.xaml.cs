@@ -282,10 +282,18 @@ public sealed partial class MainWindow : Window
     private async Task CheckUpdateOnStartupAsync()    {
         try
         {
-            if (!_settings.Current.AutoCheckUpdate) return;
+            if (!_settings.Current.AutoCheckUpdate)
+            {
+                Core.AppLog.Debug("update", "跳过启动检查：设置里关掉了「自动检查更新」");
+                return;
+            }
 
             var service = Services.Updating.UpdateService.CreateDefault();
-            if (!service.Source.IsConfigured) return;
+            if (!service.Source.IsConfigured)
+            {
+                Core.AppLog.Debug("update", "跳过启动检查：更新源未配置");
+                return;
+            }
 
             var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
@@ -309,9 +317,10 @@ public sealed partial class MainWindow : Window
             else if (choice == Services.Updating.UpdateFlow.UpdateChoice.Background)
                 Services.Updating.UpdateFlow.StartBackgroundDownload(service, release);
         }
-        catch
+        catch (Exception ex)
         {
-            // 启动时查更新失败就安静放过，别影响正常使用
+            // 对用户安静放过（别影响正常使用），但对日志不能安静 —— 否则"启动时没弹更新"永远查不出原因。
+            Core.AppLog.Exception("update", ex, "启动时检查更新失败（已忽略，不影响正常使用）");
         }
     }
 
@@ -441,7 +450,7 @@ public sealed partial class MainWindow : Window
 
             var changed = App.Content.Source != oldSource || App.Content.Apps.Count != oldCount;
             if (changed)
-                Debug.WriteLine($"[content] {result.Message}；{oldSource} → {App.Content.Source}");
+                Core.AppLog.Info("content", $"{result.Message}；{oldSource} → {App.Content.Source}");
         }
         catch
         {
@@ -553,7 +562,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] AppWindow 获取失败: " + ex.Message);
+            Core.AppLog.Warn("shell", "AppWindow 获取失败（窗口管理功能全部降级）：" + ex.Message);
         }
 
         if (_appWindow is null) return;
@@ -672,7 +681,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 标题栏定制不可用: " + ex.Message);
+            Core.AppLog.Warn("shell", "标题栏定制不可用：" + ex.Message);
         }
 
         UpdateCaptionButtonColors();
@@ -785,7 +794,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 拖动失败: " + ex.Message);
+            Core.AppLog.Warn("shell", "窗口拖动失败：" + ex.Message);
         }
     }
 
@@ -930,7 +939,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             // 老系统不支持：拖动完全走网页端消息兜底
-            Debug.WriteLine("[shell] caption 区域注册失败（改用网页端拖动）: " + ex.Message);
+            Core.AppLog.Warn("shell", "caption 区域注册失败（改用网页端拖动）：" + ex.Message);
         }
     }
 
@@ -1003,7 +1012,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 背景设置失败，降级纯色: " + ex.Message);
+            Core.AppLog.Warn("shell", "背景设置失败，降级纯色：" + ex.Message);
             SystemBackdrop = null;
             kind = "solid";
             RootGrid.Background = new SolidColorBrush(FallbackSolidColor());
@@ -1436,7 +1445,7 @@ public sealed partial class MainWindow : Window
             _tray.MenuItems.Add(new TrayMenuItem { Text = "退出", Command = "exit" });
 
             if (!_tray.Setup(ShellConfig.WindowTitle))
-                Debug.WriteLine("[tray] 托盘图标没挂上（挂不上时关闭窗口仍然直接退出）");
+                Core.AppLog.Warn("tray", "托盘图标没挂上（挂不上时关闭窗口仍然直接退出）");
 
             // 托盘图标二：常用工具（左键 = 直接开工具窗口，不用先进主界面）—— 学校电脑是触屏，少点几下
             _trayTools = new TrayIcon(ToolIconPath());
@@ -1448,7 +1457,7 @@ public sealed partial class MainWindow : Window
             _trayTools.MenuItems.Add(new TrayMenuItem { Text = "退出", Command = "exit" });
 
             if (!_trayTools.Setup("常用工具"))
-                Debug.WriteLine("[tray] 第二个托盘图标没挂上");
+                Core.AppLog.Warn("tray", "「常用工具」托盘图标没挂上");
 
             // ⚠️⚠️「工具侧边栏」不在这里挂 —— 挪到主窗口首帧显示之后了（见 StartToolSidebar）。
             //    原来那句 ApplySetting() 摆在 InitTray() 里，也就是主窗口**构造函数中途**；
@@ -1462,7 +1471,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[tray] 初始化失败: " + ex.Message);
+            Core.AppLog.Exception("tray", ex, "初始化托盘");
         }
     }
 
@@ -1516,7 +1525,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[tray] 切换窗口失败: " + ex.Message);
+            Core.AppLog.Exception("tray", ex, "托盘左键切换主窗口");
         }
     }
 
@@ -1565,7 +1574,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[tray] 显示窗口失败: " + ex.Message);
+            Core.AppLog.Exception("tray", ex, "从托盘叫回主窗口");
         }
     }
 
@@ -1582,7 +1591,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[palette] 打开工具设置失败: " + ex.Message);
+            Core.AppLog.Exception("palette", ex, "打开工具设置页");
         }
     }
 
@@ -1604,7 +1613,11 @@ public sealed partial class MainWindow : Window
         try
         {
             var service = Services.Updating.UpdateService.CreateDefault();
-            if (!service.Source.IsConfigured) return;
+            if (!service.Source.IsConfigured)
+            {
+                Core.AppLog.Info("update", "手动「检查更新」被跳过：更新源未配置");
+                return;
+            }
 
             var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
@@ -1633,7 +1646,8 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[update] 检查更新失败: " + ex.Message);
+            // ⚠️ 原来是 Debug.WriteLine —— 那东西在发布版里没人监听，等于什么都没记（2026-10-12 改）
+            Core.AppLog.Fail("update", ex, "手动「检查更新」失败");
         }
     }
 
@@ -1661,7 +1675,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 开机自启设置失败: " + ex.Message);
+            Core.AppLog.Warn("shell", "开机自启设置失败（开关看着是开的，但注册表没写进去）：" + ex.Message);
         }
     }
 
@@ -1680,7 +1694,7 @@ public sealed partial class MainWindow : Window
 
         if (!AllowedExternalSchemes.Contains(uri.Scheme))
         {
-            Debug.WriteLine($"[shell] 拒绝打开非白名单协议的外部链接: {uri.Scheme}");
+            Core.AppLog.Warn("shell", $"拒绝打开非白名单协议的外部链接：{uri.Scheme}");
             return;
         }
 
@@ -1690,7 +1704,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 打开外部链接失败: " + ex.Message);
+            Core.AppLog.Exception("shell", ex, $"打开外部链接（{uri.Scheme}）");
         }
     }
 
@@ -1727,7 +1741,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 打开商店失败，改开网页: " + ex.Message);
+            Core.AppLog.Warn("shell", "打开商店失败，改开网页：" + ex.Message);
             OpenExternal(url);
         }
     }
@@ -1745,7 +1759,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 打开文件失败: " + ex.Message);
+            Core.AppLog.Exception("shell", ex, "用系统默认程序打开文件");
         }
     }
 
@@ -1759,7 +1773,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[shell] 定位文件失败: " + ex.Message);
+            Core.AppLog.Exception("shell", ex, "在资源管理器中定位文件");
         }
     }
 

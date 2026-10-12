@@ -176,6 +176,24 @@
             </Style>
 
             <!--
+              块状入口卡（2026-10-13 建）：首页「快速开始」那两张一行的入口卡就是这套 ——
+              圆角 8 + 更宽松的上下内边距，高度**靠内容撑、不写 Height**。
+              Nick 2026-10-13：「直接复用首页卡片」⇒ 实验性功能 / 内置工具页的卡片也改用它。
+
+              ⚠️ 它和 CshCardStyle **不是一类**，别互相替：
+                 · CshCardStyle      = 内容卡（说明、表单、结果），圆角 4 = 系统 ControlCornerRadius；
+                 · CshNavCardStyle   = 入口/导航卡，做得更"块"一点，圆角 8。
+                 首页的入口卡一直就是 8，这里是把它收成共享样式，不是一个新造的观感。
+            -->
+            <Style x:Key="CshNavCardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="14,18" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+
+            <!--
               只读结果行（编码 / 哈希工具的四条哈希值）。
               2026-10-02 建（Nick：「用 Border 堆叠的表单表格，所有块都是方块包方块」）：
               这类"一行一条结果"的内容改用 ListView 承载 —— 每一行自带系统悬停底色、

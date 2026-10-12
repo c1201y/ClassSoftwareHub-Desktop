@@ -377,13 +377,19 @@ public static class GithubContentSync
     {
         try
         {
+            var before = LoadRemembered(kind);
             var lines = File.Exists(BaseCacheFile)
                 ? File.ReadAllLines(BaseCacheFile).Where(l => !l.StartsWith(kind + "=", StringComparison.Ordinal)).ToList()
                 : new List<string>();
             lines.Add($"{kind}={index}");
             Directory.CreateDirectory(AppPaths.DataDir);
             File.WriteAllLines(BaseCacheFile, lines, Utf8NoBom);
-            System.Diagnostics.Debug.WriteLine($"[content] {kind} 入口改用：{label}");
+
+            // ⚠️ 这个函数是**每处理一个文件就会被叫一次**的（入口是"边下边记"），
+            //    所以日志必须按「入口真的换了」才记 —— 否则同步 112 个文件就刷 112 行同样的废字。
+            //    （2026-10-12 实测：改成 Info 后 10 秒内刷了 10 条 raw#2。）
+            if (before != index)
+                Core.AppLog.Info("content", $"{kind} 入口改用：{label}");   // 排查"内容源不对"的第一手依据
         }
         catch { /* 记不住不影响功能 */ }
     }

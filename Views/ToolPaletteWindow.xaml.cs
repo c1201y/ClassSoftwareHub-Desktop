@@ -155,7 +155,7 @@ public sealed partial class ToolPaletteWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[toolwin] 初始化失败: " + ex.Message);
+            Core.AppLog.Exception("palette", ex, "初始化工具浮窗");
         }
 
         ApplyPosition();
@@ -196,7 +196,7 @@ public sealed partial class ToolPaletteWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[toolwin] 标题栏定制不可用: " + ex.Message);
+            Core.AppLog.Warn("palette", "标题栏定制不可用：" + ex.Message);
         }
 
         UpdateCaptionButtonColors();
@@ -234,7 +234,7 @@ public sealed partial class ToolPaletteWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[toolwin] 工具窗口样式设置失败: " + ex.Message);
+            Core.AppLog.Warn("palette", "工具窗口样式设置失败（多加一个 WS_EX_TOOLWINDOW 而已，不致命）：" + ex.Message);
         }
     }
 
@@ -287,7 +287,7 @@ public sealed partial class ToolPaletteWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[toolwin] ResizeClient 不可用，退回 Resize: " + ex.Message);
+            Core.AppLog.Warn("palette", "ResizeClient 不可用，退回 Resize：" + ex.Message);
         }
 
         // 兜底：粗估标题栏 + 边框（约 40 dip 高、16 dip 宽），宁可大一点
@@ -397,7 +397,7 @@ public sealed partial class ToolPaletteWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[toolwin] 显示失败: " + ex.Message);
+            Core.AppLog.Exception("palette", ex, "显示工具浮窗");
         }
 
         _visible = true;
@@ -427,7 +427,7 @@ public sealed partial class ToolPaletteWindow : Window
         {
             if (epoch != _fadeEpoch) return;             // 淡出期间又点开了：别把刚显示的窗藏掉
             try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); }
-            catch (Exception ex) { Debug.WriteLine("[toolwin] 收起失败: " + ex.Message); }
+            catch (Exception ex) { Core.AppLog.Warn("palette", "收起工具浮窗失败：" + ex.Message); }
 
             MemoryTrimmer.Trim();
         });

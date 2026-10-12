@@ -130,11 +130,13 @@ public sealed class BridgeService
                 break;
 
             case "shell.log":
-                System.Diagnostics.Debug.WriteLine("[web] " + Str(obj["message"]));
+                // 网页端主动 console.log 过来的：高频、按调试级记，默认在日志页被「调试」筛选挡掉
+                Core.AppLog.Debug("web", Str(obj["message"]));
                 break;
 
             default:
-                System.Diagnostics.Debug.WriteLine("[bridge] unknown message: " + type);
+                // 两端协议没对上（网页是新版、壳是老版之类）—— 这属于"已经不对了"，按警告记
+                Core.AppLog.Warn("bridge", "网页端发来未知消息类型：" + type);
                 break;
         }
     }

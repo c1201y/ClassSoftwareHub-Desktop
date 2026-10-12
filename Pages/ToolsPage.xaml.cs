@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,7 +13,10 @@ public sealed partial class ToolsPage : Page
     public ToolsPage()
     {
         InitializeComponent();
-        ToolGrid.ItemsSource = ToolCatalog.All;
+
+        // 两列板式（见 .xaml：照搬首页「快速开始」）：偶数序号进左列、奇数进右列。
+        CardColumnLeft.ItemsSource = ToolCatalog.All.Where((_, i) => i % 2 == 0).ToList();
+        CardColumnRight.ItemsSource = ToolCatalog.All.Where((_, i) => i % 2 == 1).ToList();
 
         // 这里的开关（「点关闭时收进托盘」和设置页里是同一个值）；侧边栏/置顶那些挪到「设置 → 常用工具」了
         _loading = true;
@@ -31,10 +35,11 @@ public sealed partial class ToolsPage : Page
         App.MainWindow?.SetCloseToTray(TraySwitch.IsOn);
     }
 
-    private void ToolGrid_ItemClick(object sender, ItemClickEventArgs e)
+    // 卡片整张可点（首页同款：容器 chrome 关掉、反馈由卡片自己给，见 App.xaml 的 CshNavCardStyle）
+    private void Card_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
         // 走导航栏那一套（不是 Frame.Navigate）：左侧「内置工具」对应子项才会跟着高亮
-        if (e.ClickedItem is ToolDef def)
+        if ((sender as FrameworkElement)?.DataContext is ToolDef def)
             App.MainWindow?.Shell.NavigateTo(def.Id);
     }
 

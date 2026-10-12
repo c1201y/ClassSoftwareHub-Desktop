@@ -21,7 +21,9 @@
          ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
             Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
          本页最后一行是「重新检测 / 打开软件下载」页脚卡片 → 写 44，否则怼到窗口下边框。 -->
-    <Grid>
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，卡片区纹丝不动（与首页手感不一致）。 -->
+    <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
             <ColumnDefinition Width="*" />

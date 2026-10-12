@@ -389,6 +389,8 @@ public sealed class SettingsStore
     ///     从用户清单里**剔除**（见下面那一段）。
     ///   · revision 5（2026-10-11）：系统快捷三件套（任务管理器 / 安全选项 / 剪贴板历史），
     ///     三个一起插在讲台动作组最前面。
+    ///   · revision 6（2026-10-12）：结束希沃白板（杀希沃）—— 插在讲台动作组**末尾**，
+    ///     它属于特定场景的低频动作，不挤占那几颗常用的位置。
     /// </summary>
     private void EnsureNewSidebarModules()
     {
@@ -499,6 +501,33 @@ public sealed class SettingsStore
             }
 
             Current.SidebarModulesRevision = 5;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 6)
+        {
+            // revision 6（2026-10-12）：侧边栏新增「杀希沃」—— 立刻清一次白板5 残留进程，不带时间点。
+            // ⚠️ 插在**讲台动作组末尾**（FindLastIndex），不跟前面那几颗常用的抢位置；
+            //    用户已经自己加过了就跳过，别插重复。
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+
+                if (!list.Contains("killseewo"))
+                {
+                    var last = list.FindLastIndex(id => Data.SidebarModules.Find(id)?.Kind == Data.SidebarModuleKinds.Action);
+                    if (last < 0) list.Add("killseewo");
+                    else list.Insert(last + 1, "killseewo");
+
+                    Current.SidebarModuleIds = list.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 6;
             changed = true;
         }
 

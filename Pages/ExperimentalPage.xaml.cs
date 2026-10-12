@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -52,13 +53,18 @@ public sealed partial class ExperimentalPage : Page
     public ExperimentalPage()
     {
         InitializeComponent();
-        FeatureGrid.ItemsSource = All;
+
+        // 两列板式（见 .xaml：照搬首页「快速开始」）：偶数序号进左列、奇数进右列。
+        // ⚠️ 顺序仍是「从上往下读」，跟一个 GridView 两列排是一样的效果。
+        CardColumnLeft.ItemsSource = All.Where((_, i) => i % 2 == 0).ToList();
+        CardColumnRight.ItemsSource = All.Where((_, i) => i % 2 == 1).ToList();
     }
 
-    private void FeatureGrid_ItemClick(object sender, ItemClickEventArgs e)
+    // 卡片整张可点（首页同款：容器 chrome 关掉、反馈由卡片自己给，见 App.xaml 的 CshNavCardStyle）
+    private void Card_Tapped(object sender, TappedRoutedEventArgs e)
     {
         // 走导航栏那一套（不是 Frame.Navigate）：左侧「实验性功能」才会跟着高亮
-        if (e.ClickedItem is ExperimentalFeature f && f.Tag.Length > 0)
+        if ((sender as FrameworkElement)?.DataContext is ExperimentalFeature f && f.Tag.Length > 0)
             App.MainWindow?.Shell.NavigateTo(f.Tag);
     }
 

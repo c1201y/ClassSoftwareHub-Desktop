@@ -31,6 +31,9 @@ public sealed partial class SoftwarePage : Page
     public SoftwarePage()
     {
         InitializeComponent();
+
+        // 两侧留白 / 标题行上的滚轮也转给卡片列表（见 Core/WheelRelay.cs）
+        Core.WheelRelay.Attach(this, TileGrid, CompactGrid);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)

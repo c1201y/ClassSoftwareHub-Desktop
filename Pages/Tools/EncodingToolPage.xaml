@@ -37,7 +37,10 @@
         </DataTemplate>
     </Page.Resources>
 
-    <Grid>
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，内容区纹丝不动（与首页手感不一致）。
+         本页真正的滚动区是中间那行（Grid.Row=2 里互斥的 FileView / TextView），标题行/两侧留白靠接力兜。 -->
+    <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="1*" />
             <ColumnDefinition Width="998*" MaxWidth="1008" />

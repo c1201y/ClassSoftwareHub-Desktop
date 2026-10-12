@@ -309,8 +309,9 @@ public static class MemoryTrimmer
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[mem] 回收失败: " + ex.Message);
-            Log("回收失败：" + ex.Message);
+            // 2026-10-12：原先这里是 Debug.WriteLine + 调试级 Log 各记一遍 —— 发布版里前者没人监听，
+            // 后者被日志页的「调试」筛选一关就看不见。回收失败是要能查的事，固定按警告记。
+            Core.AppLog.Warn("memory", "内存回收失败：" + ex.Message);
         }
     }
 

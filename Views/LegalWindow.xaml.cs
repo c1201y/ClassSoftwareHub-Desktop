@@ -237,7 +237,7 @@ public sealed partial class LegalWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[legal] 尺寸设置失败: " + ex.Message);
+            AppLog.Warn("legal", "条款窗尺寸设置失败：" + ex.Message);
         }
     }
 
@@ -254,7 +254,7 @@ public sealed partial class LegalWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[legal] 定位失败: " + ex.Message);
+            AppLog.Warn("legal", "条款窗定位失败：" + ex.Message);
         }
     }
 
@@ -279,7 +279,7 @@ public sealed partial class LegalWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[legal] 唤醒失败: " + ex.Message);
+            AppLog.Exception("legal", ex, "唤醒条款窗");
         }
     }
 

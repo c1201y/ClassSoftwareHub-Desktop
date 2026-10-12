@@ -364,7 +364,7 @@ public sealed partial class DetailPage : Page
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[detail] 跳哈希校验失败: " + ex.Message);
+            Core.AppLog.Exception("detail", ex, "跳到「编码 / 哈希工具」的文件模式");
         }
     }
 

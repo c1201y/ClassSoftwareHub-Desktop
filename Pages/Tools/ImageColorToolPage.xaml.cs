@@ -50,7 +50,13 @@ public sealed partial class ImageColorToolPage : Page
     private readonly List<(string Hex, FontIcon Check)> _checks = new();
     private bool _busy;
 
-    public ImageColorToolPage() => InitializeComponent();
+    public ImageColorToolPage()
+    {
+        InitializeComponent();
+
+        // 两侧留白 / 标题行上的滚轮也转给内容区（见 Core/WheelRelay.cs）
+        Core.WheelRelay.Attach(this, ContentScroll);
+    }
 
 
     // ══════════════════════════ 打开 / 拖入图片 ══════════════════════════

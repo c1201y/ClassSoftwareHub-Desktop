@@ -6,7 +6,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <Grid x:Name="WorkspaceRoot">
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，页面纹丝不动（与首页手感不一致）。
+         2026-10-13：曾把 ScrollViewer 提到最外层当页面根，实测这一页滚动反而更卡（顶区元素密），
+         已改回「中列滚动容器 + 接力」。 -->
+    <Grid x:Name="WorkspaceRoot" Background="Transparent">
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />

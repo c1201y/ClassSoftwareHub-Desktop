@@ -1,10 +1,12 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.Updating;
 
@@ -45,7 +47,13 @@ public static class UpdateFlow
         if (release.PublishedAt is { } when) detail += $"　·　{when.LocalDateTime:yyyy-MM-dd}";
         body.Children.Add(new TextBlock { Text = detail, FontSize = 12, Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
 
-        if (!string.IsNullOrWhiteSpace(release.Notes))
+        // 「本次更新内容」：Release 正文是**发版文档原文**，里面有配图语法（![…](…)）、
+        // `# …版本发布` 大标题、首行那句下载提示、`## 其他内容` 之后的网站 / 爱发电 / 主页链接。
+        // 原样摆上去等于让用户读一遍发布页 —— 重点全被这些噪音淹了（2026-10-12 Nick 报）。
+        // 这里只抠「前言」小节的条目（发版文档开头那段要点摘要），逐条洗干净摆出来。
+        // ⚠️ 2026-10-12 Nick 定：卡片上用**前言**，不用更新日志（后者是逐条流水账、还带作者署名）。
+        var items = SummarizeNotes(release.Notes);
+        if (items.Count > 0)
         {
             body.Children.Add(new TextBlock
             {
@@ -54,15 +62,19 @@ public static class UpdateFlow
                 Opacity = 0.7,
                 Margin = new Thickness(0, 4, 0, 0),
             });
-            body.Children.Add(new TextBlock
+
+            var itemsPanel = new StackPanel { Spacing = 3 };
+            foreach (var item in items)
             {
-                Text = release.Notes.Trim(),
-                FontSize = 12,
-                Opacity = 0.8,
-                TextWrapping = TextWrapping.Wrap,
-                MaxLines = 8,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            });
+                itemsPanel.Children.Add(new TextBlock
+                {
+                    Text = "· " + item,
+                    FontSize = 12,
+                    Opacity = 0.8,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+            body.Children.Add(itemsPanel);
         }
 
         body.Children.Add(new TextBlock
@@ -86,12 +98,161 @@ public static class UpdateFlow
         };
 
         var result = await dialog.ShowAsync();
-        return result switch
+        var choice = result switch
         {
             ContentDialogResult.Primary => UpdateChoice.Now,
             ContentDialogResult.Secondary => UpdateChoice.Background,
             _ => UpdateChoice.Later,
         };
+
+        // ⚠️ 用户点了哪颗按钮**必须留痕**（2026-10-12 Nick 报：点了更新什么都没发生，日志里查不出来）。
+        //    有这一行，"他点了没反应"才分得清是"他没点"还是"点了但后面某一环断了"。
+        AppLog.Info("update", $"用户选择「{ChoiceText(choice)}」· {release.Tag}");
+        return choice;
+    }
+
+    /// <summary>把用户的选择翻成日志里的中文（见 <see cref="AskAsync"/>）。</summary>
+    private static string ChoiceText(UpdateChoice choice) => choice switch
+    {
+        UpdateChoice.Now => "立即更新",
+        UpdateChoice.Background => "后台下载",
+        _ => "稍后",
+    };
+
+    /// <summary>「本次更新内容」最多摆几条 —— 再多卡片就撑得没边了。</summary>
+    private const int NoteItemsMax = 4;
+
+    /// <summary>发版文档里小节的取用顺序（见 <see cref="SummarizeNotes"/>）。</summary>
+    private static readonly string[] NoteSections = { "前言", "更新日志" };
+
+    /// <summary>
+    /// 把 Release 正文（Markdown）压成「本次更新内容」该有的样子。
+    ///
+    /// 只收**小节里的条目**，优先级：`前言`（发版文档开头那段给用户看的要点摘要）
+    /// → `更新日志`（更早的文档体例 / 只有日志时）→ 全文洗干净取前几行。
+    ///
+    /// ⚠️ 2026-10-12 Nick 定：卡片上要**前言**不要**更新日志** —— 前言三两句说完这一版干了什么，
+    ///    更新日志是逐条流水账（每条还带 `（作者[@TinyNick](…)）`），摆在弹窗里太长、也没重点。
+    /// ⚠️ 不要退回"把 Notes 原样摆出来"—— 正文里有配图语法、Markdown 标题、下载提示、
+    ///    以及「## 其他内容」下面那一堆网站 / 爱发电 / 主页链接，用户看的是更新要点，不是发布页。
+    /// </summary>
+    private static List<string> SummarizeNotes(string? notes)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(notes)) return result;
+
+        var lines = notes.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
+        // ① 首选「前言」；没有这一节（更早的文档体例）再试「更新日志」
+        foreach (var section in NoteSections)
+        {
+            CollectSection(lines, section, result);
+            if (result.Count > 0) break;
+        }
+
+        // ② 退路：两个小节都没有 —— 全文洗干净，跳过配图与「## 其他内容」之后的链接堆
+        if (result.Count == 0)
+        {
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                if (line.StartsWith("##") && line.Contains("其他内容")) break;
+                if (line.Length == 0 || line.StartsWith("![")) continue;
+
+                var text = CleanNoteLine(line);
+                if (text.Length == 0) continue;
+
+                result.Add(text);
+                if (result.Count >= NoteItemsMax) break;
+            }
+        }
+
+        if (result.Count > NoteItemsMax)
+        {
+            var total = result.Count;
+            result = result.GetRange(0, NoteItemsMax);
+            result.Add($"……本次共 {total} 条，其余可在更新日志页查看。");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 从 <paramref name="title"/> 这个小节里收条目，直到撞上下一个标题行（或「其他内容」那一段）。
+    /// 收获直接追加进 <paramref name="result"/>；这一节不存在时什么也不做。
+    ///
+    /// ⚠️ 发版文档的小节标题有两种写法 —— `## 前言` 与 `前言` + 下一行 `--`（下划线式），
+    ///    两种都要认，否则「更新日志」这四个字会被当成一条正文收进去。
+    /// </summary>
+    private static void CollectSection(string[] lines, string title, List<string> result)
+    {
+        var inSection = false;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].Trim();
+            var bare = line.TrimStart('#').Trim();   // 剥掉开头的 # 再比标题
+
+            if (!inSection)
+            {
+                if (bare.StartsWith(title, StringComparison.Ordinal)) inSection = true;
+                continue;
+            }
+
+            // 小节到头了：下一个标题行（`## …` 或下划线式）/「其他内容」那一段
+            if (line.StartsWith("##") || bare.StartsWith("其他内容", StringComparison.Ordinal)) break;
+            if (IsHeadingUnderline(lines, i + 1)) break;
+            if (line.Length == 0 || line.StartsWith("--")) continue;
+
+            var text = CleanNoteLine(line);
+            if (text.Length > 0) result.Add(text);
+        }
+    }
+
+    /// <summary>
+    /// 第 <paramref name="index"/> 行是不是 Markdown 的"标题下划线"（`--…` / `==…`）。
+    /// ⚠️ 必须**紧邻**上一行才算 —— 分隔线 `---` 前面通常空一行，不能当标题。
+    /// </summary>
+    private static bool IsHeadingUnderline(string[] lines, int index)
+    {
+        if (index < 0 || index >= lines.Length) return false;
+
+        var next = lines[index].Trim();
+        if (next.Length < 2) return false;
+
+        foreach (var c in next)
+        {
+            if (c != '-' && c != '=') return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 洗掉一行 Markdown：去图片、去作者署名、链接只留文字、去行首的项目符号 / 井号 / 引用号。
+    /// 太长（发版文档里那些长句说明在卡片上摆不下）就截断。
+    /// </summary>
+    private static string CleanNoteLine(string line)
+    {
+        var s = line;
+
+        s = Regex.Replace(s, @"!\[[^\]]*\]\([^)]*\)", "");                  // 图片 → 去掉
+        s = Regex.Replace(s, @"（\s*作者\[[^\]]*\]\([^)]*\)\s*）", "");     // （作者[@xxx](url)）→ 去掉
+        s = Regex.Replace(s, @"\[([^\]]*)\]\([^)]*\)", "$1");               // [文字](url) → 文字
+        s = s.TrimStart('-', '*', ' ', '>', '#').Trim();
+
+        // 发版文档「前言」的长条目在 90 字上下，上限给到 96 就能整条摆下、不截半句；
+        // 「更新日志」那种 150+ 字的长句才需要截，且下面会尽量断在句末。
+        const int MaxChars = 96;
+        if (s.Length > MaxChars)
+        {
+            var cut = s[..MaxChars];
+
+            // 尽量断在句末标点，别把话截成半句（往回最多找 12 个字）
+            var stop = cut.LastIndexOfAny(new[] { '。', '；', '！', '？' });
+            s = stop >= MaxChars - 12 ? cut[..(stop + 1)] : cut.TrimEnd() + "…";
+        }
+
+        return s;
     }
 
     /// <summary>
@@ -102,6 +263,8 @@ public static class UpdateFlow
         XamlRoot xamlRoot, UpdateService service, UpdateRelease release, string title = "正在更新")
     {
         if (release.Primary is not { } package) return false;
+
+        AppLog.Begin("update", $"进入「正在更新」流程 · {release.Tag}（下载 → 校验 → 安装）");
 
         var bar = new ProgressBar { Minimum = 0, Maximum = 100, Value = 0 };
         var status = new TextBlock { Text = $"正在下载 {release.Tag}", TextWrapping = TextWrapping.Wrap };
@@ -122,6 +285,7 @@ public static class UpdateFlow
         var allowClose = false;          // 收尾阶段（正在安装）才允许关窗
         var userCancelled = false;       // 用户主动点了「取消下载」
         var closedByUser = false;        // 弹窗已经被用户关掉了，后面别再 Hide
+        var detached = false;            // 用户点了「后台下载」：进度窗收掉，下载在后台继续
 
         // ⚠️ 这个 token 就是"卡死时的出口"。原来它根本没接线：
         // UpdateService 里的 HttpClient 是 Timeout.InfiniteTimeSpan（注释写着"靠 CancellationToken 控制"），
@@ -134,13 +298,25 @@ public static class UpdateFlow
             XamlRoot = xamlRoot,
             Title = title,
             Content = panel,
-            PrimaryButtonText = "立即更新",
+            PrimaryButtonText = "后台下载",
             CloseButtonText = "取消下载",
             DefaultButton = ContentDialogButton.Primary,
         };
 
-        // 主按钮只是"更新进行中"的指示，点了不该关窗
-        dialog.PrimaryButtonClick += (_, args) => args.Cancel = true;
+        // ⚠️ 这颗主按钮原来写的是「立即更新」—— 可用户**就是点了「立即更新」才走到这个窗**的，
+        //    再摆一颗同名按钮毫无意义（点了也没第二个动作，纯粹是个摆设，2026-10-12 Nick 报）。
+        //    改成「后台下载」：点一下把进度窗收掉，下载继续在后台跑，
+        //    完成后发系统通知，装不装由他决定（跟外面那颗「后台下载」同一个收尾）。
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            args.Cancel = true;              // 不靠按钮关窗 —— 我们自己 Hide，好把"转后台"这一步先做完
+            if (detached) return;
+
+            detached = true;
+            allowClose = true;               // ⚠️ 置上它，Closing 里才不会再当成"用户取消"去掐断下载
+            AppLog.Info("update", $"用户点了「后台下载」· {release.Tag}（进度窗收掉，下载继续在后台跑）");
+            TryHide(dialog, closedByUser);
+        };
 
         dialog.Closing += (_, args) =>
         {
@@ -150,6 +326,9 @@ public static class UpdateFlow
             // 绝不 Cancel 关窗：宁可下载被取消，也不能把用户困在一个关不掉的弹窗里。
             closedByUser = true;
             userCancelled = true;
+            // ⚠️ 用户主动取消**一定要留痕**（2026-10-12 Nick 报）。取消之后临时文件被清理、磁盘上什么都不剩，
+            //    日志里再没有这一行的话，事后只能靠猜是"没下成"还是"用户自己掐了"。
+            AppLog.Info("update", $"用户取消下载 · {release.Tag}（进度窗被关掉，正在中止传输）");
             try { cts.Cancel(); } catch { /* 已经取消过了 */ }
         };
 
@@ -178,8 +357,24 @@ public static class UpdateFlow
                              ?? await service.DownloadAndVerifyAsync(package, destination, progress, cts.Token);
 
             cts.CancelAfter(Timeout.Infinite);   // 下载完了，别再触发超时打断安装
+
+            // 用户中途选了「后台下载」：这次就不装了 —— 把包装进存档、发一条系统通知，
+            // 什么时候装由他自己点（跟外面那颗「后台下载」的收尾完全一致）。
+            if (detached)
+            {
+                var settings = App.Settings;
+                settings.Current.UpdatePendingPath = downloaded.FilePath;
+                settings.Current.UpdatePendingTag = release.Tag;
+                settings.Save();
+
+                AppLog.Done("update", $"下载完成并已标记待装（用户已转后台，等他点安装）· {release.Tag} → {downloaded.FilePath}");
+                RunOnUi(() => App.MainWindow?.NotifyUpdateReady(release.Tag));
+                return true;
+            }
+
             bar.Value = 100;
             status.Text = $"下载完成（{downloaded.VerifyNote}），正在安装：安装完成后应用将自动重新打开。";
+            AppLog.Step("update", $"下载完成且校验通过（{downloaded.VerifyNote}），开始安装 · {release.Tag}");
 
             // ⚠️⚠️ RunInstaller 只是"安排"（它内部会先等约 3 秒才拉起安装程序），
             //    随后必须**立刻真的退出应用**：Inno 一启动就查 AppMutex，
@@ -195,9 +390,23 @@ public static class UpdateFlow
         {
             allowClose = true;
 
-            // 用户自己取消的：他已经知道了，不用再解释
-            if (userCancelled) return false;
+            // 用户自己取消的：他已经知道了，不用再解释（按钮那一行的日志已经留过痕）
+            if (userCancelled)
+            {
+                AppLog.Info("update", $"更新流程因用户取消而结束 · {release.Tag}");
+                return false;
+            }
 
+            // 已经转后台了：进度窗不在了，失败得走系统通知 —— 不然用户什么都看不到
+            if (detached)
+            {
+                AppLog.Warning("update", $"后台下载停滞（连续 {IdleSeconds} 秒无进度），已中止并通知用户 · {release.Tag}");
+                RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(
+                    release.Tag, $"下载停滞（连续 {IdleSeconds} 秒无进度）"));
+                return false;
+            }
+
+            AppLog.Warning("update", $"下载停滞（连续 {IdleSeconds} 秒无进度），已取消 · {release.Tag}");
             status.Text = $"下载停滞（连续 {IdleSeconds} 秒无进度），已取消。\n" +
                           "可能为网络问题或下载源无响应，可稍后重试。";
             await Task.Delay(2500);
@@ -207,6 +416,15 @@ public static class UpdateFlow
         catch (Exception ex)
         {
             allowClose = true;
+
+            if (detached)
+            {
+                AppLog.Fail("update", ex, $"后台下载失败（已发系统通知）· {release.Tag}");
+                RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, ex.Message));
+                return false;
+            }
+
+            AppLog.Fail("update", ex, $"更新失败（进度窗显示后自动收起）· {release.Tag}");
             status.Text = "更新失败：" + ex.Message;
             await Task.Delay(2500);
             TryHide(dialog, closedByUser);
@@ -232,7 +450,13 @@ public static class UpdateFlow
     public static bool StartBackgroundDownload(UpdateService service, UpdateRelease release)
     {
         if (release.Primary is not { } package) return false;
-        if (Interlocked.Exchange(ref _bgBusy, 1) == 1) return false;
+        if (Interlocked.Exchange(ref _bgBusy, 1) == 1)
+        {
+            AppLog.Info("update", $"已有一个后台下载在进行，这次的「后台下载」请求忽略 · {release.Tag}");
+            return false;
+        }
+
+        AppLog.Begin("update", $"后台下载开始（不弹进度窗）· {release.Tag}");
 
         _ = Task.Run(async () =>
         {
@@ -255,14 +479,17 @@ public static class UpdateFlow
                 settings.Current.UpdatePendingTag = release.Tag;
                 settings.Save();
 
+                AppLog.Done("update", $"后台下载完成，已标记待装并发系统通知 · {release.Tag} → {downloaded.FilePath}");
                 RunOnUi(() => App.MainWindow?.NotifyUpdateReady(release.Tag));
             }
             catch (OperationCanceledException)
             {
+                AppLog.Warning("update", $"后台下载停滞超时（连续 45 秒无进度），已中止并通知用户 · {release.Tag}");
                 RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, "下载停滞（连续 45 秒无进度）"));
             }
             catch (Exception ex)
             {
+                AppLog.Fail("update", ex, $"后台下载失败（已发系统通知）· {release.Tag}");
                 RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, ex.Message));
             }
             finally
@@ -277,7 +504,14 @@ public static class UpdateFlow
     public static async Task InstallPendingNowAsync()
     {
         var path = App.Settings.Current.UpdatePendingPath;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            // 记一笔：用户点了「现在安装」但包没了（被清理 / 被手动删），否则又是一个"点了没反应"
+            AppLog.Info("update", $"点「现在安装」但待装安装包已不在（记录值：{(string.IsNullOrEmpty(path) ? "空" : path)}），忽略");
+            return;
+        }
+
+        AppLog.Begin("update", $"安装待装更新 · {path}");
 
         UpdateService.RunInstaller(path);
         await Task.Delay(400);       // 让 cmd 来得及把延迟启动安排下去，再走
@@ -294,7 +528,13 @@ public static class UpdateFlow
     /// </summary>
     public static async Task InstallLocalAsync(string installerPath)
     {
-        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath)) return;
+        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+        {
+            AppLog.Info("update", $"覆盖安装被忽略：路径为空或文件不存在（{installerPath}）");
+            return;
+        }
+
+        AppLog.Begin("update", $"用本地安装包覆盖安装 · {installerPath}");
 
         UpdateService.RunInstaller(installerPath);
         await Task.Delay(400);       // 让 cmd 来得及把延迟启动安排下去，再走
@@ -311,6 +551,10 @@ public static class UpdateFlow
     /// </summary>
     private static void ExitAppNow()
     {
+        // 所有安装路径都汇到这儿。记一条：日志到这里就断了，这一行是"应用是自己退的、不是崩的"的证据
+        // （装好之后日志由新实例接手，两段会话之间靠它接得上）。
+        AppLog.Info("update", "应用主动退出，把位置让给安装程序（后续日志由新实例接手）");
+
         if (App.MainWindow is { } win)
         {
             win.ExitApp();
@@ -348,11 +592,14 @@ public static class UpdateFlow
 
             if (expectedMd5.Length > 0 && !string.Equals(expectedMd5, md5, StringComparison.OrdinalIgnoreCase))
             {
+                // 记警告：这是"明明本地有包、为什么还下一遍"的唯一答案，静默删掉的话查不出来
+                AppLog.Warning("update", $"本地安装包 MD5 不符（本地 {md5} ≠ 期望 {expectedMd5}），已删除并改为重新下载 · {path}");
                 DeleteQuiet(path);
                 return null;
             }
             if (wantSha && !string.Equals(package.Sha256, sha, StringComparison.OrdinalIgnoreCase))
             {
+                AppLog.Warning("update", $"本地安装包 SHA256 不符（本地 {sha} ≠ 期望 {package.Sha256}），已删除并改为重新下载 · {path}");
                 DeleteQuiet(path);
                 return null;
             }
@@ -361,17 +608,21 @@ public static class UpdateFlow
                 // 该发布什么校验值都没给：大小一致才敢直接用，否则重下
                 if (package.Size <= 0 || new FileInfo(path).Length != package.Size)
                 {
+                    AppLog.Warning("update", $"本地安装包大小不符（本地 {new FileInfo(path).Length} ≠ 期望 {package.Size}），已删除并改为重新下载 · {path}");
                     DeleteQuiet(path);
                     return null;
                 }
+                AppLog.Info("update", $"复用本地安装包：该发布未提供校验值，大小一致，直接采用 · {path}");
                 return new DownloadedPackage(path, md5, sha, false,
                     "本地安装包大小一致（该发布未提供校验值）");
             }
+            AppLog.Info("update", $"复用本地安装包：校验通过，省去一次下载 · {path}");
             return new DownloadedPackage(path, md5, sha, true, "本地安装包校验通过，未重新下载");
         }
-        catch
+        catch (Exception ex)
         {
             // 本地包读不了 / 网络取校验值失败等：一律退回正常下载，不在复用这条路上添堵
+            AppLog.Warning("update", $"复用本地安装包这一步出错，改为正常下载：{ex.Message}");
             return null;
         }
     }

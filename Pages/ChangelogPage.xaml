@@ -12,7 +12,9 @@
             Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
          本页最后一行是「版本列表 + 详情」撑满容器（自带边框），归 0 会让卡片外框贴到窗口
          下边框 → 写 44。 -->
-    <Grid>
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，列表纹丝不动（与首页手感不一致）。 -->
+    <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
             <ColumnDefinition Width="*" />

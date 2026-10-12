@@ -76,6 +76,9 @@ public sealed partial class LogViewerPage : Page
     {
         InitializeComponent();
 
+        // 两侧留白 / 标题行上的滚轮也转给表格（见 Core/WheelRelay.cs）
+        Core.WheelRelay.Attach(this, LogList);
+
         LogList.ItemsSource = _view;
 
         _chips = new LevelChipBar(ChipHost);

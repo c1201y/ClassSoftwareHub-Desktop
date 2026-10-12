@@ -104,6 +104,10 @@ public sealed partial class ChangelogPage : Page
     public ChangelogPage()
     {
         InitializeComponent();
+
+        // 两侧留白 / 标题行上的滚轮也转给滚动区（见 Core/WheelRelay.cs）：
+        // 指针压在哪一栏就滚哪一栏，压在别处一律给右侧的版本说明。
+        Core.WheelRelay.Attach(this, ReleaseScroll, VersionList);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)

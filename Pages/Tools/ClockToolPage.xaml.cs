@@ -54,6 +54,9 @@ public sealed partial class ClockToolPage : Page
     {
         InitializeComponent();
 
+        // 两侧留白 / 标题行上的滚轮也转给设置区（见 Core/WheelRelay.cs）
+        Core.WheelRelay.Attach(this, RootScroll);
+
         // 先把上次的样子读回来（记忆），再铺控件初值。
         // ⚠️ 2026-09-28（Nick）：「每次启动遵循上次」——上次在用某套预设，就按**那套预设**铺；
         //    上次没在用预设（纯手调 / 默认），就按上次那个外观铺，**不强行套任何预设**。

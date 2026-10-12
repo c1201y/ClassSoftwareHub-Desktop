@@ -48,6 +48,9 @@ public static class TeachingActions
                 // 取消关机：返回值就是给用户看的一句话（「已取消」或「当前没有待执行的关机」），
                 // 侧边栏会拿它弹一个原生提示浮层（见 ToolSidebarWindow.Tool_Click 里 hint 那一段）。
                 case "cancelshutdown": return Data.AutoShutdown.CancelPending();
+                // 杀希沃（2026-10-12 Nick 要）：立刻清一次白板5 的残留进程，不带时间点。
+                // ⚠️ 安全闸在 EasiNoteGuard.RunOnce 里 —— **有可见窗口的一律放过**（老师正开着白板讲课）。
+                case "killseewo": return KillEasiNote();
                 default: Log($"不认识的动作: {id}"); break;
             }
         }
@@ -212,6 +215,26 @@ public static class TeachingActions
             catch { }
         };
         timer.Start();
+    }
+
+    /// <summary>
+    /// 立刻结束希沃白板5 后台滞留的残留进程（侧边栏「杀希沃」，2026-10-12 Nick 要）。
+    ///
+    /// 复用 <see cref="Data.EasiNoteGuard.RunOnce"/> —— 它自带那道**唯一的安全闸**：
+    /// 有可见顶层窗口的一律放过（老师正开着白板讲课就不动它），只清"没有任何窗口"的残留进程。
+    /// 返回的那句话由侧边栏弹一个原生提示浮层显示（跟「取消关机」一个路子）。
+    /// </summary>
+    private static string KillEasiNote()
+    {
+        var r = Data.EasiNoteGuard.RunOnce(dryRun: false);
+
+        // 手动点也留一条日志 —— 翻 easiguard.log 时分得清"是到点自己杀的"还是"我手点的"
+        Log($"杀希沃（侧边栏手点）：{r.Summary}"
+            + (r.KilledNames.Count > 0 ? " 清掉=" + string.Join("、", r.KilledNames) : "")
+            + (r.SkippedNames.Count > 0 ? " 放过=" + string.Join("、", r.SkippedNames) : "")
+            + (r.Errors.Count > 0 ? " 失败=" + string.Join("；", r.Errors) : ""));
+
+        return r.Summary;
     }
 
     /// <summary>锁定电脑：Win+L 用的就是这个 API，它也是 Ctrl+Alt+Del 界面上的第一项。</summary>
