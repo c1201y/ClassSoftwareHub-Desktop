@@ -60,6 +60,12 @@ public sealed class AutoShutdownConfig
         "ClassSoftwareHub", "autoshutdown.json");
 
     /// <summary>
+    /// 延迟秒数的上限（一天）。防止手滑填个天文数字把机器永久排上关机。
+    /// ⚠️ 只有这一份 —— 巡检执行（<see cref="AutoShutdown"/>）与配置弹层的 NumberBox 上限都读它。
+    /// </summary>
+    public const int MaxDelaySeconds = 86400;
+
+    /// <summary>
     /// 总开关。默认**关** —— 这是实验性功能，而且是**破坏性操作**（真会关机），
     /// 一律由用户自己在页面上打开（同两个专杀）。
     /// </summary>
@@ -72,6 +78,18 @@ public sealed class AutoShutdownConfig
     ///    一律走 <see cref="DayIndexOf"/> 换算。
     /// </summary>
     public List<List<ShutdownPoint>> Days { get; set; } = NewDays();
+
+    /// <summary>
+    /// **上一次保存过的那个关机点**（时间 / 方式 / 延迟），供"新增关机点"时当默认值。
+    ///
+    /// 为什么有它（Nick 2026-10-12：「一个一个配置太麻烦了，如果上次设置的啥，这次可以直接套用」）：
+    /// 放学场景一天要排好几个点、七天排一遍，每次都得把 17:30 / 直接关机 / 60 秒重新填一遍。
+    /// 存下最后一个，下次开配置框时就是它，改个分钟数即可。
+    ///
+    /// ⚠️ 它只是**输入助手**：不参与执行、不参与巡检，删掉整天也没影响 —— 所以别拿它当"配置"。
+    /// ⚠️ 与 <see cref="Days"/> 一样**只存一份**，新增/修改成功时覆盖（不攒历史，免得上限膨胀）。
+    /// </summary>
+    public ShutdownPoint? LastPoint { get; set; }
 
     /// <summary>七天各自一个空清单。</summary>
     public static List<List<ShutdownPoint>> NewDays() =>
@@ -105,6 +123,22 @@ public sealed class AutoShutdownConfig
             cfg.Days[i].RemoveAll(p => p is null || !IsValidTime(p.Time));
             foreach (var p in cfg.Days[i]) p.Method = NormalizeMethod(p.Method);
         }
+
+        // "上次填过的那个"同样要规整：时间认不出就整个丢掉（退回内置默认值），
+        // 免得手改坏了的 json 把新增框的默认值也带成 25:99
+        if (cfg.LastPoint is not null)
+        {
+            if (!IsValidTime(cfg.LastPoint.Time))
+            {
+                cfg.LastPoint = null;
+            }
+            else
+            {
+                cfg.LastPoint.Method = NormalizeMethod(cfg.LastPoint.Method);
+                cfg.LastPoint.DelaySeconds = Math.Clamp(cfg.LastPoint.DelaySeconds, 0, MaxDelaySeconds);
+            }
+        }
+
         return cfg;
     }
 
@@ -158,8 +192,8 @@ public static class AutoShutdown
     /// </summary>
     private static readonly TimeSpan LateWindow = TimeSpan.FromMinutes(3);
 
-    /// <summary>延迟秒数的上限（一天）。防止手滑填个天文数字把机器永久排上关机。</summary>
-    private const int MaxDelaySeconds = 86400;
+    /// <summary>延迟秒数的上限（一天）。见 <see cref="AutoShutdownConfig.MaxDelaySeconds"/>。</summary>
+    private const int MaxDelaySeconds = AutoShutdownConfig.MaxDelaySeconds;
 
     private static DispatcherQueueTimer? _timer;
 

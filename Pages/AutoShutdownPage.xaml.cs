@@ -9,7 +9,10 @@ using Microsoft.UI.Xaml.Controls;
 namespace ClassSoftwareHub.Desktop.Pages;
 
 /// <summary>
-/// 「自动关机」页（实验性功能，tag = <c>autoshutdown</c>）。
+/// 「自动关机」页（内置工具，tag = <c>autoshutdown</c>）。
+///
+/// ⚠️ 2026-10-12 从「实验性功能」转正，搬进「内置工具」分组
+///    （入口 = <c>Data/ToolDef.cs</c> 的 ToolCatalog；页头那颗「实验性功能」徽标已去掉）。
 ///
 /// 上半是总开关，中间是按星期排的时间表（周一~周日一列一天），
 /// 下半是「把取消关机加到侧边栏」的快捷入口 + 限制说明。
@@ -43,6 +46,7 @@ public sealed partial class AutoShutdownPage : Page
         EnableSwitch.IsOn = _config.Enabled;
         _loading = false;
 
+        ShowScheduleHint("");
         BuildSchedule();
         UpdateHints();
     }
@@ -90,7 +94,17 @@ public sealed partial class AutoShutdownPage : Page
             for (var index = 0; index < points.Count; index++)
                 column.Children.Add(BuildPointButton(day, index, points[index]));
 
-            column.Children.Add(BuildAddButton(day));
+            // 列底：加号 + 它右边那颗「套用前一天」。
+            // ⚠️ 两颗并排放在一个横向 StackPanel 里（Nick 2026-10-12 指明"在加号右边再加一个"）。
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            actions.Children.Add(BuildAddButton(day));
+            actions.Children.Add(BuildCopyPrevButton(day));
+            column.Children.Add(actions);
 
             Grid.SetColumn(column, day);
             ScheduleGrid.Children.Add(column);
@@ -141,23 +155,111 @@ public sealed partial class AutoShutdownPage : Page
         return button;
     }
 
+    /// <summary>
+    /// 加号右边那颗「套用前一天」：把**前一天**那一列整列拷到本列（周一取周日）。
+    ///
+    /// ⚠️ 语义是**覆盖**不是追加 —— "套用"就是把这一天排成前一天的样子；
+    ///    本列已有关机点时先弹一句确认，不做无声覆盖。
+    /// ⚠️ 前一天是空的就只提示、不动手 —— 否则"套用"会退化成"把本列清空"，那不是用户要的。
+    /// </summary>
+    private Button BuildCopyPrevButton(int dayIndex)
+    {
+        var prev = PreviousDay(dayIndex);
+
+        var button = new Button
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0),
+            Width = 30,
+            Height = 30,
+            // E8C8（Copy）是 MDL2 里的老码位，Win10 也有字形
+            Content = new FontIcon { Glyph = "\uE8C8", FontSize = 12 },
+        };
+        ToolTipService.SetToolTip(button,
+            $"把{AutoShutdownConfig.DayNames[prev]}的关机点套用到{AutoShutdownConfig.DayNames[dayIndex]}（本列原有内容会被替换）");
+
+        var day = dayIndex;
+        button.Click += async (_, _) => await CopyPreviousDayAsync(day);
+        return button;
+    }
+
+    /// <summary>本列的"前一天"（周一取周日）。</summary>
+    private static int PreviousDay(int dayIndex) => (dayIndex + 6) % 7;
+
+    private async Task CopyPreviousDayAsync(int dayIndex)
+    {
+        var prev = PreviousDay(dayIndex);
+        var source = _config.Days[prev];
+        var target = _config.Days[dayIndex];
+
+        if (source.Count == 0)
+        {
+            ShowScheduleHint($"{AutoShutdownConfig.DayNames[prev]}还没有关机点，没有可以套用的内容。");
+            return;
+        }
+
+        if (target.Count > 0)
+        {
+            var confirm = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "套用前一天的关机点",
+                Content = $"{AutoShutdownConfig.DayNames[dayIndex]}现在有 {target.Count} 个关机点，"
+                          + $"套用{AutoShutdownConfig.DayNames[prev]}的 {source.Count} 个会把它们全部替换掉。",
+                PrimaryButtonText = "替换",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+        }
+
+        // ⚠️ 必须**深拷**：直接把同一批对象塞过去，之后改其中一天会连带改到另一天
+        target.Clear();
+        foreach (var p in source)
+            target.Add(new ShutdownPoint
+            {
+                Time = p.Time,
+                Method = p.Method,
+                DelaySeconds = p.DelaySeconds,
+            });
+
+        SaveAndRefresh();
+        ShowScheduleHint(
+            $"已把{AutoShutdownConfig.DayNames[prev]}的 {source.Count} 个关机点套用到{AutoShutdownConfig.DayNames[dayIndex]}。");
+    }
+
+    /// <summary>时间表那块自己的提示行（套用结果 / 没什么可套用）。</summary>
+    private void ShowScheduleHint(string text)
+    {
+        if (ScheduleHint is not null) ScheduleHint.Text = text;
+    }
+
     // ── 增 / 改 / 删 ────────────────────────────────────────
 
     private async Task AddPointAsync(int dayIndex)
     {
-        // 新点的默认值：放学时段 + 直接关机 + 一分钟延迟
-        var draft = new ShutdownPoint
-        {
-            Time = "17:30",
-            Method = ShutdownMethods.Shutdown,
-            DelaySeconds = 60,
-        };
+        // 默认值：**沿用上次保存过的那个点**（时间 / 方式 / 延迟），没存过才退回内置默认
+        // （放学时段 + 直接关机 + 一分钟延迟）。Nick 2026-10-12：一个一个配太麻烦。
+        var last = _config.LastPoint;
+        var draft = last is null
+            ? new ShutdownPoint { Time = "17:30", Method = ShutdownMethods.Shutdown, DelaySeconds = 60 }
+            : new ShutdownPoint { Time = last.Time, Method = last.Method, DelaySeconds = last.DelaySeconds };
 
         if (await ShowPointDialogCoreAsync(draft, isNew: true) != PointDialogOutcome.Save) return;
 
         _config.Days[dayIndex].Add(draft);
+        RememberLast(draft);
         SaveAndRefresh();
     }
+
+    /// <summary>把"用户刚填好的这一份"记进存档，供下次新增关机点时当默认值。</summary>
+    private void RememberLast(ShutdownPoint point) =>
+        _config.LastPoint = new ShutdownPoint
+        {
+            Time = point.Time,
+            Method = point.Method,
+            DelaySeconds = point.DelaySeconds,
+        };
 
     private async Task EditPointAsync(int dayIndex, int pointIndex)
     {
@@ -179,6 +281,7 @@ public sealed partial class AutoShutdownPage : Page
                 current.Time = draft.Time;
                 current.Method = draft.Method;
                 current.DelaySeconds = draft.DelaySeconds;
+                RememberLast(current);      // 改过的这份也算"上次填的"，下次新增照它来
                 SaveAndRefresh();
                 break;
 
@@ -254,7 +357,7 @@ public sealed partial class AutoShutdownPage : Page
         // 延迟：只有「直接关机」用得上
         var delayBox = new NumberBox
         {
-            Value = draft.DelaySeconds, Minimum = 0, Maximum = 86400, SmallChange = 10,
+            Value = draft.DelaySeconds, Minimum = 0, Maximum = AutoShutdownConfig.MaxDelaySeconds, SmallChange = 10,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
             Width = 170, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center,
         };
@@ -303,7 +406,7 @@ public sealed partial class AutoShutdownPage : Page
         // 保存：把控件里的值写回草稿（用 Clamp 挡掉 NaN / 越界）
         draft.Time = $"{ReadNumber(hourBox, hour, 0, 23):00}:{ReadNumber(minuteBox, minute, 0, 59):00}";
         draft.Method = radioSlide.IsChecked == true ? ShutdownMethods.Slide : ShutdownMethods.Shutdown;
-        draft.DelaySeconds = ReadNumber(delayBox, draft.DelaySeconds, 0, 86400);
+        draft.DelaySeconds = ReadNumber(delayBox, draft.DelaySeconds, 0, AutoShutdownConfig.MaxDelaySeconds);
         return PointDialogOutcome.Save;
     }
 

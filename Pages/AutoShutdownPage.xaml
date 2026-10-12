@@ -21,21 +21,9 @@
 
             <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
-                <!-- 标题 + 实验性标记 -->
+                <!-- 标题。（原来的「实验性功能」徽标 2026-10-12 去掉了：功能转正、搬进「内置工具」） -->
                 <StackPanel Spacing="6" Margin="0,0,0,20">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="自动关机" FontSize="28" FontWeight="Bold" />
-                        <Border CornerRadius="4" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                                BorderThickness="1"
-                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                <TextBlock Text="实验性功能" FontSize="12"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
+                    <TextBlock Text="自动关机" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
                                Text="按星期设定关机时间点，到达时间后自动关机。可以选「直接关机」（可设延迟）或系统原生的「滑动关机」；延迟期间可在侧边栏用「取消关机」撤回。" />
                 </StackPanel>
@@ -54,8 +42,10 @@
                     <StackPanel Spacing="12">
                         <TextBlock Text="关机时间表" FontSize="14" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="每一列是一天。点列下面的 + 添加一个关机点；点已有的关机点可以改时间、方式或删掉它。同一天可以放多个点。" />
+                                   Text="每一列是一天。点列下面的 ＋ 添加一个关机点（新增时会沿用上次填过的时间与方式，不用重填）；点已有的关机点可以改时间、方式或删掉它。＋ 右边那颗按钮把「前一天」的关机点整列套用到本列。同一天可以放多个点。" />
                         <Grid x:Name="ScheduleGrid" ColumnSpacing="8" />
+                        <!-- 时间表这块自己的一句提示（套用结果 / 没什么可套用）—— 别跟上面那张「自动执行」卡的说明混用 -->
+                        <TextBlock x:Name="ScheduleHint" FontSize="12" TextWrapping="Wrap" Opacity="0.75" Text="" />
                     </StackPanel>
                 </Border>
 

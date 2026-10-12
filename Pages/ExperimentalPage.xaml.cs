@@ -38,14 +38,14 @@ public sealed partial class ExperimentalPage : Page
         },
         new ExperimentalFeature
         {
-            Id = "autoshutdown", Name = "自动关机",
-            // ⚠️ 图标用日历（E787）而不是电源（E7E8）—— 电源那个已经被「程序专杀」占了，
-            //    同一页两张卡撞脸。日历正好对上"按星期排时间表"这件事。
-            Desc = "按星期设定关机时间点，到点自动关机（可直接关，也可用系统的滑动关机）",
-            Glyph = "\uE787", Tag = "autoshutdown"
+            Id = "uninstaller", Name = "应用卸载",
+            Desc = "扫描本机已安装的软件，可直接卸载其中的任意一款",
+            Glyph = "\uE74D", Tag = "uninstaller"
         },
         // ⚠️ 原来是四项，第三项是「虚拟键盘」—— 该功能 2026-10-09 整体下线，卡片一并删除
         //    （导航分组里的子项、NavigateTagCore 的 case 也同步删了）。
+        // ⚠️「自动关机」2026-10-12 转正搬去「内置工具」（Nick 定）——
+        //    入口改由 Data/ToolDef.cs 的 ToolCatalog 提供，这里连同导航子项、case 一起删掉。
         // 日志查看已不算实验功能（Nick 2026-10-02）：入口挪到 设置 → 诊断。
     };
 

@@ -122,11 +122,13 @@ public sealed partial class ToolSidebarWindow : Window
     /// ⚠️ 取值怎么定的（本机 125% 缩放、工作区 784 dip 实测）：
     ///    底排五颗竖排自己就吃掉 ~228 dip，加标题/分隔线/内边距，"框架"就要 ~287 dip。
     ///    · 0.60 → 上限 470：连**默认的四个模块**都开始滚动（它们自然高 507），不合格；
-    ///    · 0.65 → 上限 510：默认那档刚好放得下、不滚，模块堆满时封在占屏 65%；
-    ///    · 0.75 → 上限 588：占屏 75%，又偏长了。
-    ///    ⇒ 取 0.65。嫌长或嫌短就调这一个数（工具区可见行数跟着变）。
+    ///    · 0.65 → 上限 510：默认那档刚好放得下、不滚；
+    ///    · 0.75 → 上限 588：默认那档富余一截，模块堆起来时也能多露两行。
+    ///    ⇒ 2026-10-12 Nick「感觉有点太少了，稍微再扩大一点」⇒ 从 0.65 抬到 0.75。
+    ///      当时写下的「0.75 又偏长了」作废 —— 他那条边条上模块较多，0.65 反而频繁滚动。
+    /// 嫌长或嫌短就调这一个数（工具区可见行数跟着变）。
     /// </summary>
-    private const double SingleColumnMaxHeightRatio = 0.65;
+    private const double SingleColumnMaxHeightRatio = 0.75;
 
     /// <summary>
     /// 收起动画的第二段：面板滑出屏幕之后，**抓手从屏幕外滑回贴边位**要花的毫秒（2026-10-01）。
@@ -538,10 +540,36 @@ public sealed partial class ToolSidebarWindow : Window
     // ⚠️「紧凑」不是把整条等比缩小到底：条宽、图标、字号都缩，但**按钮的点击区域不缩到底**
     //    —— Nick 特意提的「判定区域可以大一点，不然容易点不到」，所以紧凑档按钮高仍留 40。
     //    ⛔ 别把这些值写回上面的 const（那是旧的一档样式），也别在别处另抄一份数字。
+    //
+    // ⚠️ 2026-10-12 起两个态**各有各的样式来源**：
+    //    · 收起条 → CompactCollapsed（设置项「侧边栏大小样式」）
+    //    · 展开面板 → CompactBody（设置项「展开后的大小样式」，默认跟随上面那个）
+    //    ⇒ 下面所有"面板上看得见的东西"（条宽/按钮/图标/字号/横条厚度/标题行）一律用 CompactBody；
+    //      只有收起态的抓手尺寸用 CompactCollapsed。⛔ 别再写回单个 Compact —— 那会让两态又绑死。
 
-    /// <summary>紧凑样式（细条 + 小图标小字）。见 <c>AppSettings.SidebarDensity</c>，认不出的值当标准。</summary>
-    private static bool Compact =>
+    /// <summary>
+    /// **收起条**（贴边那条小抓手）用紧凑样式。见 <c>AppSettings.SidebarDensity</c>，认不出的值当标准。
+    /// ⚠️ 2026-10-12 起「侧边栏大小样式」这一项**只管收起态**，展开面板走 <see cref="CompactBody"/>。
+    /// </summary>
+    private static bool CompactCollapsed =>
         string.Equals(App.Settings.Current.SidebarDensity, "compact", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// **展开面板**用紧凑样式。
+    /// 默认（<c>same</c>）跟随 <see cref="CompactCollapsed"/>，也就是上下两态一致 —— 这是 2026-10-12 之前的唯一行为；
+    /// 也可以在「侧边布局 → 展开后的大小样式」里单独指定（Nick 2026-10-12：有用户要"收起时紧凑、展开后仍用标准"）。
+    /// ⚠️ 只认 <c>compact</c> / <c>standard</c>，别的值（含 <c>same</c>）一律回落到跟随收起态。
+    /// </summary>
+    private static bool CompactBody
+    {
+        get
+        {
+            var v = App.Settings.Current.SidebarExpandedDensity;
+            if (string.Equals(v, "compact", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(v, "standard", StringComparison.OrdinalIgnoreCase)) return false;
+            return CompactCollapsed;
+        }
+    }
 
     /// <summary>
     /// 工具区**每行摆几个**：竖条认设置（1 或 3，别的值当 1），横条永远是一排到底
@@ -550,20 +578,20 @@ public sealed partial class ToolSidebarWindow : Window
     private int Columns => IsFlat ? 1 : (App.Settings.Current.SidebarColumns == 3 ? 3 : 1);
 
     /// <summary>竖条展开后的厚度（= 单列的宽度）。</summary>
-    private static int BarWidth => Compact ? 58 : PanelThicknessDip;
+    private static int BarWidth => CompactBody ? 58 : PanelThicknessDip;
 
     /// <summary>单个工具按钮的宽度（去掉面板左右内边距与外框）—— 多列时按它算总宽。</summary>
     private static int CellWidth => BarWidth - 12;
 
-    private static int ToolButtonH => Compact ? 40 : 52;
-    private static double ToolIcon => Compact ? 16 : 20;
-    private static double ToolLabel => Compact ? 9.5 : 11;
-    private static int ToolGap => Compact ? 2 : 3;
+    private static int ToolButtonH => CompactBody ? 40 : 52;
+    private static double ToolIcon => CompactBody ? 16 : 20;
+    private static double ToolLabel => CompactBody ? 9.5 : 11;
+    private static int ToolGap => CompactBody ? 2 : 3;
 
-    private static int FooterButtonH => Compact ? 36 : 44;
-    private static int FlatThickness => Compact ? 96 : PanelThicknessFlatDip;
-    private static int FlatBareThickness => Compact ? 64 : PanelThicknessFlatBareDip;
-    private static int FlatMinLength => Compact ? 380 : PanelLengthFlatDip;
+    private static int FooterButtonH => CompactBody ? 36 : 44;
+    private static int FlatThickness => CompactBody ? 96 : PanelThicknessFlatDip;
+    private static int FlatBareThickness => CompactBody ? 64 : PanelThicknessFlatBareDip;
+    private static int FlatMinLength => CompactBody ? 380 : PanelLengthFlatDip;
 
     /// <summary>设置里选的是自由模式（能吸四条边）。⚠️ 认不出的值一律当贴靠模式。</summary>
     private static bool IsFreeMode => App.Settings.Current.SidebarMode == "free";
@@ -1124,7 +1152,7 @@ public sealed partial class ToolSidebarWindow : Window
                 Tag = m.Id,
                 MinWidth = 0,
                 MinHeight = ToolButtonH,
-                Padding = new Thickness(0, Compact ? 4 : 8, 0, Compact ? 4 : 8),
+                Padding = new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8),
                 Background = new SolidColorBrush(Colors.Transparent),
                 BorderThickness = new Thickness(0),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -2100,16 +2128,17 @@ public sealed partial class ToolSidebarWindow : Window
 
             // 收起状态的抓手：竖条时竖着、横条时横着。
             // ⚠️ 紧凑档也要跟着缩 —— 条本身细了，抓手还是原来那根长条会显得只剩它一根杵着。
+            // ⚠️ 这里跟着**收起态**那套样式（CompactCollapsed），不是展开面板那套。
             GripStack.Orientation = flat ? Orientation.Horizontal : Orientation.Vertical;
-            var gripLong = Compact ? 34 : 48;
-            var gripStub = Compact ? 4 : 5;
+            var gripLong = CompactCollapsed ? 34 : 48;
+            var gripStub = CompactCollapsed ? 4 : 5;
             Grip.Width = flat ? gripLong : gripStub;
             Grip.Height = flat ? gripStub : gripLong;
 
             // 展开面板：永远竖着排（贴上下边时就是两行）
             ExpandedStack.Orientation = Orientation.Vertical;
             // ⚠️ 紧凑档也把标题收掉：条才 58 宽，「常用工具」四个字加图标根本放不下（会被裁掉）
-            TitleRow.Visibility = flat || Compact ? Visibility.Collapsed : Visibility.Visible;
+            TitleRow.Visibility = flat || CompactBody ? Visibility.Collapsed : Visibility.Visible;
 
             // 工具区是个 Grid（行列由 BuildToolButtons 按「每行几个」摆好），这里只管间距与对齐
             ToolStack.ColumnSpacing = flat ? 8 : ToolGap;
@@ -2144,17 +2173,17 @@ public sealed partial class ToolSidebarWindow : Window
             // 贴上下边时给按钮留出宽度，别挤成一坨；竖条时按钮高度/内边距按大小样式走
             foreach (var b in _toolButtons)
             {
-                b.MinWidth = flat ? (Compact ? 56 : 64) : 0;
-                b.MinHeight = flat ? (Compact ? 42 : 48) : ToolButtonH;
+                b.MinWidth = flat ? (CompactBody ? 56 : 64) : 0;
+                b.MinHeight = flat ? (CompactBody ? 42 : 48) : ToolButtonH;
                 b.Padding = flat
                     ? new Thickness(4, 6, 4, 6)
-                    : new Thickness(0, Compact ? 4 : 8, 0, Compact ? 4 : 8);
+                    : new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8);
             }
             foreach (var (_, b) in FooterItems())
             {
-                b.MinWidth = flat ? (Compact ? 88 : FooterFlatButtonWidthDip) : 0;
+                b.MinWidth = flat ? (CompactBody ? 88 : FooterFlatButtonWidthDip) : 0;
                 // 横条时矮一点，不然两行加起来超出面板高度，下面一排会被裁掉
-                b.MinHeight = flat ? (Compact ? 28 : 32) : FooterButtonH;
+                b.MinHeight = flat ? (CompactBody ? 28 : 32) : FooterButtonH;
                 b.Padding = flat ? new Thickness(6, 2, 6, 2) : new Thickness(8, 4, 8, 4);
                 b.HorizontalContentAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
             }
@@ -2240,7 +2269,11 @@ public sealed partial class ToolSidebarWindow : Window
         SetFooterButton(FoldButton, "\uE76C", "收起", flat, out _foldIcon);
         SetFooterButton(PinButton, "\uE718", "常驻", flat, out _pinIcon);
         SetFooterButton(ResetButton, "\uE777", "位置复原", flat, out _);
-        SetFooterButton(HideButton, "\uED1A", "隐藏", flat, out _);
+        // ⚠️「隐藏」原来是 \uED1A —— 在 **Win10 上是个空框**（Nick 2026-10-12 报）。
+        //    那不是码位不存在，而是 ED 那一段属于"新版图标字体"才有的字形，Win10 自带的那版没有。
+        //    ⇒ 一律挑 E7/E8/E9 这一带的老码位（本机 Win10 上已经在正常显示的都在这一带）。
+        //    现在用的 \uE89F 是「ClosePane」（一块面板被收进去），语义对得上"把这条边条收掉不再显示"。
+        SetFooterButton(HideButton, "\uE89F", "隐藏", flat, out _);
         SetFooterImageButton(OpenAppButton, "打开应用", flat);
         UpdatePinVisual();
     }
@@ -2254,14 +2287,14 @@ public sealed partial class ToolSidebarWindow : Window
         var text = new TextBlock
         {
             Text = label,
-            FontSize = flat ? 11 : (Compact ? 9.5 : 10.5),
+            FontSize = flat ? 11 : (CompactBody ? 9.5 : 10.5),
             VerticalAlignment = VerticalAlignment.Center
         };
         var img = new Image
         {
             Source = AppIconImage(),
-            Width = flat ? 14 : (Compact ? 14 : 17),
-            Height = flat ? 14 : (Compact ? 14 : 17),
+            Width = flat ? 14 : (CompactBody ? 14 : 17),
+            Height = flat ? 14 : (CompactBody ? 14 : 17),
             Stretch = Stretch.Uniform,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
@@ -2311,13 +2344,13 @@ public sealed partial class ToolSidebarWindow : Window
         var text = new TextBlock
         {
             Text = label,
-            FontSize = flat ? 11 : (Compact ? 9.5 : 10.5),
+            FontSize = flat ? 11 : (CompactBody ? 9.5 : 10.5),
             VerticalAlignment = VerticalAlignment.Center
         };
         icon = new FontIcon
         {
             Glyph = glyph,
-            FontSize = flat ? 13 : (Compact ? 13 : 15),
+            FontSize = flat ? 13 : (CompactBody ? 13 : 15),
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
         };
@@ -2387,9 +2420,9 @@ public sealed partial class ToolSidebarWindow : Window
             // 宽度取**两行里更宽的那行**：底排是固定几颗（不被裁的硬要求），
             // 工具行多到放不下时由 ToolsScroll 横向滚动兜底。
             var count = Math.Max(1, _toolButtons.Count);
-            var cell = Compact ? 56 : 64;
+            var cell = CompactBody ? 56 : 64;
             var toolsRow = count * cell + (count - 1) * 8 + FlatRowPadDip;
-            var footerCell = Compact ? 88 : FooterFlatButtonWidthDip;
+            var footerCell = CompactBody ? 88 : FooterFlatButtonWidthDip;
             var footerRow = footerCount > 0
                 ? footerCount * footerCell + (footerCount - 1) * FooterFlatSpacingDip + FlatRowPadDip
                 : 0;
@@ -2592,8 +2625,8 @@ public sealed partial class ToolSidebarWindow : Window
     private SizeInt32 CollapsedSize()
     {
         var scale = Scale();
-        var thick = Compact ? CollapsedCompactThicknessDip : CollapsedThicknessDip;
-        var len = Compact ? CollapsedCompactLengthDip : CollapsedLengthDip;
+        var thick = CompactCollapsed ? CollapsedCompactThicknessDip : CollapsedThicknessDip;
+        var len = CompactCollapsed ? CollapsedCompactLengthDip : CollapsedLengthDip;
         var dipW = IsFlat ? len : thick;
         var dipH = IsFlat ? thick : len;
         return new SizeInt32((int)Math.Round(dipW * scale), (int)Math.Round(dipH * scale));

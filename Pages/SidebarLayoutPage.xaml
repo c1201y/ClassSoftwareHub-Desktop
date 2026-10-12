@@ -141,7 +141,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="侧边栏大小样式"
-                                               Description="「标准」为默认样式；「紧凑」把侧边栏收细、图标与文字相应缩小，按钮的点击区域仍保持较大尺寸（不至于点不准）。">
+                                               Description="侧边栏收起成那条小抓手时的大小样式。「标准」为默认；「紧凑」把条收细、图标与文字相应缩小，按钮的点击区域仍保持较大尺寸（不至于点不准）。展开后的面板默认跟着这项走，也可以在下一条里单独指定。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE747;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -152,15 +152,28 @@
                             </ComboBox>
                         </controls:SettingsCard>
 
+                        <controls:SettingsCard Header="展开后的大小样式"
+                                               Description="侧边栏展开成面板后用哪套大小样式。默认「跟随收起时的样式」，即上下两态一致；也可以单独指定（例如收起时用紧凑省地方、展开后仍用标准）。">
+                            <controls:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE70E;" />
+                            </controls:SettingsCard.HeaderIcon>
+                            <ComboBox x:Name="SidebarExpandedDensityCombo" MinWidth="170"
+                                      SelectionChanged="SidebarExpandedDensity_SelectionChanged">
+                                <ComboBoxItem Content="跟随收起时的样式" Tag="same" />
+                                <ComboBoxItem Content="标准" Tag="standard" />
+                                <ComboBoxItem Content="紧凑" Tag="compact" />
+                            </ComboBox>
+                        </controls:SettingsCard>
+
                         <controls:SettingsCard Header="工具排列模式"
-                                               Description="「舒展模式」每行一个、自上而下竖排；「紧凑模式」每行三个、放满自动折行，同样长度里能放更多工具。仅在贴靠屏幕左右两边时生效，贴上边或下边时为横向单行。">
+                                               Description="「舒展模式」每行三个、放满自动折行，面板更宽、能横向铺开；「紧凑模式」每行一个、自上而下竖排，面板更窄、更省地方。仅在贴靠屏幕左右两边时生效，贴上边或下边时为横向单行。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8FD;" />
                             </controls:SettingsCard.HeaderIcon>
                             <ComboBox x:Name="SidebarColumnsCombo" MinWidth="170"
                                       SelectionChanged="SidebarColumns_SelectionChanged">
-                                <ComboBoxItem Content="舒展模式" Tag="1" />
-                                <ComboBoxItem Content="紧凑模式" Tag="3" />
+                                <ComboBoxItem Content="舒展模式" Tag="3" />
+                                <ComboBoxItem Content="紧凑模式" Tag="1" />
                             </ComboBox>
                         </controls:SettingsCard>
 

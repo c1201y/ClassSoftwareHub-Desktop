@@ -59,7 +59,15 @@ public static class ToolCatalog
             Desc = "校验文件：拖入即得 MD5 / SHA-1 / SHA-256 / SHA-512，可粘贴官方值自动核对；也可做 Base64、URL 编解码。",
             Glyph = "\uE943", Page = typeof(EncodingToolPage)
         },
-        // ⚠️ 原来这里还有第 6 个工具「系统镜像下载（mirror-download → MirrorToolPage）」，
+        new ToolDef
+        {
+            Id = "autoshutdown", Name = "自动关机",
+            Desc = "按星期设定关机时间点，到达时间后自动关机；可直接关机（可设延迟），也可用系统原生的滑动关机。",
+            Glyph = "\uE787", Page = typeof(ClassSoftwareHub.Desktop.Pages.AutoShutdownPage)
+        },
+        // ⚠️ 原来是第 6 个工具「系统镜像下载（mirror-download → MirrorToolPage）」，
         //    2026-10-09 该功能整体下线，工具定义、页面、侧边栏模块、内容解析一并删除。
+        // ⚠️「自动关机」2026-10-12 从「实验性功能」转正搬来这里（Nick 定：这玩意可以退出实验性了）——
+        //    导航子项与工具索引页卡片都会自动跟着出现，不用另改导航（见本类注释）。
     };
 }

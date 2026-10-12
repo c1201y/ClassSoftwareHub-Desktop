@@ -292,9 +292,12 @@ public sealed partial class ShellPage : UserControl
             case "procguard":
                 ContentFrame.Navigate(typeof(ProcessGuardPage));
                 return;
-            case "autoshutdown":
-                ContentFrame.Navigate(typeof(AutoShutdownPage));
+            case "uninstaller":
+                // 应用卸载（2026-10-12 加，实验性功能分组下）
+                ContentFrame.Navigate(typeof(UninstallPage));
                 return;
+            // ⚠️ 自动关机（autoshutdown）2026-10-12 转正搬进「内置工具」，走上面 ToolCatalog 那条路，
+            //    这里不再单写 case（写了也到不了：工具路径在前面就 return 了）。
             case "logs":
                 ContentFrame.Navigate(typeof(LogViewerPage));
                 return;

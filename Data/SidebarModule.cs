@@ -89,7 +89,9 @@ public static class SidebarModules
 
         // 系统快捷三件套（2026-10-11 Nick 要）：任务管理器 / 安全选项 / 剪贴板历史。
         // 都插在动作组最前面（跟 rev1 递音量同一个位置约定），紧挨着工具组下沿，好找。
-        new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", Glyph = "\uE9F3", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
+        // ⚠️ 图标用 E9D9（框内折线图，跟 Windows 自家任务管理器那个图标一个意思）。
+        //    ⛔ 原来用的是 E9F3 —— 那字形是"虚线圈 + 箭头"（同步/刷新），放这儿让人莫名其妙（Nick 2026-10-12 报）。
+        new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", Glyph = "\uE9D9", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
         // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起
         //    （否则钓鱼程序可以伪造一个一模一样的界面骗密码）。这里给的是它上面的那几个操作本身。
         // ⚠️ 短名用「安全项」不用「安全」（2026-10-12 Nick：只写「安全」两个字别人看不懂是干什么的）。

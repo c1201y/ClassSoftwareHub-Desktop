@@ -160,15 +160,22 @@
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
                         <!--
-                          自动关机：按星期（周一~周日）设关机时间点，到点自动关机。
-                          ⚠️ 为啥塞进实验性：真会关机、且依赖本程序常驻；放学场景的误伤面还没摸清。
-                          ⚠️ 图标用日历（E787）不用电源（E7E8）—— 后者与上面「程序专杀」撞脸。
+                          应用卸载：2026-10-12 加（Nick：「既然是以软件下载起步的，为什么不也管卸载」）。
+                          ⚠️ 为啥塞实验性：卸载是**不可逆操作**，而扫描口径有已知盲区（免安装版没有任何登记、
+                             别的账户注册的商店应用读不到），结果不像"能装机验收"那么权威 ——
+                             先放这儿用一阵，反馈好了再议要不要上主界面。
+                          ⚠️ 图标 E74D（垃圾桶）：MDL2 里没有专门的"卸载"字形，垃圾桶是最通用的隐喻；
+                             改之前先过 glyphs.ps1 渲图看有没有字形（ED 那段的坑见 MEMORY §6）。
                         -->
-                        <NavigationViewItem Content="自动关机" Tag="autoshutdown">
+                        <NavigationViewItem Content="应用卸载" Tag="uninstaller">
                             <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE787;" />
+                                <FontIcon Glyph="&#xE74D;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
+                        <!--
+                          自动关机：2026-10-12 转正搬去「内置工具」分组 —— 子项由 ToolCatalog 自动生成，
+                          这里不能再手写一条（否则导航里会出现两个同名项）。见 Data/ToolDef.cs。
+                        -->
                         <!--
                           日志查看：Nick 2026-10-02 拍板「不要实验性」，入口挪到 设置 → 诊断
                           （Pages/SettingsPage.xaml）。NavigateTagCore 的 "logs" case 保留，

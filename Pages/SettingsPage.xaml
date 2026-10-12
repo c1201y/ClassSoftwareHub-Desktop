@@ -4,7 +4,6 @@
     NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:core="using:ClassSoftwareHub.Desktop.Core"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls"
     Background="{x:Null}">
@@ -23,7 +22,9 @@
     -->
 
     <Page.Resources>
-        <!-- 快捷入口两套模板（同首页）：颜色全走 {ThemeResource}，浅色/深色自己会变 -->
+        <!-- 快捷入口模板（同首页）：颜色全走 {ThemeResource}，浅色/深色自己会变。
+             ⚠️ 原来还有第二套「主题色底 + 反白字」专给「赞助作者」那颗用（Accent 模板 + QuickLinkSelector），
+                2026-10-12 Nick 嫌那底色越看越丑，整套去掉了 —— 五颗一视同仁。 -->
         <DataTemplate x:Key="QuickLinkNormal">
             <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -34,22 +35,6 @@
                 </StackPanel>
             </Border>
         </DataTemplate>
-
-        <DataTemplate x:Key="QuickLinkAccent">
-            <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                    Background="{ThemeResource AccentFillColorDefaultBrush}">
-                <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
-                              Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Opacity="0.95" />
-                    <TextBlock Text="{Binding Name}" FontSize="12" HorizontalAlignment="Center"
-                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                </StackPanel>
-            </Border>
-        </DataTemplate>
-
-        <core:QuickLinkSelector x:Key="QuickLinkSelector"
-                                Normal="{StaticResource QuickLinkNormal}"
-                                Accent="{StaticResource QuickLinkAccent}" />
     </Page.Resources>
 
     <!-- ⛔ 不写 Background：App.xaml 给全站 ScrollViewer 设了 Transparent（见那里的注释）——
@@ -84,7 +69,7 @@
                 <!-- 相关链接（在版本号下面，跟首页那行同款） -->
                 <GridView x:Name="SettingsQuickGrid" Margin="0,6,0,0" Padding="0" SelectionMode="None"
                           IsItemClickEnabled="True" ItemClick="Quick_ItemClick"
-                          ItemTemplateSelector="{StaticResource QuickLinkSelector}"
+                          ItemTemplate="{StaticResource QuickLinkNormal}"
                           ScrollViewer.HorizontalScrollMode="Disabled"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <GridView.ItemsPanel>

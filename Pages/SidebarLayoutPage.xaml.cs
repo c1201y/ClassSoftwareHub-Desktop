@@ -283,15 +283,30 @@ public sealed partial class SidebarLayoutPage : Page
                 if (SidebarModeCombo.SelectedIndex != index) SidebarModeCombo.SelectedIndex = index;
             }
 
-            // 大小样式 / 工具排列模式（2026-10-11 Nick：嫌默认那套按钮太大、单列太占地方）
+            // 大小样式（收起态 / 展开态）/ 工具排列模式
+            //（2026-10-11 Nick：嫌默认那套按钮太大、单列太占地方；2026-10-12 又拆出展开态那项）
             if (SidebarDensityCombo is not null)
             {
                 var index = s.SidebarDensity == "compact" ? 1 : 0;
                 if (SidebarDensityCombo.SelectedIndex != index) SidebarDensityCombo.SelectedIndex = index;
             }
+            if (SidebarExpandedDensityCombo is not null)
+            {
+                // 选项顺序：0 跟随收起时的样式（same）／1 标准／2 紧凑；认不出的值当 same。
+                var index = s.SidebarExpandedDensity switch
+                {
+                    "standard" => 1,
+                    "compact" => 2,
+                    _ => 0,
+                };
+                if (SidebarExpandedDensityCombo.SelectedIndex != index) SidebarExpandedDensityCombo.SelectedIndex = index;
+            }
             if (SidebarColumnsCombo is not null)
             {
-                var index = s.SidebarColumns == 3 ? 1 : 0;
+                // 选项顺序：0 舒展模式（Tag=3，每行三个）／1 紧凑模式（Tag=1，每行一个）。
+                // ⚠️ 2026-10-12 把两个 Tag 换了个位 —— 之前「舒展」配的是单列，Nick 说写反了。
+                //    存档里存的仍是**列数**（1 / 3），所以老存档不用迁移，回显按下标映射即可。
+                var index = s.SidebarColumns == 3 ? 0 : 1;
                 if (SidebarColumnsCombo.SelectedIndex != index) SidebarColumnsCombo.SelectedIndex = index;
             }
             if (SidebarGapCombo is not null)
@@ -2266,7 +2281,8 @@ public sealed partial class SidebarLayoutPage : Page
     }
 
     /// <summary>
-    /// 大小样式（标准 / 紧凑）。
+    /// **收起条**的大小样式（标准 / 紧凑）。2026-10-12 起这一项只管收起态，展开面板见
+    /// <see cref="SidebarExpandedDensity_SelectionChanged"/>。
     /// ⚠️ 改了要**整个重建**侧边栏（按钮尺寸、图标、字号、底排都跟着换），不是只重排位置 ——
     ///    <c>ToolSidebarWindow.ApplySetting()</c> 里走的就是重建那条路。
     /// </summary>
@@ -2281,7 +2297,28 @@ public sealed partial class SidebarLayoutPage : Page
         if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplySetting();
     }
 
-    /// <summary>工具排列模式：舒展（1 列）/ 紧凑（3 列）。贴上/下边时不生效（横条永远一排到底，见 ToolSidebarWindow.Columns）。</summary>
+    /// <summary>
+    /// **展开面板**的大小样式（跟随收起时的样式 / 标准 / 紧凑）。
+    /// 2026-10-12 Nick：有用户报「侧边栏大小样式想要紧凑，但打开的侧边栏想要标准」⇒ 拆出这一项。
+    /// ⚠️ 与上面那条同理，改了要**整个重建**（条宽、按钮高、图标、字号全变）。
+    /// </summary>
+    private void SidebarExpandedDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_toolSync) return;
+        if (SidebarExpandedDensityCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string style) return;
+
+        App.Settings.Current.SidebarExpandedDensity = style;
+        App.Settings.Save();
+
+        if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplySetting();
+    }
+
+    /// <summary>
+    /// 工具排列模式：**舒展（3 列，Tag="3"）/ 紧凑（1 列，Tag="1"）**。贴上/下边时不生效
+    /// （横条永远一排到底，见 ToolSidebarWindow.Columns）。
+    /// ⚠️ 2026-10-12 Nick：「写反了，舒展模式它是一行有 3 个，紧凑模式它是一行有一个」⇒ 两个 Tag 对调，
+    ///    存档里存的仍是**列数**（1 / 3），老存档不用迁移。
+    /// </summary>
     private void SidebarColumns_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_toolSync) return;

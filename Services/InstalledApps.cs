@@ -6,8 +6,26 @@ using Microsoft.Win32;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>本机装的一个软件（从注册表 Uninstall 键读出来的）。</summary>
-public sealed record InstalledApp(string Name, string Version, string Publisher, string Location);
+/// <summary>
+/// 本机装的一个软件（从注册表 Uninstall 键读出来的，或一个 Microsoft Store / MSIX 包）。
+///
+/// ⚠️ 后四个字段是 2026-10-12 为「应用卸载」功能补的，都带默认值 ——
+///    「本机核实」只用前四个，老代码 <c>new InstalledApp(n, v, p, l)</c> 照样编译，不用改。
+///    加在这里而不是另开一个类，是为了**不重复读一遍注册表**（那活儿在本机挺贵）。
+/// </summary>
+/// <param name="UninstallString">注册表里的卸载命令原文（如 <c>"C:\...\uninst.exe" /S</c> 或 <c>MsiExec.exe /I{GUID}</c>）。</param>
+/// <param name="QuietUninstallString">厂商额外给的静默卸载命令，有就优先用它（少一次交互）。</param>
+/// <param name="IsStore">true = Microsoft Store / MSIX 包 —— 它不写 Uninstall 键，卸载要走另一条路。</param>
+/// <param name="PackageFullName">MSIX 的包全名（<c>Name_Version_Arch__PublisherHash</c>），卸载时按它定位。</param>
+public sealed record InstalledApp(
+    string Name,
+    string Version,
+    string Publisher,
+    string Location,
+    string UninstallString = "",
+    string QuietUninstallString = "",
+    bool IsStore = false,
+    string PackageFullName = "");
 
 /// <summary>
 /// 枚举本机已安装的桌面软件。
@@ -44,10 +62,12 @@ public static class InstalledApps
             ReadHive(hive, view, found);
         }
 
-        // 同一款软件可能在 64/32 两个视图里各出现一次（甚至多个版本并存）→ 按「名称+版本」去重
+        // 同一款软件可能在 64/32 两个视图里各出现一次（甚至多个版本并存）→ 按「名称+版本」去重。
+        // ⚠️ 去重时**优先留带卸载命令的那条**（2026-10-12 加）：两个视图里常常一只有 UninstallString、
+        //    另一只没有（比如 32 位残留键），随便留一条会让「应用卸载」页上这颗按钮点了没反应。
         return found
             .GroupBy(a => (a.Name.ToLowerInvariant(), a.Version.ToLowerInvariant()))
-            .Select(g => g.First())
+            .Select(g => g.OrderByDescending(a => a.UninstallString.Length > 0).First())
             .OrderBy(a => a.Name, StringComparer.CurrentCulture)
             .ToList();
     }
@@ -124,7 +144,10 @@ public static class InstalledApps
         if (name.Length == 0) return null;
 
         var location = (k.GetValue("PackageRootFolder") as string)?.Trim() ?? "";
-        return new InstalledApp(name, VersionOf(fullName), "", location);
+        // ⚠️ 商店包没有 UninstallString —— 卸载只能按 PackageFullName 走 PackageManager / Remove-AppxPackage。
+        //    fullName 在这里必须原样留着，它就是那条路的钥匙。
+        return new InstalledApp(name, VersionOf(fullName), "", location,
+                                IsStore: true, PackageFullName: fullName);
     }
 
     /// <summary>PackageFullName = <c>Name_Version_Arch__PublisherHash</c> → 取 Name 的最后一段。</summary>
@@ -195,7 +218,13 @@ public static class InstalledApps
         var publisher = (k.GetValue("Publisher") as string)?.Trim() ?? "";
         var location = (k.GetValue("InstallLocation") as string)?.Trim() ?? "";
 
-        return new InstalledApp(name, version, publisher, location);
+        // 卸载命令。QuietUninstallString 是厂商额外提供的无交互版本，能拿到就优先用它。
+        // ⚠️ 有些条目两个都没有（只做登记的、或者卸载信息写在别处）—— 「应用卸载」页上要如实说
+        //    "这条得去系统设置里卸"，⛔ 别让按钮点了没反应。
+        var uninstall = (k.GetValue("UninstallString") as string)?.Trim() ?? "";
+        var quiet = (k.GetValue("QuietUninstallString") as string)?.Trim() ?? "";
+
+        return new InstalledApp(name, version, publisher, location, uninstall, quiet);
     }
 
     /// <summary>

@@ -147,15 +147,29 @@ public sealed class AppSettings
     public bool SidebarFooterEnabled { get; set; } = true;
 
     /// <summary>
-    /// 侧边栏展开面板的**大小样式**（2026-10-11 Nick：有用户嫌默认那套悬浮按钮太大）：
+    /// 侧边栏**收起条**的大小样式（2026-10-11 Nick：有用户嫌默认那套悬浮按钮太大）：
     /// <list type="bullet">
-    ///   <item><c>standard</c>（默认）= 现在这套：宽 92 dip 的竖条，按钮 52 高、图标 20、图标下面带短名。</item>
+    ///   <item><c>standard</c>（默认）= 现在这套：抓手 20×110，展开后面板宽 92 dip，按钮 52 高、图标 20、图标下面带短名。</item>
     ///   <item><c>compact</c> = 紧凑：细条 + 小图标小字，但**按钮本身的点击区域不跟着缩到底**
     ///         （否则细条上的键点不准，2026-10-11 Nick 特意提的）。</item>
     /// </list>
-    /// ⚠️ 认不出的值一律当 <c>standard</c>（见 <c>ToolSidebarWindow.IsCompact</c>）。
+    /// ⚠️ 认不出的值一律当 <c>standard</c>（见 <c>ToolSidebarWindow.CompactCollapsed</c>）。
+    ///
+    /// ⚠️ 2026-10-12 起这项**只决定收起态**（那条小抓手），展开面板改由
+    ///    <see cref="SidebarExpandedDensity"/> 决定 —— 有用户要「收起时紧凑省地方、展开后仍用标准」。
+    ///    它的默认值 <c>same</c> 会让展开面板继续跟随本项，所以老用户升上来观感不变。
     /// </summary>
     public string SidebarDensity { get; set; } = "standard";
+
+    /// <summary>
+    /// 侧边栏**展开后**（面板态）的大小样式（2026-10-12 Nick：有用户要「收起紧凑、展开标准」）：
+    /// <list type="bullet">
+    ///   <item><c>same</c>（默认）= 跟随 <see cref="SidebarDensity"/>，上下两态一致 —— 2026-10-12 之前的唯一行为。</item>
+    ///   <item><c>standard</c> / <c>compact</c> = 无论收起态怎么设，展开面板固定用这一套。</item>
+    /// </list>
+    /// ⚠️ 只认这三个值，别的（含 <c>null</c>）一律当 <c>same</c>（见 <c>ToolSidebarWindow.CompactBody</c>）。
+    /// </summary>
+    public string SidebarExpandedDensity { get; set; } = "same";
 
     /// <summary>
     /// 侧边栏工具区**每行摆几个**（2026-10-11 Nick：单列排下来太占地方，想要能折行）：
