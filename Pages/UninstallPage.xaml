@@ -7,11 +7,37 @@
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
     <!--
-      版式与「本机核实」「软件下载」同源：三列 Grid 把内容钉在中间 960 宽。
-      ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
-      本页最后一行是页脚说明卡（非自滚元素）→ 中间列底 Margin 写 44；
+      2026-10-13 第二版（Nick：「不要用可独立开关的筛选按钮，你直接下拉弹窗选择分类，
+      每个分类单独显示，不要混在一起，我现在想提供列表和表格两种形式，
+      还有其他页都是有页宽的，为什么这个页宽被改没了，空间利用率还是不够大，
+      一些无关紧要的太多了」）：
+
+        · **页宽回来了**：上一版为了"铺满"把 `MaxWidth="960"` 去掉了，这次按全站规范加回来。
+        · **分类＝下拉单选**（`ComboBox`），一次只显示一个分类 —— ⛔ 不再是四颗可独立开关的芯片。
+          ⚠️ 是"下拉"不是 `SelectorBar`/`Pivot`：Nick 2026-10-11 明确否过那两个（见 Controls/LevelChipBar 注释）。
+        · **列表 / 表格 两种形式**（右上角切换）：
+            列表 = 图标 + 名称/发布者 + 版本 + 卸载（宽松，看内容）
+            表格 = 图标 | 名称 | 操作（带表头，紧凑，看全貌）
+        · **页脚那一大段「扫描范围与须知」收成一枚带图标的「说明」按钮**（Nick：「那个玩意儿给用户看，
+          其实没什么重要的」）—— 放标题行右侧，点了才弹出来。那一块原本占掉将近四分之一屏。
+        · 行内不再重复显示分类标签：分类已经由上面的下拉决定了，每行再贴一遍是纯噪音。
+
+      骨架仍是「24 / * / 24」三列，960 上限写在**中列内容自身**（⛔ 不是给根元素定宽 + 居中）。
       列表那一行是 `*`，由 ListView 自己滚（外面不再套 ScrollViewer，否则内外两层滚动条）。
     -->
+    <Page.Resources>
+        <!-- 表格视图的行样式（`CshResultRowStyle` 的紧凑版，只把行高收紧一档）。
+             ⚠️ 刻意把三行 Setter **照抄**在这里、而不是写 `BasedOn="{StaticResource CshResultRowStyle}"`：
+             2026-10-13 实测，XAML 编译器在 Pass2 的代码生成阶段解析跨文件的 BasedOn 时会**直接崩掉**
+             （报出来的是 WMC9999「找不到 XamlCompiler 的错误消息资源」—— 它连自己的错误文本都格式化不出来，
+              崩溃点正好停在 UninstallPage 的 PageCodeGen）。所以这里宁可重复三行。 -->
+        <Style x:Key="CshTableRowStyle" TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="14,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </Page.Resources>
+
     <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
          但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，列表纹丝不动（与首页手感不一致）。 -->
     <Grid Background="Transparent">
@@ -25,52 +51,104 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- 标题 + 实验性标记：本功能会**真的把软件卸掉**，第一眼就得让人知道它是什么性质 -->
-            <StackPanel Spacing="6">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="应用卸载" FontSize="28" FontWeight="Bold" />
-                    <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                            BorderThickness="1"
-                            BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                      Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            <TextBlock Text="实验性功能" FontSize="12"
-                                       Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-                <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                           Text="扫描本机已安装的软件，可以直接调起它们自带的卸载程序。卸载动作由厂商自己的卸载程序完成，本程序不删除任何文件。" />
-            </StackPanel>
+            <!-- ── 标题行：左＝标题+实验性标记，右＝视图切换 + 说明按钮 ── -->
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <!-- 工具条：左边计数，右边搜索（按钮贴在输入框右侧） -->
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="应用卸载" FontSize="28" FontWeight="Bold" />
+                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <FontIcon Glyph="&#xEA80;" FontSize="11"
+                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                <TextBlock Text="实验性功能" FontSize="12"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                               Text="扫描本机已安装的软件，可以直接调起它们自带的卸载程序。卸载动作由厂商自己的卸载程序完成，本程序不删除任何文件。" />
+                </StackPanel>
+
+                <!-- 视图切换：⛔ 别换成 SelectorBar / Pivot（Nick 2026-10-11 否过），
+                     与「软件下载」页的磁贴/网格切换同一种写法（RadioButtons + Tag）。 -->
+                <RadioButtons x:Name="ViewChoice" Grid.Column="1" MaxColumns="2"
+                              VerticalAlignment="Top" Margin="0,4,0,0"
+                              SelectionChanged="ViewChoice_SelectionChanged">
+                    <RadioButton Content="列表" Tag="list" />
+                    <RadioButton Content="表格" Tag="table" />
+                </RadioButtons>
+
+                <!-- 说明按钮（A Button with graphical content）：原来那四行页脚说明搬进弹窗。
+                     ⚠️ Content 是 StackPanel ⇒ UIA 拿不到按钮名（本项目老坑），这里显式给一个。 -->
+                <Button x:Name="AboutButton" Grid.Column="2" Click="About_Click"
+                        AutomationProperties.Name="说明"
+                        VerticalAlignment="Top" Margin="0,4,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE946;" FontSize="14" />
+                        <TextBlock Text="说明" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- ── 工具条：分类下拉 + 计数 | 搜索 + 重新扫描 ── -->
             <Border Grid.Row="1" CornerRadius="4" Padding="18,12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1">
                 <Grid ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="CountText" Text="正在扫描…" FontSize="12" Opacity="0.7"
-                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <!-- 分类：**下拉单选**，一次只显示一个分类。
+                         ⚠️ 选项内容在代码里建（FillCategories）—— 试过在这里写 `ItemTemplate` + `x:Bind`，
+                            XamlCompiler 会在整页的代码生成阶段直接崩（WMC9999，见文件头注释）。 -->
+                    <ComboBox x:Name="CategoryBox" MinWidth="180" VerticalAlignment="Center"
+                              SelectionChanged="Category_Changed" />
 
-                    <TextBox Grid.Column="1" x:Name="SearchBox" Width="240" MinHeight="32"
+                    <TextBlock x:Name="CountText" Grid.Column="1" Text="正在扫描…" FontSize="12" Opacity="0.7"
+                               Margin="8,0,0,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                    <TextBox Grid.Column="2" x:Name="SearchBox" Width="260" MinHeight="32"
                              PlaceholderText="按名称或发布者筛选" TextChanged="Search_Changed" />
-                    <Button Grid.Column="2" x:Name="RescanButton" Content="重新扫描" Click="Rescan_Click" />
+                    <Button Grid.Column="3" x:Name="RescanButton" Content="重新扫描" Click="Rescan_Click" />
                 </Grid>
             </Border>
 
-            <!-- 列表：一行一个应用，右侧一颗卸载按钮 -->
-            <Grid Grid.Row="2">
+            <!-- ── 表头（只有表格视图显示）。⚠️ 列宽必须与表格行模板逐列一致，否则错位 ── -->
+            <Grid x:Name="TableHeader" Grid.Row="2" Visibility="Collapsed"
+                  ColumnSpacing="12" Margin="14,0,14,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="64" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="1" Text="名称" FontSize="12" Opacity="0.6" Margin="0,0,0,7" />
+                <TextBlock Grid.Column="2" Text="操作" FontSize="12" Opacity="0.6" Margin="0,0,0,7" />
+                <!-- 表头压一条细线 —— 这一条线就是"表格"与"列表"在观感上的分界。
+                     ⚠️ 用文字的下边距把线顶到底，别写负 Margin（本页 LayoutCycle 出过一次） -->
+                <Border Grid.ColumnSpan="3" Height="1" VerticalAlignment="Bottom"
+                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            </Grid>
+
+            <!-- ── 内容区：两个 ListView 叠放，按视图切换显隐（共用同一次扫描的结果） ── -->
+            <Grid Grid.Row="3">
+                <!-- 列表视图 -->
                 <ListView x:Name="AppList"
                           SelectionMode="None" IsItemClickEnabled="False"
                           ItemContainerStyle="{StaticResource CshResultRowStyle}"
@@ -79,12 +157,24 @@
                         <DataTemplate x:DataType="local:UninstallRow">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                <!-- 图标：能掏到就用软件自己的（多数人认图不认字），掏不到退成分类占位字形。
+                                     ⚠️ 两个 x:Bind Visibility 都在 UninstallRow 里算好 —— 那里会顺带触发惰性取图标，
+                                        所以谁先求值都一样，不会出现"有图但显示占位"。 -->
+                                <Grid Width="32" Height="32" VerticalAlignment="Center">
+                                    <Image Source="{x:Bind Icon}" Width="32" Height="32" Stretch="Uniform"
+                                           Visibility="{x:Bind IconVisibility}" />
+                                    <FontIcon Glyph="{x:Bind PlaceholderGlyph}" FontSize="16" Opacity="0.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Visibility="{x:Bind PlaceholderVisibility}" />
+                                </Grid>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock Text="{x:Bind Name}" FontSize="14"
                                                MaxLines="1" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind Sub}" FontSize="12" Opacity="0.6"
@@ -92,10 +182,50 @@
                                                ToolTipService.ToolTip="{x:Bind Sub}" />
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="1" Text="{x:Bind Version}" FontSize="12" Opacity="0.7"
-                                           Margin="12,0,12,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Version}" FontSize="12" Opacity="0.7"
+                                           Margin="14,0,14,0" VerticalAlignment="Center" />
 
-                                <Button Grid.Column="2" Content="卸载"
+                                <Button Grid.Column="3" Content="卸载" Width="72"
+                                        Click="Uninstall_Click"
+                                        IsEnabled="{x:Bind CanUninstall}"
+                                        ToolTipService.ToolTip="{x:Bind ActionTip}"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- 表格视图：图标 | 名称 | 操作（紧凑，一屏能扫过更多条） -->
+                <ListView x:Name="AppTable" Visibility="Collapsed"
+                          SelectionMode="None" IsItemClickEnabled="False"
+                          ItemContainerStyle="{StaticResource CshTableRowStyle}"
+                          Padding="0,0,0,8">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:UninstallRow">
+                            <Grid ColumnSpacing="12" MinHeight="26">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="20" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Width="20" Height="20" VerticalAlignment="Center">
+                                    <Image Source="{x:Bind Icon}" Width="20" Height="20" Stretch="Uniform"
+                                           Visibility="{x:Bind IconVisibility}" />
+                                    <FontIcon Glyph="{x:Bind PlaceholderGlyph}" FontSize="13" Opacity="0.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Visibility="{x:Bind PlaceholderVisibility}" />
+                                </Grid>
+
+                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontSize="13"
+                                           MaxLines="1" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           ToolTipService.ToolTip="{x:Bind Sub}" />
+
+                                <!-- 表格里的卸载键比列表里小一档：表格的意义就是"一屏扫过更多条"，
+                                     按钮沿用 32 高会把行高撑到和列表差不多。 -->
+                                <Button Grid.Column="2" Content="卸载" Width="64" MinHeight="28"
+                                        Padding="10,0" FontSize="12"
                                         Click="Uninstall_Click"
                                         IsEnabled="{x:Bind CanUninstall}"
                                         ToolTipService.ToolTip="{x:Bind ActionTip}"
@@ -118,24 +248,9 @@
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE74D;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
                     <TextBlock x:Name="EmptyText" Text="没有符合条件的应用" FontSize="14" Opacity="0.7"
-                               HorizontalAlignment="Center" />
+                               HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
                 </StackPanel>
             </Grid>
-
-            <!-- 页脚：扫描范围与须知（先说清边界，别让用户自己猜） -->
-            <Border Grid.Row="3" Style="{StaticResource CshCardStyle}">
-                <StackPanel Spacing="7">
-                    <TextBlock Text="扫描范围与须知" FontSize="12" FontWeight="Bold" Opacity="0.85" />
-                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="· 扫描范围：Windows「程序和功能」的安装记录（64 位、32 位、当前用户三处），以及本账户注册的 Microsoft Store 应用。免安装（绿色版）软件没有任何登记，不会出现在列表里。" />
-                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="· 卸载方式：调起软件自带的卸载程序（需要管理员权限时会弹出系统授权提示）。本程序只负责发起，不删文件、不动注册表 —— 这比手动删目录安全。" />
-                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="· 卸载完成后会自动重扫。若某个卸载程序启动后长期不退出（个别软件会卡在重启提示上），可能仍需到系统「设置 → 应用」里收尾。" />
-                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="· 部分软件（尤其系统组件与其他账户下的商店应用）会拒绝卸载或要求重启，这些限制来自软件本身。卸载前请先退出该软件，并保存好正在编辑的内容。" />
-                </StackPanel>
-            </Border>
         </Grid>
     </Grid>
 </Page>

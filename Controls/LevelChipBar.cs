@@ -156,7 +156,8 @@ public sealed class LevelChipBar
             Padding = new Thickness(9, 3, 9, 3),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Quiet(button);
+        // 安静版观感抽在 ChipLook 里（2026-10-13）—— 与「应用卸载」页的分类芯片共用一份
+        ChipLook.Quiet(button);
 
         var chip = new Chip { Level = level, Label = label, Button = button, Content = content, CountText = count };
 
@@ -170,48 +171,4 @@ public sealed class LevelChipBar
 
     private static void Sync(Chip chip) =>
         chip.Content.Opacity = chip.Button.IsChecked == true ? 1.0 : 0.45;
-
-    /// <summary>
-    /// 把 <see cref="ToggleButton"/> 的 on/off 画刷换成安静版本（实例级资源覆盖，
-    /// 模板里的 <c>{ThemeResource ToggleButton*}</c> 会先命中这一层）。
-    ///   · off = **无底无边** + 内容压淡（读起来就是一枚普通标签）
-    ///   · on  = 一层浅填充 + 一圈细边 + 主文字（"开着"，但不用 Accent 喊）
-    ///
-    /// ⚠️⚠️ "无"那一侧一律用 <c>Colors.Transparent</c> 现造，**不要**去查
-    ///   <c>…TransparentBrush</c> 这类主题键：查不到时 <see cref="LogReader.Look"/> 会兜底成
-    ///   不透明灰 ⇒ 关掉的芯片反而多出一圈灰边、比选中的还显眼（2026-10-11 实拍踩到）。
-    ///   透明本身与主题无关，不算"写死颜色"（§2 禁的是 RGB 主题色）。
-    /// </summary>
-    private static void Quiet(ToggleButton button)
-    {
-        void Set(string key, Microsoft.UI.Xaml.Media.Brush brush)
-        {
-            try { button.Resources[key] = brush; } catch { }
-        }
-
-        var none = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        var hover = LogReader.Look("SubtleFillColorSecondaryBrush");
-        var press = LogReader.Look("SubtleFillColorTertiaryBrush");
-        var onFill = LogReader.Look("ControlFillColorSecondaryBrush");
-        var onEdge = LogReader.Look("CardStrokeColorDefaultBrush");
-        var onText = LogReader.Look("TextFillColorPrimaryBrush");
-        var onTextDim = LogReader.Look("TextFillColorSecondaryBrush");
-
-        Set("ToggleButtonBackground", none);
-        Set("ToggleButtonBackgroundPointerOver", hover);
-        Set("ToggleButtonBackgroundPressed", press);
-        Set("ToggleButtonBorderBrush", none);
-        Set("ToggleButtonBorderBrushPointerOver", none);
-        Set("ToggleButtonBorderBrushPressed", none);
-
-        Set("ToggleButtonBackgroundChecked", onFill);
-        Set("ToggleButtonBackgroundCheckedPointerOver", press);
-        Set("ToggleButtonBackgroundCheckedPressed", press);
-        Set("ToggleButtonForegroundChecked", onText);
-        Set("ToggleButtonForegroundCheckedPointerOver", onText);
-        Set("ToggleButtonForegroundCheckedPressed", onTextDim);
-        Set("ToggleButtonBorderBrushChecked", onEdge);
-        Set("ToggleButtonBorderBrushCheckedPointerOver", onEdge);
-        Set("ToggleButtonBorderBrushCheckedPressed", onEdge);
-    }
 }

@@ -43,6 +43,12 @@ public sealed partial class ExperimentalPage : Page
             Desc = "扫描本机已安装的软件，可直接卸载其中的任意一款",
             Glyph = "\uE74D", Tag = "uninstaller"
         },
+        new ExperimentalFeature
+        {
+            Id = "appdata", Name = "AppData 管理",
+            Desc = "先看清是哪些文件夹在占地方，再把能安全清理的缓存挑出来",
+            Glyph = "\uE8B7", Tag = "appdata"
+        },
         // ⚠️ 原来是四项，第三项是「虚拟键盘」—— 该功能 2026-10-09 整体下线，卡片一并删除
         //    （导航分组里的子项、NavigateTagCore 的 case 也同步删了）。
         // ⚠️「自动关机」2026-10-12 转正搬去「内置工具」（Nick 定）——

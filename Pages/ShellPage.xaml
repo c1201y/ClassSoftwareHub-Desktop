@@ -173,6 +173,19 @@
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
                         <!--
+                          AppData 管理：2026-10-13 加（Nick：「实验性功能就是 AppData 文件夹管理」）。
+                          ⚠️ 为啥塞实验性：删的是**别的软件的数据**，没有厂商卸载程序兜底，
+                             判"哪些目录是纯缓存"这件事永远可能判错 —— 所以只放实验性里，且清单一律限于缓存目录（永久删除）。
+                             三层边界（只读体检 / 白名单清理 / 禁碰区）写在 Services/AppDataScan.cs 的类注释里。
+                          ⚠️ 图标 E8B7（文件夹）：语义最直白；改之前先过 glyphs 脚本渲图看有没有字形
+                             （ED 那段的坑见 MEMORY §6）。
+                        -->
+                        <NavigationViewItem Content="AppData 管理" Tag="appdata">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE8B7;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
                           自动关机：2026-10-12 转正搬去「内置工具」分组 —— 子项由 ToolCatalog 自动生成，
                           这里不能再手写一条（否则导航里会出现两个同名项）。见 Data/ToolDef.cs。
                         -->
