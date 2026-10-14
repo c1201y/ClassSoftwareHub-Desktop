@@ -202,9 +202,24 @@ public static class AppDataScan
         }
 
         // 同一条路径可能被多条规则命中（比如将来加了通配更宽的规则）—— 去重，免得列表里出现两条。
-        return found
+        var dedup = found
             .GroupBy(e => e.FullPath, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
+            .ToList();
+
+        // ⛔⛔ **列出来的必须真能清**。这里再问一遍 <see cref="Clean"/> 用的那道闸（IsCleanable）。
+        //    它俩原本各判各的，于是白名单里凡是"一级目录"的规则（Temp / npm-cache / D3DSCache）
+        //    都变成"界面上有、一点就弹『这个路径不在白名单内』" —— 2026-10-15 实拍。
+        //    多问一遍不影响判断，但以后再出现同类不一致，界面就不会撒谎了。
+        var cleanable = dedup.Where(e => IsCleanable(e.FullPath)).ToList();
+        if (cleanable.Count != dedup.Count)
+        {
+            AppLog.Warning("appdata",
+                $"白名单里有 {dedup.Count - cleanable.Count} 条规则列得出、清不掉（判据不一致），已在列表里隐去："
+                + string.Join("、", dedup.Except(cleanable).Select(e => e.RelPath)));
+        }
+
+        return cleanable
             .OrderBy(e => e.RelPath, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -285,9 +300,12 @@ public static class AppDataScan
     ///
     /// 四道判据，缺一不可：
     ///  ① 路径确实在 <c>%LOCALAPPDATA%</c> 或 <c>%APPDATA%</c> 之下（不是别处凑巧同名的目录）；
-    ///  ② **相对段数 ≥ 2** —— 一级目录永不整目录清理（<c>Programs</c>、<c>Tencent</c> 就是这么挡住的）；
+    ///  ② **相对段数 ≥ 2** —— 一级目录永不整目录清理；
     ///  ③ 不是 reparse point（不能顺着联接点删到别的地方去）；
     ///  ④ 命中白名单模式（逐段比对）。
+    ///
+    /// ⛔⛔ ② 有一条**白名单显式点名**的例外，见下方注释 —— 2026-10-15 就是因为这条闸把
+    ///     <c>Temp</c> 拦死，界面上列得出来、一点就弹「不在白名单内」。
     /// </summary>
     public static bool IsCleanable(string fullPath)
     {
@@ -309,11 +327,20 @@ public static class AppDataScan
             if (rel.Length == 0) return false;                              // ② 根目录本身
 
             var segs = rel.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-            if (segs.Length < 2) return false;                              // ② 一级目录
             if (segs.Any(s => s is "." or "..")) return false;              // ③ 轨迹里不许有跳转
             if (IsReparsePoint(full)) return false;                         // ③ 联接点
 
-            return RulesFor(zone).Any(r => Matches(r.Pattern, segs));       // ④ 白名单
+            var rule = RulesFor(zone).FirstOrDefault(r => Matches(r.Pattern, segs));   // ④ 白名单
+            if (rule is null) return false;
+
+            // ② 一级目录（<c>%LOCALAPPDATA%\X</c> 这种）。
+            //    ⛔⛔ 例外只给**白名单里点名写死、且不含通配符**的一级目录（`Temp`、`npm-cache`、
+            //        `D3DSCache`）。它们本身就是"缓存根"，删的是**内容**不是目录本身，
+            //        而且是我们逐条担保过的 —— 拿 `Programs`/`Tencent` 挡人的活由 ④ 号闸干，
+            //        不归这条管。带 `*` 的例外一律不给：那等于"清空任意一级目录"。
+            if (segs.Length < 2 && rule.Pattern.Contains('*')) return false;
+
+            return true;
         }
 
         return false;

@@ -14,22 +14,46 @@
         第 2 层 **白名单清理**（可清理 · 系统临时 / 浏览器 / 商店应用 / 开发工具 / 图形）—— 永久删除
         第 3 层 **禁碰区** —— 一级目录整目录删除这条路上的按钮**压根不存在**（见 Services/AppDataScan 类注释）
 
-      版式与「应用卸载」二版一致（Nick 2026-10-13 对那一版的要求同样适用）：
-        页宽 960 写在**中列内容自身**（⛔ 不是给根元素定宽 + 居中）；
-        分类＝**下拉单选**（⛔ 不是可独立开关的芯片）；列表 / 表格两种形式；说明按钮带图标。
+      2026-10-14 与「应用卸载」页一起做过一次去网页感的改版（Nick 的第三轮反馈，两页同罪）：
+        · **砍掉表格视图**（⛔ 不是改成下拉）—— 与列表内容一模一样，纯粹是凑出来的选择；
+        · 标题下的解释长句删掉、包着工具条的卡片删掉，标题下方改成**动态计数**；
+        · 分类下拉 / 重新扫描 / 说明 并到标题行右侧（原先孤零零占一整行，还套了个卡片）；
+        · **行尾不再摆按钮**：改成一朵透明的「⋯」（`E712`），点开是**手建**的 `MenuFlyout`
+          —— 里面是「打开文件夹」，可清理的行多一项「清理」。原先行尾并排两个按钮
+          （`打开` + `清理`），几十行下来也是一面按钮墙。
+
+      2026-10-15 加（Nick：「可清理项可以加一个复选框，可以统一管理。还有一件事，可以再增加一个按钮
+      一个是复制文件路径。第二个功能是搜索……现在用户看到这么多文件夹，不知道是干啥的」）：
+        · 可清理行加**系统多选**（`ListView.SelectionMode=Multiple`，靠系统那个 SelectionCheckBox，
+          ⛔ 不是自己在 DataTemplate 里画一个 CheckBox —— 行模板里少一个控件就少一处 WMC9999 风险，
+          而且这本来就是系统控件该干的事）；底部随之多出一条**批量动作条**。
+        · 行尾「⋯」菜单扩到四项：复制完整路径 / 打开文件夹 / 在网上搜索完整路径 / 清理。
+          ⛔ 搜索走**系统默认浏览器**（`UseShellExecute=true` 调 Bing），不内置 WebView2 ——
+             本机唯一那个 WebView2 是只读 WebSheet，再起一个实例要摊用户数据目录与生命周期，
+             而这个动作本来就是"去互联网查资料"，交给真浏览器能开标签、能继续点进去看。
+          ⛔⛔ 检索词就是**完整路径原样**，不附加「AppData」「文件夹」之类的后缀
+             （Nick 2026-10-15 定案：擅自概括会失真，同一个目录名挂在不同根下含义完全不同）。
+        · 顶部加**常驻红条**（与「应用卸载」页同一条规则：永久删除类功能一律常驻风险提示，不可关闭）。
 
       ⚠️ 三个已踩过的编译坑，别在这里复现（都是同一个壳错误 `WMC9999`，没有行号）：
         · `ComboBox.ItemTemplate` + `x:Bind` 会让 XamlCompiler 崩在 PageCodeGen ⇒ 选项在代码里手建。
-        · `Page.Resources` 里跨文件 `BasedOn` 同样会崩 ⇒ 三行 Setter 照抄。
-        · ⛔⛔ 控件 `x:Name` **撞上行类型的属性名**（本页 `x:Name="CountText"` 撞 `AppDataRow.CountText`，
+        · `Page.Resources` 里跨文件 `BasedOn` 同样会崩 ⇒ 八行 Setter 照抄。
+        · ⛔⛔ 控件 `x:Name` **撞上行类型的属性名**（本页 `x:Name="CountText"` 曾撞 `AppDataRow.CountText`，
           行模板里又有 `{x:Bind CountText}`）⇒ 崩在 PageCodeGen。改名 `CountLine` 后立刻 0 错误。
           排查法：读 `obj\…\output.json` 的 `MSBuildLogEntries` 找到崩在哪一页，再**掏空法二分**。
     -->
     <Page.Resources>
-        <Style x:Key="CshTableRowStyle" TargetType="ListViewItem">
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="Padding" Value="14,2" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <!-- 行尾的图标按钮（⋯ / 说明）。⚠️ 八行 Setter **照抄**而不是跨文件 `BasedOn`：
+             跨文件 BasedOn 会让 XAML 编译器在 Pass2 的代码生成阶段崩掉（见文件头注释）。 -->
+        <Style x:Key="RowMoreButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
     </Page.Resources>
 
@@ -41,23 +65,23 @@
             <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="10" Margin="0,36,0,44">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- ── 标题行 ── -->
-            <Grid ColumnSpacing="12">
+            <!-- ── 标题行：左＝标题+实验性标记+计数，右＝分类 / 重新扫描 / 说明（全部并排） ── -->
+            <Grid ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Spacing="6">
+                <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="AppData 管理" FontSize="28" FontWeight="Bold" />
                         <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
@@ -71,76 +95,52 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
-                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="先看清是哪些文件夹在占地方，再决定要不要清。能清的一律只清缓存，删掉程序会自己重建。" />
+
+                    <!-- 标题下面这一行原本是一段解释话（已移进「说明」弹窗），现在放**计数**。
+                         ⚠️ 名字必须叫 CountLine —— 「CountText」会撞行类型的 AppDataRow.CountText（见文件头） -->
+                    <TextBlock x:Name="CountLine" Text="" FontSize="12" Opacity="0.65"
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <!-- 视图切换：⛔ 别换成 SelectorBar / Pivot（Nick 2026-10-11 否过） -->
-                <RadioButtons x:Name="ViewChoice" Grid.Column="1" MaxColumns="2"
-                              VerticalAlignment="Top" Margin="0,4,0,0"
-                              SelectionChanged="ViewChoice_SelectionChanged">
-                    <RadioButton Content="列表" Tag="list" />
-                    <RadioButton Content="表格" Tag="table" />
-                </RadioButtons>
+                <!-- 分类：**下拉单选**，一次只显示一个分类。
+                     ⚠️ 选项内容在代码里建（FillCategories）—— `ItemTemplate` + `x:Bind` 会让编译器崩 -->
+                <ComboBox x:Name="CategoryBox" Grid.Column="1" MinWidth="200"
+                          VerticalAlignment="Top" Margin="0,4,0,0"
+                          SelectionChanged="Category_Changed" />
 
-                <!-- ⚠️ Content 是 StackPanel ⇒ UIA 拿不到按钮名，显式给一个 -->
-                <Button x:Name="AboutButton" Grid.Column="2" Click="About_Click"
+                <Button x:Name="RescanButton" Grid.Column="2" Content="重新扫描" Click="Rescan_Click"
+                        VerticalAlignment="Top" Margin="0,4,0,0" />
+
+                <!-- ⚠️ Content 是 FontIcon ⇒ UIA 拿不到按钮名，显式给一个 -->
+                <Button x:Name="AboutButton" Grid.Column="3" Click="About_Click"
+                        Style="{StaticResource RowMoreButtonStyle}"
+                        VerticalAlignment="Top" Margin="0,4,0,0"
                         AutomationProperties.Name="说明"
-                        VerticalAlignment="Top" Margin="0,4,0,0">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                        <FontIcon Glyph="&#xE946;" FontSize="14" />
-                        <TextBlock Text="说明" />
-                    </StackPanel>
+                        ToolTipService.ToolTip="这三层是怎么分的">
+                    <FontIcon Glyph="&#xE946;" FontSize="15" />
                 </Button>
             </Grid>
 
-            <!-- ── 工具条：分类下拉 + 计数 | 重新扫描 ── -->
-            <Border Grid.Row="1" CornerRadius="4" Padding="18,12"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1">
-                <Grid ColumnSpacing="10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+            <!-- ── 常驻风险提示 ──
+                 ⛔ 与「应用卸载」页同一条规约：**永久删除类功能一律常驻红色提示、不给关**
+                    （Nick 2026-10-15 定：「页面警告，常驻红色警告」）。
+                 ⚠️ Severity 用 Error 而不是 Warning：这一层是**不入回收站**的直接删除，
+                    比"改动系统"更重，配色上也要区分得开。 -->
+            <InfoBar x:Name="RiskBar" Grid.Row="1"
+                     Severity="Error" IsOpen="True" IsClosable="False"
+                     Title="此操作将永久删除文件"
+                     Message="清理不会进入回收站，删除后无法恢复。仅清空缓存目录的内容，目录本身保留。" />
 
-                    <!-- 分类：**下拉单选**，一次只显示一个分类。
-                         ⚠️ 选项内容在代码里建（FillCategories）—— `ItemTemplate` + `x:Bind` 会让编译器崩 -->
-                    <ComboBox x:Name="CategoryBox" MinWidth="200" VerticalAlignment="Center"
-                              SelectionChanged="Category_Changed" />
+            <!-- ── 内容区 ── -->
+            <Grid Grid.Row="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                    <TextBlock x:Name="CountLine" Grid.Column="1" Text="" FontSize="12" Opacity="0.7"
-                               Margin="8,0,0,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-
-                    <Button Grid.Column="2" x:Name="RescanButton" Content="重新扫描" Click="Rescan_Click" />
-                </Grid>
-            </Border>
-
-            <!-- ── 表头（只有表格视图显示）。⚠️ 列宽必须与表格行模板逐列一致，否则错位 ── -->
-            <Grid x:Name="TableHeader" Grid.Row="2" Visibility="Collapsed"
-                  ColumnSpacing="12" Margin="14,0,14,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="20" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="110" />
-                    <ColumnDefinition Width="104" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="名称" FontSize="12" Opacity="0.6" Margin="0,0,0,7" />
-                <TextBlock Grid.Column="2" Text="体积" FontSize="12" Opacity="0.6"
-                           HorizontalAlignment="Right" Margin="0,0,0,7" />
-                <TextBlock Grid.Column="3" Text="操作" FontSize="12" Opacity="0.6" Margin="0,0,0,7" />
-                <!-- 这一条线就是"表格"与"列表"的观感分界。
-                     ⚠️ 用文字的下边距把线顶到底，别写负 Margin（负 Margin 出过 LayoutCycle） -->
-                <Border Grid.ColumnSpan="4" Height="1" VerticalAlignment="Bottom"
-                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-            </Grid>
-
-            <!-- ── 内容区：两个 ListView 叠放，按视图切换显隐（共用同一次扫描的结果） ── -->
-            <Grid Grid.Row="3">
                 <ListView x:Name="EntryList"
                           SelectionMode="None" IsItemClickEnabled="False"
+                          SelectionChanged="Selection_Changed"
                           ItemContainerStyle="{StaticResource CshResultRowStyle}"
                           Padding="0,2,0,8">
                     <ListView.ItemTemplate>
@@ -150,7 +150,7 @@
                                     <ColumnDefinition Width="20" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="110" />
-                                    <ColumnDefinition Width="104" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
                                 <FontIcon Grid.Column="0" Glyph="{x:Bind Glyph}" FontSize="15" Opacity="0.55"
@@ -175,78 +175,22 @@
                                                Typography.NumeralAlignment="Tabular" />
                                 </StackPanel>
 
-                                <!-- 操作列：「打开」**每一行都有**（只读体检也想进去看一眼）；
-                                     「清理」只有白名单命中项才出现（⛔ 只读项永远不出清理按钮）。
-                                     ⚠️ 原来那行「只读」灰字已去掉 —— 行副标题里已经写了
-                                     「一级目录（只读体检，不提供清理）」，再跟按钮并排反而自相矛盾。 -->
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8"
-                                            VerticalAlignment="Center" HorizontalAlignment="Left">
-                                    <Button Width="32" MinHeight="28" Padding="0" MinWidth="0"
-                                            Click="OpenFolder_Click"
-                                            AutomationProperties.Name="打开文件夹"
-                                            ToolTipService.ToolTip="在资源管理器里打开这个目录">
-                                        <FontIcon Glyph="&#xE838;" FontSize="14" />
-                                    </Button>
-                                    <Button Content="清理" Width="64" MinHeight="28"
-                                            Padding="10,0" FontSize="12"
-                                            Click="Clean_Click"
-                                            IsEnabled="{x:Bind CanClean, Mode=OneWay}"
-                                            Visibility="{x:Bind CleanVisibility}"
-                                            ToolTipService.ToolTip="{x:Bind ActionTip, Mode=OneWay}" />
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-
-                <ListView x:Name="EntryTable" Visibility="Collapsed"
-                          SelectionMode="None" IsItemClickEnabled="False"
-                          ItemContainerStyle="{StaticResource CshTableRowStyle}"
-                          Padding="0,0,0,8">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="local:AppDataRow">
-                            <Grid ColumnSpacing="12" MinHeight="26">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="20" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="110" />
-                                    <ColumnDefinition Width="104" />
-                                </Grid.ColumnDefinitions>
-
-                                <FontIcon Grid.Column="0" Glyph="{x:Bind Glyph}" FontSize="13" Opacity="0.55"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-
-                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontSize="13"
-                                           MaxLines="1" TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center"
-                                           ToolTipService.ToolTip="{x:Bind Sub}" />
-
-                                <TextBlock Grid.Column="2" Text="{x:Bind SizeText, Mode=OneWay}" FontSize="13"
-                                           HorizontalAlignment="Right" VerticalAlignment="Center"
-                                           Typography.NumeralAlignment="Tabular" />
-
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8"
-                                            VerticalAlignment="Center" HorizontalAlignment="Left">
-                                    <Button Width="32" MinHeight="28" Padding="0" MinWidth="0"
-                                            Click="OpenFolder_Click"
-                                            AutomationProperties.Name="打开文件夹"
-                                            ToolTipService.ToolTip="在资源管理器里打开这个目录">
-                                        <FontIcon Glyph="&#xE838;" FontSize="14" />
-                                    </Button>
-                                    <Button Content="清理" Width="64" MinHeight="28"
-                                            Padding="10,0" FontSize="12"
-                                            Click="Clean_Click"
-                                            IsEnabled="{x:Bind CanClean, Mode=OneWay}"
-                                            Visibility="{x:Bind CleanVisibility}"
-                                            ToolTipService.ToolTip="{x:Bind ActionTip, Mode=OneWay}" />
-                                </StackPanel>
+                                <!-- 行尾：一朵透明的「⋯」。菜单里有「打开文件夹」，可清理的行多一项「清理」
+                                     （⛔ 只读体检行永远不出「清理」）。 -->
+                                <Button Grid.Column="3" Style="{StaticResource RowMoreButtonStyle}"
+                                        Click="More_Click"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="更多操作"
+                                        ToolTipService.ToolTip="更多操作">
+                                    <FontIcon Glyph="&#xE712;" FontSize="14" />
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
 
                 <!-- 扫描中 -->
-                <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
+                <StackPanel x:Name="LoadingPanel" Grid.Row="0" Spacing="12" HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                     <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
                     <TextBlock Text="正在读取 AppData 目录结构" FontSize="12" Opacity="0.7"
@@ -254,12 +198,39 @@
                 </StackPanel>
 
                 <!-- 空状态 -->
-                <StackPanel x:Name="EmptyPanel" Spacing="10" Visibility="Collapsed"
+                <StackPanel x:Name="EmptyPanel" Grid.Row="0" Spacing="10" Visibility="Collapsed"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE8B7;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
                     <TextBlock x:Name="EmptyText" Text="这个分类下没有东西" FontSize="14" Opacity="0.7"
                                HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
                 </StackPanel>
+
+                <!-- ── 批量动作条 ──
+                     只在「可清理 · ×××」分类下出现（⛔ 只读体检没有删除入口，别让它露出来）。
+                     ⚠️ 全选 / 清空选择 都在代码里操作 `EntryList.SelectedItems`，不额外维护一份勾选状态 ——
+                        勾选状态只有列表自己那一份，才不会出现"界面上没勾、其实记着"。
+                     ⛔ 这里**没有**反选：这一页的动作全是删除，少一个花样少一次误删。 -->
+                <Grid x:Name="CleanBar" Grid.Row="1" Visibility="Collapsed" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="CleanBarSummary" FontSize="12" Opacity="0.7"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+
+                    <Button x:Name="SelectAllButton" Grid.Column="1" Content="全选"
+                            Click="SelectAll_Click" />
+
+                    <Button x:Name="ClearSelButton" Grid.Column="2" Content="清空选择"
+                            Click="ClearSel_Click" />
+
+                    <Button x:Name="CleanSelectedButton" Grid.Column="3" Content="清理选中"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="CleanSelected_Click" />
+                </Grid>
             </Grid>
         </Grid>
     </Grid>

@@ -550,6 +550,51 @@ public partial class App : Application
 
     public App()
     {
+        // ═══════════════════════════════════════════════════════════════════════
+        //  提权助手模式（2026-10-14 加，卸载残留清理的最后一环）
+        //
+        //  「应用卸载」页清残留时，HKCU 和用户目录普通权限就够，但 HKLM 与
+        //  Program Files 底下的东西普通账户删不动。做法是：普通权限先跑一遍，
+        //  **只有真的失败了**才把剩下的清单提权补刀 —— 也就是这里。
+        //
+        //  ⛔ 必须放在**最前面**，在 InitializeComponent / 单实例 / 主窗口之前：
+        //     这是另一个进程（runas 起来的），不建界面、不碰互斥体、不往托盘里塞图标，
+        //     干完活写完结果文件立刻退。放后面的话，它会因为单实例判定去"叫醒"那个
+        //     非提权的实例、或者弹出主窗口，而用户看到的只是一个莫名其妙的窗口闪一下。
+        // ═══════════════════════════════════════════════════════════════════════
+        var argv = Environment.GetCommandLineArgs();
+        for (var i = 0; i < argv.Length - 1; i++)
+        {
+            if (!argv[i].Equals(Services.LeftoverCleaner.ApplySwitch, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Services.LeftoverCleaner.ApplyManifestElevated(argv[i + 1]);
+            Environment.Exit(0);
+            return;
+        }
+
+        // ── 残留清理链路的无人值守体检（2026-10-14 加，诊断用） ──
+        // 见 Services/LeftoverDoctor.cs 顶部的说明。⛔ 同样必须在最前面接管：
+        // 它要跑完就退出，不建窗口、不碰互斥体。
+        for (var i = 0; i < argv.Length - 1; i++)
+        {
+            var isFull = argv[i].Equals(Services.LeftoverDoctor.FullSwitch, StringComparison.OrdinalIgnoreCase);
+            var isScan = argv[i].Equals(Services.LeftoverDoctor.ScanSwitch, StringComparison.OrdinalIgnoreCase);
+            if (!isFull && !isScan) continue;
+
+            // ⛔⛔ 必须包一层 `Task.Run`。
+            //    这里是构造函数的**UI 线程**，而 WinUI 已经在上面装了
+            //    DispatcherQueueSynchronizationContext —— 直接 `.GetAwaiter().GetResult()`
+            //    等一个内部有 `await` 的方法，那些续体会被排回**没人泵**的消息队列，
+            //    于是整条流程当场死锁（2026-10-15 实测：日志停在"启动卸载程序"那一行，进程 120 MB 干等）。
+            //    丢进线程池跑之后，方法内部的 `await` 在线程池上续，这里阻塞 UI 线程就不再有影响。
+            var code = Task.Run(() => Services.LeftoverDoctor.RunAsync(argv[i + 1], isScan))
+                           .GetAwaiter().GetResult();
+
+            Environment.Exit(code);
+            return;
+        }
+
         InitializeComponent();
         UnhandledException += OnUnhandledException;
 

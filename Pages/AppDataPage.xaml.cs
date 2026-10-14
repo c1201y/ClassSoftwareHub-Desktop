@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Controls;
@@ -15,7 +16,7 @@ using Microsoft.UI.Xaml.Navigation;
 namespace ClassSoftwareHub.Desktop.Pages;
 
 /// <summary>
-/// 列表 / 表格里的一行。两种来源共用一个类型：
+/// 列表里的一行。两种来源共用一个类型：
 ///  - 体检行（<see cref="FromFolder"/>）：一级目录，**永远不可清理**（操作列显示"只读"）；
 ///  - 清理行（<see cref="FromEntry"/>）：命中白名单的缓存目录。
 ///
@@ -179,7 +180,6 @@ public sealed partial class AppDataPage : Page
     private CancellationTokenSource? _cts;
 
     private bool _ready;        // 目录结构到位了没（构造期的事件要忽略）
-    private bool _table;        // 当前是不是表格视图
     private bool _measuring;    // 正在统计体积
     private bool _busy;         // 正在跑一次清理
 
@@ -187,11 +187,8 @@ public sealed partial class AppDataPage : Page
     {
         InitializeComponent();
 
-        // 两个视图叠着放，滚轮要能分别接力（同页互斥的两个滚动区都传进去）
-        WheelRelay.Attach(this, EntryList, EntryTable);
-
-        ViewChoice.SelectedIndex = 0;
-        _table = false;
+        // 两侧留白 / 标题行上的滚轮也转给列表（Core/WheelRelay.cs）
+        WheelRelay.Attach(this, EntryList);
 
         // 构造期控件还没进可视化树，扫描放 Loaded（与其它页一致）
         Loaded += (_, _) =>
@@ -240,8 +237,8 @@ public sealed partial class AppDataPage : Page
 
         LoadingPanel.Visibility = Visibility.Visible;
         EmptyPanel.Visibility = Visibility.Collapsed;
+        CleanBar.Visibility = Visibility.Collapsed;
         EntryList.ItemsSource = null;
-        EntryTable.ItemsSource = null;
         CountLine.Text = "正在读取目录结构…";
 
         // ── 阶段 A：只读目录结构（秒出）──
@@ -319,6 +316,11 @@ public sealed partial class AppDataPage : Page
             row.Bytes = measured.Bytes;
             row.Files = measured.Files;
             RefreshCounts();
+
+            // 体积一到位这一行才「能清」（`CanClean` 要求统计完），所以动作条也要跟着重算 ——
+            // 否则「全选」勾完、后台又统计出几项，按钮上的数字会一直停在勾选那一刻。
+            // ⚠️ 只在可清理分类下才真干活（测量顺序是"两个概览在前、可清理在后"），开销可忽略。
+            UpdateActionBar();
         }
 
         if (cts.IsCancellationRequested) return;
@@ -427,16 +429,7 @@ public sealed partial class AppDataPage : Page
         }
     }
 
-    private void ViewChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ViewChoice.SelectedItem is RadioButton { Tag: string tag })
-        {
-            _table = tag == "table";
-            ShowCategory();
-        }
-    }
-
-    /// <summary>把当前分类的行摆上去（两个视图共用同一份结果）。</summary>
+    /// <summary>把当前分类的行摆上去。</summary>
     private void ShowCategory()
     {
         if (!_ready || _category is null) return;
@@ -444,12 +437,16 @@ public sealed partial class AppDataPage : Page
         var rows = RowsOf(_category);
         var any = rows.Count > 0;
 
-        EntryList.ItemsSource = rows;
-        EntryTable.ItemsSource = rows;
+        // ⛔ 复选框只给可清理分类：只读体检那一层**没有删除入口**，别让它看着能删。
+        //    切 SelectionMode 会顺带清掉上一次的选择 —— 正合适：跨分类保留勾选只会让人误删。
+        //    用系统的多选（那枚 SelectionCheckBox 是 ListView 自带的），⛔ 不是自己在行模板里画一个 ——
+        //    行模板里少一个控件就少一处 WMC9999 风险，而且这本来就是系统控件该干的事。
+        EntryList.SelectionMode = _category.IsOverview
+            ? ListViewSelectionMode.None
+            : ListViewSelectionMode.Multiple;
 
-        EntryList.Visibility = !_table && any ? Visibility.Visible : Visibility.Collapsed;
-        EntryTable.Visibility = _table && any ? Visibility.Visible : Visibility.Collapsed;
-        TableHeader.Visibility = _table && any ? Visibility.Visible : Visibility.Collapsed;
+        EntryList.ItemsSource = rows;
+        EntryList.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
 
         EmptyPanel.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
         if (!any)
@@ -459,6 +456,7 @@ public sealed partial class AppDataPage : Page
 
         LoadingPanel.Visibility = Visibility.Collapsed;
         UpdateCountText();
+        UpdateActionBar();
     }
 
     /// <summary>阶段 A 失败时的落地状态：收起转圈、给一句人话。</summary>
@@ -467,43 +465,235 @@ public sealed partial class AppDataPage : Page
         _ready = false;
         LoadingPanel.Visibility = Visibility.Collapsed;
         EntryList.Visibility = Visibility.Collapsed;
-        EntryTable.Visibility = Visibility.Collapsed;
-        TableHeader.Visibility = Visibility.Collapsed;
+        CleanBar.Visibility = Visibility.Collapsed;
         EmptyText.Text = text;
         EmptyPanel.Visibility = Visibility.Visible;
         CountLine.Text = "";
     }
 
-    // ── 打开所在目录 ────────────────────────────────────────────────────
+    // ── 批量选择（底部动作条） ──────────────────────────────────────────
+    //
+    // ⚠️ 勾选状态**只有 `EntryList` 那一份**，这里不另存一份。
+    //    自己再维护一个 `List<AppDataRow> _checked` 是这类界面最常见的错法 ——
+    //    列表一重建、行一重排，两份状态就会分家，最后出现"界面上没勾、程序却记着"。
+
+    /// <summary>勾选变了 —— 只刷动作条，**不动列表**（列表一重建，用户刚勾的就全没了）。</summary>
+    private void Selection_Changed(object sender, SelectionChangedEventArgs e) => UpdateActionBar();
+
+    private void SelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_category is null || _category.IsOverview) return;
+
+        // 只勾**能清**的：体积还在统计的那些不进选择区，
+        // 否则按钮上那个数字里会混着清不掉的项，点下去才发现少清了几个。
+        EntryList.SelectedItems.Clear();
+        foreach (var row in RowsOf(_category).Where(r => r.CanClean))
+            EntryList.SelectedItems.Add(row);
+
+        UpdateActionBar();
+    }
+
+    private void ClearSel_Click(object sender, RoutedEventArgs e)
+    {
+        EntryList.SelectedItems.Clear();
+        UpdateActionBar();
+    }
+
+    private async void CleanSelected_Click(object sender, RoutedEventArgs e)
+    {
+        var chosen = ChosenRows();
+        if (chosen.Count == 0) return;
+        await CleanAsync(chosen);
+    }
+
+    /// <summary>当前勾选里**真能清**的那些（还在统计体积、正在清理的不算）。</summary>
+    private List<AppDataRow> ChosenRows() =>
+        EntryList.SelectedItems.OfType<AppDataRow>().Where(r => r.CanClean).ToList();
+
+    /// <summary>刷新底部动作条。⛔ 只读体检分类、空分类、没准备好时整条藏起来。</summary>
+    private void UpdateActionBar()
+    {
+        var show = _ready
+                   && _category is { IsOverview: false }
+                   && RowsOf(_category).Count > 0;
+
+        CleanBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+
+        var chosen = ChosenRows();
+        var size = chosen.Sum(r => Math.Max(0, r.Bytes));
+
+        SelectAllButton.IsEnabled = !_busy;
+        ClearSelButton.IsEnabled = !_busy && chosen.Count > 0;
+        CleanSelectedButton.Content = chosen.Count > 0 ? $"清理选中 ({chosen.Count})" : "清理选中";
+        CleanSelectedButton.IsEnabled = !_busy && chosen.Count > 0;
+
+        CleanBarSummary.Text = chosen.Count == 0
+            ? "勾选左侧复选框可一次处理多项。"
+            : $"已选 {chosen.Count} 项" + (size > 0 ? $" · 合计约 {AppLog.Size(size)}" : "");
+    }
+
+    // ── 行尾菜单 ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 「打开」：在资源管理器里看一眼这个目录到底装了什么。
-    /// **只读动作**，对所有行都开放（只读体检行尤其需要 —— 光看体积排行回答不了「里面是什么」）。
+    /// 行尾「⋯」—— 弹出这一行的操作。
+    ///
+    /// 顺序固定：**三项只读动作在前**（复制完整路径 / 打开文件夹 / 在网上搜索），
+    /// 分隔线之后才是「清理」（只有白名单命中的行有）。
+    /// 这样即使手快，落在最上面的也是不会改系统的那些。
+    ///
+    /// ⚠️ 菜单在这里**手建**，不把 `MenuFlyout` 写进 `DataTemplate`：Flyout 不在可视树里，
+    ///    模板内的 `{x:Bind}` 求值上下文很脆，而 XamlCompiler 对这个组合本身就有前科
+    ///    （本页踩过的 WMC9999 就是这一类）。手建时用闭包直接捕获这一行，最稳。
     /// </summary>
-    private async void OpenFolder_Click(object sender, RoutedEventArgs e)
+    private void More_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AppDataRow row) return;
 
+        var flyout = new MenuFlyout();
+
+        var copy = new MenuFlyoutItem { Text = "复制完整路径", Icon = new FontIcon { Glyph = "\uE8C8" } };
+        copy.Click += (_, _) => _ = CopyPathAsync(row);
+        flyout.Items.Add(copy);
+
+        // 「打开文件夹」对所有行都开放 —— 只读体检行尤其需要：
+        // 光看体积排行回答不了「里面到底装了什么」。
+        var open = new MenuFlyoutItem { Text = "打开文件夹", Icon = new FontIcon { Glyph = "\uE838" } };
+        open.Click += (_, _) => _ = OpenFolderAsync(row);
+        flyout.Items.Add(open);
+
+        // 「搜索」同理：面对 Local 下七十个一级目录，最缺的就是"这名字到底是个啥"。
+        // ⛔ 查的是**完整路径**，不是目录名 —— 详见 `SearchOnline` 的注释。
+        var search = new MenuFlyoutItem
+        {
+            Text = "在网上搜索完整路径", Icon = new FontIcon { Glyph = "\uE721" },
+        };
+        search.Click += (_, _) => _ = SearchAsync(row);
+        flyout.Items.Add(search);
+
+        // 「清理」只有白名单命中的行才有（⛔ 只读项永远不出这一项）
+        if (row.CanClean && row.Entry is not null)
+        {
+            flyout.Items.Add(new MenuFlyoutSeparator());
+
+            var clean = new MenuFlyoutItem { Text = "清理", Icon = new FontIcon { Glyph = "\uE74D" } };
+            clean.Click += (_, _) => _ = CleanAsync(new[] { row });
+            flyout.Items.Add(clean);
+        }
+
+        flyout.ShowAt(fe);
+    }
+
+    // ── 打开所在目录 / 复制路径 / 搜索（三个只读动作） ──────────────────
+
+    /// <summary>在资源管理器里看一眼这个目录到底装了什么。**只读动作**。</summary>
+    private async Task OpenFolderAsync(AppDataRow row)
+    {
         if (AppDataScan.OpenInExplorer(row.MeasuredPath)) return;
 
         await InfoAsync("没能打开", $"「{row.Name}」这个目录可能已经不在了，点「重新扫描」刷新一下。");
     }
 
+    private async Task CopyPathAsync(AppDataRow row)
+    {
+        if (CopyText(row.MeasuredPath)) return;
+
+        await InfoAsync("没能复制", "写入剪贴板失败，详情见日志。");
+    }
+
+    private async Task SearchAsync(AppDataRow row)
+    {
+        if (SearchOnline(row.MeasuredPath)) return;
+
+        await InfoAsync("没能打开浏览器",
+            "本机可能没有可用的默认浏览器。可以手动复制路径后在搜索框里查：" + row.MeasuredPath);
+    }
+
+    /// <summary>复制到剪贴板。⚠️ 必须带 <c>Flush()</c> —— 不加这句，本程序一退出剪贴板里就空了。</summary>
+    private static bool CopyText(string text)
+    {
+        try
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("appdata", ex, "复制路径：" + text);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 用**系统默认浏览器**去 Bing 搜这个目录。
+    ///
+    /// ⛔⛔ 查询词就是**完整路径本身，一个字都不加**（Nick 2026-10-15 定案）。
+    ///     曾经拼过 `名称 + " AppData 文件夹"`，看着"更懂搜索"，实际是在**替用户概括** ——
+    ///     概括就会失真：同一个名字挂在不同根下含义完全不同，而搜索结果页最擅长的恰好就是
+    ///     由整条路径反查到具体软件。加了后缀反而把原始线索冲淡，还会带偏到泛泛的"AppData 是什么"。
+    ///
+    /// ⛔ 这里**不内置 WebView2**（Nick 提过这个方案）：本机唯一那个 WebView2 是只读 `WebSheet`，
+    ///    再起一个实例要摊用户数据目录与生命周期，而这个动作本来就是"去互联网查资料" ——
+    ///    交给真浏览器能开标签、能带登录态、能继续点进去看，也不用我们常驻一个内核
+    ///    （本项目在内存上是激进派的：切页即收内存）。
+    ///
+    /// ⚠️ <c>UseShellExecute = true</c> 才会走 shell 的默认程序关联；不加这句会去 `PATH` 里
+    ///    找一个叫 `https://...` 的文件。
+    /// </summary>
+    private static bool SearchOnline(string fullPath)
+    {
+        var url = "https://www.bing.com/search?q=" + Uri.EscapeDataString(fullPath);
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("appdata", ex, "打开浏览器搜索：" + fullPath);
+            return false;
+        }
+    }
+
     // ── 清理 ──────────────────────────────────────────────────────────
 
-    private async void Clean_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 清理一批目录。
+    ///
+    /// ⛔ 行菜单里的「清理」和底部动作条的「清理选中」**走的是同一个方法** ——
+    ///    两条入口各写一份的话，确认框规格、占用检测、结果统计迟早会分家。
+    ///    单行只是"这一批只有一个"的特例。
+    /// </summary>
+    private async Task CleanAsync(IReadOnlyList<AppDataRow> rows)
     {
         if (_busy) return;
-        if (sender is not FrameworkElement fe || fe.DataContext is not AppDataRow row) return;
-        if (!row.CanClean || row.Entry is null) return;
 
-        var running = AppDataScan.RunningApps(row.Entry.Kind);
+        var work = rows.Where(r => r.CanClean && r.Entry is not null).ToList();
+        if (work.Count == 0) return;
+
+        // 占用检测：这批涉及哪几类就问哪几类，别按行重复问
+        var running = work.Select(r => r.Entry!.Kind)
+                          .Distinct()
+                          .SelectMany(AppDataScan.RunningApps)
+                          .Distinct(StringComparer.OrdinalIgnoreCase)
+                          .ToList();
+
+        var total = work.Sum(r => Math.Max(0, r.Bytes));
+        var fileCount = work.Sum(r => Math.Max(0, r.Files));
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = $"清理「{row.Name}」？",
-            Content = BuildConfirmBody(row, running),
+            Title = work.Count == 1 ? $"清理「{work[0].Name}」？" : $"清理选中的 {work.Count} 个目录？",
+            Content = BuildConfirmBody(work, total, fileCount, running),
             PrimaryButtonText = "清理",
             CloseButtonText = "取消",
             // ⚠️ 默认落在「取消」：删的是别人的数据，别让一个回车就动手
@@ -513,75 +703,110 @@ public sealed partial class AppDataPage : Page
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
         _busy = true;
-        row.Busy = true;
         RescanButton.IsEnabled = false;
         CategoryBox.IsEnabled = false;
+        UpdateActionBar();                       // 让三颗按钮一起变灰
 
-        var before = Math.Max(0, row.Bytes);
+        var okCount = 0;
+        var failCount = 0;
+        var skipped = 0;
+        var freed = 0L;
+        var notes = new List<string>();
 
-        try
+        foreach (var row in work)
         {
-            var entry = row.Entry;
-            var outcome = await Task.Run(() => AppDataScan.Clean(entry, CancellationToken.None));
+            row.Busy = true;
+            var before = Math.Max(0, row.Bytes);
 
-            // 清完重新量一次，把新体积如实显示出来（而不是假报 0 或者留着旧数）
-            var (bytes, files) = await Task.Run(() => AppDataScan.Measure(row.MeasuredPath, CancellationToken.None));
-            row.Bytes = bytes;
-            row.Files = files;
-
-            if (outcome.Ok)
+            try
             {
-                row.Status = outcome.Skipped > 0 ? $"已清空（跳过 {outcome.Skipped} 项）" : "已清空";
-                ShowCategory();
-                await InfoAsync("清理完成",
-                    $"「{row.Name}」已清空，释放约 {AppLog.Size(before - bytes)}。\n"
-                    + "这些是缓存文件，程序下次要用会自己重新生成。");
+                // ⚠️ **串行**跑：这是秒级动作，几条并行没有意义，
+                //    而串行能保证同一父目录下的两条规则不会互相把对方刚重建的目录当成残留。
+                var entry = row.Entry!;
+                var outcome = await Task.Run(() => AppDataScan.Clean(entry, CancellationToken.None));
+
+                // 清完重新量一次，把新体积如实显示出来（而不是假报 0 或者留着旧数）
+                var (bytes, files) = await Task.Run(() => AppDataScan.Measure(row.MeasuredPath, CancellationToken.None));
+                row.Bytes = bytes;
+                row.Files = files;
+
+                if (outcome.Ok)
+                {
+                    okCount++;
+                    skipped += outcome.Skipped;
+                    freed += before - bytes;
+                    row.Status = outcome.Skipped > 0 ? $"已清空（跳过 {outcome.Skipped} 项）" : "已清空";
+                }
+                else
+                {
+                    failCount++;
+                    row.Status = "";
+                    notes.Add($"「{row.Name}」：{outcome.Message}");
+                }
             }
-            else
+            catch (Exception ex)
             {
+                failCount++;
                 row.Status = "";
-                await InfoAsync("没能清掉", outcome.Message.Length > 0
-                    ? outcome.Message
-                    : "有文件正被程序占用。先关掉相关程序，再点「重新扫描」后重试。");
+                AppLog.Fail("appdata", ex, "清理：" + row.Name);
+                notes.Add($"「{row.Name}」：遇到错误，详情见日志。");
+            }
+            finally
+            {
+                row.Busy = false;
             }
         }
-        catch (Exception ex)
-        {
-            AppLog.Fail("appdata", ex, "清理：" + row.Name);
-            await InfoAsync("清理出错", "详情见日志。");
-        }
-        finally
-        {
-            row.Busy = false;
-            _busy = false;
-            RescanButton.IsEnabled = true;
-            CategoryBox.IsEnabled = true;
-            RefreshCounts();
-        }
+
+        _busy = false;
+        RescanButton.IsEnabled = true;
+        CategoryBox.IsEnabled = true;
+
+        // ⛔ 走 ShowCategory 而不是就地改：清完体积变小，计数行、下拉里的数字、动作条都要跟着重算。
+        //    顺带把勾选清空 —— 已经清过的项留在勾选区里只会让人以为还能再清一次。
+        ShowCategory();
+        RefreshCounts();
+
+        await InfoAsync(failCount == 0 ? "清理完成" : "部分完成",
+            BuildResultBody(okCount, failCount, freed, skipped, notes));
     }
 
-    private static UIElement BuildConfirmBody(AppDataRow row, IReadOnlyList<string> running)
+    private static UIElement BuildConfirmBody(
+        IReadOnlyList<AppDataRow> rows, long total, int fileCount, IReadOnlyList<string> running)
     {
         var panel = new StackPanel { Spacing = 12 };
 
         panel.Children.Add(new TextBlock
         {
-            Text = $"将清空这个目录的内容（{AppLog.Size(Math.Max(0, row.Bytes))}，{row.Files:N0} 个文件），"
-                 + "目录本身保留：",
+            Text = rows.Count == 1
+                ? $"将清空这个目录的内容（{AppLog.Size(total)}，{fileCount:N0} 个文件），目录本身保留："
+                : $"将清空以下 {rows.Count} 个目录的内容（合计 {AppLog.Size(total)}，{fileCount:N0} 个文件），"
+                  + "目录本身保留：",
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
         });
 
-        // 完整路径单独给一块小字底 —— 确认框的意义就是让人看清到底动的是哪儿
+        // 清单单独给一块小字底 —— 确认框的意义就是让人看清到底动的是哪儿。
+        // 单项给**完整路径**；多项按「相对路径 + 体积」列，超过 10 行就滚起来（确认框不该比页面还长）。
+        var lines = rows.Count == 1
+            ? rows[0].MeasuredPath
+            : string.Join("\n", rows.Take(10).Select(r => $"{r.Name}    {AppLog.Size(Math.Max(0, r.Bytes))}"))
+              + (rows.Count > 10 ? $"\n…… 还有 {rows.Count - 10} 个" : "");
+
         var pathBlock = new TextBlock
         {
-            Text = row.MeasuredPath, FontSize = 12, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas"),
+            Text = lines, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+            FontFamily = new FontFamily("Consolas"),
         };
         var pathBorder = new Border
         {
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(10, 8, 10, 8),
-            Child = pathBlock,
+            Child = new ScrollViewer
+            {
+                MaxHeight = 190,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = pathBlock,
+            },
         };
         var subtle = Res("CardBackgroundFillColorSecondaryBrush");
         if (subtle is not null) pathBorder.Background = subtle;
@@ -612,6 +837,33 @@ public sealed partial class AppDataPage : Page
         }
 
         return panel;
+    }
+
+    /// <summary>
+    /// 清理结果的收尾说明。
+    /// ⚠️ 讲的必须是**实际结果**，不是"我们打算做的事" —— 跳过几项、失败几项都要如实报。
+    /// </summary>
+    private static string BuildResultBody(
+        int okCount, int failCount, long freed, int skipped, IReadOnlyList<string> notes)
+    {
+        var sb = new StringBuilder();
+
+        sb.Append(okCount == 1
+            ? $"已清理 1 个目录，释放约 {AppLog.Size(freed)}。"
+            : $"已清理 {okCount} 个目录，合计释放约 {AppLog.Size(freed)}。");
+
+        if (skipped > 0)
+            sb.Append($"\n有 {skipped} 项正被程序占用，已跳过 —— 关掉相关程序后可以再清一次。");
+
+        if (failCount > 0)
+        {
+            sb.Append($"\n有 {failCount} 个目录没能清掉：");
+            foreach (var note in notes.Take(5)) sb.Append("\n· " + note);
+            if (notes.Count > 5) sb.Append($"\n· …… 还有 {notes.Count - 5} 条");
+        }
+
+        sb.Append("\n这些是缓存文件，程序下次要用会自己重新生成。");
+        return sb.ToString();
     }
 
     /// <summary>拿主题画刷；拿不到就返回 null（⛔ 别写死 RGB —— 深色浅色两套主题都要对）。</summary>
@@ -691,6 +943,17 @@ public sealed partial class AppDataPage : Page
         Item("为什么有些清不掉",
              "正被程序占用的文件删不动，会被跳过，并且如实告诉你跳过了几项。"
              + "关掉相关程序（比如浏览器）再清理，能清得更干净。");
+
+        Item("批量选择",
+             "「可清理」分类下每一行都带复选框，底部动作条可以一次处理多项。"
+             + "「全选」只勾选体积已经统计完的项 —— 还在统计的暂时不能清，按钮上的数字里也就不含它们。"
+             + "切换分类会清空勾选：跨分类保留勾选，只会让人记不清自己到底勾了哪一类。");
+
+        Item("复制路径与搜索",
+             "行尾「⋯」里可以复制完整路径，也可以调起系统默认浏览器在 Bing 上检索它。"
+             + "检索词就是这一项的完整路径原样，不附加任何后缀 —— 由整条路径反查具体软件，"
+             + "比只拿一段目录名去搜准得多。"
+             + "两者都只读，不修改本机任何内容，任何一行都可以用。");
 
         Item("体积是怎么算的",
              "逐个文件累加得到，读不到的个别文件会跳过，所以数字可能略微偏小；"
