@@ -254,6 +254,22 @@ public sealed class AppSettings
     /// <summary>后台下载完成的版本号（配 UpdatePendingPath，仅供展示）。</summary>
     public string UpdatePendingTag { get; set; } = "";
 
+    /// <summary>
+    /// 安装或解压完成之后，自动删除下载下来的那个安装包 / 压缩包（**默认关闭**）。
+    ///
+    /// ⚠️ 只管「软件下载」页下下来的普通文件。应用自身的更新包不归它管 ——
+    ///    更新包另有 InstallerKeepCount 那套保留策略（要留着"装回旧版本"）。
+    /// ⚠️ 安装那条路的删除时机是「安装程序退出之后」：装的过程中删不动（文件正被读），
+    ///    而且安装程序退出前我们也无从知道用户是装完了还是取消了。
+    /// </summary>
+    public bool AutoDeletePackage { get; set; }
+
+    /// <summary>
+    /// 解压完成之后自动打开产物文件夹（**默认开启**）。
+    /// 解压本来就是为了去那个目录里拿东西，多一步手动打开纯属多余。
+    /// </summary>
+    public bool AutoOpenExtractFolder { get; set; } = true;
+
     /// <summary>软件下载页的卡片视图：tile（磁贴，3 列带简介）| grid（网格，5 列紧凑）。</summary>
     public string AppCardView { get; set; } = "tile";
     public bool WebTransparent { get; set; } = true;

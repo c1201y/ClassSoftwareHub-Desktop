@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    「下载完之后的安装 / 解压」（Services/PackageKind.cs + Services/PackageRunner.cs）的离线回归测试。
+
+    为什么要有它：解压这一段没法靠界面点着验 —— 要造真压缩包、要验 Zip Slip、要验删源文件的时机，
+    走一遍 UI 慢且不可复现。这个工程把产品里那两个源文件**原样链接**进来（不是复制），
+    再配几个 stub 就能脱离 WinUI 直接跑。
+
+    跑法（在本目录）：dotnet run -c Release
+    退出码 0 = 全过。
+
+    ⛔ 它不参与主项目编译（主 csproj 里已经 Remove 掉 tools\**）——
+       本工程只能用 `dotnet run` 手动跑，加了新用例也别往主项目里塞。
+    ⛔ 只链接源文件、不链接 Testing 框架：少了依赖，代价是断言要手写。
+    ⛔ 跑完记得删掉这里的 bin/ obj/ —— 仓库在 OneDrive 上，编译产物上云是配额主因。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>package-tests</AssemblyName>
+    <RootNamespace>PackageTests</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Stubs.cs" />
+    <Compile Include="Program.cs" />
+    <!-- ⚠️ 相对路径指向产品里的同一份文件：改了产品代码，这里跑的就是改后的 -->
+    <Compile Include="..\..\Services\PackageKind.cs" />
+    <Compile Include="..\..\Services\PackageRunner.cs" />
+  </ItemGroup>
+
+</Project>

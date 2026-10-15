@@ -111,7 +111,7 @@
                 <!-- 应用代号：与左上角的版本号同一水平线、贴右端（左右各占一头，不打架）。
                      ⚠️ 别再往它上面补「代号」两个字 —— Nick 2026-10-06 说那行中文莫名其妙，只要英文代号本身。 -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Right">
-                    <TextBlock x:Name="CodeNameText" Text="Panorama" FontSize="28" FontWeight="Bold"
+                    <TextBlock x:Name="CodeNameText" Text="Synesthesia" FontSize="28" FontWeight="Bold"
                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                 </StackPanel>
             </Grid>

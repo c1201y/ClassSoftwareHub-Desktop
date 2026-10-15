@@ -4,7 +4,7 @@
 //   set GITHUB_TOKEN=ghp_xxx            # 只在当前终端，别写进任何文件
 //   node tools/publish-release.mjs --tag dv1.0.0-insider1.3 --channel insider ^
 //        --installer "dist\installer\ClassSoftwareHub-Setup-dv1.0.0-insider1.3.exe" ^
-//        --image "dist\release\dv1.1.png" ^
+//        --image "dist\release\dv1.2.png" ^
 //        --notes notes.md
 //
 // 参数：

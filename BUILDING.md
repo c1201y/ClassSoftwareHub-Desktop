@@ -65,7 +65,7 @@ $env:GITHUB_TOKEN = "..."   # 需要仓库写权限，别写进任何文件
 node --use-system-ca tools\publish-release.mjs `
   --tag dv1.1.0-insider1.3 --channel insider `
   --installer "dist\installer\ClassSoftwareHub-Setup-dv1.1.0-insider1.3.exe" `
-  --image "dist\release\dv1.1.png" `
+  --image "dist\release\dv1.2.png" `
   --name "ClassSoftwareHub dv1.1.0-insider1.3" --notes "dist\release\notes.md"
 ```
 

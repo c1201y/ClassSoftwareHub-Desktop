@@ -42,11 +42,6 @@ public static class GithubMirror
             or "codeload.github.com" or "raw.githubusercontent.com";
     }
 
-    private static readonly Regex StoreUrl = new(
-        @"^https?://(apps\.microsoft\.com|www\.microsoft\.com/store|store\.microsoft\.com)|^ms-windows-store:",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    /// <summary>是不是 Microsoft Store 的应用页（详情页要把这类链接单独提成商店卡）。</summary>
-    public static bool IsStoreUrl(string? url) =>
-        !string.IsNullOrWhiteSpace(url) && StoreUrl.IsMatch(url);
+    // 「这是不是 Microsoft Store 应用页」原先在这里另有一份 StoreUrl 正则；分类判定已统一到
+    // Data/DownloadLinkKind.cs（与站点 downloadLink.ts 同源），这份平行判据已删除。
 }

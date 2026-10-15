@@ -48,28 +48,52 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <FontIcon Grid.Row="0" Grid.Column="0" Glyph="&#xE896;" FontSize="20"
+                                    <FontIcon Grid.Row="0" Grid.Column="0" Glyph="{x:Bind HeaderGlyph}" FontSize="20"
                                               VerticalAlignment="Center" />
 
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Title}"
-                                               FontSize="14" FontWeight="Bold" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Title}"
+                                                   FontSize="14" FontWeight="Bold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <!-- 更新包才有的一行说明：这条是应用更新、装在哪一步走 -->
+                                        <TextBlock Text="{x:Bind Note}" FontSize="12" Opacity="0.65"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{x:Bind NoteVisibility}" />
+                                    </StackPanel>
 
                                     <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8"
                                                 VerticalAlignment="Center">
                                         <Button Content="取消" Tag="{x:Bind}" Click="Cancel_Click"
                                                 Visibility="{x:Bind RunningVisibility, Mode=OneWay}" />
+                                        <!-- 普通下载下完后的那一步：安装包写「安装」、压缩包写「解压」（文案由类型决定）。
+                                             和更新包的「安装」互斥出现，所以同屏不会有两颗强调按钮。 -->
+                                        <Button Content="{x:Bind ActionText, Mode=OneWay}" Tag="{x:Bind}"
+                                                Click="PackageAction_Click"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{x:Bind ActionVisibility, Mode=OneWay}" />
+                                        <!-- 解压过之后顶替「解压」的那颗：产物已经在硬盘上了，下一步就是去拿。
+                                             和「打开文件夹」不同 —— 那颗定位的是压缩包本身，解压后就不需要了。 -->
+                                        <Button Content="打开解压后的文件夹" Tag="{x:Bind}"
+                                                Click="OpenExtracted_Click"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{x:Bind ExtractFolderVisibility, Mode=OneWay}" />
+                                        <!-- 更新包下完 → 唯一正解是走这条「安装」：应用先退、安装程序后起。
+                                             ⛔ 不给「打开」（双击安装包会被单实例 Mutex 拦成静默失败）。 -->
+                                        <Button Content="安装" Tag="{x:Bind}" Click="Install_Click"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{x:Bind InstallVisibility, Mode=OneWay}" />
                                         <Button Content="重试" Tag="{x:Bind}" Click="Retry_Click"
                                                 Visibility="{x:Bind RetryVisibility, Mode=OneWay}" />
                                         <Button Content="打开" Tag="{x:Bind}" Click="Open_Click"
                                                 Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
                                         <Button Content="打开文件夹" Tag="{x:Bind}" Click="Reveal_Click"
-                                                Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
+                                                Visibility="{x:Bind RevealVisibility, Mode=OneWay}" />
                                         <Button Tag="{x:Bind}" Click="Remove_Click" Padding="9,5"
                                                 ToolTipService.ToolTip="从列表移除（不删除已下载的文件）"
-                                                Visibility="{x:Bind RetryVisibility, Mode=OneWay}">
+                                                Visibility="{x:Bind RemoveVisibility, Mode=OneWay}">
                                             <FontIcon Glyph="&#xE74D;" FontSize="12" />
                                         </Button>
                                     </StackPanel>
@@ -80,6 +104,17 @@
                                                      IsIndeterminate="{x:Bind BarIndeterminate, Mode=OneWay}"
                                                      Visibility="{x:Bind BarVisibility, Mode=OneWay}" />
                                         <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" FontSize="12" Opacity="0.7"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <!-- 解压中 / 解压完：
+                                         解压时上面那条下载进度条会收起来（它已经停在 100%），只留这条不确定进度条。
+                                         解压没有可靠的百分比可报（系统 bsdtar 不给），所以不给数字。 -->
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Spacing="6"
+                                                Visibility="{x:Bind WorkTextVisibility, Mode=OneWay}">
+                                        <ProgressBar Minimum="0" Maximum="100" IsIndeterminate="True"
+                                                     Visibility="{x:Bind WorkingVisibility, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind WorkText, Mode=OneWay}" FontSize="12" Opacity="0.7"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
@@ -98,14 +133,32 @@
                     <FontIcon Glyph="&#xE896;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
                     <TextBlock Text="当前无下载任务" FontSize="14" FontWeight="SemiBold" Opacity="0.75"
                                HorizontalAlignment="Center" />
-                    <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Opacity="0.6"
-                               Text="在「软件下载」中打开任意软件并单击「下载」，任务将显示在此处。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
+                    <TextBlock MaxWidth="440" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Opacity="0.6"
+                               Text="在「软件下载」中打开任意软件并开始下载，任务将显示在此处。软件更新选择「后台下载」时同样显示于此。下载完成的安装包可在此直接安装，压缩包可在此解压。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
-                    <Button Content="打开下载文件夹" Click="OpenFolder_Click" />
-                    <Button x:Name="ClearButton" Content="清除已完成" Click="ClearFinished_Click" />
-                </StackPanel>
+                <!-- 底部：左边是页面级操作，右边是「完成后自动删除」开关。
+                     开关放在这一行而不是藏进设置页 —— 它跟这一页的行为绑得死死的，
+                     用户在这儿下完东西，想的就是在哪儿能顺手改它。 -->
+                <Grid Grid.Row="2" ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Content="打开下载文件夹" Click="OpenFolder_Click" />
+                        <Button x:Name="ClearButton" Content="清除已完成" Click="ClearFinished_Click" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Center">
+                        <CheckBox x:Name="AutoOpenBox" Content="解压完成后自动打开所在文件夹"
+                                  Checked="AutoOpen_Changed" Unchecked="AutoOpen_Changed" />
+                        <CheckBox x:Name="AutoDeleteBox" Content="安装或解压完成后自动删除安装包或压缩包"
+                                  Checked="AutoDelete_Changed" Unchecked="AutoDelete_Changed" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Grid>
     </ScrollViewer>

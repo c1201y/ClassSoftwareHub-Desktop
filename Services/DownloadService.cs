@@ -274,25 +274,11 @@ public static class DownloadService
     }
 
     /// <summary>
-    /// 这个 URL 看起来是「直接一个文件」还是「一个网页/官网跳转」？
-    /// 站点里不少软件更新频繁，下载链接其实指向官网页面（让用户自己去点），
-    /// 这种情况绝不能当文件下载（否则会把网页存成文件）。
+    /// 「这是不是一个能下载的文件」的判定已统一到 <see cref="Data.DownloadLinkKind"/>（与站点
+    /// src/gallery/downloadLink.ts 同源，含 kind 显式声明、商店页、网盘页三类）。
+    /// 这里原有一份只看扩展名的 IsDirectFileUrl，两套判据会漂移，已删除 —— 判定请调
+    /// <c>DownloadLinkKind.Of(url) == DownloadKind.File</c>。
     /// </summary>
-    public static bool IsDirectFileUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url)) return false;
-        try
-        {
-            var path = new Uri(url).AbsolutePath;
-            var ext = Path.GetExtension(path);
-            return ext.Length > 1 && FileExtensions.Contains(ext);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static readonly HashSet<string> FileExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".msi", ".msix", ".appx", ".appxbundle", ".msixbundle",

@@ -79,7 +79,8 @@ public static class UpdateFlow
 
         body.Children.Add(new TextBlock
         {
-            Text = "更新为自愿操作，不会自动安装。可「立即更新」现在就装，「后台下载」先下好稍后安装，或「稍后」暂不处理。",
+            Text = "更新为自愿操作，不会自动安装。可「立即更新」现在就装，「后台下载」转入「任务进行」页下载、"
+                 + "完成后随时安装，或「稍后」暂不处理。",
             FontSize = 12,
             Opacity = 0.7,
             TextWrapping = TextWrapping.Wrap,
@@ -286,6 +287,7 @@ public static class UpdateFlow
         var userCancelled = false;       // 用户主动点了「取消下载」
         var closedByUser = false;        // 弹窗已经被用户关掉了，后面别再 Hide
         var detached = false;            // 用户点了「后台下载」：进度窗收掉，下载在后台继续
+        DownloadTask? adopted = null;    // 转后台后承接这条下载的任务卡片（见下面 PrimaryButtonClick）
 
         // ⚠️ 这个 token 就是"卡死时的出口"。原来它根本没接线：
         // UpdateService 里的 HttpClient 是 Timeout.InfiniteTimeSpan（注释写着"靠 CancellationToken 控制"），
@@ -315,7 +317,15 @@ public static class UpdateFlow
             detached = true;
             allowClose = true;               // ⚠️ 置上它，Closing 里才不会再当成"用户取消"去掐断下载
             AppLog.Info("update", $"用户点了「后台下载」· {release.Tag}（进度窗收掉，下载继续在后台跑）");
+
+            // 接手：把这次**已经在跑**的下载挂到任务页上，进度接着走、结束在那里说得清。
+            // ⚠️ 令牌要交出去 —— 否则卡片上的「取消」点了掐不到真正在传的那一次（按钮会变成摆设）。
+            adopted = DownloadManager.Current.TrackUpdate(
+                $"ClassSoftwareHub {release.Tag}", release.Tag, UpdateTaskNote(), package.Url.ToString());
+            adopted.AdoptCancellation(cts);
+
             TryHide(dialog, closedByUser);
+            GoToDownloads();
         };
 
         dialog.Closing += (_, args) =>
@@ -336,16 +346,20 @@ public static class UpdateFlow
 
         // 空闲超时（不是总时长）：连续这么久没有任何进度就认定卡死。
         // 慢速下载不会被误杀 —— 每来一次进度就续期一次。
-        const int IdleSeconds = 45;
         cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds));
 
         try
         {
-            var progress = new Progress<double>(p =>
+            var progress = new Progress<DownloadProgress>(p =>
             {
-                bar.Value = p * 100;
-                status.Text = $"正在下载 {release.Tag} {p:P0}";
+                bar.Value = p.Percent;
+                status.Text = $"正在下载 {release.Tag}　{p.Percent:0}%"
+                    + (p.SizeText.Length > 0 ? "　·　" + p.SizeText : "")
+                    + (p.SpeedText.Length > 0 ? "　·　" + p.SpeedText : "");
                 try { cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds)); } catch { /* 已取消/已释放 */ }
+
+                // 用户中途点了「后台下载」：从这一刻起进度同时写进「任务进行」页那张卡片
+                if (adopted is not null) DownloadManager.Current.ReportProgress(adopted, p);
             });
 
             var destination = Path.Combine(UpdateService.UpdatesDir, package.Name);
@@ -368,7 +382,12 @@ public static class UpdateFlow
                 settings.Save();
 
                 AppLog.Done("update", $"下载完成并已标记待装（用户已转后台，等他点安装）· {release.Tag} → {downloaded.FilePath}");
-                RunOnUi(() => App.MainWindow?.NotifyUpdateReady(release.Tag));
+                RunOnUi(() =>
+                {
+                    if (adopted is not null)
+                        DownloadManager.Current.CompleteExternal(adopted, downloaded.FilePath, SizeOfFile(downloaded.FilePath));
+                    App.MainWindow?.NotifyUpdateReady(release.Tag);
+                });
                 return true;
             }
 
@@ -400,9 +419,24 @@ public static class UpdateFlow
             // 已经转后台了：进度窗不在了，失败得走系统通知 —— 不然用户什么都看不到
             if (detached)
             {
-                AppLog.Warning("update", $"后台下载停滞（连续 {IdleSeconds} 秒无进度），已中止并通知用户 · {release.Tag}");
-                RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(
-                    release.Tag, $"下载停滞（连续 {IdleSeconds} 秒无进度）"));
+                // 转后台之后有两种"取消"：用户自己在任务页点的、以及闲置超时自动中止的。
+                // 这两件事在日志与界面上说法完全不同，必须分开（见 DownloadTask.CanceledByUser）。
+                var byUser = adopted?.CanceledByUser == true;
+                AppLog.Warning("update", byUser
+                    ? $"用户在「任务进行」页取消了更新下载 · {release.Tag}"
+                    : $"后台下载停滞（连续 {IdleSeconds} 秒无进度），已中止并通知用户 · {release.Tag}");
+
+                RunOnUi(() =>
+                {
+                    if (adopted is null) return;
+                    if (byUser)
+                    {
+                        DownloadManager.Current.CancelExternal(adopted);
+                        return;
+                    }
+                    DownloadManager.Current.FailExternal(adopted, $"下载停滞（连续 {IdleSeconds} 秒无进度）");
+                    App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, $"下载停滞（连续 {IdleSeconds} 秒无进度）");
+                });
                 return false;
             }
 
@@ -420,7 +454,11 @@ public static class UpdateFlow
             if (detached)
             {
                 AppLog.Fail("update", ex, $"后台下载失败（已发系统通知）· {release.Tag}");
-                RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, ex.Message));
+                RunOnUi(() =>
+                {
+                    if (adopted is not null) DownloadManager.Current.FailExternal(adopted, ex.Message);
+                    App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, ex.Message);
+                });
                 return false;
             }
 
@@ -440,12 +478,23 @@ public static class UpdateFlow
 
     // ── 后台下载 ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 连续这么久没有任何进度就认定卡死（不是总时长）。慢速下载不会被误杀 —— 每来一次进度就续期一次。
+    /// 弹窗式更新与后台下载用同一个规矩。
+    /// </summary>
+    private const int IdleSeconds = 45;
+
     private static int _bgBusy;      // 0 = 空闲，1 = 后台下载进行中（同一时间只允许一个）
 
     /// <summary>
     /// 后台下载：不弹进度窗，静默走「校验本地包 → 下载 → 校验」，
     /// 成功后记入存档待装标记并弹系统通知（带 现在安装 / 稍后安装 按钮）；
     /// 失败也报一声（托盘气泡兜底）。返回 false = 已经有一个在下了。
+    ///
+    /// ⚠️⚠️ 2026-10-15 Nick 报「点了后台下载没有任何反应，也没法手动安装、也不知道下没下好」——
+    ///    原因就是这条路**从头到尾没有任何界面**：进度只用来续期超时，结果只发一条系统通知
+    ///    （通知还可能被免打扰/专注助手吃掉）。现在改成开工前先在「任务进行」页挂一张卡片
+    ///    （<see cref="DownloadManager.TrackUpdate"/>），进度、体积、速度、取消、装不装全在那儿看得见。
     /// </summary>
     public static bool StartBackgroundDownload(UpdateService service, UpdateRelease release)
     {
@@ -453,51 +502,138 @@ public static class UpdateFlow
         if (Interlocked.Exchange(ref _bgBusy, 1) == 1)
         {
             AppLog.Info("update", $"已有一个后台下载在进行，这次的「后台下载」请求忽略 · {release.Tag}");
+            GoToDownloads();    // 已经在下着了 —— 把人领到任务页去看那一条，别让他以为点了没用
             return false;
         }
 
-        AppLog.Begin("update", $"后台下载开始（不弹进度窗）· {release.Tag}");
+        AppLog.Begin("update", $"后台下载开始（进度显示在「任务进行」页）· {release.Tag}");
+
+        // ⚠️ 卡片与 Progress 都必须在 UI 线程建：ObservableCollection 不能跨线程改，
+        //    而 Progress<T> 只有在 UI 线程建才捕获得到同步上下文（否则进度回调跑在
+        //    ThreadPool 线程上，改任务属性会把绑定刷崩）。
+        var task = DownloadManager.Current.TrackUpdate(
+            $"ClassSoftwareHub {release.Tag}", release.Tag, UpdateTaskNote(), package.Url.ToString());
+
+        // 把"用户在卡片上点取消"接进下载循环：链接到任务自己的令牌上。
+        // 空闲超时打在这个 linked 上，用户取消打在那个上面 —— 两者事后能分开（见 CanceledByUser）。
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(task.Cancellation.Token);
+        cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds));
+
+        var progress = new Progress<DownloadProgress>(p =>
+        {
+            DownloadManager.Current.ReportProgress(task, p);
+            try { cts.CancelAfter(TimeSpan.FromSeconds(IdleSeconds)); } catch { /* 已取消 */ }
+        });
+
+        GoToDownloads();
 
         _ = Task.Run(async () =>
         {
             try
             {
                 var destination = Path.Combine(UpdateService.UpdatesDir, package.Name);
-                using var cts = new CancellationTokenSource();
-                cts.CancelAfter(TimeSpan.FromSeconds(45));   // 空闲超时，同 RunAsync 的规矩
-                var progress = new Progress<double>(p =>
-                {
-                    try { cts.CancelAfter(TimeSpan.FromSeconds(45)); } catch { /* 已取消 */ }
-                });
-
                 var downloaded = await TryReuseLocalAsync(package, destination, null, cts.Token)
                                  ?? await service.DownloadAndVerifyAsync(package, destination, progress, cts.Token);
 
-                // 记入存档：首页横幅与「稍后安装」都认它
+                // 记入存档：首页横幅、任务页卡片、「稍后安装」都认它
                 var settings = App.Settings;
                 settings.Current.UpdatePendingPath = downloaded.FilePath;
                 settings.Current.UpdatePendingTag = release.Tag;
                 settings.Save();
 
                 AppLog.Done("update", $"后台下载完成，已标记待装并发系统通知 · {release.Tag} → {downloaded.FilePath}");
-                RunOnUi(() => App.MainWindow?.NotifyUpdateReady(release.Tag));
+                RunOnUi(() =>
+                {
+                    DownloadManager.Current.CompleteExternal(task, downloaded.FilePath, SizeOfFile(downloaded.FilePath));
+                    App.MainWindow?.NotifyUpdateReady(release.Tag);
+                });
             }
             catch (OperationCanceledException)
             {
-                AppLog.Warning("update", $"后台下载停滞超时（连续 45 秒无进度），已中止并通知用户 · {release.Tag}");
-                RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, "下载停滞（连续 45 秒无进度）"));
+                // 用户自己点的取消 vs 闲置超时：日志与界面上都得分开说
+                var byUser = task.CanceledByUser;
+                AppLog.Warning("update", byUser
+                    ? $"用户在「任务进行」页取消了更新下载 · {release.Tag}"
+                    : $"后台下载停滞超时（连续 {IdleSeconds} 秒无进度），已中止并通知用户 · {release.Tag}");
+
+                RunOnUi(() =>
+                {
+                    if (byUser)
+                    {
+                        DownloadManager.Current.CancelExternal(task);
+                        return;
+                    }
+                    DownloadManager.Current.FailExternal(task, $"下载停滞（连续 {IdleSeconds} 秒无进度）");
+                    App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, $"下载停滞（连续 {IdleSeconds} 秒无进度）");
+                });
             }
             catch (Exception ex)
             {
                 AppLog.Fail("update", ex, $"后台下载失败（已发系统通知）· {release.Tag}");
-                RunOnUi(() => App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, ex.Message));
+                RunOnUi(() =>
+                {
+                    DownloadManager.Current.FailExternal(task, ex.Message);
+                    App.MainWindow?.NotifyBackgroundDownloadFailed(release.Tag, ex.Message);
+                });
             }
             finally
             {
+                try { cts.Dispose(); } catch { /* 已经释放过 */ }
                 Interlocked.Exchange(ref _bgBusy, 0);
             }
         });
         return true;
+    }
+
+    /// <summary>
+    /// 卡片上那句固定说明 —— 让人一眼知道这条是「应用更新」，不是普通下载。
+    ///
+    /// ⚠️ 只说"这是什么、能干什么"，**别复述进度状态** —— 状态行紧挨着它下面，
+    ///    两边都报体积 / 都说"已通过校验"就成了同一句话说两遍。
+    /// </summary>
+    private static string UpdateTaskNote() => "应用更新包　·　可在此直接安装，无需手动查找安装包";
+
+    /// <summary>文件大小（拿不到就 0，卡片上少显示一个数字而已）。</summary>
+    private static long SizeOfFile(string path)
+    {
+        try { return new FileInfo(path).Length; } catch { return 0; }
+    }
+
+    /// <summary>
+    /// 把「任务进行」页推到前台。点完「后台下载」必须给一个即时反馈 ——
+    /// 2026-10-15 Nick 报的"点完什么都没发生"，本质就是那一步之前没有任何界面变化。
+    /// </summary>
+    public static void GoToDownloads()
+    {
+        RunOnUi(() =>
+        {
+            try { App.MainWindow?.Shell.NavigateTo("downloads"); }
+            catch { /* 界面还没就绪就算了，任务本身照跑 */ }
+        });
+    }
+
+    /// <summary>
+    /// 「任务进行」页每次露面时调一次：存档里还挂着待装更新（后台下载完但没装）而列表里没有对应卡片，
+    /// 就补一条**已完成**的任务。
+    ///
+    /// 为什么需要：任务列表是**进程内**的，关掉应用再打开就空了 —— 而那条"下好了、等你装"的包
+    /// 还躺在硬盘上。不补的话，用户下次进任务页只看到"当前无下载任务"，又回到"不知道下没下好"。
+    /// </summary>
+    public static void EnsurePendingTaskVisible()
+    {
+        var s = App.Settings.Current;
+        var path = s.UpdatePendingPath ?? "";
+        if (path.Length == 0 || !File.Exists(path)) return;
+
+        var tag = s.UpdatePendingTag ?? "";
+
+        foreach (var t in DownloadManager.Current.Tasks)
+            if (t.IsUpdate && (tag.Length == 0 ? t.Path == path : t.UpdateTag == tag)) return;
+
+        var size = SizeOfFile(path);
+        var task = DownloadManager.Current.TrackUpdate(
+            $"ClassSoftwareHub {(tag.Length > 0 ? tag : "新版本")}", tag, UpdateTaskNote(), "");
+        DownloadManager.Current.CompleteExternal(task, path, size);
     }
 
     /// <summary>立即安装待装的更新（首页横幅按钮 / 通知「现在安装」都走这里）。须在 UI 线程调用。</summary>

@@ -337,6 +337,10 @@ public sealed partial class MainWindow : Window
         // 进度弹窗正开着它 → 弹窗自己会弹「下载完成 / 下载失败」，别再叠一条系统通知
         if (task.Id == _downloadDialogTaskId) return;
 
+        // 更新包有自己那套收尾（带「现在安装」按钮的系统通知）——
+        // 再叠一条"下载完成，已保存到下载文件夹"只会把用户带偏（他要去的地方是任务页的「安装」）
+        if (task.Kind == DownloadKind.Update) return;
+
         if (task.State == DownloadState.Completed)
         {
             ShowBalloon("下载完成", $"{task.FileName}\n已保存到：{DownloadService.DefaultDir}",
@@ -1763,12 +1767,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>在资源管理器里定位到某个文件。</summary>
+    /// <summary>
+    /// 在资源管理器里定位到某个文件；传目录就直接把它打开。
+    /// （解压完之后「打开文件夹」指的是产物目录，不是那个压缩包 —— 见 DownloadTask.PreferredRevealPath）
+    /// </summary>
     public void RevealFile(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        if (string.IsNullOrWhiteSpace(path)) return;
         try
         {
+            if (Directory.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+                return;
+            }
+
+            if (!File.Exists(path)) return;
             Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         }
         catch (Exception ex)
@@ -2031,26 +2045,111 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // 下到的是安装包还是压缩包，决定主按钮写什么 —— 见 PackageKind。
+        // 「打开」对这两类都不是用户想干的事：安装包该说「安装」，压缩包该说「解压」。
+        var action = task.Action;
+
+        var body = new StackPanel { Spacing = 10 };
+        body.Children.Add(new TextBlock
+        {
+            Text = $"{task.FileName}\n{DownloadProgress.Size(task.Bytes)}",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = task.Path ?? "",
+            FontSize = 11.5,
+            Opacity = 0.6,
+            TextWrapping = TextWrapping.Wrap,
+        });
+
+        if (action == PackageAction.Install)
+            body.Children.Add(new TextBlock
+            {
+                Text = "该文件为安装包，可在此直接开始安装。",
+                FontSize = 12,
+                Opacity = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        else if (action == PackageAction.Extract)
+            body.Children.Add(new TextBlock
+            {
+                Text = "该文件为压缩包，将解压到与该文件同级的同名文件夹。",
+                FontSize = 12,
+                Opacity = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+        // 和「任务进行」页底部那两颗开关是同一组设置项，两边改哪边都算数。
+        // 勾上就立刻生效，不用等下一次下载。
+        var autoDeleteBox = new CheckBox
+        {
+            Content = "安装或解压完成后自动删除该文件",
+            IsChecked = App.Settings.Current.AutoDeletePackage,
+        };
+        body.Children.Add(autoDeleteBox);
+
+        // 「自动打开产物目录」只有压缩包才有意义 —— 安装包没有"产物目录"这回事
+        CheckBox? autoOpenBox = null;
+        if (action == PackageAction.Extract)
+        {
+            autoOpenBox = new CheckBox
+            {
+                Content = "解压完成后自动打开所在文件夹",
+                IsChecked = App.Settings.Current.AutoOpenExtractFolder,
+            };
+            body.Children.Add(autoOpenBox);
+        }
+
         var done = new ContentDialog
         {
             XamlRoot = root,
             Title = "下载完成",
-            Content = new TextBlock
+            Content = body,
+            PrimaryButtonText = action switch
             {
-                Text = $"{task.FileName}\n{DownloadProgress.Size(task.Bytes)}\n\n{task.Path}",
-                TextWrapping = TextWrapping.Wrap,
+                PackageAction.Install => "安装",
+                PackageAction.Extract => "解压",
+                _ => "立即打开",
             },
-            PrimaryButtonText = "立即打开",
             SecondaryButtonText = "打开所在文件夹",
             CloseButtonText = "完成",
             DefaultButton = ContentDialogButton.Primary,
         };
 
-        switch (await done.ShowAsync())
+        var choice = await done.ShowAsync();
+
+        // 用户可能在弹窗里刚改过开关 —— 不管他接着点的是哪个按钮，都按他改的存下来
+        var autoDelete = autoDeleteBox.IsChecked == true;
+        var autoOpen = autoOpenBox?.IsChecked == true;
+        var settingsChanged = false;
+
+        if (App.Settings.Current.AutoDeletePackage != autoDelete)
         {
-            case ContentDialogResult.Primary:
+            App.Settings.Current.AutoDeletePackage = autoDelete;
+            settingsChanged = true;
+        }
+        if (autoOpenBox is not null && App.Settings.Current.AutoOpenExtractFolder != autoOpen)
+        {
+            App.Settings.Current.AutoOpenExtractFolder = autoOpen;
+            settingsChanged = true;
+        }
+        if (settingsChanged) App.Settings.Save();
+
+        switch (choice)
+        {
+            case ContentDialogResult.Primary when action == PackageAction.None:
                 OpenFile(task.Path);
                 break;
+
+            case ContentDialogResult.Primary:
+                // 有类型的（安装包 / 压缩包）交回给任务页那条同款流程，免得这套动作有两个版本
+                _ = PackageRunner.RunAsync(task);
+                // 解压有过程（可能好几秒到大半分钟），把人领到任务页看进度，
+                // 否则"点了解压之后什么都没发生"又成了新一个"点后台下载没反应"
+                if (action == PackageAction.Extract) Services.Updating.UpdateFlow.GoToDownloads();
+                break;
+
             case ContentDialogResult.Secondary:
                 RevealFile(task.Path);
                 break;

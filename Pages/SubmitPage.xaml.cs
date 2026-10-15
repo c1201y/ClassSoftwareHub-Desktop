@@ -45,10 +45,36 @@ public sealed partial class SubmitPage : Page
         public string Note = "";
         public string Url = "";
         public string Hash = "";
+
+        /// <summary>用户在「下载方式」里显式选的 kind；空串＝自动识别，提交时不写这个字段。</summary>
+        public string Kind = "";
     }
 
     /// <summary>
-    /// 一张下载项卡片里的五个输入框。
+    /// 「下载方式」下拉的选项 —— 与网页端提交页 SubmitPage.vue 的 downloadKindItems **同一套**，
+    /// 顺序也一样：第 0 项是「自动识别」（不写 kind，交给详情页按链接推断），其余对应
+    /// Data/DownloadLinkKind.cs 里的 DownloadKind。
+    /// ⛔ 两边选项必须一致，否则同一份提交数据在网页端与桌面端会长得不一样。
+    /// </summary>
+    private static readonly (string Label, string Kind)[] DownloadKinds =
+    {
+        ("自动识别（按链接判断）", ""),
+        ("官网直链 / 直接下载", "file"),
+        ("网页跳转", "netdisk"),
+        ("应用商店", "store"),
+    };
+
+    /// <summary>kind 值 → 下拉索引；空串（自动）返回 -1，让占位文案显示出来（与网页端一致）。</summary>
+    private static int KindIndexOf(string kind)
+    {
+        if (kind.Length == 0) return -1;
+        for (var i = 1; i < DownloadKinds.Length; i++)
+            if (DownloadKinds[i].Kind == kind) return i;
+        return -1;
+    }
+
+    /// <summary>
+    /// 一张下载项卡片里的输入框与下拉。
     /// ⛔ 存引用而不是「遍历卡片按顺序取第 N 个」—— 直链那行外面多包了一层 StackPanel，
     /// 早期按遍历顺序取会把直链填进校验值框（2026-10-09 用户报的恢复草稿错位）。
     /// </summary>
@@ -59,6 +85,7 @@ public sealed partial class SubmitPage : Page
         public TextBox Note = null!;
         public TextBox Url = null!;
         public TextBox Hash = null!;
+        public ComboBox Kind = null!;
     }
 
     private readonly List<DownloadDraft> _downloads = new();
@@ -165,6 +192,24 @@ public sealed partial class SubmitPage : Page
         urlBlock.Children.Add(urlBar);
         urlBlock.Children.Add(urlHint);
         stack.Children.Add(urlBlock);
+
+        // 下载方式（对应网页端提交页同一个下拉）：决定详情页那颗按钮写「下载」还是
+        // 「前往网盘 / 前往官网」。默认 -1 ＝不选 ＝自动识别，提交时不写 kind 字段。
+        var kindCombo = new ComboBox
+        {
+            Header = "下载方式",
+            PlaceholderText = DownloadKinds[0].Label,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            // ⛔ 必须先填项、再置 -1：SelectedIndex 在空集合上设 -1 会被后续 Add 顶成 0
+            SelectedIndex = -1,
+        };
+        foreach (var (label, _) in DownloadKinds)
+            kindCombo.Items.Add(new ComboBoxItem { Content = label });
+        kindCombo.SelectedIndex = -1;
+        kindCombo.SelectionChanged += (_, _) =>
+            draft.Kind = kindCombo.SelectedIndex >= 1 ? DownloadKinds[kindCombo.SelectedIndex].Kind : "";
+        stack.Children.Add(kindCombo);
+
         var hashBox = Field("校验值（选填，用于防篡改）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value);
         stack.Children.Add(hashBox);
 
@@ -179,7 +224,7 @@ public sealed partial class SubmitPage : Page
         };
 
         _cards.Add(card);
-        _fields.Add(new DownloadFields { Platform = platformBox, Size = sizeBox, Note = noteBox, Url = urlBox, Hash = hashBox });
+        _fields.Add(new DownloadFields { Platform = platformBox, Size = sizeBox, Note = noteBox, Url = urlBox, Hash = hashBox, Kind = kindCombo });
         _titles.Add(title);
         DownloadsHost.Children.Add(card);
         RenumberDownloads();
@@ -624,6 +669,9 @@ public sealed partial class SubmitPage : Page
                 };
                 var hash = NormalizeHash(item.Hash);
                 if (hash.Length > 0) entry["hash"] = hash;
+                // 下载方式：用户显式选了才写 kind，选「自动识别」就交给详情页按链接推断
+                // —— 与网页端提交页同一口径（SubmitPage.vue：if (kind) entry.kind = kind）
+                if (item.Kind.Length > 0) entry["kind"] = item.Kind;
                 return entry;
             })
             .ToList();
@@ -879,6 +927,8 @@ public sealed partial class SubmitPage : Page
                 item.Note = JsonText(element, "note");
                 item.Url = JsonText(element, "url");
                 item.Hash = JsonText(element, "hash");
+                // 下载方式：草稿里没写 kind 就是「自动识别」（下拉回到未选状态，显示占位文案）
+                item.Kind = JsonText(element, "kind");
                 FillCard(_fields[^1], item);
             }
         }
@@ -900,6 +950,8 @@ public sealed partial class SubmitPage : Page
         fields.Note.Text = draft.Note;
         fields.Url.Text = draft.Url;
         fields.Hash.Text = draft.Hash;
+        // 下载方式：空串（自动识别）落在 -1，下拉显示占位文案 —— 与网页端同一个观感
+        fields.Kind.SelectedIndex = KindIndexOf(draft.Kind);
         // 本站上传回填的 `oss://` 键是服务端生成的，锁住别让人改坏
         fields.Url.IsReadOnly = draft.Url.Trim().StartsWith("oss://", StringComparison.OrdinalIgnoreCase);
     }

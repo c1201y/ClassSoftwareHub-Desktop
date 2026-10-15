@@ -150,7 +150,7 @@ public sealed class UpdateService
     ///    （只加速安装包本体；那个几百字节的 .md5 校验文件仍直接问 GitHub，不值得为它换路。）
     /// </summary>
     public async Task<DownloadedPackage> DownloadAndVerifyAsync(
-        UpdatePackage package, string destinationFile, IProgress<double>? progress = null, CancellationToken ct = default)
+        UpdatePackage package, string destinationFile, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
         var temp = destinationFile + ".part";
@@ -212,7 +212,7 @@ public sealed class UpdateService
                 sha.GetHashAndReset();
                 if (i < candidates.Count - 1)
                 {
-                    progress?.Report(0);
+                    progress?.Report(new DownloadProgress(0, package.Size, 0));
                     AppLog.Warn("update",
                         $"更新包候选 {i + 1}/{candidates.Count}（{HostOf(candidate.Url)}）不可用（{ex.Message}）→ 换下一条");
                 }
@@ -233,7 +233,7 @@ public sealed class UpdateService
                 TryDelete(temp);
                 if (i < candidates.Count - 1)
                 {
-                    progress?.Report(0);
+                    progress?.Report(new DownloadProgress(0, package.Size, 0));
                     AppLog.Warn("update",
                         $"更新包候选 {i + 1}/{candidates.Count}（{HostOf(candidate.Url)}）给的包校验不过："
                         + $"{mismatch.Message} → 换下一条重下");
@@ -320,10 +320,15 @@ public sealed class UpdateService
     /// 一次性抓一条链接到 <paramref name="temp"/>，边下边喂两个哈希。
     /// 一次只试一条；失败/取消都把 .part 删掉再往外抛（重试由调用方换下一条候选）。
     /// 候选自带的头（自建节点的 Referer / X-Api-Key）必须原样发出去 —— 漏了直接 403。
+    ///
+    /// ⚠️ 进度报的是 <see cref="DownloadProgress"/>（含已下载字节 / 总字节 / 速度），不是光秃秃的百分比 ——
+    ///    更新下载的进度要显示在「任务进行」页的任务卡片上，那里要跟普通下载是同一种快照。
+    ///    上报按 **120 毫秒节流**：<c>Progress&lt;T&gt;</c> 每次 Report 都会 Post 到 UI 线程，
+    ///    128 KB 一块、60 MB 的包就是 480 次，不节流会把 UI 线程喂撑（卡片反而卡）。
     /// </summary>
     private static async Task FetchPackageAsync(
         DownloadCandidate candidate, UpdatePackage package, string temp,
-        IncrementalHash md5, IncrementalHash sha, IProgress<double>? progress, CancellationToken ct)
+        IncrementalHash md5, IncrementalHash sha, IProgress<DownloadProgress>? progress, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
         candidate.ApplyTo(req);
@@ -336,7 +341,9 @@ public sealed class UpdateService
         await using var dst = File.Create(temp);
 
         var buffer = new byte[128 * 1024];
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         long done = 0;
+        long lastTick = -200;
         int read;
         while ((read = await src.ReadAsync(buffer, ct)) > 0)
         {
@@ -344,13 +351,27 @@ public sealed class UpdateService
             md5.AppendData(buffer, 0, read);
             sha.AppendData(buffer, 0, read);
             done += read;
-            if (total > 0) progress?.Report(Math.Min(1.0, done / (double)total));
+
+            if (total > 0 && clock.ElapsedMilliseconds - lastTick >= 120)
+            {
+                lastTick = clock.ElapsedMilliseconds;
+                progress?.Report(new DownloadProgress(done, total, SpeedOf(done, clock)));
+            }
         }
 
         // 少一截就别往下走了：说了多少就得拿到多少。
         // 在这里拦住，报的是"下载不完整"（比后面那句"校验不通过"好懂），也不会把半截包当成"这条线路给的包"。
         if (total > 0 && done != total)
             throw new IOException($"下载不完整：拿到 {done} 字节，应为 {total} 字节");
+
+        if (total > 0) progress?.Report(new DownloadProgress(done, total, SpeedOf(done, clock)));
+    }
+
+    /// <summary>这一轮传输的平均速度（字节/秒）。样本太短就返回 0 —— 别拿头几毫秒除出一个吓人的数字。</summary>
+    private static double SpeedOf(long done, System.Diagnostics.Stopwatch clock)
+    {
+        var seconds = clock.Elapsed.TotalSeconds;
+        return seconds >= 0.15 ? done / seconds : 0;
     }
 
     /// <summary>把 package.Md5 里的 "asset:URL" 解析成真正的 32 位十六进制 MD5。</summary>

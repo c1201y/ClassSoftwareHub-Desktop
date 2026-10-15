@@ -15,8 +15,10 @@ namespace ClassSoftwareHub.Desktop.Pages;
 /// <summary>
 /// 软件详情页（原生）。版式照站点 DownloadDetailPage.vue：
 /// 头部（图标 / 名称 / 标语 / 分类徽标）→ 应用介绍 → 详细信息（版本·体积·系统·官网·GitHub）
-/// → 小提示 → 下载（应用商店卡 + 下载项：平台·备注·体积·校验值 + 下载 + GitHub 加速）。
-/// 所有链接都交给系统（浏览器 / 下载工具）。
+/// → 小提示 → 下载（应用商店卡 + 下载项：平台·备注·体积·类型说明·校验值 + 主按钮 + GitHub 加速）。
+/// 所有链接都交给系统或应用内浮层。
+/// 主按钮的文案与行为随链接类型变（Data/DownloadLinkKind.cs，与站点 downloadLink.ts 同源）：
+/// 直链才写「下载」，网盘 / 官网下载页分别写「前往网盘」「前往官网」。
 /// </summary>
 public sealed partial class DetailPage : Page
 {
@@ -134,10 +136,11 @@ public sealed partial class DetailPage : Page
         AddLinkRow(ui.T("detail.github", "GitHub"), app.Github);
 
         // ── 下载 ──
+        // 商店项不进下载列表，交给上方那张商店卡（判据与站点一致：kindOf() === 'store'）
         _storeUrl = app.Store.Length > 0
             ? app.Store
-            : app.Downloads.FirstOrDefault(d => GithubMirror.IsStoreUrl(d.Url))?.Url ?? "";
-        var others = app.Downloads.Where(d => !GithubMirror.IsStoreUrl(d.Url)).ToList();
+            : app.Downloads.FirstOrDefault(d => d.Kind == DownloadKind.Store)?.Url ?? "";
+        var others = app.Downloads.Where(d => d.Kind != DownloadKind.Store).ToList();
 
         StoreCard.Visibility = _storeUrl.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         StoreOnlyHint.Visibility = _storeUrl.Length > 0 && others.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -217,28 +220,32 @@ public sealed partial class DetailPage : Page
 
     private void Download_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button b && b.Tag is string url && url.Length > 0)
-            OpenDownload(url, b);
+        if (sender is Button b && b.DataContext is DownloadItem item)
+            OpenDownload(item, b);
     }
 
     /// <summary>
-    /// 下载按钮分流：
+    /// 下载按钮分流。类型判定见 <see cref="DownloadLinkKind"/>（与站点 src/gallery/downloadLink.ts 同源）：
     ///   · 微软商店本体 → 特例（商店没装的话商店链接是死的，得能把商店装回来）
-    ///   · 链接本身就是文件（.exe/.zip/…）→ 原生下载
-    ///   · 链接其实是官网页面（很多软件更新频繁，站点就丢个官网地址）→ 开在浮层里，让人自己点
+    ///   · file     文件直链 → 原生下载
+    ///   · netdisk  网盘分享页 → 只能跳转（要密码 / 登录 / 客户端）
+    ///   · page     官网下载页 → 只能跳转（链接由 JS 生成或带签名，取不到）
     /// </summary>
-    private async void OpenDownload(string url, Button? source = null)
+    private async void OpenDownload(DownloadItem item, Button? source = null)
     {
+        var url = item.Url;
+        if (url.Length == 0) return;
+
         if (Services.StoreRepair.IsStoreItself(_app?.Id, url))
         {
             await ShowStoreSelfDialogAsync();
             return;
         }
 
-        if (Services.DownloadService.IsDirectFileUrl(url))
+        if (item.Kind == DownloadKind.File)
             App.MainWindow?.DownloadFile(url, source is null ? null : DownloadNameFor(source));
         else
-            App.MainWindow?.ShowWebSheet(url, "官网下载");
+            App.MainWindow?.ShowWebSheet(url, item.Kind == DownloadKind.Netdisk ? "网盘分享" : "官网下载");
     }
 
     /// <summary>
@@ -403,8 +410,11 @@ public sealed partial class DetailPage : Page
             };
             button.Click += (s, _) =>
             {
-                // 加速下载也是下载：直接文件就原生下，指到官网就开浮层
-                if (((Button)s).Tag is string u) OpenDownload(u, b);
+                // 加速下载就是把这条直链套上镜像前缀，入口本身只对文件直链出现
+                // ⇒ 显式声明 file：有些包的地址不带后缀（/package/win-autoupdate、
+                //   /api/v1/release/dl/1），光看 URL 会被判成「官网页面」而开成浮层。
+                if (((Button)s).Tag is string u)
+                    OpenDownload(new DownloadItem { Url = u, DeclaredKind = "file" }, b);
                 flyout.Hide();
             };
             panel.Children.Add(button);

@@ -246,6 +246,9 @@ public sealed class ContentStore
                             Size = ReadString(d, "size"),
                             Url = ReadString(d, "url"),
                             Hash = ReadString(d, "hash"),
+                            // 维护者显式声明的落地方式（file / store / netdisk / page），
+                            // 不写就由 DownloadLinkKind 按域名与后缀推断
+                            DeclaredKind = ReadString(d, "kind"),
                         };
                         if (item.Platform.Length > 0 || item.Url.Length > 0) app.Downloads.Add(item);
                     }

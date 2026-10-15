@@ -550,9 +550,9 @@ public sealed partial class SettingsPage : Page
                 if (choice == UpdateFlow.UpdateChoice.Background)
                 {
                     if (UpdateFlow.StartBackgroundDownload(_updater, release))
-                        UpdateStatus.Text = $"已转为后台下载 {release.Tag}，完成后通过系统通知提醒。";
+                        UpdateStatus.Text = $"已转入「任务进行」页下载 {release.Tag}，可在该页查看进度并安装。";
                     else
-                        UpdateStatus.Text = "已有一个更新正在后台下载，完成后会通知。";
+                        UpdateStatus.Text = "已有一个更新正在后台下载，可在「任务进行」页查看。";
                     return;
                 }
 
