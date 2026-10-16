@@ -297,7 +297,17 @@ public sealed partial class MainWindow : Window
 
             var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
-            if (result is not { HasUpdate: true, Release: { } release }) return;
+
+            // 查到「已是最新」⇒ 顺手把首页那颗「发现新版本」收起来（用户可能刚更新完）
+            if (result is not { HasUpdate: true, Release: { } release })
+            {
+                Services.Updating.UpdateNotice.Clear();
+                return;
+            }
+
+            // ⛔⛔ 先记下来、再弹窗：用户一选「稍后」，对话框关掉这条信息就没了 ——
+            //    首页要靠它显示「发现新版本」入口（Nick 2026-10-16 提的正是这一态）。
+            Services.Updating.UpdateNotice.Set(release);
 
             // 这种启动方式主窗口是藏着的（--minimized / --palette / 直接收进托盘）
             // → 弹对话框没人看，改发一条系统通知，点通知再把界面叫出来
@@ -1625,6 +1635,11 @@ public sealed partial class MainWindow : Window
 
             var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
+
+            // 首页那颗「发现新版本」与这里共用同一份检查结果 —— ⛔ 首页自己绝不联网，见 UpdateNotice 的类注释。
+            if (result is { HasUpdate: true, Release: { } found }) Services.Updating.UpdateNotice.Set(found);
+            else Services.Updating.UpdateNotice.Clear();
+
             var root = (Content as FrameworkElement)?.XamlRoot;
             if (root is null) return;
 

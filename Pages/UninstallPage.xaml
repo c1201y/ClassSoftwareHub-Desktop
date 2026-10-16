@@ -83,6 +83,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Spacing="4">
@@ -130,7 +131,17 @@
 
                 <!-- 说明按钮：图标钮。两个状态共用，只是弹出来的内容不一样（见 About_Click）。
                      ⚠️ Content 是 FontIcon ⇒ UIA 拿不到按钮名，显式给一个（本项目老坑）。 -->
-                <Button x:Name="AboutButton" Grid.Column="4" Click="About_Click"
+                <!-- ⚠️ 列号：本行是 4，下面的「说明」被挪到 5、「返回列表」挪到 6（加这颗按钮时一起改的） -->
+
+                <!-- 「残留与隔离区」：**主动进入**卸载残留界面的入口。
+                     ⚠️ 2026-10-16 加 —— 在此之前那个界面只能靠"卸载完自动跳过去"进入，用户平时
+                        根本看不到它，卸载之后也没法回头补清（Nick：「我卸完 ToDesk 根本不知道
+                        残留清没清，还以为是 bug」）。列表态与残留态都显示，残留态里也能直接进去。 -->
+                <Button x:Name="LeftoverEntryButton" Grid.Column="4" Content="残留与隔离区"
+                        Click="LeftoverEntry_Click"
+                        VerticalAlignment="Top" Margin="0,4,0,0" />
+
+                <Button x:Name="AboutButton" Grid.Column="5" Click="About_Click"
                         Style="{StaticResource RowMoreButtonStyle}"
                         VerticalAlignment="Top" Margin="0,4,0,0"
                         AutomationProperties.Name="说明"
@@ -141,7 +152,7 @@
                 <!-- 「返回列表」：只在残留状态露出来（应用列表状态里它是收起的）。
                      ⚠️ 这是**页面内的状态切换**，不是页面返回 —— 所以它是一颗普通按钮，
                         ⛔ 不碰导航栏那个返回箭头（项目硬规约：页面级返回只用导航栏那个）。 -->
-                <Button x:Name="BackButton" Grid.Column="5" Content="返回列表" Click="Back_Click"
+                <Button x:Name="BackButton" Grid.Column="6" Content="返回列表" Click="Back_Click"
                         Visibility="Collapsed"
                         VerticalAlignment="Top" Margin="0,4,0,0" />
             </Grid>
@@ -155,7 +166,7 @@
             <InfoBar x:Name="RiskBar" Grid.Row="1"
                      Severity="Error" IsOpen="True" IsClosable="False"
                      Title="此操作将删除文件与注册表项"
-                     Message="清理卸载残留会移除文件与注册表项。所有被移除的内容均先行备份至隔离区，可随时还原。" />
+                     Message="清理卸载残留会移除文件与注册表项。被移除的内容均先行备份至隔离区，可在「隔离区」中查看并取回。" />
 
             <!-- ── 内容区：两个状态各占一层，靠 Visibility 换 ── -->
             <Grid Grid.Row="2">
@@ -236,6 +247,22 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
+
+                    <!-- 空态：**主动进来**（当前没有待处理的残留）时显示。
+                         ⚠️ 2026-10-16 加 —— 原先这个界面只有"卸载完自动跳进来"一条路，进去必然有内容；
+                            现在有了主动入口，就得说清"这里是什么、什么时候会有东西"，别让人对着空白发愣。 -->
+                    <StackPanel x:Name="LeftoverEmpty" Visibility="Collapsed" Spacing="10"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="28" Opacity="0.45"
+                                  HorizontalAlignment="Center" />
+                        <TextBlock Text="当前没有待处理的残留项" FontSize="14" Opacity="0.7"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap"
+                                   FontSize="12" Opacity="0.55"
+                                   Text="卸载软件后会自动扫描残留并在本页列出，判定确定的项目默认勾选。" />
+                        <Button Content="查看隔离区" Click="Quarantine_Click"
+                                HorizontalAlignment="Center" />
+                    </StackPanel>
 
                     <ListView x:Name="LeftoverList"
                               SelectionMode="None" IsItemClickEnabled="False"
@@ -318,7 +345,7 @@
                     <!-- 动作条：左＝已选统计（不粗体），右＝唯一的主按钮 + 一颗放弃钮。
                          ⛔ 故意**没有**"全选 / 反选 / 重置"那排钮：默认勾选已经把确定的那批勾好了，
                            剩下的是"不确定"的，逐条看比一键全选安全。少一排按钮，也少一分网页感。 -->
-                    <Grid Grid.Row="1" ColumnSpacing="10">
+                    <Grid x:Name="LeftoverBar" Grid.Row="1" ColumnSpacing="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />

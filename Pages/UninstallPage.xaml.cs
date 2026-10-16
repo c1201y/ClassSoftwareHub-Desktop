@@ -459,7 +459,7 @@ public sealed partial class UninstallPage : Page
 
         Item("清理前的处理",
              "先行备份，再行移除：注册表项导出为标准 .reg 文件（双击即可导回），文件原样移入隔离区目录。"
-             + "两者均存放于本程序数据目录的 quarantine 下，不参与自动清理，可随时还原。");
+             + "两者均存放于本程序数据目录的 quarantine 下，不参与自动清理，可在「隔离区」中查看并取回。");
 
         Item("保护范围",
              "Windows 目录、程序目录下的公共组件（Common Files、WindowsApps、系统组件目录）、"
@@ -567,34 +567,47 @@ public sealed partial class UninstallPage : Page
             if (!run.Outcome.Started)
             {
                 CountLine.Text = run.Outcome.Message;
+                await InfoAsync("无法启动卸载程序",
+                    run.Outcome.Message
+                    + "\n\n可以改用系统「设置 → 应用」来卸载；"
+                    + "也可以确认该软件的卸载程序是否仍在其安装目录中。");
                 return;
             }
 
             var stillThere = _all.Any(r =>
                 string.Equals(r.Name, row.Name, StringComparison.CurrentCultureIgnoreCase));
+            var stillThereNote =
+                $"「{row.Name}」仍存在于已安装列表：卸载可能已取消、失败，或需重启后方可完成。"
+                + "为避免误删其正在使用的数据，本次不执行残留清理。";
 
             if (!run.Scanned)
             {
                 // 没做体检（超时 / 用户取消了 UAC 之后的回落）—— 如实说，别假装"没有残留"
                 CountLine.Text = run.Outcome.Message;
+                await InfoAsync("未能完成残留检查",
+                    run.Outcome.Message + "\n\n本次没有检查残留，也没有移除任何东西。");
                 return;
             }
 
-            // ⛔⛔ 卸载记录**还在**（卸载被取消 / 失败 / 要重启才生效）⇒ 一律不进残留状态。
-            //     原因：这时候"名字对得上的痕迹"里有一大半是这个软件**正在用的活数据**
-            //     （它的 AppData、它自己的注册表键、它的安装目录），清掉就等于把一个还在装的软件
-            //     拆坏。宁可什么都不做，也不能在这个状态下摆出一份"看起来像残留"的清单。
             if (stillThere)
             {
-                CountLine.Text =
-                    $"「{row.Name}」仍存在于已安装列表：卸载可能已取消、失败，或需重启后方可完成。"
-                    + "为避免误删其正在使用的数据，本次不执行残留清理。";
+                // ⛔⛔ 卸载记录**还在**（卸载被取消 / 失败 / 要重启才生效）⇒ 一律不进残留状态。
+                //     原因：这时候"名字对得上的痕迹"里有一大半是这个软件**正在用的活数据**
+                //     （它的 AppData、它自己的注册表键、它的安装目录），清掉就等于把一个还在装的软件
+                //     拆坏。宁可什么都不做，也不能在这个状态下摆出一份"看起来像残留"的清单。
+                CountLine.Text = stillThereNote;
+                await InfoAsync("卸载未完成", stillThereNote);
                 return;
             }
 
             if (run.Leftovers.Count == 0)
             {
-                CountLine.Text = $"「{row.Name}」已卸载，未发现残留。";
+                // ⚠️ 措辞是「没有扫描到」，⛔ 不是「没有」—— 扫的是浅层快照 + 名字/位置吻合，
+                //    说"没有残留"等于替扫描能力打包票；"没有扫描到"才是如实交代（Nick 2026-10-16 定）。
+                CountLine.Text = $"「{row.Name}」已卸载 · 没有扫描到残留";
+                await InfoAsync("卸载完成",
+                    $"「{row.Name}」已卸载，没有扫描到残留的文件或注册表项。\n\n"
+                    + "如需一并查看它留在 AppData 里的缓存目录，可以到「AppData 管理」中查找。");
                 return;
             }
 
@@ -609,6 +622,27 @@ public sealed partial class UninstallPage : Page
         }
     }
 
+    /// <summary>
+    /// 一句话的提示框。
+    ///
+    /// ⛔ 存在的理由：卸载这条路上有四种**不会进入残留确认**的结局（卸载程序起不来 / 没做成体检 /
+    ///    卸载未生效 / 确实没残留）。原先这些结局只在标题下面改一行 12px 小字 —— 用户点完「卸载」
+    ///    会觉得界面上什么都没发生（Nick 2026-10-16：「完成卸载之后，没有弹那个什么清理的，很奇怪」）。
+    ///    每种结局都得有个看得见的落点。
+    /// ⛔ 关闭钮一律写「关闭」，不用"知道了"这类口语（项目文案硬规约）。
+    /// </summary>
+    private async Task InfoAsync(string title, string body)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = new TextBlock { Text = body, FontSize = 13, TextWrapping = TextWrapping.Wrap },
+            CloseButtonText = "关闭",
+        };
+        await dialog.ShowAsync();
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     //  状态二：卸载残留确认
     // ══════════════════════════════════════════════════════════════════════════
@@ -616,6 +650,8 @@ public sealed partial class UninstallPage : Page
     /// <summary>
     /// 切到残留状态。
     /// ⛔ 这里只切**状态**，不改导航 —— 它是同一页里的第二屏（顶栏那些控件换岗）。
+    /// ⚠️ <paramref name="appName"/> 传空 = **主动进来**（从「残留与隔离区」按钮），
+    ///    这时没有目标软件也没有待处理项，走空态。
     /// </summary>
     private void EnterLeftoverState(string appName, IReadOnlyList<LeftoverItem> items)
     {
@@ -632,21 +668,152 @@ public sealed partial class UninstallPage : Page
         RescanButton.Visibility = Visibility.Collapsed;
         BackButton.Visibility = Visibility.Visible;
 
-        var strong = items.Count(i => i.Evidence == LeftoverEvidence.Strong);
-        var medium = items.Count(i => i.Evidence == LeftoverEvidence.Medium);
-        var weak = items.Count(i => i.Evidence == LeftoverEvidence.Weak);
+        var any = _leftoverRows.Count > 0;
 
-        CountLine.Text = $"「{appName}」已卸载 · 发现 {items.Count} 项残留";
-        if (strong + medium > 0 || weak > 0)
-            CountLine.Text += $"（确定 {strong} · 很可能 {medium} · 不确定 {weak}）";
+        if (any)
+        {
+            var strong = items.Count(i => i.Evidence == LeftoverEvidence.Strong);
+            var medium = items.Count(i => i.Evidence == LeftoverEvidence.Medium);
+            var weak = items.Count(i => i.Evidence == LeftoverEvidence.Weak);
+
+            CountLine.Text = $"「{appName}」已卸载 · 发现 {items.Count} 项残留";
+            if (strong + medium > 0 || weak > 0)
+                CountLine.Text += $"（确定 {strong} · 很可能 {medium} · 不确定 {weak}）";
+        }
+        else
+        {
+            // 主动进来：⛔ 别拼出"「」已卸载 · 发现 0 项残留"那种怪句子
+            CountLine.Text = "当前没有待处理的残留项";
+        }
 
         LeftoverList.ItemsSource = _leftoverRows;
+        LeftoverList.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        LeftoverEmpty.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
+        LeftoverBar.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
 
         ListHost.Visibility = Visibility.Collapsed;
         LeftoverHost.Visibility = Visibility.Visible;
         UpdateLeftoverBar();
 
         AppLog.Info("leftover", $"进入残留确认：{appName}，{items.Count} 项（默认勾选 {_leftoverRows.Count(r => r.IsChecked == true)} 项）");
+    }
+
+    /// <summary>
+    /// 「残留与隔离区」：**主动进入**残留界面。
+    ///
+    /// ⚠️ 2026-10-16 加。在此之前这个界面只能靠"卸载完自动跳过去"进入 —— 用户平时根本看不到它，
+    ///    卸载之后也没法回头补看（Nick：「我卸完 ToDesk 根本不知道残留清没清，还以为是 bug」）。
+    ///    主动进来时没有目标软件、也没有待处理项，所以走空态，由空态说明这里是什么。
+    /// </summary>
+    private void LeftoverEntry_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+
+        // ⚠️ 已经在残留态就别再切一次（会把它重置成空态，把用户正在勾的清单冲掉）
+        if (LeftoverHost.Visibility == Visibility.Visible) return;
+
+        EnterLeftoverState("", Array.Empty<LeftoverItem>());
+    }
+
+    /// <summary>
+    /// 「查看隔离区」：列出历次清理留下的备份记录。
+    ///
+    /// ⛔ 只读 —— 这里不删任何东西、也不自动还原：每条记录点开是文件夹，还原方式写在里面的
+    ///    「清理记录.txt」里（文件剪切回原位、.reg 双击导入）。
+    /// 之所以必须补这个入口：清理时移除的东西**全部备份在隔离区**，但此前唯一的入口是
+    /// "清理完成"那一刻弹窗里的按钮 —— 弹窗一关，用户的后悔药就再也找不着了。
+    /// </summary>
+    private async void Quarantine_Click(object sender, RoutedEventArgs e)
+    {
+        var entries = QuarantineStore.Scan();
+        var body = new StackPanel { Spacing = 10 };
+
+        if (entries.Count == 0)
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = $"隔离区里还没有记录。\n\n位置：{QuarantineStore.Root}",
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+        else
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = $"共 {entries.Count} 条清理记录。移除的内容均备份在这里，可随时取回。",
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            var host = new StackPanel { Spacing = 8 };
+            foreach (var entry in entries) host.Children.Add(BuildQuarantineRow(entry));
+
+            body.Children.Add(new ScrollViewer
+            {
+                MaxHeight = 320,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = host,
+            });
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "隔离区",
+            Content = body,
+            CloseButtonText = "关闭",
+        };
+
+        // ⚠️ 同一时刻只允许一个 ContentDialog（还有弹窗开着时 ShowAsync 会直接抛）
+        try
+        {
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("quarantine", ex, "打开隔离区对话框");
+        }
+    }
+
+    /// <summary>隔离区列表的一行：左＝软件名与时间，右＝打开文件夹。</summary>
+    private StackPanel BuildQuarantineRow(QuarantineEntry entry)
+    {
+        var row = new StackPanel { Spacing = 2 };
+
+        var head = new Grid { ColumnSpacing = 8 };
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var title = new TextBlock
+        {
+            Text = entry.Title,
+            FontSize = 13,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(title, 0);
+        head.Children.Add(title);
+
+        var open = new Button { Content = "打开文件夹" };
+        open.Click += (_, _) =>
+        {
+            if (!QuarantineStore.OpenInExplorer(entry.Dir))
+                _ = InfoAsync("没能打开", $"隔离区目录可能已被移走或删除：\n{entry.Dir}");
+        };
+        Grid.SetColumn(open, 1);
+        head.Children.Add(open);
+
+        row.Children.Add(head);
+        row.Children.Add(new TextBlock
+        {
+            Text = $"{entry.TimeText}　·　{entry.SubText}",
+            FontSize = 12,
+            Opacity = 0.6,
+            TextWrapping = TextWrapping.Wrap,
+        });
+
+        return row;
     }
 
     /// <summary>回到应用列表状态。⛔ 什么都**没删** —— 「不用了」和「返回列表」走的是同一条路。</summary>
@@ -665,6 +832,8 @@ public sealed partial class UninstallPage : Page
         _leftoverAppName = "";
 
         LeftoverList.ItemsSource = null;
+        LeftoverList.Visibility = Visibility.Visible;      // 复位：下次进残留态默认是列表（主动进来时再收）
+        LeftoverEmpty.Visibility = Visibility.Collapsed;
         LeftoverHost.Visibility = Visibility.Collapsed;
         ListHost.Visibility = Visibility.Visible;
 
@@ -693,7 +862,7 @@ public sealed partial class UninstallPage : Page
         else
         {
             RiskBar.Title = "此操作将删除文件与注册表项";
-            RiskBar.Message = "清理卸载残留会移除文件与注册表项。所有被移除的内容均先行备份至隔离区，可随时还原。";
+            RiskBar.Message = "清理卸载残留会移除文件与注册表项。被移除的内容均先行备份至隔离区，可在「隔离区」中查看并取回。";
         }
     }
 
@@ -899,7 +1068,7 @@ public sealed partial class UninstallPage : Page
         Line($"将移除 {count} 项残留条目" + (size > 0 ? $"，合计约 {HumanSize(size)}" : "") + "。", 0.9);
 
         Line("移除前先行备份：注册表项导出为标准 .reg 文件，文件原样移入隔离区，"
-             + "两者均位于本程序数据目录的 quarantine 下，可随时还原。", 0.7);
+             + "两者均位于本程序数据目录的 quarantine 下，可在「隔离区」中查看并取回。", 0.7);
 
         Line("仅移除已勾选的位置，不涉及任何系统目录与系统注册表项。"
              + "该限制为代码内固定常量，界面勾选不改变其判定结果。", 0.7);

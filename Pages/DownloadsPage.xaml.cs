@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -79,9 +82,134 @@ public sealed partial class DownloadsPage : Page
         if (Tagged(sender) is { } task) DownloadManager.Current.Retry(task.Id);
     }
 
-    private void Remove_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 行尾「⋯」：这条任务能干的两件事。
+    ///
+    /// ⛔ 顺序固定 —— **不删东西的放前面**（从列表移除），不可逆的「删除文件」放最后、且要确认。
+    /// 之所以补上「删除文件」：以前这里只有"从列表移除"，文件留在硬盘上，用户想删得自己摸到下载
+    /// 文件夹里找（Nick 2026-10-16：「删除已下载安装程序（即使未安装）」）。
+    ///
+    /// ⚠️ 菜单**手建**、闭包直接捕获这一条任务 —— 跟 AppData 管理页同一套做法
+    ///    （`MenuFlyout` 写进 `DataTemplate` 时 `{x:Bind}` 求值上下文很脆，本项目有 WMC9999 前科）。
+    /// </summary>
+    private void More_Click(object sender, RoutedEventArgs e)
     {
-        if (Tagged(sender) is { } task) DownloadManager.Current.Remove(task.Id);
+        if (sender is not FrameworkElement { Tag: DownloadTask task } fe) return;
+
+        var flyout = new MenuFlyout();
+
+        var remove = new MenuFlyoutItem
+        {
+            Text = "从列表移除",
+            Icon = new FontIcon { Glyph = "\uE894" },   // Clear（只把这一行从列表里清掉，不动文件）
+        };
+        remove.Click += (_, _) => DownloadManager.Current.Remove(task.Id);
+        flyout.Items.Add(remove);
+
+        // 「删除文件」只在文件**真还在**的时候给 —— 用户可能早把它挪走或删掉了
+        if (task.CanOpen)
+        {
+            flyout.Items.Add(new MenuFlyoutSeparator());
+
+            var del = new MenuFlyoutItem
+            {
+                Text = "删除文件",
+                Icon = new FontIcon { Glyph = "\uE74D" },   // Delete
+            };
+            del.Click += (_, _) => _ = DeleteFileAsync(task);
+            flyout.Items.Add(del);
+        }
+
+        flyout.ShowAt(fe);
+    }
+
+    /// <summary>
+    /// 弹出删除确认框。返回 true = 用户确认要删。
+    ///
+    /// ⚠️ 为什么单独包一层 try/catch：同一时刻**只允许开一个** `ContentDialog`，
+    ///    若此刻还有别的弹窗（典型是「下载完成」那张）没关，`ShowAsync()` 会直接抛。
+    ///    正常操作遇不到 —— 模态弹窗会把卡片上的点击挡住；但这一步是不可逆动作，
+    ///    ⛔ 不能让它静默失败，所以至少留一条日志。
+    /// </summary>
+    private async Task<bool> ConfirmDeleteAsync(DownloadTask task, string path)
+    {
+        var size = task.Bytes > 0 ? Core.AppLog.Size(task.Bytes) + "　·　" : "";
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "删除已下载的文件？",
+            Content = new TextBlock
+            {
+                Text = $"{task.FileName}\n{size}{path}\n\n"
+                     + "文件将被永久删除，不进入回收站；删除后如需使用需要重新下载。",
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = "删除",
+            CloseButtonText = "取消",
+            // ⚠️ 不可逆操作，默认落在「取消」上，别让一个回车就删掉
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        try
+        {
+            return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("download", ex, "弹出「删除已下载的文件」确认框");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 把这条任务下载的文件从硬盘上删掉，连带移出列表。
+    ///
+    /// ⚠️ 是**永久删除、不进回收站** —— 与「设置 → 本地安装包」删更新包的行为保持一致
+    ///    （那边 `InstallerCleanup.TryDelete` 也是直接 `File.Delete`），所以确认框里必须写清这一点。
+    /// ⚠️ 万一删的是**待装的更新包**，得顺手把待装标记清掉 —— 否则首页会一直挂着
+    ///    "XX 已下载就绪"，点下去却找不到文件。（首页那边有兜底自检，但主动清更干净。）
+    /// </summary>
+    private async Task DeleteFileAsync(DownloadTask task)
+    {
+        if (task.Path is not { Length: > 0 } path) return;
+
+        if (!await ConfirmDeleteAsync(task, path)) return;
+
+        try
+        {
+            File.Delete(path);
+            Core.AppLog.Done("download", $"已删除已下载的文件「{task.Title}」→ {path}");
+
+            var s = App.Settings.Current;
+            if (string.Equals(s.UpdatePendingPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                s.UpdatePendingPath = "";
+                s.UpdatePendingTag = "";
+                App.Settings.Save();
+                Core.AppLog.Info("update", "随文件删除，待装标记已一并清除");
+            }
+
+            DownloadManager.Current.Remove(task.Id);
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("download", ex, "删除已下载的文件：" + path);
+
+            var fail = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "没能删除",
+                Content = new TextBlock
+                {
+                    Text = "文件可能正被其他程序占用（比如安装程序还在运行）。关掉它之后再试一次。",
+                    FontSize = 13,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                CloseButtonText = "关闭",
+            };
+            await fail.ShowAsync();
+        }
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)

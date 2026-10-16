@@ -20,7 +20,7 @@ public sealed record CacheInstanceInfo(
 /// <summary>
 /// 版本化素材缓存目录（Nick 2026-10-10 定案）：
 /// <c>%LOCALAPPDATA%\ClassSoftwareHub\cache\dv{版本}-{yyyyMMddHHmm}\</c>，例如
-/// <c>dv1.2.0-insider1.0-202610101842</c>。
+/// <c>dv1.2.0-insider1.1-202610101842</c>。
 ///
 /// 为什么要一个版本一个目录：以前所有版本的解包素材（图标 / 首页 banner / 引导图 / 铃声…）
 /// 全堆在 <c>cache\</c> 根下、按文件名区分（<c>banner-dv1.2.png</c> 这种），越攒越乱、
@@ -56,7 +56,7 @@ public static class CacheHome
     /// <summary>缓存根目录：<c>%LOCALAPPDATA%\ClassSoftwareHub\cache</c>。</summary>
     public static string Root => Path.Combine(SettingsStore.Dir, FolderName);
 
-    /// <summary>当前版本实例目录名（如 <c>dv1.2.0-insider1.0-202610101842</c>）。取用即确保已初始化。</summary>
+    /// <summary>当前版本实例目录名（如 <c>dv1.2.0-insider1.1-202610101842</c>）。取用即确保已初始化。</summary>
     public static string InstanceName => Ensure();
 
     /// <summary>当前版本实例目录的完整路径。初始化失败时退回 <c>cache\</c> 根（不至于让素材写不出去）。</summary>
@@ -85,7 +85,7 @@ public static class CacheHome
             {
                 Directory.CreateDirectory(Root);
 
-                // 同版本前缀：dv1.2.0-insider1.0-
+                // 同版本前缀：dv1.2.0-insider1.1-
                 var prefix = "dv" + ShellConfig.ShellVersion + "-";
 
                 // 目录名尾部就是 12 位时间 ⇒ 字符串倒序 == 时间倒序，取第一个即最新

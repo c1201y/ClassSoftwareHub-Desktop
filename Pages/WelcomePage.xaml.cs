@@ -30,6 +30,11 @@ public sealed partial class WelcomePage : Page
         {
             App.Content.Changed -= OnContentChanged;
             App.Content.Changed += OnContentChanged;
+
+            // 更新状态可能在首页不在眼前时就变了（启动检查跑在后台）⇒ 每次 Loaded 重挂一次，防重复订阅
+            Services.Updating.UpdateNotice.Changed -= OnUpdateNoticeChanged;
+            Services.Updating.UpdateNotice.Changed += OnUpdateNoticeChanged;
+
             Populate();
             RefreshUpdateCard();
         };
@@ -48,15 +53,36 @@ public sealed partial class WelcomePage : Page
         RefreshCollectedCount();
     }
 
+    /// <summary>
+    /// 「发现新版本」状态变了（见 <see cref="Services.Updating.UpdateNotice"/>）。
+    /// ⚠️ 通知发出来的线程不保证是 UI 线程（检查跑在后台任务里）⇒ 回 UI 线程再动控件。
+    /// </summary>
+    private void OnUpdateNoticeChanged()
+    {
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            RefreshUpdateCard();
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(RefreshUpdateCard);
+    }
+
     // ── 更新状态（2026-10-06 起，挂在快速开始区的「查看更新内容」主题色卡上） ──
 
     /// <summary>
-    /// 「查看更新内容」卡的两种状态：
-    /// ①「待装」——后台下载完成、存档里有待装标记，且包还在、tag 还不是当前版本 → 右端换出「立即安装」按钮；
-    /// ②「已是最新」——其余所有情况 → 副标题写当前版本号 + 已是最新版本，点击进「更新日志」页。
+    /// 「查看更新内容」卡的三种状态（优先级从上到下）：
+    /// ①「待装」—— 后台下载完成、存档里有待装标记，且包还在、tag 还不是当前版本 → 右端换出「立即安装」；
+    /// ②「发现新版本」—— **只是查到了、还没下载** → 右端换出「立即更新」（2026-10-16 新增）；
+    /// ③「已是最新」—— 其余所有情况 → 副标题写当前版本号，点击进「更新日志」页。
     ///
-    /// 之所以不做「发现新版本」这一态：那需要在首页发起网络检查，会拖慢首屏。
-    /// 后台本来就会自动检查并下载，真下了包自然落到状态①，够用了。
+    /// ⛔⛔ 首页**绝不自己发起网络检查**（那会拖慢首屏，这条规矩一直有效）。
+    ///    状态②的数据来自 <see cref="Services.Updating.UpdateNotice"/> —— MainWindow 在启动时 / 用户
+    ///    手动检查后把结果放进去，本页订阅它的变化重刷。所以这里零额外网络开销。
+    ///
+    /// 之所以原先不做状态②（旧注释写的是"后台本来就会自动检查并下载，真下了包自然落到状态①"）：
+    /// 那条路成立的前提是**用户没关掉自动下载**。Nick 2026-10-16 报的实际体验是——更新提示只在开机
+    /// 弹一次，用户选「稍后」之后就再也找不到入口了，很容易忘。所以补上这一态。
     ///
     /// 待装标记的自检清理逻辑与旧 InfoBar 完全一致：装上新版本再进来、或包被清理了 → 顺手清档，不摆死卡片。
     /// </summary>
@@ -83,30 +109,72 @@ public sealed partial class WelcomePage : Page
         }
 
         // 目标元素＝快速开始区那张「查看更新内容」主题色卡（2026-10-06 从顶部独立卡片并入这里）。
-        // 注意：卡片本身就是强调色底 ⇒ 不再靠 BorderBrush 表达"待装"，改用右端「立即安装」按钮。
+        // 注意：卡片本身就是强调色底 ⇒ 不再靠 BorderBrush 表达"待装"，改用右端那颗按钮。
         if (pending)
         {
+            // ① 待装：**离"装上"最近，优先级最高** —— 哪怕这会儿又查到别的版本，也先把手上这个装掉。
             var tag = s.UpdatePendingTag.Length > 0 ? s.UpdatePendingTag : "新版本";
             ChangelogCardTitle.Text = $"{tag} 已下载就绪";
             ChangelogCardSubtitle.Text = "安装包已通过校验，可立即安装";
             UpdateInstallButton.Visibility = Visibility.Visible;
+            QuickUpdateButton.Visibility = Visibility.Collapsed;
             ChangelogChevron.Visibility = Visibility.Collapsed;
+            return;
         }
-        else
+
+        // ② 发现新版本（还没下载）
+        if (Services.Updating.UpdateNotice.Pending is { } found)
         {
-            ChangelogCardTitle.Text = "查看更新内容";
-            ChangelogCardSubtitle.Text =
-                $"当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion} · 已是最新版本";
+            ChangelogCardTitle.Text = $"{found.Tag} 可用";
+            ChangelogCardSubtitle.Text = "发现新版本，可立即更新";
             UpdateInstallButton.Visibility = Visibility.Collapsed;
-            ChangelogChevron.Visibility = Visibility.Visible;
+            QuickUpdateButton.Visibility = Visibility.Visible;
+            ChangelogChevron.Visibility = Visibility.Collapsed;
+            return;
         }
+
+        // ③ 已是最新
+        ChangelogCardTitle.Text = "查看更新内容";
+        ChangelogCardSubtitle.Text =
+            $"当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion} · 已是最新版本";
+        UpdateInstallButton.Visibility = Visibility.Collapsed;
+        QuickUpdateButton.Visibility = Visibility.Collapsed;
+        ChangelogChevron.Visibility = Visibility.Visible;
     }
 
-    /// <summary>点「查看更新内容」卡 → 去「更新日志」页（待装态由「立即安装」按钮接管，这里让开）。</summary>
+    /// <summary>
+    /// 点「查看更新内容」卡 → 去「更新日志」页。
+    /// ⛔ 两颗按钮任一可见时直接让开 —— 这张卡此刻是"行动项"，点击归按钮。
+    /// </summary>
     private void ChangelogCard_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (UpdateInstallButton.Visibility == Visibility.Visible) return;
+        if (QuickUpdateButton.Visibility == Visibility.Visible) return;
         App.MainWindow?.Shell.NavigateTo("changelog");
+    }
+
+    /// <summary>
+    /// 「立即更新」：用户点它就是要装，所以**不再弹三选一**（那张对话框是"刚发现新版本"时的分岔口，
+    /// 这一态本来就是从那儿选完「稍后」过来的，再问一遍纯属找麻烦）。
+    /// 直接进「正在更新」流程：下载 → 校验 → 安装 → 应用自动退出并重开。
+    /// </summary>
+    private async void QuickUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (Services.Updating.UpdateNotice.Pending is not { } release) return;
+        if (XamlRoot is not { } root) return;
+
+        // 防连点：这条链路会下载几十 MB 并最终退出应用，多点只会并发起来
+        if (sender is Button b) b.IsEnabled = false;
+        try
+        {
+            var service = Services.Updating.UpdateService.CreateDefault();
+            await Services.Updating.UpdateFlow.RunAsync(root, service, release);
+        }
+        finally
+        {
+            // 走完正常流程应用已经退出了，这一句基本用不上；失败/取消回来时得把按钮放开
+            if (sender is Button bb) bb.IsEnabled = true;
+        }
     }
 
     private async void InstallPending_Click(object sender, RoutedEventArgs e)

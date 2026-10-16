@@ -91,10 +91,15 @@
                                                 Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
                                         <Button Content="打开文件夹" Tag="{x:Bind}" Click="Reveal_Click"
                                                 Visibility="{x:Bind RevealVisibility, Mode=OneWay}" />
-                                        <Button Tag="{x:Bind}" Click="Remove_Click" Padding="9,5"
-                                                ToolTipService.ToolTip="从列表移除（不删除已下载的文件）"
+                                        <!-- 行尾「⋯」：从列表移除 / 删除文件。
+                                             ⚠️ 2026-10-16 起改成菜单 —— 以前这里只有"从列表移除"，
+                                                文件留在硬盘上，用户想删得自己摸到下载文件夹里找
+                                                （Nick：「删除已下载安装程序（即使未安装）」）。 -->
+                                        <Button Tag="{x:Bind}" Click="More_Click" Padding="9,5"
+                                                AutomationProperties.Name="更多操作"
+                                                ToolTipService.ToolTip="更多操作"
                                                 Visibility="{x:Bind RemoveVisibility, Mode=OneWay}">
-                                            <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                                            <FontIcon Glyph="&#xE712;" FontSize="12" />
                                         </Button>
                                     </StackPanel>
 

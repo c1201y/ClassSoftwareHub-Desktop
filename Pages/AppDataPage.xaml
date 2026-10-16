@@ -24,9 +24,14 @@
 
       2026-10-15 加（Nick：「可清理项可以加一个复选框，可以统一管理。还有一件事，可以再增加一个按钮
       一个是复制文件路径。第二个功能是搜索……现在用户看到这么多文件夹，不知道是干啥的」）：
-        · 可清理行加**系统多选**（`ListView.SelectionMode=Multiple`，靠系统那个 SelectionCheckBox，
-          ⛔ 不是自己在 DataTemplate 里画一个 CheckBox —— 行模板里少一个控件就少一处 WMC9999 风险，
-          而且这本来就是系统控件该干的事）；底部随之多出一条**批量动作条**。
+        · 可清理行加**复选框**，底部随之多出一条**批量动作条**。
+          ⚠️ 2026-10-16 改过一次实现（Nick：「这钩子钩得很奇怪、颜色很奇怪，为什么那个选出来的框是直角」）：
+             起初借的是系统多选（`SelectionMode=Multiple` + 那枚 `SelectionCheckBox`），
+             但它的填充取 `ListViewItemCheckBoxBrush`（**前景色系**），深色下呈"浅灰底 + 白勾"——
+             既不是强调色，也和「应用卸载」页残留列表的标准 CheckBox 观感割裂；再加上
+             `ItemContainerStyle` 把默认样式里那条 `CornerRadius` 顶掉了，选中底色还是直角。
+             ⇒ 改为**行模板里的标准 `CheckBox`**（强调色勾），勾选状态落在 `AppDataRow.IsChecked` 上，
+                `SelectionMode` 保持 `None`。两页的复选框从此是同一套观感。
         · 行尾「⋯」菜单扩到四项：复制完整路径 / 打开文件夹 / 在网上搜索完整路径 / 清理。
           ⛔ 搜索走**系统默认浏览器**（`UseShellExecute=true` 调 Bing），不内置 WebView2 ——
              本机唯一那个 WebView2 是只读 WebSheet，再起一个实例要摊用户数据目录与生命周期，
@@ -140,23 +145,37 @@
 
                 <ListView x:Name="EntryList"
                           SelectionMode="None" IsItemClickEnabled="False"
-                          SelectionChanged="Selection_Changed"
                           ItemContainerStyle="{StaticResource CshResultRowStyle}"
                           Padding="0,2,0,8">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:AppDataRow">
                             <Grid ColumnSpacing="12" MinHeight="34">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="20" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="110" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <FontIcon Grid.Column="0" Glyph="{x:Bind Glyph}" FontSize="15" Opacity="0.55"
+                                <!-- ⛔⛔ 用**标准 CheckBox**，不用 ListView 自带的多选勾。
+                                     2026-10-16 Nick 反馈：「这钩子钩得很奇怪、颜色很奇怪」——
+                                     真因是系统那枚 SelectionCheckBox 的填充取的是 `ListViewItemCheckBoxBrush`
+                                     （前景色系），深色下呈"浅灰底 + 白勾"，既不是强调色、也和本页其它强调色元素对不上；
+                                     而「应用卸载」页的残留列表用的正是标准 CheckBox（强调色勾），两页观感割裂。
+                                     ⛔ 配套：`EntryList.SelectionMode="None"`，勾选状态改由行自己扛（见 AppDataRow.IsChecked）。
+                                     ⚠️ MinWidth / Padding 必须归零，否则整行会莫名多缩进 20px 左右（照抄残留列表那处）。 -->
+                                <CheckBox Grid.Column="0" MinWidth="0" Padding="0" Margin="0,0,4,0"
+                                          VerticalAlignment="Center"
+                                          IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
+                                          Click="RowCheck_Click"
+                                          Visibility="{x:Bind CheckVisibility}"
+                                          AutomationProperties.Name="勾选这一项" />
+
+                                <FontIcon Grid.Column="1" Glyph="{x:Bind Glyph}" FontSize="15" Opacity="0.55"
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock Text="{x:Bind Name}" FontSize="14"
                                                MaxLines="1" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind Sub}" FontSize="12" Opacity="0.6"
@@ -165,7 +184,7 @@
                                 </StackPanel>
 
                                 <!-- 体积 + 文件数：等宽数字（Typography.NumeralAlignment），否则统计过程中数字一跳整行抖 -->
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2"
+                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Spacing="2"
                                             HorizontalAlignment="Right">
                                     <TextBlock Text="{x:Bind SizeText, Mode=OneWay}" FontSize="13"
                                                HorizontalAlignment="Right"
@@ -177,7 +196,7 @@
 
                                 <!-- 行尾：一朵透明的「⋯」。菜单里有「打开文件夹」，可清理的行多一项「清理」
                                      （⛔ 只读体检行永远不出「清理」）。 -->
-                                <Button Grid.Column="3" Style="{StaticResource RowMoreButtonStyle}"
+                                <Button Grid.Column="4" Style="{StaticResource RowMoreButtonStyle}"
                                         Click="More_Click"
                                         VerticalAlignment="Center"
                                         AutomationProperties.Name="更多操作"

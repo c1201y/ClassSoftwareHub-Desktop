@@ -177,6 +177,10 @@ public static class LeftoverCleaner
 
         var logFile = WriteHumanLog(dir, appName, results, backup, quarantineOk);
 
+        // 另出一份**机器可读**的清单：「隔离区」界面要按记录列出"都清过什么"，
+        // 去解析上面那份中文记录太脆（措辞一改解析就废）。
+        WriteManifest(dir, appName, results, quarantineOk);
+
         var report = new CleanupReport
         {
             QuarantineDir = quarantineOk ? dir : "",
@@ -871,6 +875,47 @@ public static class LeftoverCleaner
         {
             AppLog.Exception("cleanup", ex, "写清理记录");
             return "";
+        }
+    }
+
+    /// <summary>
+    /// 写一份**机器可读**的清单（<c>manifest.json</c>），供「隔离区」界面读取。
+    ///
+    /// 为什么除了「清理记录.txt」还要这个：那份中文记录是写给人看的，程序要想列出
+    /// "隔离区里都清过什么"就得去解析它 —— 措辞一改解析就废。所以另出一份结构化的，界面只认这一份。
+    /// ⚠️ 读不到（旧记录没有这个文件）就只显示目录名与体积，⛔ 不假装知道详情。
+    /// </summary>
+    private static void WriteManifest(string dir, string appName, List<CleanupItemResult> results, bool quarantineOk)
+    {
+        if (dir.Length == 0 || !quarantineOk) return;
+
+        try
+        {
+            var payload = new
+            {
+                app = appName,
+                time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                removed = results.Count(r => r.Status is CleanStatus.Removed or CleanStatus.RemovedNoBackup),
+                failed = results.Count(r => r.Status == CleanStatus.Failed),
+                blocked = results.Count(r => r.Status == CleanStatus.Blocked),
+                items = results.Select(r => new
+                {
+                    status = r.Status.ToString(),
+                    kind = r.Item.Kind.ToString(),
+                    path = r.Item.DisplayPath,
+                    note = r.Note,
+                }).ToList(),
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(payload,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+            File.WriteAllText(Path.Combine(dir, "manifest.json"), json, new UTF8Encoding(false));
+        }
+        catch (Exception ex)
+        {
+            // 清单写不出来不算致命：界面读不到就退回"只显示目录名与体积"
+            AppLog.Exception("cleanup", ex, "写隔离区清单");
         }
     }
 

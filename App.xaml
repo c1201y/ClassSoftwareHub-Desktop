@@ -209,6 +209,11 @@
                         右侧的复制键会比页面里所有其它按钮都凸出来约 10px（实测过）。 -->
                 <Setter Property="Padding" Value="14,8" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <!-- ⚠️⚠️ 圆角**必须显式给**。`ItemContainerStyle` 一旦指定，WinUI 默认样式里那条
+                     `CornerRadius` 就不再跟着来了（这儿的 Style 没有 BasedOn，而跨文件 BasedOn 会让
+                     XamlCompiler 崩 —— 见 Pages/AppDataPage.xaml 文件头），结果是选中/悬停底色
+                     变成**直角**。2026-10-16 Nick 抓到的就是这个：「那个选出来的框是直角」。 -->
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
             </Style>
 
             <!--

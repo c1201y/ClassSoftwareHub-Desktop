@@ -6,6 +6,9 @@ using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.System;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
@@ -27,6 +30,8 @@ public sealed partial class ShellPage : UserControl
     {
         InitializeComponent();
         ActualThemeChanged += (_, _) => UpdateThemeButton();
+
+        InitSearch();
 
         // 「内置工具」分组的子项从 ToolCatalog 动态生成（tag = ToolDef.Id，工具清单只有一份）
         BuildToolNavItems();
@@ -416,5 +421,124 @@ public sealed partial class ShellPage : UserControl
         //    但**子项的高亮它靠不住**（「实验性功能 → 本机核实」这种嵌套项，选中态经常不跟着走）。
         //    显式 SelectTag 一遍，两条路径都吃到同一套高亮逻辑。
         NavigateTo(tag);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // 标题栏全局搜索
+    //
+    // 匹配规则全在 Data/SearchIndex.cs，这里只管把结果喂给 AutoSuggestBox。
+    // ⛔ 2026-10-16 Nick 看过自绘那一版（分组标题 + 自己接管键盘 + 自叠浮层），
+    //    要求「用 WinUI 原生的就行，你不需要照抄网页的」—— 所以结果改走
+    //    **AutoSuggestBox 自带的建议列表**：下拉定位、滚动、↑↓ 选择、Enter 提交、
+    //    点外面自动收起，全部归系统管，这边一行键盘代码都不用写。
+    //    代价是没有网页端那种"软件 / 内置工具 / 页面"的组标题，
+    //    改由每行右侧那个类型小字顶上（见 SearchHit.Badge）。
+    // ════════════════════════════════════════════════════════════════════════════
+
+    private List<SearchHit> _hits = new();
+    private string _lastOpenedKey = "";
+    private DateTime _lastOpenedAt = DateTime.MinValue;
+
+    private void InitSearch()
+    {
+        // Ctrl + K 聚焦搜索框（与站点同）。
+        var accel = new KeyboardAccelerator { Key = VirtualKey.K, Modifiers = VirtualKeyModifiers.Control };
+        accel.Invoked += (_, e) =>
+        {
+            e.Handled = true;
+            FocusSearch();
+        };
+        RootGrid.KeyboardAccelerators.Add(accel);
+    }
+
+    /// <summary>Ctrl + K：聚焦输入框，并把候选摆出来。</summary>
+    private void FocusSearch()
+    {
+        // AutoSuggestBox 自己不是焦点目标，得往里找那个 TextBox
+        if (FindDescendant<TextBox>(SearchBox) is { } input) input.Focus(FocusState.Programmatic);
+        else SearchBox.Focus(FocusState.Programmatic);
+
+        RefreshResults();
+    }
+
+    /// <summary>
+    /// 窗口变窄时收一收搜索框 —— 标题栏左边是图标与名称、右边是外观按钮和系统按钮，中间不能硬撑。
+    /// </summary>
+    private void TitleBarArea_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var w = e.NewSize.Width;
+        SearchBox.Width = w >= 880 ? 360d : w >= 720 ? 250d : 170d;
+    }
+
+    private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        // ⚠️ 选中建议项之后，系统会把那一项的文本回填进输入框 —— 那不是"有人在打字"，
+        //    当成新一次搜索会让列表刚关又开。这一档必须放过。
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.SuggestionChosen) return;
+
+        // 其余（用户输入、程序改文本、点内置的清除按钮）都重算一遍。
+        // ⛔ 这里绝不去回写 SearchBox.Text，否则会和 TextChanged 互相咬住。
+        RefreshResults();
+    }
+
+    /// <summary>按当前关键词重算候选，交给系统那个下拉列表。</summary>
+    private void RefreshResults()
+    {
+        var query = SearchBox.Text ?? "";
+        _hits = SearchIndex.Query(query).SelectMany(g => g.Hits).ToList();
+
+        SearchBox.ItemsSource = _hits;
+        SearchBox.IsSuggestionListOpen = _hits.Count > 0;
+    }
+
+    /// <summary>用户从下拉里挑了一项（鼠标点，或键盘选中后回车）。</summary>
+    private void SearchBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (args.SelectedItem is not SearchHit hit) return;
+        sender.IsSuggestionListOpen = false;
+        OpenHit(hit);
+    }
+
+    private void SearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        // 下拉里选中后回车 → ChosenSuggestion 有值；直接在输入框里回车 → 打开第一条
+        if (args.ChosenSuggestion is SearchHit hit) OpenHit(hit);
+        else if (_hits.Count > 0) OpenHit(_hits[0]);
+    }
+
+    private void OpenHit(SearchHit hit)
+    {
+        // 同一次选择可能先来 SuggestionChosen、再来 QuerySubmitted —— 别连着跳两趟，
+        // 否则返回栈里会平白多压一层（按一次返回退不出来）。
+        var now = DateTime.UtcNow;
+        if (hit.Key == _lastOpenedKey && (now - _lastOpenedAt).TotalMilliseconds < 600) return;
+        _lastOpenedKey = hit.Key;
+        _lastOpenedAt = now;
+
+        if (hit.Kind == SearchHitKind.App) NavigateToApp(hit.Key);
+        else NavigateTo(hit.Target);
+    }
+
+    /// <summary>
+    /// 从搜索结果进软件详情页 —— 与「软件下载」里点卡片落到同一页；
+    /// 导航高亮跟着切到「软件下载」（人确实还在软件这一区里）。
+    /// </summary>
+    private void NavigateToApp(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return;
+        SelectTag("apps");
+        ContentFrame.Navigate(typeof(DetailPage), id);
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T hit) return hit;
+            if (FindDescendant<T>(child) is { } deep) return deep;
+        }
+        return null;
     }
 }

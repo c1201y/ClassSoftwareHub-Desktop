@@ -133,6 +133,31 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
 
     public Visibility CleanVisibility => Cleanable ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>复选框只在可清理分类下出现（只读体检那一层没有删除入口）。</summary>
+    public Visibility CheckVisibility => Cleanable ? Visibility.Visible : Visibility.Collapsed;
+
+    private bool _checked;
+
+    /// <summary>
+    /// 这一行有没有被勾上。
+    ///
+    /// ⚠️ 2026-10-16 起勾选状态**存在行自己身上**，不再借 `ListView.SelectedItems`：
+    ///    先前用的是系统多选（`SelectionMode=Multiple`）—— 那样勾选框由 `ListViewItemPresenter` 画，
+    ///    取的是 `ListViewItemCheckBoxBrush`（前景色系），深色下是"浅灰底 + 白勾"，
+    ///    既不是强调色、也与「应用卸载」页残留列表的标准 CheckBox 观感割裂。
+    ///    改回标准 CheckBox 后，勾选这件事就归行自己管，页面只读它。
+    /// </summary>
+    public bool IsChecked
+    {
+        get => _checked;
+        set
+        {
+            if (_checked == value) return;
+            _checked = value;
+            Raise(nameof(IsChecked));
+        }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void Raise(string name) =>
@@ -424,6 +449,10 @@ public sealed partial class AppDataPage : Page
     {
         if (CategoryBox.SelectedItem is ComboBoxItem { Tag: CategoryOption option })
         {
+            // 切分类就把勾清空：跨分类保留勾选只会让人记不清自己到底勾了哪一类。
+            // ⚠️ 以前是靠切 `SelectionMode` 顺带清掉的，改用标准 CheckBox 后得显式清。
+            ClearAllChecks();
+
             _category = option;
             ShowCategory();
         }
@@ -437,14 +466,9 @@ public sealed partial class AppDataPage : Page
         var rows = RowsOf(_category);
         var any = rows.Count > 0;
 
-        // ⛔ 复选框只给可清理分类：只读体检那一层**没有删除入口**，别让它看着能删。
-        //    切 SelectionMode 会顺带清掉上一次的选择 —— 正合适：跨分类保留勾选只会让人误删。
-        //    用系统的多选（那枚 SelectionCheckBox 是 ListView 自带的），⛔ 不是自己在行模板里画一个 ——
-        //    行模板里少一个控件就少一处 WMC9999 风险，而且这本来就是系统控件该干的事。
-        EntryList.SelectionMode = _category.IsOverview
-            ? ListViewSelectionMode.None
-            : ListViewSelectionMode.Multiple;
-
+        // ⛔ 复选框只给可清理分类：只读体检那一层**没有删除入口**，行模板里按 `CheckVisibility` 隐藏。
+        //    ⚠️ 勾选状态自 2026-10-16 起跟着**行对象**走（`AppDataRow.IsChecked`），
+        //       切分类不会自动清 —— 由 `Category_Changed` 显式清空。
         EntryList.ItemsSource = rows;
         EntryList.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
 
@@ -473,12 +497,34 @@ public sealed partial class AppDataPage : Page
 
     // ── 批量选择（底部动作条） ──────────────────────────────────────────
     //
-    // ⚠️ 勾选状态**只有 `EntryList` 那一份**，这里不另存一份。
+    // ⚠️ 勾选状态**只有 `AppDataRow.IsChecked` 那一份**，这里不另存一份。
     //    自己再维护一个 `List<AppDataRow> _checked` 是这类界面最常见的错法 ——
     //    列表一重建、行一重排，两份状态就会分家，最后出现"界面上没勾、程序却记着"。
 
-    /// <summary>勾选变了 —— 只刷动作条，**不动列表**（列表一重建，用户刚勾的就全没了）。</summary>
-    private void Selection_Changed(object sender, SelectionChangedEventArgs e) => UpdateActionBar();
+    /// <summary>批量改写勾选时把逐行的刷新压住：几百项全选时不至于刷几百次动作条。</summary>
+    private bool _suppressCheckEvent;
+
+    /// <summary>
+    /// 某一行被勾上 / 取消。
+    ///
+    /// ⚠️⚠️ 这里**必须**把复选框当下的值显式写回行，不能只调 `UpdateActionBar()`。
+    ///    原因：`Checked` / `Unchecked` 事件**先于** `x:Bind` 的 TwoWay 回写触发 ——
+    ///    事件里读到的 `AppDataRow.IsChecked` 还是**上一拍**的值，计数就会永远慢一步。
+    ///    2026-10-16 Nick 抓到的正是它：「我没勾起来，为什么还能清理？」
+    ///    （勾上又取消之后，界面上没有勾、动作条却写着「已选 1 项」。）
+    ///
+    /// ⚠️ 用 `Click` 而不是 `Checked`/`Unchecked` 还有一层好处：`Click` 只在**用户交互**时触发，
+    ///    代码里批量改 `IsChecked`（全选 / 清空选择）不会反过来打进这里。
+    /// </summary>
+    private void RowCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressCheckEvent) return;
+
+        if (sender is CheckBox { DataContext: AppDataRow row } box)
+            row.IsChecked = box.IsChecked == true;
+
+        UpdateActionBar();
+    }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e)
     {
@@ -486,16 +532,39 @@ public sealed partial class AppDataPage : Page
 
         // 只勾**能清**的：体积还在统计的那些不进选择区，
         // 否则按钮上那个数字里会混着清不掉的项，点下去才发现少清了几个。
-        EntryList.SelectedItems.Clear();
-        foreach (var row in RowsOf(_category).Where(r => r.CanClean))
-            EntryList.SelectedItems.Add(row);
+        _suppressCheckEvent = true;
+        try
+        {
+            foreach (var row in RowsOf(_category)) row.IsChecked = row.CanClean;
+        }
+        finally
+        {
+            _suppressCheckEvent = false;
+        }
 
         UpdateActionBar();
     }
 
-    private void ClearSel_Click(object sender, RoutedEventArgs e)
+    private void ClearSel_Click(object sender, RoutedEventArgs e) => ClearAllChecks();
+
+    /// <summary>
+    /// 把所有行上的勾清掉。
+    /// ⛔ 清的是**全部行**，不是当前分类那一屏 —— 切分类与清理收尾都要用它，
+    ///    跨分类留着勾只会让人记不清自己到底勾了哪一类。
+    /// </summary>
+    private void ClearAllChecks()
     {
-        EntryList.SelectedItems.Clear();
+        _suppressCheckEvent = true;
+        try
+        {
+            foreach (var row in _foldersLocal.Concat(_foldersRoaming).Concat(_clean))
+                row.IsChecked = false;
+        }
+        finally
+        {
+            _suppressCheckEvent = false;
+        }
+
         UpdateActionBar();
     }
 
@@ -508,7 +577,9 @@ public sealed partial class AppDataPage : Page
 
     /// <summary>当前勾选里**真能清**的那些（还在统计体积、正在清理的不算）。</summary>
     private List<AppDataRow> ChosenRows() =>
-        EntryList.SelectedItems.OfType<AppDataRow>().Where(r => r.CanClean).ToList();
+        _category is null
+            ? new List<AppDataRow>()
+            : RowsOf(_category).Where(r => r.IsChecked && r.CanClean).ToList();
 
     /// <summary>刷新底部动作条。⛔ 只读体检分类、空分类、没准备好时整条藏起来。</summary>
     private void UpdateActionBar()
@@ -763,6 +834,7 @@ public sealed partial class AppDataPage : Page
 
         // ⛔ 走 ShowCategory 而不是就地改：清完体积变小，计数行、下拉里的数字、动作条都要跟着重算。
         //    顺带把勾选清空 —— 已经清过的项留在勾选区里只会让人以为还能再清一次。
+        ClearAllChecks();
         ShowCategory();
         RefreshCounts();
 
@@ -887,7 +959,7 @@ public sealed partial class AppDataPage : Page
             XamlRoot = XamlRoot,
             Title = title,
             Content = new TextBlock { Text = body, FontSize = 13, TextWrapping = TextWrapping.Wrap },
-            CloseButtonText = "知道了",
+            CloseButtonText = "关闭",
         };
         await dialog.ShowAsync();
     }
@@ -901,7 +973,7 @@ public sealed partial class AppDataPage : Page
             XamlRoot = XamlRoot,
             Title = "AppData 管理：能做什么、不能做什么",
             Content = BuildAboutBody(),
-            CloseButtonText = "知道了",
+            CloseButtonText = "关闭",
         };
         await dialog.ShowAsync();
     }
