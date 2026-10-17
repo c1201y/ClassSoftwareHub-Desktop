@@ -86,6 +86,11 @@
          ⚠️ 运行时由 Services/TimerAlarm.cs 释放到 cache\ 再交给 MediaPlayer ——
             单文件发布下旁边没有散落文件可读，只能走内嵌这条路。 -->
     <EmbeddedResource Include="Assets\Audio\timer-alarm.wav" />
+    <!-- 首页 / 设置页「快捷入口」的 3 个 SVG 图标（项目仓库 / 作者主页 / 加入Q群）。
+         颜色用 __C__ 占位，运行时按主题色（TextFillColorPrimary）注入，浅色/深色自适应。 -->
+    <EmbeddedResource Include="Assets\QuickLinks\GITHUB.svg" />
+    <EmbeddedResource Include="Assets\QuickLinks\主页.svg" />
+    <EmbeddedResource Include="Assets\QuickLinks\QQ.svg" />
   </ItemGroup>
 
   <!-- ⛔⛔ 安装包**不带**内容包（2026-10-05 Nick 定案"以后统统只有通过网络获取更新的途径"）。

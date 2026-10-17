@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ClassSoftwareHub.Desktop.Services;
 
 namespace ClassSoftwareHub.Desktop.Data;
 
@@ -110,6 +111,15 @@ public sealed class SoftwareApp : System.ComponentModel.INotifyPropertyChanged
     /// <summary>卡片副标题：有版本号显示版本，否则显示一句话简介。</summary>
     public string CardSubtitle => Version.Length > 0 ? "v" + Version : Tagline;
 
+    /// <summary>
+    /// 短简介（详情页右栏「推荐应用」用）：优先 Tagline，其次 Description，最后退分类名。
+    /// ⚠️ 数据里 Description 可能很长，界面要自己限行数（MaxLines）。
+    /// </summary>
+    public string IntroText =>
+        !string.IsNullOrWhiteSpace(Tagline) ? Tagline.Trim()
+        : !string.IsNullOrWhiteSpace(Description) ? Description.Trim()
+        : CategoryDisplay;
+
     /// <summary>分类显示名（载入内容后由 ContentStore 填，界面当徽标用）。</summary>
     public string CategoryDisplay { get; set; } = "";
 
@@ -146,7 +156,7 @@ public sealed class SoftwareApp : System.ComponentModel.INotifyPropertyChanged
     public Microsoft.UI.Xaml.Visibility IconPlaceholder =>
         _iconLoaded ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 
-    /// <summary>卡片图标（http 地址就下载显示；空的话界面用占位字形兜底）。</summary>
+    /// <summary>卡片图标。优先用本地缓存（file://，零网络、秒开）；没缓存才联网，并后台落盘供下次直接用。</summary>
     public Microsoft.UI.Xaml.Media.ImageSource? IconImage
     {
         get
@@ -155,32 +165,148 @@ public sealed class SoftwareApp : System.ComponentModel.INotifyPropertyChanged
             _iconResolved = true;
             try
             {
+                if (string.IsNullOrWhiteSpace(Icon)) return null;
+
                 if (Icon.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
-                    var uri = new Uri(Icon);
-                    // SVG 图标（chrome 等）BitmapImage 解不了 → 用 SvgImageSource 解（矢量，缩放不糊）
-                    if (uri.AbsolutePath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+                    AppIconCache.TryGet(Icon, out var localHit, out var stale);   // 本机有没有这张图（含陈旧的）
+                    var svg = IsSvg(Icon);
+
+                    // ① 本机有且新鲜 → 直接加载，零网络、秒开。
+                    //    SVG 陈旧也走这条：SvgImageSource 压根没有 Failed 事件，网络挂了收不到通知，
+                    //    给它远程源等于没有退路，不如直接用本机那张，再让后台去换新的。
+                    if (localHit is { } c && (!stale || svg))
                     {
-                        // ⚠️ SvgImageSource 只有 Opened，没有 Failed 事件；解不出来就一直等着，
-                        // 占位字形自然留在那儿（正好是想的效果）
-                        var svg = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(uri);
-                        svg.Opened += (_, _) => { _iconLoaded = true; Raise(nameof(IconPlaceholder)); };
-                        _icon = svg;
+                        _icon = c;
+                        MarkLoadedWhenOpen(c);
+                        if (stale) _ = AppIconCache.EnsureCachedAsync(Icon);   // 后台换新，下次进来就已经是新的
+                        return _icon;
                     }
-                    else
-                    {
-                        var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri);
-                        // 卡片上图标最大也就 72px（详情页），按原图解码（动不动 256/512）纯属浪费：
-                        // 教学机 8G 内存，一页 50 多个图标就是几十 MB。这里限宽解码（等比，高度自动）。
-                        bmp.DecodePixelWidth = 128;
-                        bmp.ImageOpened += (_, _) => { _iconLoaded = true; Raise(nameof(IconPlaceholder)); };
-                        bmp.ImageFailed += (_, _) => { _iconLoaded = false; Raise(nameof(IconPlaceholder)); };
-                        _icon = bmp;
-                    }
+
+                    // ② 陈旧 / 本机没有 → **网络优先**：先给远程源，拿到就是最新的；
+                    //    网络超时或失败时自动退回本机旧图（见 MarkLoadedWhenOpen 的 fallback），
+                    //    ⛔ 网络不通不该让卡片退化成一个占位字形 —— 那张旧图比空框有用得多。
+                    var remote = MakeRemoteSource(Icon);
+                    _icon = remote;
+                    MarkLoadedWhenOpen(remote, fallback: localHit);
+                    _ = AppIconCache.EnsureCachedAsync(Icon);
+                    return _icon;
                 }
+
+                // 非 http（打包内资源等）→ 本地路径直接加载
+                var local = MakeLocalSource(Icon);
+                _icon = local;
+                MarkLoadedWhenOpen(local);
+                return _icon;
             }
             catch { /* 图标地址坏了就当没有 */ }
             return _icon;
+        }
+    }
+
+    /// <summary>远程 http 源（和原来一致：SVG 走 SvgImageSource，其余限宽 128 解码）。</summary>
+    private static Microsoft.UI.Xaml.Media.ImageSource MakeRemoteSource(string icon)
+    {
+        var uri = new Uri(icon);
+        // SVG 图标（chrome 等）BitmapImage 解不了 → 用 SvgImageSource 解（矢量，缩放不糊）
+        if (uri.AbsolutePath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+            return new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(uri);
+        var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri);
+        // 卡片上图标最大也就 72px（详情页），按原图解码（动不动 256/512）纯属浪费：
+        // 教学机 8G 内存，一页 50 多个图标就是几十 MB。这里限宽解码（等比，高度自动）。
+        bmp.DecodePixelWidth = 128;
+        return bmp;
+    }
+
+    /// <summary>本地路径源（file://，限宽 128 解码；SVG 走 SvgImageSource）。</summary>
+    private static Microsoft.UI.Xaml.Media.ImageSource? MakeLocalSource(string icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon)) return null;
+        try
+        {
+            var uri = new Uri("file:///" + icon.Replace('\\', '/'));
+            if (icon.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+                return new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(uri);
+            return new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri) { DecodePixelWidth = 128 };
+        }
+        catch { return null; }
+    }
+
+    /// <summary>是不是 SVG（BitmapImage 解不了，必须走 SvgImageSource；后者没有 Failed 事件）。</summary>
+    private static bool IsSvg(string icon)
+    {
+        try { return new Uri(icon).AbsolutePath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase); }
+        catch { return icon.EndsWith(".svg", StringComparison.OrdinalIgnoreCase); }
+    }
+
+    /// <summary>
+    /// 给源挂上「加载成功/失败」事件，驱动占位字形（购物袋）的显隐。
+    /// </summary>
+    /// <param name="fallback">
+    /// 网络源加载不出来时**顶上去的本机旧图**（只在"本机还有一张"时才传）。
+    /// 命中失败就把它换成当前图标并通知界面 —— 这是"网络超时用本地"这条容错指令的落点。
+    /// ⚠️ 依赖绑定写成 <c>Mode=OneWay</c>：x:Bind 默认是一次性的 OneTime，那样 Raise 传不到界面。
+    /// </param>
+    private void MarkLoadedWhenOpen(Microsoft.UI.Xaml.Media.ImageSource? src,
+                                   Microsoft.UI.Xaml.Media.ImageSource? fallback = null)
+    {
+        if (src is null) return;
+        if (src is Microsoft.UI.Xaml.Media.Imaging.BitmapImage bmp)
+        {
+            bmp.ImageOpened += (_, _) => { _iconLoaded = true; Raise(nameof(IconPlaceholder)); };
+            bmp.ImageFailed += (_, _) =>
+            {
+                if (fallback is { } old)
+                {
+                    _icon = old;                    // 网络这条路断了 ⇒ 换本机那张，再通知界面重取图标
+                    _iconLoaded = true;
+                    Raise(nameof(IconImage));
+                    Raise(nameof(IconPlaceholder));
+                }
+                else
+                {
+                    _iconLoaded = false;            // 本机也没有 ⇒ 老实显示占位字形
+                    Raise(nameof(IconPlaceholder));
+                }
+            };
+        }
+        else if (src is Microsoft.UI.Xaml.Media.Imaging.SvgImageSource svg)
+        {
+            // ⚠️ SvgImageSource 只有 Opened，没有 Failed 事件；解不出来就一直等着，
+            // 占位字形自然留在那儿（正好是想的效果）。也因此它对 fallback 无感 —— 见 IconImage 分支 ①。
+            svg.Opened += (_, _) => { _iconLoaded = true; Raise(nameof(IconPlaceholder)); };
+        }
+    }
+
+    private Microsoft.UI.Xaml.Media.Brush? _iconBrush;
+    private bool _iconBrushMade;
+
+    /// <summary>
+    /// 图标当画刷用（详情页顶栏、推荐列表的圆角小图标）。
+    /// ⛔ 本项目的圆角 Border **不会裁剪子元素**，所以只能用 Background 画，
+    /// 不能把 Image 放进去指望圆角生效（详情页大图标一直是这么做的）。
+    /// </summary>
+    public Microsoft.UI.Xaml.Media.Brush? IconBrush
+    {
+        get
+        {
+            if (_iconBrushMade) return _iconBrush;
+            _iconBrushMade = true;
+            try
+            {
+                if (IconImage is { } image)
+                {
+                    _iconBrush = new Microsoft.UI.Xaml.Media.ImageBrush
+                    {
+                        ImageSource = image,
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
+                        AlignmentX = Microsoft.UI.Xaml.Media.AlignmentX.Center,
+                        AlignmentY = Microsoft.UI.Xaml.Media.AlignmentY.Center,
+                    };
+                }
+            }
+            catch { /* 取不到就当没有，界面用占位字形兜底 */ }
+            return _iconBrush;
         }
     }
 

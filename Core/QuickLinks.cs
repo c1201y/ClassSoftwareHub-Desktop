@@ -1,9 +1,11 @@
 using System.Collections.Generic;
+using System.ComponentModel;
+using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
 /// <summary>首页 / 设置页那一行快捷入口的数据。</summary>
-public sealed class QuickLink
+public sealed class QuickLink : INotifyPropertyChanged
 {
     public string Name { get; set; } = "";
     public string Glyph { get; set; } = "";
@@ -17,6 +19,20 @@ public sealed class QuickLink
     ///    那会让"更新日志"又跳回网站（Nick 2026-09-26 明确要求改成应用内）。
     /// </summary>
     public string Tag { get; set; } = "";
+
+    /// <summary>SVG 图标资源文件名（如 <c>github.svg</c>）。非空时模板改用这张图、隐藏 FontIcon。</summary>
+    public string? IconSvg { get; set; }
+
+    /// <summary>按当前主题色染好的 SVG 图标源（由页面在 Build 后填充，主题切换时刷新）。</summary>
+    public ImageSource? IconSource
+    {
+        get => _iconSource;
+        set { _iconSource = value; OnChanged(nameof(IconSource)); }
+    }
+    private ImageSource? _iconSource;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 /// <summary>快捷入口清单（两处页面共用，改一处两边都变）。</summary>
@@ -31,10 +47,10 @@ public static class QuickLinks
 
         return new List<QuickLink>
         {
-            new() { Name = "项目仓库", Glyph = "\uE943", Url = repoUrl },
+            new() { Name = "项目仓库", Glyph = "\uE943", IconSvg = "GITHUB.svg", Url = repoUrl },
             new()
             {
-                Name = "作者主页", Glyph = "\uE77B",
+                Name = "作者主页", Glyph = "\uE77B", IconSvg = "主页.svg",
                 Url = ui.T("about.author-home-url", "https://space.bilibili.com/1274920807"),
             },
             // ⚠️ 这颗原来带 Accent = true（走"主题色底 + 反白字"那套模板单独突出），
@@ -47,7 +63,7 @@ public static class QuickLinks
             },
             new()
             {
-                Name = "加入Q群", Glyph = "\uE8BD",
+                Name = "加入Q群", Glyph = "\uE8BD", IconSvg = "QQ.svg",
                 Url = ui.T("about.qq-group-url", "https://qm.qq.com/q/wByO7XG8Wk"),
             },
             // ⚠️ 更新日志走**应用内**页面（tag changelog），不是仓库的 releases 网页 ——

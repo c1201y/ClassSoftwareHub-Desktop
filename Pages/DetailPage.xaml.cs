@@ -1,14 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.UI;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
@@ -78,16 +82,20 @@ public sealed partial class DetailPage : Page
         StoreButton.Content = ui.T("detail.store-button", "下载");
         StoreOnlyHint.Text = ui.T("detail.store-only", "该软件通过 Microsoft Store 分发，单击上方按钮打开商店页面即可获取");
 
+        // 换软件时先把上一个的图标通知退订，避免占位字形被旧软件的状态带歪
         var app = App.Content.FindById(e.Parameter as string ?? "");
         if (app is null)
         {
             AppName.Text = ui.T("detail.not-found", "未找到该软件。");
             AppTagline.Visibility = Visibility.Collapsed;
             CategoryBadge.Visibility = Visibility.Collapsed;
+            HeroMeta.Visibility = Visibility.Collapsed;
             IntroTitle.Visibility = Visibility.Collapsed;
             AppDescription.Visibility = Visibility.Collapsed;
             InfoTitle.Visibility = Visibility.Collapsed;
             DownloadsTitle.Visibility = Visibility.Collapsed;
+            Rail.Visibility = Visibility.Collapsed;
+            RailCol.Width = new GridLength(0);
             return;
         }
 
@@ -125,6 +133,12 @@ public sealed partial class DetailPage : Page
             NoticeBar.Title = ui.T("detail.notice-title", "小提示");
             NoticeBar.Message = app.Notice;
             NoticeBar.IsOpen = true;
+            NoticeBar.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            NoticeBar.IsOpen = false;
+            NoticeBar.Visibility = Visibility.Collapsed;
         }
 
         // ── 详细信息 ──
@@ -164,12 +178,115 @@ public sealed partial class DetailPage : Page
             IssueBar.Message = string.Join("\n", issues.Select(i => i.File + "：" + i.Message));
             IssueBar.IsOpen = true;
         }
+
+        // ── 顶栏副标题、推荐应用、主题色 ──
+        var meta = string.Join("　·　", new[] { app.VersionText, app.Size, app.System }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+        HeroMeta.Text = meta;
+        HeroMeta.Visibility = meta.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        BuildRecommendations(app);
+        _ = ApplyHeroColorAsync(app);
+    }
+
+    /// <summary>
+    /// 右栏「推荐应用」：先取同分类的，不够就用其他软件补齐（Nick：搜不到就随便推荐）。
+    /// ⛔ 标题不能叫「相似应用」—— 补齐的那部分只是别的软件，叫相似名不副实。
+    /// ⛔ 用 Id 的稳定哈希排序而不是 Random —— 同一台机器每次进来顺序一致，不会看着"跳来跳去"。
+    /// </summary>
+    private void BuildRecommendations(SoftwareApp app)
+    {
+        var pool = App.Content.Apps
+            .Where(a => !string.Equals(a.Id, app.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var same = pool
+            .Where(a => string.Equals(a.Category, app.Category, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => Core.StableRank.Of(a.Id))
+            .ToList();
+
+        var picks = same.Take(6).ToList();
+
+        if (picks.Count < 6)
+        {
+            picks.AddRange(pool
+                .Except(picks)
+                .OrderBy(a => Core.StableRank.Of(a.Id + "|rest"))
+                .Take(6 - picks.Count));
+        }
+
+        RecommendList.ItemsSource = picks;
+        RecommendList.Visibility = picks.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RailEmpty.Visibility = picks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void Recommend_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SoftwareApp target) return;
+        Frame.Navigate(typeof(DetailPage), target.Id);
+    }
+
+    /// <summary>
+    /// 顶部色带：一律等**图标主色**，颜色没就绪之前色带是透明的（等于页面底色）。
+    ///
+    /// ⛔⛔ 上一版先用主题强调色顶上、几百毫秒后再换成图标色，被 Nick 点名"非常割裂"。
+    /// 现在只有两种情况会立刻上色：① 列表页已经预热过（缓存命中，进页面就是最终色）；
+    /// ② 取不到色（黑白图标 / SVG / 网络失败）⇒ 才退回强调色，这是兜底、不是过渡。
+    /// 其余情况取到后再淡入，读起来像"色带浮现"，不像"颜色换了"。
+    /// </summary>
+    private async Task ApplyHeroColorAsync(SoftwareApp app)
+    {
+        if (Services.IconPalette.TryGetCached(app.Icon, out var ready))
+        {
+            PaintHero(app, ready, fade: false);
+            return;
+        }
+
+        var picked = await Services.IconPalette.PickAsync(app.Icon);
+
+        if (picked is { } color)
+        {
+            PaintHero(app, color, fade: true);
+            return;
+        }
+
+        // 兜底：没有主色可用，直接上强调色（不做淡入，免得看着像还在加载）
+        var fallback = (Services.ThemeBrush.Get(this, "AccentFillColorDefaultBrush") as SolidColorBrush)?.Color
+                       ?? Color.FromArgb(255, 0, 95, 184);
+        PaintHero(app, fallback, fade: false);
+    }
+
+    private void PaintHero(SoftwareApp app, Color color, bool fade)
+    {
+        // 期间可能已经导航到别的软件 —— 比 Id，别把 A 的颜色刷到 B 页面上
+        if (_app is null || !string.Equals(_app.Id, app.Id, StringComparison.OrdinalIgnoreCase)) return;
+
+        Hero.Background = Services.IconPalette.Gradient(color);
+
+        if (!fade)
+        {
+            Hero.Opacity = 1;
+            return;
+        }
+
+        var anim = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(260)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(anim, Hero);
+        Storyboard.SetTargetProperty(anim, "Opacity");
+
+        var story = new Storyboard();
+        story.Children.Add(anim);
+        story.Begin();
     }
 
     /// <summary>详细信息里的一行（左侧标签固定宽度，右侧值可选中复制）。</summary>
     private void AddInfoRow(string label, string value)
     {
-        var row = NewInfoRow(label);
         var text = new TextBlock
         {
             Text = value.Length > 0 ? value : App.Content.Ui.T("detail.pending", "待补充"),
@@ -178,29 +295,47 @@ public sealed partial class DetailPage : Page
             IsTextSelectionEnabled = true,
             Opacity = value.Length > 0 ? 1.0 : 0.6,
         };
-        Grid.SetColumn(text, 1);
-        row.Children.Add(text);
-        InfoList.Children.Add(row);
+        InfoList.Children.Add(InfoRow(label, text));
     }
 
     private void AddLinkRow(string label, string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
-        var row = NewInfoRow(label);
         var link = new HyperlinkButton { Content = url, Padding = new Thickness(0), Tag = url };
         link.Click += (s, _) => { if (((HyperlinkButton)s).Tag is string u) Open(u); };
-        Grid.SetColumn(link, 1);
-        row.Children.Add(link);
-        InfoList.Children.Add(row);
+        InfoList.Children.Add(InfoRow(label, link));
     }
 
-    private static Grid NewInfoRow(string label)
+    /// <summary>
+    /// 一行详细信息。
+    /// ⛔ 不再放进灰色卡片（Nick：灰底很丑）—— 现在靠**行间细分割线 + 上下留白**分组，
+    /// 和商店里详情区的做法一致。分割线只画在行与行之间，末行不拖一条尾巴。
+    /// </summary>
+    private Border InfoRow(string label, FrameworkElement value)
     {
-        var row = new Grid { ColumnSpacing = 12 };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.Children.Add(new TextBlock { Text = label, Opacity = 0.65, VerticalAlignment = VerticalAlignment.Center });
-        return row;
+        var grid = new Grid { ColumnSpacing = 16 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(104) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            Opacity = 0.58,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        Grid.SetColumn(value, 1);
+        grid.Children.Add(value);
+
+        var first = InfoList.Children.Count == 0;
+
+        return new Border
+        {
+            Padding = new Thickness(0, 13, 0, 13),
+            BorderThickness = new Thickness(0, first ? 0 : 1, 0, 0),
+            BorderBrush = Services.ThemeBrush.Get(this, "DividerStrokeColorDefaultBrush"),
+            Child = grid,
+        };
     }
 
     private async void Store_Click(object sender, RoutedEventArgs e)

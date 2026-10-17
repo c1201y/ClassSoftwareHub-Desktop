@@ -573,6 +573,33 @@ public partial class App : Application
             return;
         }
 
+        // ── 开机启动项的提权助手（2026-10-16 加，与上面同一个套路） ──
+        //  「所有用户」级的启动项，启用状态位在 HKLM 下，普通权限写不动。
+        //  ⛔ 同样必须在**最前面**接管：不建界面、不碰互斥体、不往托盘塞图标，干完就走。
+        for (var i = 0; i < argv.Length - 1; i++)
+        {
+            if (!argv[i].Equals(Services.StartupItems.AdminSwitch, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Services.StartupItems.ApplyElevated(argv[i + 1]);
+            Environment.Exit(0);
+            return;
+        }
+
+        // ── 系统修复任务的提权助手（2026-10-16 加，同一个套路） ──
+        //  7 张修复卡全部要管理员权限。命令跑在助手里，输出/进度/心跳/结局写成文件，
+        //  非提权的父进程读那些文件来显示；中止也是父进程写哨兵、助手自己杀子进程树。
+        //  ⛔ 同样必须在**最前面**接管：不建界面、不碰互斥体、不往托盘塞图标，干完就走。
+        for (var i = 0; i < argv.Length - 1; i++)
+        {
+            if (!argv[i].Equals(Services.SystemRepair.AdminSwitch, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Services.SystemRepair.RunElevated(argv[i + 1]);
+            Environment.Exit(0);
+            return;
+        }
+
         // ── 残留清理链路的无人值守体检（2026-10-14 加，诊断用） ──
         // 见 Services/LeftoverDoctor.cs 顶部的说明。⛔ 同样必须在最前面接管：
         // 它要跑完就退出，不建窗口、不碰互斥体。

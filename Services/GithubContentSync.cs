@@ -188,6 +188,15 @@ public static class GithubContentSync
             try { await File.WriteAllTextAsync(stamp, head, Utf8NoBom, ct).ConfigureAwait(false); } catch { }
             try { await File.WriteAllTextAsync(formatFile, SyncFormat, Utf8NoBom, ct).ConfigureAwait(false); } catch { }
 
+            // 图标跟着软件数据一起旧：Apps JSON 里记着图标地址，站点换了图 / 换了地址就该往下拉新的。
+            // ⛔ 只有**真有文件变化**才失效 —— head 换了但内容一字未改时不必让上百个图标白重下一次。
+            //    标记陈旧（不是删除）⇒ 界面先用远程源顶上，后台逐个覆盖，视觉不断档。
+            if (downloaded > 0)
+            {
+                AppIconCache.Invalidate();
+                Core.AppLog.Step("content", $"{downloaded} 个数据文件有变化 → 图标缓存已标记为陈旧");
+            }
+
             var count = CountApps();
             Core.AppLog.Done("content", $"软件数据已更新到 {Short(head)} · {count} 个软件 · {downloaded} 个文件有变化", sw.Elapsed);
             return new RepoContentResult(true, true, count,
@@ -405,6 +414,29 @@ public static class GithubContentSync
     /// 放的：`.` 开头的元文件（<c>.reposha</c>）。
     /// 兜底：任何一步失败都只当没清干净 —— 绝不能连累本次已经同步下来的数据。
     /// </summary>
+    /// <summary>
+    /// 是不是**本机派生**的缓存文件 —— 它们由本机生成、来源是 gorgeId 里的资源，
+    /// 但本身不属于仓库内容，不能被上面的清理当"装机残留"扫掉：
+    ///   · <c>icons/</c>      —— 软件图标磁盘缓存（<see cref="AppIconCache"/>）
+    ///   · <c>quickicons/</c> —— 快捷入口 SVG 按主题着色后的产物（<see cref="QuickLinkIconLoader"/>）
+    ///
+    /// ⚠️ 之前这里递归清了整个 content 目录，只豁免 `.` 开头的元文件 ⇒ 每同步一次，
+    ///    图标缓存就被整个删光、下次进页面又要从头下载一遍 —— "本地缓存"名存实亡，
+    ///    AppIconCache 基于 mtime 的纪元失效也因此永远轮不到生效（文件压根留不到下一轮）。
+    /// </summary>
+    private static bool IsDerivedCache(string file)
+    {
+        try
+        {
+            var full = Path.GetFullPath(file);
+            var icons = Path.GetFullPath(Path.Combine(Dir, "icons")) + Path.DirectorySeparatorChar;
+            var quick = Path.GetFullPath(Path.Combine(Dir, "quickicons")) + Path.DirectorySeparatorChar;
+            return full.StartsWith(icons, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(quick, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
     private static void DeleteUnknownFiles(HashSet<string> keep)
     {
         try
@@ -412,6 +444,7 @@ public static class GithubContentSync
             foreach (var file in Directory.EnumerateFiles(Dir, "*", SearchOption.AllDirectories))
             {
                 if (Path.GetFileName(file).StartsWith('.')) continue;
+                if (IsDerivedCache(file)) continue;     // 本机派生缓存不是仓库内容，别当垃圾清（见方法注释）
                 if (keep.Contains(Path.GetFullPath(file))) continue;
                 try { File.Delete(file); } catch { /* 删不掉算了 */ }
             }

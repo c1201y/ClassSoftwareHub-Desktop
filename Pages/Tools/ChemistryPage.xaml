@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.Tools.ChemistryPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      ⛔ 2026-10-17 第二版（Nick）：不再让用户手打整条方程。
+      左边摆反应物、右边摆生成物，中间的箭头挂反应条件（可多选）；
+      化学式从**元素周期表**点出来，显示按真实上下标排（Services/ChemicalNotation）。
+    -->
+    <Grid Background="Transparent">
+        <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="1008" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" Margin="24,14,24,20" RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题 -->
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="2">
+                    <TextBlock Text="化学方程式配平" FontSize="28" FontWeight="Bold" />
+                    <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="左边放反应物、右边放生成物，化学式从元素周期表点选。系数按元素守恒自动计算。" />
+                </StackPanel>
+
+                <Button x:Name="ExampleButton" Grid.Column="1" Content="载入示例"
+                        VerticalAlignment="Center" Click="Example_Click"
+                        ToolTipService.ToolTip="用 Fe + O2 = Fe2O3 填一遍，看看怎么用" />
+            </Grid>
+
+            <!-- 反应区：反应物卡片 | 箭头与条件 | 生成物卡片
+                 ⛔ 用**两张卡片**托住两边（Nick 2026-10-17）：一行行的文字飘在空白里看不出
+                     "哪些是反应物、哪些是生成物"，卡片一包立刻分得清。 -->
+            <Grid Grid.Row="1" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border CornerRadius="8" Padding="16,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="反应物" FontSize="14" FontWeight="SemiBold" />
+                            <TextBlock x:Name="ReactantCount" Grid.Column="1" FontSize="12"
+                                       Opacity="0.45" VerticalAlignment="Center" Text="0 种" />
+                        </Grid>
+
+                        <StackPanel x:Name="ReactantList" Spacing="6" />
+                        <TextBlock x:Name="ReactantEmpty" FontSize="12.5" Opacity="0.4"
+                                   Text="还没有添加物质" />
+
+                        <Button Content="+ 添加物质" Click="AddReactant_Click" Height="36"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8" MinWidth="132">
+                    <DropDownButton x:Name="ConditionButton" Content="反应条件" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center" Height="36"
+                                    ToolTipService.ToolTip="可多选：点燃、加热、高温、催化剂、通电、光照、加压" />
+                    <TextBlock Text="→" FontSize="30" HorizontalAlignment="Center" Opacity="0.5" />
+                </StackPanel>
+
+                <Border Grid.Column="2" CornerRadius="8" Padding="16,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="生成物" FontSize="14" FontWeight="SemiBold" />
+                            <TextBlock x:Name="ProductCount" Grid.Column="1" FontSize="12"
+                                       Opacity="0.45" VerticalAlignment="Center" Text="0 种" />
+                        </Grid>
+
+                        <StackPanel x:Name="ProductList" Spacing="6" />
+                        <TextBlock x:Name="ProductEmpty" FontSize="12.5" Opacity="0.4"
+                                   Text="还没有添加物质" />
+
+                        <Button Content="+ 添加物质" Click="AddProduct_Click" Height="36"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 结果 -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
+                <StackPanel x:Name="ResultPanel" Spacing="12">
+                    <TextBlock x:Name="HintText" FontSize="13" Opacity="0.55" TextWrapping="Wrap"
+                               Text="两边各添加至少一种物质后自动配平。" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <TextBlock Grid.Row="3" FontSize="11.5" Opacity="0.45" TextWrapping="Wrap"
+                       Text="配平依据元素守恒（只算元素种类与原子个数，不含电荷）。反应条件只影响书写样式，不参与计算。" />
+        </Grid>
+        </Grid>
+
+        <!-- ===== 化学式编辑器浮层 =====
+             ⛔ 不用 ContentDialog：它在 DPI 缩放下定位会偏，窗口不够宽时右边直接切掉几列元素。
+             自己铺一层，尺寸完全由页面算，窗口多大都能摆正。
+             ⛔⛔ 必须套在 Canvas 里：Canvas 不测量子元素，浮层的宽度就不会反过来把整页撑宽
+                 （曾经因此把整页顶得右移、标题都跑到屏幕中间去了）。 -->
+        <Canvas x:Name="OverlayHost">
+        <Grid x:Name="EditorOverlay" Visibility="Collapsed">
+            <Border Background="#8C000000" Tapped="EditorOverlay_Tapped" />
+
+            <!-- ⛔ 靠左摆而不是居中：居中在这个页面里会莫名偏右（实测偏了 ~200px），
+                 靠左 + 固定外边距是确定的，怎么也跑不出窗口。 -->
+            <Border x:Name="EditorShell" CornerRadius="10" Padding="20,16"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="24,0,0,0"
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                <Grid RowSpacing="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock x:Name="EditorTitle" Text="添加物质" FontSize="18" FontWeight="SemiBold" />
+
+                    <Border x:Name="EditorHost" Grid.Row="1" />
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                                HorizontalAlignment="Right">
+                        <Button Content="取消" Click="EditorCancel_Click" MinWidth="88" />
+                        <Button x:Name="EditorOk" Content="确定" MinWidth="88"
+                                Style="{StaticResource AccentButtonStyle}" Click="EditorOk_Click" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+        </Canvas>
+    </Grid>
+</Page>

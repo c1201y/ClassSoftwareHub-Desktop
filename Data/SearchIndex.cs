@@ -268,6 +268,10 @@ public static class SearchIndex
                 Keywords = "uninstaller 卸载 删除 移除 残留 uninstall 清理" },
         new() { Tag = "appdata", Title = "AppData 管理", Desc = "查看并清理 AppData 中的缓存目录", Glyph = "\uE8B7",
                 Keywords = "appdata 缓存 清理 数据 文件夹 cache" },
+        new() { Tag = "startup", Title = "开机启动项", Desc = "管理开机时自动启动的程序", Glyph = "\uE945",
+                Keywords = "startup 开机 启动项 自启 自启动 开机启动 autostart run 关掉" },
+        new() { Tag = "repair", Title = "系统修复", Desc = "修复系统文件、组件存储与网络", Glyph = "\uE7EF",
+                Keywords = "repair 系统修复 修复 sfc dism chkdsk 网络重置 组件存储 磁盘 scannow" },
     };
 
     // ── 汇总 ──────────────────────────────────────────────────────

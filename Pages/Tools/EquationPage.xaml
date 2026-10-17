@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.Tools.EquationPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      ⛔ 2026-10-17 第二版（Nick）：跟化学配平页一样，**不让用户对着空白框回忆语法**。
+      每条方程是一张卡片，点开是按键式编辑器（数字 / 未知数 / 运算 / 函数 / 常用式子），
+      边输边校验，改完立刻自动求解 —— 没有"再点一下求解"这一步。
+      单列竖排（工具页既定版式），输入在上、结果在下。
+    -->
+    <Grid Background="Transparent">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="998*" MaxWidth="1008" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="1" Margin="24,14,24,20" RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 标题 -->
+                <StackPanel Spacing="2">
+                    <TextBlock Text="方程求解" FontSize="28" FontWeight="Bold" />
+                    <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="一次方程组给出精确分数解；一元方程按方程本身的性质求根，支持 π、三角函数与对数。" />
+                </StackPanel>
+
+                <!-- 方程卡片区 -->
+                <Border Grid.Row="1" CornerRadius="8" Padding="16,14"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="方程" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock x:Name="EquationCount" FontSize="12" Opacity="0.45"
+                                           VerticalAlignment="Center" Text="0 条" />
+                            </StackPanel>
+
+                            <HyperlinkButton x:Name="ClearAllButton" Grid.Column="1" Content="清空"
+                                             FontSize="12" Padding="2,0" Click="ClearAll_Click" />
+                        </Grid>
+
+                        <StackPanel x:Name="EquationList" Spacing="6" />
+
+                        <TextBlock x:Name="EmptyHint" FontSize="12.5" Opacity="0.4"
+                                   Text="还没有方程。点下面的按钮添加，或用上面的示例试一次。" />
+
+                        <Button Content="+ 添加方程" Click="AddEquation_Click" Height="36"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="试试" FontSize="12" Opacity="0.5" VerticalAlignment="Center" />
+                            <Button Content="一元二次" FontSize="12" Padding="9,3" Click="ExampleQuadratic_Click" />
+                            <Button Content="一次方程组" FontSize="12" Padding="9,3" Click="ExampleLinear_Click" />
+                            <Button Content="三角方程" FontSize="12" Padding="9,3" Click="ExampleTrig_Click" />
+                            <Button Content="指数方程" FontSize="12" Padding="9,3" Click="ExampleExp_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 结果 -->
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
+                    <StackPanel x:Name="ResultPanel" Spacing="10">
+                        <TextBlock x:Name="HintText" FontSize="13" Opacity="0.55" TextWrapping="Wrap"
+                                   Text="添加方程后自动求解。" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <TextBlock Grid.Row="3" FontSize="11.5" Opacity="0.45" TextWrapping="Wrap"
+                           Text="一元方程的未知数用 x；方程组的未知数用任意字母，一条方程一张卡片。多元非一次方程组不在本工具范围内。" />
+            </Grid>
+        </Grid>
+
+        <!-- ===== 方程编辑器浮层 =====
+             ⛔ 与化学式编辑器同一套做法：不用 ContentDialog（DPI 缩放下定位会偏、窄窗口右侧被切），
+                自己铺一层 Canvas，尺寸由页面算。⛔ Canvas 必须兜住浮层，否则浮层会把整页撑宽。 -->
+        <Canvas x:Name="OverlayHost">
+            <Grid x:Name="EditorOverlay" Visibility="Collapsed">
+                <Border Background="#8C000000" Tapped="EditorOverlay_Tapped" />
+
+                <Border x:Name="EditorShell" CornerRadius="10" Padding="20,16"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" Margin="24,0,0,0"
+                        Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <Grid RowSpacing="12">
+                        <!-- ⛔ 列定义不能省：隐式单列是 Auto，内容比外壳宽就会顶出去、超出部分被裁
+                             （右侧「×」「÷」曾经只剩半个）。 -->
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock x:Name="EditorTitle" Text="添加方程" FontSize="18" FontWeight="SemiBold" />
+
+                        <Border x:Name="EditorHost" Grid.Row="1" />
+
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                                    HorizontalAlignment="Right">
+                            <Button Content="取消" Click="EditorCancel_Click" MinWidth="88" />
+                            <Button x:Name="EditorOk" Content="确定" MinWidth="88"
+                                    Style="{StaticResource AccentButtonStyle}" Click="EditorOk_Click" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Canvas>
+    </Grid>
+</Page>

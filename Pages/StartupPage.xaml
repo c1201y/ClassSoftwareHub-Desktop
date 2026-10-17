@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.StartupPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
+
+    <!--
+      开机启动项（2026-10-16 新功能，实验性功能分组下）。
+
+      做的事只有一件：把「开机时会自己启动的东西」列全，并允许逐个关掉。
+      ⛔⛔ **关掉 = 写 Windows 的 StartupApproved 状态位**，不删注册表值、不移动启动文件夹里的文件
+         —— 跟任务管理器 / 设置 → 应用 → 启动 是同一套机制，所以三边看到的启用状态天然一致，
+         而且关错了随时能开回来（详见 Services/StartupItems.cs 的类注释）。
+
+      ⛔ 版式照 Pages/AppDataPage.xaml：三列 24 / * / 24、内容列锁 960、标题行右侧并排放动作、
+         标题下面一行是**动态计数**（不是解释长句）、常驻红色风险条（会动系统的功能一律常驻）。
+
+      ⚠️ 两个已知的编译坑（都出在本项目其它页上，别在这里复现）：
+        · 行模板里 `x:Bind` 的目标属性名 ⛔ **不能与页面上某个 `x:Name` 撞名**
+          （AppData 页的 CountText 撞过，XamlCompiler 只报壳错误 WMC9999，没有行号）。
+        · `Content` 是 FontIcon 的按钮要用 `AutomationProperties.Name` 补一个名字，否则 UIA 拿不到。
+    -->
+    <Page.Resources>
+        <!-- 行尾 / 标题行的图标按钮。⚠️ 八行 Setter **照抄**而不是跨文件 `BasedOn`：
+             跨文件 BasedOn 会让 XAML 编译器在代码生成阶段崩掉（见 AppData 页文件头）。 -->
+        <Style x:Key="RowMoreButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Page.Resources>
+
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（Core/WheelRelay.cs）：两侧留白也要参与命中测试 -->
+    <Grid Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="10" Margin="0,36,0,44">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- ── 标题行：左＝标题 + 实验性标记 + 计数，右＝重新扫描 / 说明 ── -->
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="开机启动项" FontSize="28" FontWeight="Bold" />
+                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <FontIcon Glyph="&#xEA80;" FontSize="11"
+                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                <TextBlock Text="实验性功能" FontSize="12"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 标题下面放**计数**（不是解释话，解释在「说明」弹窗里）。
+                         ⚠️ 名字别叫 CountText 之类容易跟行类型属性撞名的 —— 见文件头注释。 -->
+                    <TextBlock x:Name="CountLine" Text="" FontSize="12" Opacity="0.65"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <Button x:Name="RescanButton" Grid.Column="1" Content="重新扫描" Click="Rescan_Click"
+                        VerticalAlignment="Top" Margin="0,4,0,0" />
+
+                <Button x:Name="AboutButton" Grid.Column="2" Click="About_Click"
+                        Style="{StaticResource RowMoreButtonStyle}"
+                        VerticalAlignment="Top" Margin="0,4,0,0"
+                        AutomationProperties.Name="说明"
+                        ToolTipService.ToolTip="扫的是哪些位置、关掉之后到底发生了什么">
+                    <FontIcon Glyph="&#xE946;" FontSize="15" />
+                </Button>
+            </Grid>
+
+            <!-- ── 常驻风险提示 ──
+                 ⛔ 规约：会改动系统的功能一律常驻提示、不给关（Nick 2026-10-15 定）。
+                 这条**不是**删除类操作，所以话要说准：关的只是"开机自启"这一个开关，程序本身还在。 -->
+            <InfoBar x:Name="RiskBar" Grid.Row="1"
+                     Severity="Error" IsOpen="True" IsClosable="False"
+                     Title="此操作会改动系统启动配置"
+                     Message="禁用后该程序不再随系统自动启动，启用状态由 Windows 统一记录，与任务管理器一致。不会删除程序或文件，随时可以在本页改回来。" />
+
+            <!-- ── 内容区 ── -->
+            <Grid Grid.Row="2">
+                <ListView x:Name="EntryList"
+                          SelectionMode="None" IsItemClickEnabled="False"
+                          ItemContainerStyle="{StaticResource CshResultRowStyle}"
+                          Padding="0,2,0,8">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:StartupRow">
+                            <Grid ColumnSpacing="12" MinHeight="36">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="20" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <FontIcon Grid.Column="0" Glyph="{x:Bind Glyph}" FontSize="15" Opacity="0.55"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{x:Bind Name}" FontSize="14"
+                                                   MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                        <!-- 「已禁用」只在关着的时候出现 —— 开着不用再写一遍"已启用"，那是废话 -->
+                                        <Border CornerRadius="4" Padding="6,1" VerticalAlignment="Center"
+                                                Visibility="{x:Bind StateVisibility, Mode=OneWay}"
+                                                Background="{ThemeResource SystemFillColorNeutralBackgroundBrush}">
+                                            <TextBlock Text="已禁用" FontSize="11" Opacity="0.75" />
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- 命令行 / 快捷方式目标。⛔ 找不到对应文件是**很有用**的信息
+                                         （软件卸载后留下的死项），单独写一句，别只靠颜色区分。 -->
+                                    <TextBlock Text="{x:Bind Sub}" FontSize="12" Opacity="0.6"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind SubTooltip}" />
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="3" Text="{x:Bind SourceLabel}" FontSize="11" Opacity="0.5"
+                                           VerticalAlignment="Center" />
+
+                                <!-- 行尾的启停开关。
+                                     ⚠️ OnContent / OffContent 置空 —— 每行都跟一个「开 / 关」在十几行的列表里
+                                        就是一面字墙（同页其它 ToggleSwitch 有标签是因为它们各自单独一行）。
+                                         状态本身由左边那枚「已禁用」承担。
+                                     ⚠️ IsOn 绑 OneWay：事件里改 `Enabled` 会同步回灌控件，
+                                         回灌那次 Toggled 靠 `row.Busy` / 值相等两道判断挡掉（见代码）。 -->
+                                <ToggleSwitch Grid.Column="4" MinWidth="0" Margin="0" Padding="0"
+                                              VerticalAlignment="Center"
+                                              OnContent="" OffContent=""
+                                              IsOn="{x:Bind Enabled, Mode=OneWay}"
+                                              IsEnabled="{x:Bind CanToggle, Mode=OneWay}"
+                                              Toggled="Row_Toggled"
+                                              AutomationProperties.Name="开机时自动启动"
+                                              ToolTipService.ToolTip="开机时是否自动启动" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- 扫描中 -->
+                <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
+                    <TextBlock Text="正在读取开机启动项" FontSize="12" Opacity="0.7"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- 空状态 -->
+                <StackPanel x:Name="EmptyPanel" Spacing="10" Visibility="Collapsed"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE945;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptyText" Text="没有扫描到开机启动项" FontSize="14" Opacity="0.7"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

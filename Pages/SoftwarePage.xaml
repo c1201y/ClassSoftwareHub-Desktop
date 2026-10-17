@@ -86,7 +86,7 @@
                                     <Border Width="44" Height="44" CornerRadius="9" VerticalAlignment="Top"
                                             HorizontalAlignment="Left">
                                         <Border.Background>
-                                            <ImageBrush ImageSource="{x:Bind IconImage}" Stretch="UniformToFill"
+                                            <ImageBrush ImageSource="{x:Bind IconImage, Mode=OneWay}" Stretch="UniformToFill"
                                                         AlignmentX="Center" AlignmentY="Center" />
                                         </Border.Background>
                                         <Grid>
@@ -132,7 +132,7 @@
                                     <Border Width="30" Height="30" CornerRadius="6" HorizontalAlignment="Left"
                                             VerticalAlignment="Top">
                                         <Border.Background>
-                                            <ImageBrush ImageSource="{x:Bind IconImage}" Stretch="UniformToFill"
+                                            <ImageBrush ImageSource="{x:Bind IconImage, Mode=OneWay}" Stretch="UniformToFill"
                                                         AlignmentX="Center" AlignmentY="Center" />
                                         </Border.Background>
                                         <Grid>

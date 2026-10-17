@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.Tools.DiskMapPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      ⛔ 单列竖排：工具条 → 面包屑 → 树图（吃满剩余高度）→ 排行。
+      树图是这一页的主角，其它都可以让位；⛔ 不做左右分栏。
+    -->
+    <Grid Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="998*" MaxWidth="1008" />
+            <ColumnDefinition Width="1*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" Margin="24,14,24,20" RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题 -->
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="2">
+                    <TextBlock Text="磁盘空间" FontSize="28" FontWeight="Bold" />
+                    <TextBlock x:Name="SubtitleText" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                               Text="按占用面积画出目录结构，单击方块进入下一层，单击上方路径返回。" />
+                </StackPanel>
+
+                <ProgressRing x:Name="BusyRing" Grid.Column="1" Width="22" Height="22"
+                              IsActive="False" VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- 工具条 -->
+            <Grid Grid.Row="1" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <ComboBox x:Name="DriveBox" MinWidth="210" VerticalAlignment="Center"
+                          SelectionChanged="DriveBox_SelectionChanged"
+                          ToolTipService.ToolTip="选择一个磁盘开始扫描" />
+
+                <Button x:Name="PickButton" Grid.Column="1" Content="选择文件夹…" Click="Pick_Click" />
+                <Button x:Name="ScanButton" Grid.Column="2" Content="重新扫描" Click="Scan_Click" />
+
+                <TextBlock x:Name="StatusText" Grid.Column="3" FontSize="12" Opacity="0.6"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </Grid>
+
+            <!-- 面包屑 -->
+            <StackPanel x:Name="CrumbBar" Grid.Row="2" Orientation="Horizontal" Spacing="2" />
+
+            <!-- 树图 -->
+            <Border Grid.Row="3" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <Grid>
+                    <Canvas x:Name="MapCanvas" SizeChanged="MapCanvas_SizeChanged"
+                            Background="Transparent" />
+                    <TextBlock x:Name="EmptyText" FontSize="13" Opacity="0.55" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextAlignment="Center" Margin="40" Visibility="Collapsed" />
+                </Grid>
+            </Border>
+
+            <!-- 排行（占用前几项，给树图补一个能看数字的地方） -->
+            <StackPanel Grid.Row="4" x:Name="TopList" Spacing="4" Margin="0,2,0,0" />
+        </Grid>
+    </Grid>
+</Page>

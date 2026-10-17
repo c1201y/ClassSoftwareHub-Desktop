@@ -618,16 +618,14 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var w = Math.Max(900, _settings.Current.WindowWidth);
-            var h = Math.Max(600, _settings.Current.WindowHeight);
-            _appWindow.Resize(new SizeInt32(w, h));
+            LoadWindowBounds();
         }
         catch { }
 
         _appWindow.Closing += (_, _) =>
         {
             Core.AppLog.Info("exit", "主窗 Closing#1 SaveWindowState");
-            SaveWindowState();
+            SaveWindowState(flush: true);
         };
 
         // 点右上角 × 默认收进托盘（可在设置 / 内置工具页关掉）；托盘挂不上就直接退，别把用户困在后台
@@ -652,11 +650,15 @@ public sealed partial class MainWindow : Window
         };
         _appWindow.Changed += (_, args) =>
         {
-            if (args.DidSizeChange || args.DidPresenterChange)
+            if (args.DidSizeChange || args.DidPositionChange || args.DidPresenterChange)
             {
                 SendCaptionInsets();
                 RequestTitlebarRegions();
                 ApplyWindowRounding();   // 最大化 / 还原 → 圆角跟着切换（最大化必须直角）
+
+                // 大小 / 位置 / 最大化状态随时记一笔（内部有节流）——
+                // 光靠关闭时存是不行的：托盘退出根本不走 Closing（见 SaveWindowState 注释）
+                SaveWindowState();
             }
 
             // 最小化 = 用户看不见窗口了 → 把内存还给系统（教学机 8G）。
@@ -855,36 +857,259 @@ public sealed partial class MainWindow : Window
         catch { return 0; }
     }
 
-    /// <summary>网页上报主题：原生跟着走（系统按钮颜色对齐）。</summary>
+    /// <summary>网页上报主题：仅记录用于诊断，**不再反向覆盖原生界面主题**。</summary>
+    /// <remarks>
+    /// ⚠️ 旧实现会把 <c>RootGrid.RequestedTheme</c> 直接覆盖成网页报来的主题。但网页（站点）有
+    /// 自己的外观偏好、首屏常默认浅色；一旦它报 <c>light</c>，整窗原生界面（含首页快捷入口的
+    /// SVG 图标）就被强行切到浅色 → 图标按浅色取色得到黑色，在深色 mica 背景上即表现为
+    /// 「深色模式下黑图标」。原生主题由 <see cref="ApplyTheme"/>（应用设置）独占决定；站点主题
+    /// 通过 <c>shell.applyWebTheme</c> 反向跟随应用，故这里不再用网页上报去改原生主题。
+    /// </remarks>
     public void OnWebThemeReported(string theme)
     {
         if (string.IsNullOrWhiteSpace(theme)) return;
         var normalized = theme.Trim().ToLowerInvariant();
         if (normalized is not ("light" or "dark")) return;
-
         _themeFromWeb = true;
-        var elementTheme = normalized == "dark" ? ElementTheme.Dark : ElementTheme.Light;
-        if (RootGrid.RequestedTheme != elementTheme)
-        {
-            RootGrid.RequestedTheme = elementTheme;
-            if (_settings.Current.Backdrop == "solid")
-                RootGrid.Background = new SolidColorBrush(FallbackSolidColor());
-            else
-                ApplyBackdrop(_settings.Current.Backdrop);
-            UpdateCaptionButtonColors();
-        }
+        // 原生主题不再随网页上报变化；站点与系统 / 应用的同步由 ApplyTheme 经 shell.applyWebTheme 下发。
     }
 
-    private void SaveWindowState()
+    /// <summary>上一次 saveBounds 的时刻：窗口**随时在写**，别每拖一帧都落一次盘。</summary>
+    private DateTime _lastBoundsSave = DateTime.MinValue;
+
+    /// <summary>恢复记忆布局的那一刻起才允许写回（避免把默认值覆盖掉用户的记忆）。</summary>
+    private bool _windowBoundsLoaded;
+
+    /// <summary>
+    /// 启动恢复：大小 + 位置 + 是否最大化，全部来自上一次退出时的样子。
+    /// </summary>
+    private void LoadWindowBounds()
+    {
+        if (_appWindow is null) return;
+
+        var s = _settings.Current;
+        var w = Math.Max(900, s.WindowWidth);
+        var h = Math.Max(600, s.WindowHeight);
+
+        // ⛔ 别无脑照抄：上次是在别的显示器（或外接投影）上拉的尺寸，
+        //    换回一台更小的机器会超出屏幕 —— 按当前屏幕夹一趟。
+        //    ⚠️ 用 Win32 而不是 DisplayArea：本机实测 DisplayArea.FindAll() 拿不到有效结果，
+        //       拿它判"位置在不在屏上"会永远判否 ⇒ 记忆下来的位置从不生效。
+        var maxW = GetSystemMetrics(SmCxScreen);
+        var maxH = GetSystemMetrics(SmCyScreen);
+        if (maxW > 0) w = Math.Min(w, maxW);
+        if (maxH > 0) h = Math.Min(h, maxH);
+
+        _appWindow.Resize(new SizeInt32(w, h));
+
+        if (s.WindowLeft != int.MinValue && s.WindowTop != int.MinValue
+            && IsVisibleOnAnyScreen(s.WindowLeft, s.WindowTop, w, h))
+        {
+            _pendingPosition = new PointInt32(s.WindowLeft, s.WindowTop);
+        }
+        _pendingMaximize = s.WindowMaximized;
+
+        // ⚠️ Move() 不能在构造期就喊：窗口那时还没真正落位，系统随后会把它摆回默认位置，
+        //    我们摆的坐标被吃掉（实测只认大小、位置回到左上角）。挪到激活之后再摆。
+        Activated += (_, _) => ApplyPendingPlacement();
+
+        StartBoundsWatch();
+
+        _windowBoundsLoaded = true;
+    }
+
+    private PointInt32? _pendingPosition;
+    private bool _pendingMaximize;
+    private bool _placementApplied;
+
+    /// <summary>
+    /// 兜底巡检（每 1.2 秒）：AppWindow.Changed **并不可靠** —— 某些改动窗口尺寸/位置的路径
+    /// （外部还原、系统贴靠）它压根不报，光靠它会出现"用户明明拖过了，值却没写进去"。
+    /// SaveWindowState 内部有节流且只在真的变了才落盘，所以这里空转几乎不花钱。
+    /// </summary>
+    private void StartBoundsWatch()
+    {
+        try
+        {
+            // ⚠️ 引用必须挂在字段上：只写在局部变量里会被 GC 回收，timer 从此再也不 tick
+            _boundsTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _boundsTimer.Interval = TimeSpan.FromSeconds(1.2);
+            _boundsTimer.Tick += (_, _) => { try { SaveWindowState(); } catch { } };
+            _boundsTimer.Start();
+        }
+        catch { }
+    }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _boundsTimer;
+
+    /// <summary>窗口首次激活后补上一次「摆位置 / 最大化」——见 <see cref="LoadWindowBounds"/>。</summary>
+    private void ApplyPendingPlacement()
+    {
+        if (_placementApplied || _appWindow is null) return;
+        _placementApplied = true;
+        try
+        {
+            ApplyPlacementCore();
+
+            // ⚠️ 二次校正：Windows 会替窗口记住「上次是不是最大化」，并在窗口创建后
+            //    **异步**把它套回来 —— 那一下落在我们第一次摆放之后，会把坐标顶掉。
+            //    隔一小会儿再看一眼，被顶回最大化就再按回来。
+            var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(600);
+                _ = queue.TryEnqueue(ApplyPlacementCore);
+            });
+        }
+        catch (Exception ex) { Core.AppLog.Warn("shell", "恢复窗口位置失败：" + ex.Message); }
+    }
+
+    /// <summary>把记忆里的大小 / 位置 / 最大化状态真正落到窗口上。</summary>
+    private void ApplyPlacementCore()
     {
         try
         {
             if (_appWindow is null) return;
-            if (_appWindow.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized) return;
-            var size = _appWindow.Size;
-            _settings.Current.WindowWidth = size.Width;
-            _settings.Current.WindowHeight = size.Height;
-            _settings.Save();
+
+            if (_pendingPosition is { } p) _appWindow.Move(p);
+            if (_pendingMaximize)
+            {
+                if (_appWindow.Presenter is OverlappedPresenter op) op.Maximize();
+                return;
+            }
+
+            // 记忆里是「没最大化」⇒ 现在若被系统顶成最大化，就还原回来再摆一次
+            if (_appWindow.Presenter is OverlappedPresenter p2
+                && p2.State != OverlappedPresenterState.Restored)
+            {
+                p2.Restore();
+                var s = _settings.Current;
+                _appWindow.Resize(new SizeInt32(Math.Max(900, s.WindowWidth), Math.Max(600, s.WindowHeight)));
+                if (_pendingPosition is { } p3) _appWindow.Move(p3);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 存的位置是不是真的看得见。显示器拔了 / 换了投影 / 分辨率变小都会让它落到屏幕外，
+    /// 那种情况下别硬搬 —— 交给系统自己摆，总好过窗口出现在看不见的地方。
+    /// </summary>
+    private static bool IsVisibleOnAnyScreen(int left, int top, int width, int height)
+    {
+        try
+        {
+            // 取窗口标题栏附近那个点：拔了显示器 / 换了投影之后，这个点多半还在屏上才算数。
+            // ⚠️ 用 MonitorFromPoint（Win32）判，别用 DisplayArea —— 见 LoadWindowBounds 里的说明。
+            var pt = new NativePoint
+            {
+                X = left + Math.Min(200, width / 2),
+                Y = top + Math.Min(120, height / 2)
+            };
+            return MonitorFromPoint(pt, MonitorDefaultToNull) != IntPtr.Zero;
+        }
+        catch
+        {
+            // 判不了就照摆 —— 宁可摆错，也不要这个功能彻底不生效
+            return true;
+        }
+    }
+
+    private const uint MonitorDefaultToNull = 0;
+    private const int SmCxScreen = 0;
+    private const int SmCyScreen = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(NativePoint pt, uint dwFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hwnd, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    /// <summary>
+    /// 窗口大小 / 位置一变就记一笔（节流 700ms）。
+    ///
+    /// ⚠️ 为什么不能只在关闭时保存：程序化的 <c>Window.Close()</c> 与
+    /// <c>Application.Exit()</c> **都不触发** AppWindow.Closing（见 FinishExit 注释），
+    /// 而托盘「退出」、更新安装器接管、进程被杀全走这条路 ——
+    /// 结果就是"用户拖了半天，下次开还是老样子"。随时写才丢不了。
+    /// </summary>
+    private void SaveWindowState(bool flush = false)
+    {
+        try
+        {
+            if (_appWindow is null || !_windowBoundsLoaded) return;
+
+            // ⚠️ 尺寸与坐标一律用 Win32 GetWindowRect 读真实窗口矩形，**不用 AppWindow.Size/Position**：
+            //    后者在某些路径（外部还原、EarlierWinUI 状态没同步）会给旧值，
+            //    于是"明明已经还原了"却仍被判成最大化、一条都不写。
+            var hwnd = WindowNative.GetWindowHandle(this);
+            if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rc)) return;
+
+            var sizeW = rc.Right - rc.Left;
+            var sizeH = rc.Bottom - rc.Top;
+            var screenW = GetSystemMetrics(SmCxScreen);
+            var screenH = GetSystemMetrics(SmCyScreen);
+
+            // 最大化 / 最小化时不存：此时 Size 是铺满后的尺寸、Position 是屏幕角落，
+            // 存了会让「还原」按钮再也回不到原来那个大小。
+            //
+            // ⛔ 这里**只认 Presenter.State**，绝不许再加"尺寸约等于屏幕就算最大化"这类补判：
+            //    本应用窗口无边框，用户手动把窗口拉到几乎铺满是**完全正常的用法**，
+            //    加补判会把他的尺寸当成最大化吃掉 ⇒ 表现为"我拉的尺寸下次没记住"。
+            if (_appWindow.Presenter is OverlappedPresenter p
+                && (p.State == OverlappedPresenterState.Maximized
+                    || p.State == OverlappedPresenterState.Minimized))
+            {
+                if (!_settings.Current.WindowMaximized)
+                {
+                    _settings.Current.WindowMaximized = true;
+                    _settings.Save();
+                }
+                return;
+            }
+
+            // 拖动过程中别每次都落盘（每帧一次 IO）；真要退出了强制写一次
+            var now = DateTime.UtcNow;
+            if (!flush && (now - _lastBoundsSave) < TimeSpan.FromMilliseconds(700)) return;
+            _lastBoundsSave = now;
+
+            var s = _settings.Current;
+            s.WindowMaximized = false;
+
+            if (sizeW > 0 && sizeH > 0 && (sizeW != s.WindowWidth || sizeH != s.WindowHeight))
+            {
+                s.WindowWidth = sizeW;
+                s.WindowHeight = sizeH;
+                try { _settings.Save(); }
+                catch (Exception saveEx) { Core.AppLog.Exception("shell", saveEx, "写回窗口大小"); }
+            }
+            else if (rc.Left != s.WindowLeft || rc.Top != s.WindowTop)
+            {
+                s.WindowLeft = rc.Left;
+                s.WindowTop = rc.Top;
+                try { _settings.Save(); }
+                catch (Exception saveEx) { Core.AppLog.Exception("shell", saveEx, "写回窗口位置"); }
+            }
         }
         catch { }
     }
@@ -2230,6 +2455,9 @@ public sealed partial class MainWindow : Window
         //    所以真正保证退干净的是 FinishExit() 里的显式关窗；这个标记是防御性的 ——
         //    万一某个版本让程序化关闭也走 Closing，它保证那两个窗不会被自己的 args.Cancel 拦下。
         App.IsExiting = true;
+        // 托盘「退出」/ 更新接管都不走 Closing（AppWindow.Closing 只认用户级关闭），
+        // 所以这里必须自己收一次——布局已经随时在写了，这只是补最后一把。
+        SaveWindowState(flush: true);
         try { _settings.Save(); } catch { }
         try { _tray?.Dispose(); } catch { }
         _tray = null;

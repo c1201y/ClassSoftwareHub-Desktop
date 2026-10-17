@@ -2,12 +2,17 @@
 <Application
     x:Class="ClassSoftwareHub.Desktop.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:csh="using:ClassSoftwareHub.Desktop.Core">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- 快捷入口模板用：SVG 图标与 FontIcon 二选一显示 -->
+            <csh:NullToCollapsed x:Key="NullToCollapsed" />
+            <csh:NotNullToCollapsed x:Key="NotNullToCollapsed" />
 
             <!--
               ⚠️ 卡片外面那圈矩形框 = GridViewItem 自带的「焦点框 / 悬停底色」。

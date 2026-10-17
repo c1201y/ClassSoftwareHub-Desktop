@@ -6,14 +6,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
-    <!-- 和其余页面同一套版式：内容钉在中间 960 宽 -->
-    <!-- 根 Grid 不带 Margin：间距放进中间列，让双栏容器拿到整页高度约束。
-         ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
-            Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
-         本页最后一行是「版本列表 + 详情」撑满容器（自带边框），归 0 会让卡片外框贴到窗口
-         下边框 → 写 44。 -->
-    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
-         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，列表纹丝不动（与首页手感不一致）。 -->
+    <!--
+      ⛔⛔ 版式要点（2026-10-17 改版，Nick 的七条意见）：
+      1. 顶部那张「巨无霸版本卡」删了 —— 版本号 + 通道 + 数据来源压成标题下方一行副标题。
+      2. 操作栏不再左右分家：筛选、刷新、在浏览器打开全收进左栏列表正上方，
+         它们控制的就是这个列表，主次关系一目了然。单选按钮换成下拉（不用 RadioButton 占版面）。
+      3. 左侧列表用**原生 ListView**（系统自带的选中高亮、悬停、键盘导航），
+         条目是「主标题（版本号）+ 副标题（日期 · 通道）」两行文本，不自绘选中底色。
+      4. 右侧正文按 Markdown 的标题**分组**，组标题 14.5 SemiBold、组间留白，
+         版本之间用分隔线而不是层层卡片 —— 像读文档，不是往灰盒子里塞记事本。
+    -->
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -21,161 +23,174 @@
             <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14" Margin="0,36,0,44">
+        <Grid Grid.Column="1" MaxWidth="960" Margin="0,36,0,44" RowSpacing="18">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <StackPanel Spacing="4">
+            <!-- ===== 标题区（原来那张大卡的信息压缩成一行） ===== -->
+            <StackPanel Spacing="5">
                 <TextBlock Text="更新日志" FontSize="28" FontWeight="Bold" />
-                <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                           Text="各版本的更新内容读取自更新仓库的发布说明，与应用内「检查更新」显示的内容一致。在左侧单击版本号可直接跳转至该版本。" />
+                <TextBlock x:Name="HeaderMeta" FontSize="12" Opacity="0.62"
+                           TextWrapping="Wrap" IsTextSelectionEnabled="True" />
             </StackPanel>
 
-            <!-- 当前版本 -->
-            <Border Grid.Row="1" Style="{StaticResource CshCardStyle}" Padding="20,16">
-                <StackPanel Spacing="6">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock x:Name="CurrentVersionText" FontSize="20" FontWeight="Bold" />
-                        <Border CornerRadius="4" Padding="8,2" BorderThickness="1"
-                                VerticalAlignment="Center"
-                                BorderBrush="{ThemeResource TextFillColorSecondaryBrush}">
-                            <TextBlock x:Name="ChannelBadgeText" FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </Border>
-                    </StackPanel>
-                    <TextBlock x:Name="CurrentHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <!-- 工具行：左边操作，右边筛版本范围 -->
-            <Grid Grid.Row="2" ColumnSpacing="10">
+            <Grid Grid.Row="1" ColumnSpacing="24">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Button x:Name="RefreshButton" Content="刷新" Click="Refresh_Click" />
-                <Button Grid.Column="1" Content="在浏览器中查看全部发布" Click="OpenWeb_Click" />
-
-                <!--
-                  只分「全部版本 / 正式版本」两种。**故意不做「预览版」这一档** ——
-                  Nick 2026-09-26：预览版用户本来就会收到正式版更新，单独开一档预览没意义。
-                -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                    <RadioButton x:Name="FilterAll" GroupName="ChangelogFilter" Content="全部版本"
-                                 Tag="all" MinWidth="0" IsChecked="True" Checked="Filter_Changed" />
-                    <RadioButton x:Name="FilterStable" GroupName="ChangelogFilter" Content="正式版本"
-                                 Tag="stable" MinWidth="0" Checked="Filter_Changed" />
-                </StackPanel>
-            </Grid>
-
-            <!-- ===== 左边版本清单（快速跳版本）+ 右边发布内容 ===== -->
-            <Grid Grid.Row="3" ColumnSpacing="16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="216" />
+                    <ColumnDefinition Width="264" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource CshCardStyle}" Padding="0,14,0,12">
+                <!-- ===== 左栏：工具栏 + 版本列表 + 计数 ===== -->
+                <Border Style="{StaticResource CshCardStyle}" Padding="0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock x:Name="VersionListTitle" Text="版本" FontSize="12" Opacity="0.6"
-                                   Margin="16,0,16,8" />
+                        <!-- 工具栏：筛选在左，两个图标操作靠右，全部属于「这个列表」 -->
+                        <Grid Margin="12,12,12,8" ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                        <ListView x:Name="VersionList" Grid.Row="1" SelectionMode="Single"
-                                  IsItemClickEnabled="True" ItemClick="VersionList_ItemClick"
-                                  Padding="4,0,4,0">
+                            <!-- ⚠️ 必须给 SelectedIndex：不给的话框里是空的，看着像坏了 -->
+                            <ComboBox x:Name="FilterBox" SelectedIndex="0" HorizontalAlignment="Stretch"
+                                      SelectionChanged="Filter_Changed"
+                                      ToolTipService.ToolTip="按发布通道筛选">
+                                <ComboBoxItem Content="全部版本" />
+                                <ComboBoxItem Content="仅正式版本" />
+                            </ComboBox>
+
+                            <Button Grid.Column="1" Click="Refresh_Click" Padding="8,6"
+                                    ToolTipService.ToolTip="重新读取发布说明">
+                                <FontIcon Glyph="&#xE72C;" FontSize="13" />
+                            </Button>
+
+                            <Button Grid.Column="2" Click="OpenWeb_Click" Padding="8,6"
+                                    ToolTipService.ToolTip="在浏览器中查看全部发布">
+                                <FontIcon Glyph="&#xE8A7;" FontSize="13" />
+                            </Button>
+                        </Grid>
+
+                        <!-- 原生 ListView：选中/悬停/键盘导航全交给系统默认视觉，不自绘 -->
+                        <ListView x:Name="VersionList" Grid.Row="1"
+                                  SelectionMode="Single" Margin="0,0,0,4"
+                                  SelectionChanged="VersionList_SelectionChanged">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="local:ReleaseRow">
-                                    <StackPanel Spacing="1" Padding="0,5,0,5">
-                                        <TextBlock Text="{x:Bind Tag}" FontSize="14" FontWeight="SemiBold"
+                                    <StackPanel Spacing="1">
+                                        <TextBlock Text="{x:Bind Tag}" FontSize="13.5"
                                                    TextTrimming="CharacterEllipsis" />
-                                        <!-- 日期 + 通道：一眼能认出哪几条是预览版发出来的，不用另开一档 -->
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="{x:Bind DateShort}" FontSize="12" Opacity="0.6" />
-                                            <TextBlock Text="{x:Bind ChannelShort}" FontSize="12" Opacity="0.6"
-                                                       Foreground="{x:Bind BadgeBrush}" />
-                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind SubLine}" FontSize="11.5"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
+
+                        <TextBlock x:Name="StateText" Grid.Row="2" FontSize="11.5" Opacity="0.55"
+                                   Margin="14,6,14,12" TextWrapping="Wrap" />
                     </Grid>
                 </Border>
 
+                <!-- ===== 右栏：文档式正文（不套大边框） ===== -->
                 <Grid Grid.Column="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+                    <ScrollViewer x:Name="ReleaseScroll" VerticalScrollBarVisibility="Auto"
+                                  Padding="2,0,10,0">
+                        <ItemsControl x:Name="ReleaseList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:ReleaseRow">
+                                    <StackPanel Spacing="0" Margin="0,0,0,26">
+                                        <!-- 版本头：版本号 + 通道徽标 + 右对齐日期 -->
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="StateText" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Margin="2,0,0,8" />
+                                            <TextBlock Text="{x:Bind Tag}" FontSize="19" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" />
 
-                    <Grid Grid.Row="1">
-                        <ScrollViewer x:Name="ReleaseScroll" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl x:Name="ReleaseList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="local:ReleaseRow">
-                                        <Border Style="{StaticResource CshCardStyle}" Padding="20,16,20,18" Margin="0,0,0,12">
-                                            <StackPanel Spacing="10">
-                                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                                    <TextBlock Text="{x:Bind Tag}" FontSize="18" FontWeight="Bold"
-                                                               VerticalAlignment="Center" />
-                                                    <Border CornerRadius="4" Padding="8,2" BorderThickness="1"
-                                                            VerticalAlignment="Center"
-                                                            BorderBrush="{x:Bind BadgeBrush}">
-                                                        <TextBlock Text="{x:Bind ChannelText}" FontSize="12"
-                                                                   Foreground="{x:Bind BadgeBrush}" />
-                                                    </Border>
-                                                    <TextBlock Text="{x:Bind DateText}" FontSize="12" Opacity="0.6"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
+                                            <Border Grid.Column="1" CornerRadius="9" Padding="7,1"
+                                                    VerticalAlignment="Center"
+                                                    BorderThickness="1"
+                                                    BorderBrush="{x:Bind BadgeBrush}">
+                                                <TextBlock Text="{x:Bind ChannelText}" FontSize="11"
+                                                           Foreground="{x:Bind BadgeBrush}" />
+                                            </Border>
 
-                                                <!-- 发布说明（把 Markdown 轻量转成若干行 TextBlock） -->
-                                                <ItemsControl ItemsSource="{x:Bind Lines}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="local:NoteLine">
-                                                            <TextBlock Text="{x:Bind Text}" FontSize="{x:Bind Size}"
-                                                                       FontWeight="{x:Bind Weight}"
-                                                                       Margin="{x:Bind Margin}"
-                                                                       TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
+                                            <TextBlock Grid.Column="2" Text="{x:Bind DateText}" FontSize="11.5"
+                                                       Opacity="0.5" HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
 
-                        <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
-                                    VerticalAlignment="Center" Visibility="Collapsed">
-                            <ProgressRing x:Name="LoadingRing" IsActive="True" Width="34" Height="34"
-                                          HorizontalAlignment="Center" />
-                            <TextBlock Text="正在从更新仓库读取发布说明。" FontSize="12" Opacity="0.7"
-                                       HorizontalAlignment="Center" />
-                        </StackPanel>
+                                        <Border Height="1" Margin="0,10,0,14"
+                                                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                        <!-- 兜底文案（没网 / 没发布过） -->
-                        <StackPanel x:Name="FallbackPanel" Spacing="10" Visibility="Collapsed"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE81C;" FontSize="32" Opacity="0.45" HorizontalAlignment="Center" />
-                            <TextBlock x:Name="FallbackText" MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap"
-                                       FontSize="12" Opacity="0.7" />
-                        </StackPanel>
-                    </Grid>
+                                        <!-- 按 Markdown 标题分组：组标题 + 组内条目 -->
+                                        <ItemsControl ItemsSource="{x:Bind Blocks}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="local:NoteBlock">
+                                                    <StackPanel Spacing="5" Margin="{x:Bind Margin}">
+                                                        <TextBlock Text="{x:Bind Title}" FontSize="15.5"
+                                                                   FontWeight="SemiBold"
+                                                                   Visibility="{x:Bind TitleVisibility}"
+                                                                   TextWrapping="Wrap" />
+                                                        <ItemsControl ItemsSource="{x:Bind Lines}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="local:NoteLine">
+                                                                    <Grid ColumnSpacing="8" Margin="0,0,0,3">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <TextBlock Text="•" FontSize="13"
+                                                                                   Opacity="0.45"
+                                                                                   Visibility="{x:Bind BulletVisibility}"
+                                                                                   VerticalAlignment="Top" />
+
+                                                                        <TextBlock Grid.Column="1" Text="{x:Bind Text}"
+                                                                                   FontSize="13" LineHeight="21"
+                                                                                   TextWrapping="Wrap"
+                                                                                   IsTextSelectionEnabled="True"
+                                                                                   Opacity="{x:Bind Opacity}" />
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
+                                VerticalAlignment="Center" Visibility="Collapsed">
+                        <ProgressRing x:Name="LoadingRing" IsActive="True" Width="34" Height="34"
+                                      HorizontalAlignment="Center" />
+                        <TextBlock Text="正在从更新仓库读取发布说明。" FontSize="12" Opacity="0.7"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="FallbackPanel" Spacing="10" Visibility="Collapsed"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE81C;" FontSize="32" Opacity="0.45" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="FallbackText" MaxWidth="420" TextAlignment="Center"
+                                   TextWrapping="Wrap" FontSize="12" Opacity="0.7" />
+                    </StackPanel>
                 </Grid>
             </Grid>
         </Grid>

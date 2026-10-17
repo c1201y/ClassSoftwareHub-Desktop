@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.SystemRepairPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:services="using:ClassSoftwareHub.Desktop.Services">
+
+    <!--
+      系统修复（1.2.0 第二批第二条，Nick 2026-10-16 定：**不建还原点，改为执行前二次确认**）。
+
+      ⛔⛔ 这个页面只有**预设任务卡**，⛔ 没有命令输入框 —— 定位是"系统出毛病了修一下"，
+         不是"给个终端"。放开输入等于把风险全推给用户。
+
+      ⛔ 因为不建还原点，那道确认框就是**唯一的安全闸**，所以它不是一句"确定吗"：
+         具体命令、会发生什么、耗时、要不要授权全摆在同一屏（见 code-behind 的 ConfirmAsync）。
+
+      两态：卡片列表 ↔ 运行中（同一页靠 Visibility 换，与「应用卸载」页残留态一个做法）。
+
+      ⚠️ 版式沿用本项目的通用骨架：三列 24 / * / 24、内容列自身 MaxWidth="960"、
+         间距 24,36,24,44。⛔ 行模板里 `x:Bind` 的属性名别跟页面上的 `x:Name` 撞
+         （撞了 XamlCompiler 只报壳错误 WMC9999，没有行号）。
+    -->
+    <Page.Resources>
+        <!-- 标题行的图标按钮。⚠️ 八行 Setter **照抄**而不是跨文件 `BasedOn`：
+             跨文件 BasedOn 会让 XAML 编译器在代码生成阶段崩掉（见 AppData 页文件头）。 -->
+        <Style x:Key="RowMoreButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- 任务卡：照搬首页「快速开始」那套外观（CshNavCardStyle），只是多一行灰色元信息 -->
+        <DataTemplate x:Key="TaskCardTemplate" x:DataType="services:RepairTask">
+            <Border Style="{StaticResource CshNavCardStyle}"
+                    PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                    Tapped="Card_Tapped">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="20" VerticalAlignment="Center" />
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="{x:Bind Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind Desc}" FontSize="12" Opacity="0.78"
+                                   MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind Meta}" FontSize="11" Opacity="0.55"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="12" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（Core/WheelRelay.cs）：两侧留白也要参与命中测试 -->
+    <Grid Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" MaxWidth="960" RowSpacing="10" Margin="0,36,0,44">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- ── 标题行 ── -->
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="系统修复" FontSize="28" FontWeight="Bold" />
+                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <FontIcon Glyph="&#xEA80;" FontSize="11"
+                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                <TextBlock Text="实验性功能" FontSize="12"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <TextBlock x:Name="CountLine" Text="" FontSize="12" Opacity="0.65"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <Button x:Name="AboutButton" Grid.Column="1" Click="About_Click"
+                        Style="{StaticResource RowMoreButtonStyle}"
+                        VerticalAlignment="Top" Margin="0,4,0,0"
+                        AutomationProperties.Name="说明"
+                        ToolTipService.ToolTip="这些任务到底是什么、为什么都要管理员">
+                    <FontIcon Glyph="&#xE946;" FontSize="15" />
+                </Button>
+            </Grid>
+
+            <!-- ── 常驻风险提示 ──
+                 ⛔ 规约：会改动系统的功能一律常驻提示、不给关（Nick 2026-10-15 定）。
+                 话要说准：这七条里有几条是**只读扫描**，不是全部都危险 —— 提醒里点明这一点。 -->
+            <InfoBar x:Name="RiskBar" Grid.Row="1"
+                     Severity="Error" IsOpen="True" IsClosable="False"
+                     Title="这些操作会改动系统"
+                     Message="每条任务执行前都会再确认一次，并把将要执行的命令原样列出；运行中可以随时中止。中止只是停下命令，不保证把已经做出的改动回滚。" />
+
+            <!-- ══ 内容区：两态 ══ -->
+            <Grid Grid.Row="2">
+
+                <!-- ── 态一：任务卡列表 ── -->
+                <Grid x:Name="CardArea">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  VerticalScrollMode="Auto" HorizontalScrollMode="Disabled">
+                        <Grid ColumnSpacing="8" Padding="0,2,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- ⚠️ 两列手写（首页同款）：卡片宽度跟着列宽走，窗口再窄也不会掉成单列。
+                                 ⛔ 别改成 GridView + 运行时算 ItemWidth（窄窗口下不可靠，实验性功能页踩过）。 -->
+                            <ItemsControl x:Name="CardColumnLeft" Grid.Column="0"
+                                          ItemTemplate="{StaticResource TaskCardTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+
+                            <ItemsControl x:Name="CardColumnRight" Grid.Column="1"
+                                          ItemTemplate="{StaticResource TaskCardTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- ── 态二：运行中 ── -->
+                <Grid x:Name="RunArea" Visibility="Collapsed" RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 头部：图标 + 名称 + 状态行 | 右侧动作 -->
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon x:Name="RunIcon" Glyph="&#xE9F3;" FontSize="22"
+                                  VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock x:Name="RunTitle" FontSize="18" FontWeight="Bold" />
+                            <TextBlock x:Name="RunStatus" FontSize="12" Opacity="0.7"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <Button x:Name="StopButton" Grid.Column="2" Content="中止任务"
+                                Click="Stop_Click" VerticalAlignment="Center" />
+
+                        <Button x:Name="BackButton" Grid.Column="3" Content="返回任务列表"
+                                Click="Back_Click" VerticalAlignment="Center" IsEnabled="False" />
+                    </Grid>
+
+                    <!-- 进度：拿不到百分比时切成不确定态（命令不一定都会报进度） -->
+                    <ProgressBar x:Name="RunProgress" Grid.Row="1" Height="4"
+                                 Minimum="0" Maximum="100" Value="0" IsIndeterminate="True" />
+
+                    <!-- 将要执行的命令原样列出 —— 透明度是这一页安全感的来源 -->
+                    <TextBlock x:Name="RunCommand" Grid.Row="2" FontSize="11.5" Opacity="0.6"
+                               FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+
+                    <!-- 输出面板：标准只读 TextBox（能选中复制），等宽字体 -->
+                    <TextBox x:Name="OutputBox" Grid.Row="3"
+                             IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                             IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                             FontFamily="Consolas" FontSize="12"
+                             Padding="12,10"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             AutomationProperties.Name="命令输出" />
+
+                    <!-- 结束后的结论行 -->
+                    <InfoBar x:Name="ResultBar" Grid.Row="4"
+                             Severity="Success" IsOpen="False" IsClosable="False" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

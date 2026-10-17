@@ -28,8 +28,13 @@
         <DataTemplate x:Key="QuickLinkNormal">
             <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
-                              Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95" />
+                    <Grid Height="24">
+                        <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95"
+                                  Visibility="{Binding IconSvg, Converter={StaticResource NotNullToCollapsed}}" />
+                        <Image Source="{Binding IconSource}" Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Visibility="{Binding IconSource, Converter={StaticResource NullToCollapsed}}" />
+                    </Grid>
                     <TextBlock Text="{Binding Name}" FontSize="12" HorizontalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 </StackPanel>

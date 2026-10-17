@@ -16,7 +16,9 @@
 ;  设计要点：
 ;   · 默认装到 %LOCALAPPDATA%\Programs\ClassSoftwareHub（免管理员），但**允许用户改路径**
 ;   · AppId 固定 → 升级/回滚都走「原地安装」，用户之前选的目录会被沿用
-;   · 静默升级参数（更新器用的）：/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /TASKS="desktopicon"
+;   · 静默升级参数（更新器用的）：/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS
+;     ⚠️ 不再硬塞 /TASKS="desktopicon"：桌面图标按「升级时桌面上是否还留着旧图标」决定
+;        （见 UpdateService.RunInstaller）；交互式重跑安装包时，[Code] 的 InitializeWizard 也会按同一逻辑预填「附加任务」页。
 ;   · 用户数据在 %LOCALAPPDATA%\ClassSoftwareHub（设置/内容缓存/下载的更新包），跟程序目录分开，
 ;     卸载程序不会碰它
 ; ══════════════════════════════════════════════════════════════════════
@@ -114,6 +116,8 @@ const
   WebView2Bootstrapper = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703';
   // WebView2 运行时在注册表里的固定 GUID
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  // 本应用 AppId（与 [Setup] 里的 AppId 一字不差；用于判断是不是升级、找卸载键）
+  AppIdGuid = '{7A2C4D18-9F31-4C6B-8E5A-2D0B7F4A1C93}';
 
 /// <summary>应用的单实例 Mutex 还在不在（在 = 旧版本还跑着）。</summary>
 function AppIsRunning(): Boolean;
@@ -294,4 +298,31 @@ begin
     if Choice = IDYES then
       TryInstallWebView2();
   end;
+end;
+
+// 「附加任务」页里「创建桌面快捷方式」的默认勾选状态：
+//   · 首次安装 → 默认勾上（用户可自行取消）；
+//   · 升级 → 尊重用户当前选择：桌面上还留着旧图标就勾上保留它，
+//            用户之前删了就别再自动建回来（2026-10-17 Nick 反馈的 bug）。
+// ⚠️ 静默升级（更新器）的 /TASKS 由 UpdateService 按同一逻辑给出，这里主要管交互式重跑时的预填；
+//    WizardSelectTasks 在向导起始阶段调用，对静默安装同样生效（静默不显示该页，以程序设定为准）。
+procedure InitializeWizard();
+var
+  IsUpdate, WantIcon: Boolean;
+  UninstKey: String;
+begin
+  UninstKey := AppIdGuid + '_is1';
+  IsUpdate :=
+    RegKeyExists(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + UninstKey) or
+    RegKeyExists(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + UninstKey);
+
+  if not IsUpdate then
+    WantIcon := True   // 首次安装：默认创建桌面图标（用户可取消）
+  else
+    WantIcon := FileExists(ExpandConstant('{autodesktop}\{#AppName}.lnk')); // 升级：按现状保留
+
+  if WantIcon then
+    WizardSelectTasks('desktopicon')
+  else
+    WizardSelectTasks(''); // 当前只有 desktopicon 这一个任务；清空即不勾选它
 end;

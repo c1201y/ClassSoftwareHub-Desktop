@@ -5,10 +5,12 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Services.Updating;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
@@ -49,6 +51,19 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
+
+        // 主题一切（浅色 ⇄ 深色）就把 SVG 快捷图标重染成对应颜色
+        ActualThemeChanged += (_, _) => ApplyQuickLinkIcons();
+    }
+
+    /// <summary>给带 SVG 的快捷入口按当前主题色染图标；主题一切就重染（浅色/深色自适应）。</summary>
+    private void ApplyQuickLinkIcons()
+    {
+        if (SettingsQuickGrid.ItemsSource is not List<Core.QuickLink> links) return;
+        var color = ((SolidColorBrush)ThemeBrush.Get(this, "TextFillColorPrimaryBrush")).Color;
+        foreach (var link in links)
+            if (!string.IsNullOrEmpty(link.IconSvg))
+                link.IconSource = QuickLinkIconLoader.GetIcon(link.IconSvg, color);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -112,6 +127,7 @@ public sealed partial class SettingsPage : Page
         RefreshContentInfo();
             BuildAboutHeader();
             SettingsQuickGrid.ItemsSource = Core.QuickLinks.Build(App.Content.Ui);
+            ApplyQuickLinkIcons();
             _loading = false;
 
         // 「版本记录」固定折叠：里面是十几条运行记录，摊开会把设置页拉得极长。

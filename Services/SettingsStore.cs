@@ -275,6 +275,15 @@ public sealed class AppSettings
     public bool WebTransparent { get; set; } = true;
     public int WindowWidth { get; set; } = 1280;
     public int WindowHeight { get; set; } = 820;
+
+    /// <summary>还原态时窗口左上角的 X（-32768 = 没存过，交给系统摆）。</summary>
+    public int WindowLeft { get; set; } = int.MinValue;
+
+    /// <summary>还原态时窗口左上角的 Y（-32768 = 没存过，交给系统摆）。</summary>
+    public int WindowTop { get; set; } = int.MinValue;
+
+    /// <summary>关掉时是不是最大化（下一次启动照样铺满）。</summary>
+    public bool WindowMaximized { get; set; }
     public double WebZoom { get; set; } = 1.0;
     public string LastUrl { get; set; } = "";
 

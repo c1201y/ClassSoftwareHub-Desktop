@@ -253,6 +253,35 @@
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
                         <!--
+                          开机启动项：2026-10-16 加（1.2.0 第二批第一条，Nick：「可以试试」）。
+                          ⚠️ 为啥塞实验性：它改动的是**系统启动配置**，而且扫描口径有已知盲区 ——
+                             只覆盖注册表 Run 与启动文件夹这两大类，服务、计划任务、Group Policy 启动脚本
+                             都不在范围内。用户若把它当成"这台机器上所有自启项"就会漏判。
+                          ⚠️ 关掉一项写的是 Windows 自己的 StartupApproved 状态位（与任务管理器同一套），
+                             ⛔ 不删注册表值、不移动文件 —— 不可逆操作一律不做，见 Services/StartupItems.cs。
+                          ⚠️ 图标 E945（闪电）：E7E8（电源）被「程序专杀」用了，重复会分不清；
+                             改之前先过 glyphs 脚本渲图看有没有字形（ED 那段的坑见 MEMORY §6）。
+                        -->
+                        <NavigationViewItem Content="开机启动项" Tag="startup">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE945;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
+                          系统修复：2026-10-16 加（1.2.0 第二批第二条）。
+                          ⚠️ 为啥塞实验性：7 张卡全是**改系统**的命令（系统文件 / 组件存储 / 网络栈 / 系统服务），
+                             而且"哪张卡该在什么情况下用"需要使用者自己判断 —— 它不是一键体检。
+                             条目本身是 Windows 自带命令，技术上没有不确定性，风险全在"用错场合"。
+                          ⛔ 刻意**不做命令输入框**，只有预设卡；确认框（唯一安全闸）里原样列出将要执行的命令。
+                          ⚠️ 图标 E7EF（盾牌）：语义＝修复/防护；改之前先过 glyphs 脚本渲图看有没有字形
+                             （ED 那段的坑见 MEMORY §6）。卡内 7 个图标也各验过、彼此不撞脸。
+                        -->
+                        <NavigationViewItem Content="系统修复" Tag="repair">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE7EF;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
                           自动关机：2026-10-12 转正搬去「内置工具」分组 —— 子项由 ToolCatalog 自动生成，
                           这里不能再手写一条（否则导航里会出现两个同名项）。见 Data/ToolDef.cs。
                         -->

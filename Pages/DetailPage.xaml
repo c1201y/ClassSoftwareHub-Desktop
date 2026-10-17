@@ -6,151 +6,248 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
-    <!-- 和首页 / 设置页 / 软件下载页同一套版式：内容钉在中间 960 宽 -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <Grid Margin="24,20,24,44">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="24" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="24" />
-        </Grid.ColumnDefinitions>
+    <!--
+      ⛔⛔ 版式照 Microsoft Store（Nick 2026-10-17 二次定稿）：
+      · 顶部色带**满宽铺到内容区边缘**、竖直渐变、下缘化到透明（没有可见的边），内文锁 960 与正文对齐；
+      · 色带上只留 图标 / 名称 / 标语 / 分类与版本，⛔ 不放下载按钮（下方有完整的下载通道列表）；
+      · 正文与右栏各自成块，段落之间留足空白 —— 上一版所有间距都紧贴，被指"拥挤"。
+      色带颜色由 Services/IconPalette 取自图标，取不到退回主题强调色。
+    -->
+    <Grid Background="Transparent">
+        <!-- ⛔⛔ HorizontalContentAlignment 必须写 Stretch：
+             ScrollViewer 默认让内容按"自身想要的大小"摆放，于是整块被压窄、左右边距一大一小，
+             色带也铺不满（实测右侧凭空多出 130px 空白）。 -->
+        <ScrollViewer x:Name="RootScroll" VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-        <Grid Grid.Column="1" MaxWidth="960">
-            <StackPanel Spacing="14">
+                <!-- ===== 色带底：满宽、贴顶、竖直渐变 ===== -->
+                <Border x:Name="Hero" Grid.Row="0" Opacity="0" />
 
-                    <!-- ===== 头部：图标 + 名称 + 标语 + 分类徽标 ===== -->
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <!-- 圆角 + 1:1 居中裁剪：固定 72×72 正方形，图标用 ImageBrush 填满、
-                             多出来的边从正中间裁掉（WinUI3 的 Border 会把背景/子内容一起裁圆角） -->
-                        <Border x:Name="IconBox" Width="72" Height="72" CornerRadius="14"
-                                VerticalAlignment="Top" HorizontalAlignment="Left">
-                            <Grid>
-                                <FontIcon x:Name="IconFallback" Glyph="&#xE7B8;" FontSize="30" Opacity="0.3"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                        <StackPanel Grid.Column="1" Spacing="6">
-                            <TextBlock x:Name="AppName" FontSize="26" FontWeight="Bold" TextWrapping="Wrap" />
-                            <TextBlock x:Name="AppTagline" FontSize="13" Opacity="0.75" TextWrapping="Wrap" />
-                            <Border x:Name="CategoryBadge" CornerRadius="10" Padding="8,3"
-                                    HorizontalAlignment="Left"
-                                    Background="{ThemeResource ControlFillColorSecondaryBrush}">
-                                <TextBlock x:Name="CategoryText" FontSize="12" Opacity="0.85" />
-                            </Border>
-                        </StackPanel>
-                    </Grid>
+                <!-- ===== 色带内文：与正文同宽（960）===== -->
+                <!-- ⛔ HorizontalAlignment 必须是 Stretch：写 Center 时 Grid 会缩到"内容宽度"再居中，
+                     结果是图标比正文明明偏右一大截（踩过）。Stretch + MaxWidth 才会满 960 居中。 -->
+                <Grid Grid.Row="0" MaxWidth="960" Margin="24,56,24,50"
+                      HorizontalAlignment="Stretch" ColumnSpacing="24">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-                    <!-- 小提示（数据里 notice 字段） -->
-                    <InfoBar x:Name="NoticeBar" Severity="Informational" IsOpen="False" IsClosable="False" />
-
-                    <!-- ===== 应用介绍 ===== -->
-                    <TextBlock x:Name="IntroTitle" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
-                    <TextBlock x:Name="AppDescription" TextWrapping="Wrap" LineHeight="24" Opacity="0.9" />
-
-                    <!-- ===== 详细信息（版本 / 体积 / 系统 / 官网 / GitHub） ===== -->
-                    <TextBlock x:Name="InfoTitle" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
-                    <Border Style="{StaticResource CshCardStyle}" Padding="16,14">
-                        <StackPanel x:Name="InfoList" Spacing="10" />
-                    </Border>
-
-                    <!-- ===== 下载 ===== -->
-                    <TextBlock x:Name="DownloadsTitle" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
-
-                    <!-- 应用商店入口（store 字段，或 downloads 里指向商店的那条） -->
-                    <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="4" Padding="16,14"
-                            Background="{ThemeResource AccentFillColorDefaultBrush}">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock x:Name="StoreTitle" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"
-                                           Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                                <TextBlock x:Name="StoreDesc" FontSize="12" TextWrapping="Wrap" Opacity="0.85"
-                                           Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                            </StackPanel>
-                            <Button x:Name="StoreButton" Grid.Column="1" VerticalAlignment="Center"
-                                    Click="Store_Click"
-                                    Background="Transparent"
-                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1" />
+                    <!-- 圆角 + 1:1 居中裁剪：图标用 ImageBrush 填满（Border 不裁剪子元素） -->
+                    <Border x:Name="IconBox" Width="92" Height="92" CornerRadius="18"
+                            VerticalAlignment="Top" HorizontalAlignment="Left">
+                        <Grid>
+                            <FontIcon x:Name="IconFallback" Glyph="&#xE7B8;" FontSize="36" Opacity="0.35"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Grid>
                     </Border>
 
-                    <TextBlock x:Name="StoreOnlyHint" Visibility="Collapsed" FontSize="12.5" Opacity="0.7"
-                               TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1" Spacing="13" VerticalAlignment="Top">
+                        <TextBlock x:Name="AppName" FontSize="32" FontWeight="Bold"
+                                   LineHeight="40" TextWrapping="Wrap" />
+                        <TextBlock x:Name="AppTagline" FontSize="14.5" Opacity="0.82"
+                                   LineHeight="21" TextWrapping="Wrap" />
 
-                    <!-- 下载项：平台 / 备注 / 体积 / 类型说明（仅跳转类）+ 校验值（点击复制） + 主按钮 + 加速下载 -->
-                    <ItemsControl x:Name="DownloadList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="data:DownloadItem">
-                                <Border Style="{StaticResource CshCardStyle}" Padding="16,12" Margin="0,0,0,8">
-                                    <Grid ColumnSpacing="12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="3">
-                                            <TextBlock Text="{x:Bind Platform}" FontWeight="Bold" TextWrapping="Wrap" />
-                                            <TextBlock Text="{x:Bind Note}" FontSize="12" Opacity="0.7"
-                                                       TextWrapping="Wrap" />
-                                            <TextBlock Text="{x:Bind Size}" FontSize="12" Opacity="0.7"
-                                                       TextWrapping="Wrap" />
-                                            <!-- 跳转类（网盘 / 官网下载页）才有的一行说明；文件直链整行收起。
-                                                 判据见 Data/DownloadLinkKind.cs，与站点 downloadLink.ts 同源 -->
-                                            <TextBlock Text="{x:Bind KindHint}"
-                                                       Visibility="{x:Bind KindHintVisibility}"
-                                                       FontSize="12" Opacity="0.7"
-                                                       TextWrapping="Wrap" />
-                                            <StackPanel Orientation="Horizontal" Spacing="8"
-                                                        HorizontalAlignment="Left">
-                                                <Button Content="{x:Bind HashChipText}" Tag="{x:Bind Hash}"
-                                                        Visibility="{x:Bind HashVisibility}"
-                                                        Click="CopyHash_Click"
-                                                        Padding="8,3" FontSize="11.5" Opacity="0.9"
-                                                        ToolTipService.ToolTip="{x:Bind Hash}" />
-                                                <Button Tag="{x:Bind Hash}" Visibility="{x:Bind HashVisibility}"
-                                                        Click="HashCheck_Click"
-                                                        Padding="8,3" FontSize="11.5" Opacity="0.9"
-                                                        ToolTipService.ToolTip="在「编码 / 哈希工具」中核对该校验值：选择下载的安装包后自动比对">
-                                                    <StackPanel Orientation="Horizontal" Spacing="5">
-                                                        <FontIcon Glyph="&#xE73E;" FontSize="11" />
-                                                        <TextBlock Text="校验" FontSize="11.5" />
+                        <!-- 分类徽标 + 版本·体积·系统，压成一行，不再各占一行 -->
+                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
+                            <Border x:Name="CategoryBadge" CornerRadius="10" Padding="9,3"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                <TextBlock x:Name="CategoryText" FontSize="11.5" Opacity="0.9" />
+                            </Border>
+                            <TextBlock x:Name="HeroMeta" FontSize="12" Opacity="0.62"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ===== 正文两栏 ===== -->
+                <Grid x:Name="BodyGrid" Grid.Row="1" MaxWidth="960" Margin="24,44,24,68"
+                      HorizontalAlignment="Stretch" ColumnSpacing="40">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="320" />
+                        <ColumnDefinition x:Name="RailCol" Width="300" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <!-- 小提示（数据里 notice 字段）。⛔ 默认 Collapsed：
+                             关着的 InfoBar 仍会占掉一排高度（约 32px），把「应用介绍」压低、
+                             跟右栏的「推荐应用」错开一大截。 -->
+                        <InfoBar x:Name="NoticeBar" Severity="Informational" IsOpen="False"
+                                 Visibility="Collapsed" IsClosable="False" Margin="0,0,0,26" />
+
+                        <!-- 应用介绍 -->
+                        <TextBlock x:Name="IntroTitle" FontSize="17" FontWeight="SemiBold"
+                                   Margin="0,0,0,14" />
+                        <TextBlock x:Name="AppDescription" TextWrapping="Wrap" FontSize="14"
+                                   LineHeight="27" Opacity="0.88" />
+
+                        <!-- 详细信息 -->
+                        <TextBlock x:Name="InfoTitle" FontSize="17" FontWeight="SemiBold"
+                                   Margin="0,54,0,6" />
+                        <!-- ⛔ 不再套灰色卡片（Nick：灰底很丑）。改成细分割线的纯文字行，跟商店的详情区做法一致。 -->
+                        <StackPanel x:Name="InfoList" Margin="0,6,0,0" />
+
+                        <!-- 下载通道 -->
+                        <TextBlock x:Name="DownloadsTitle" FontSize="17" FontWeight="SemiBold"
+                                   Margin="0,54,0,6" />
+
+                        <!-- 应用商店入口（store 字段，或 downloads 里指向商店的那条） -->
+                        <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="4" Padding="20,18"
+                                Background="{ThemeResource AccentFillColorDefaultBrush}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <TextBlock x:Name="StoreTitle" FontSize="15" FontWeight="Bold"
+                                               TextWrapping="Wrap"
+                                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                    <TextBlock x:Name="StoreDesc" FontSize="12" TextWrapping="Wrap" Opacity="0.85"
+                                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </StackPanel>
+                                <Button x:Name="StoreButton" Grid.Column="1" VerticalAlignment="Center"
+                                        Click="Store_Click"
+                                        Background="Transparent"
+                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock x:Name="StoreOnlyHint" Visibility="Collapsed" FontSize="12.5" Opacity="0.7"
+                                   Margin="0,12,0,0" TextWrapping="Wrap" />
+
+                        <!-- 下载项：平台 / 备注 / 体积 / 类型说明（仅跳转类）+ 校验值 + 主按钮 + 加速下载 -->
+                        <ItemsControl x:Name="DownloadList" Margin="0,14,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="data:DownloadItem">
+                                    <!-- ⛔ 不再用灰色卡片包一层：改成"行 + 底部细分割线"，靠留白分组。 -->
+                                    <Border Padding="0,22" Margin="0,0,0,2"
+                                            BorderThickness="0,0,0,1"
+                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                                        <Grid ColumnSpacing="20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="6">
+                                                <!-- 平台名与体积同一行（体积跟在名字后面），少一行就少一分松散 -->
+                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                    <TextBlock Text="{x:Bind Platform}" FontSize="14"
+                                                               FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{x:Bind Size}" FontSize="12.5" Opacity="0.55"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <TextBlock Text="{x:Bind Note}" FontSize="12.5" Opacity="0.65"
+                                                           TextWrapping="Wrap" />
+                                                <!-- 跳转类（网盘 / 官网下载页）才有的一行说明；文件直链整行收起。 -->
+                                                <TextBlock Text="{x:Bind KindHint}"
+                                                           Visibility="{x:Bind KindHintVisibility}"
+                                                           FontSize="12" Opacity="0.7"
+                                                           TextWrapping="Wrap" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8"
+                                                            HorizontalAlignment="Left" Margin="0,4,0,0">
+                                                    <Button Content="{x:Bind HashChipText}" Tag="{x:Bind Hash}"
+                                                            Visibility="{x:Bind HashVisibility}"
+                                                            Click="CopyHash_Click"
+                                                            Padding="8,3" FontSize="11.5" Opacity="0.9"
+                                                            ToolTipService.ToolTip="{x:Bind Hash}" />
+                                                    <Button Tag="{x:Bind Hash}" Visibility="{x:Bind HashVisibility}"
+                                                            Click="HashCheck_Click"
+                                                            Padding="8,3" FontSize="11.5" Opacity="0.9"
+                                                            ToolTipService.ToolTip="在「编码 / 哈希工具」中核对该校验值：选择下载的安装包后自动比对">
+                                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                                            <FontIcon Glyph="&#xE73E;" FontSize="11" />
+                                                            <TextBlock Text="校验" FontSize="11.5" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                <!-- 文案随链接类型变：直链写「下载」，网盘写「前往网盘」、
+                                                     官网下载页写「前往官网」（Data/DownloadLinkKind.cs） -->
+                                                <Button Content="{x:Bind ActionText}" Tag="{x:Bind Url}"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        Click="Download_Click" />
+                                                <Button Tag="{x:Bind Url}" Click="Mirror_Click"
+                                                        Visibility="{x:Bind MirrorVisibility}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <FontIcon Glyph="&#xE945;" FontSize="12" />
+                                                        <TextBlock Text="加速下载" />
                                                     </StackPanel>
                                                 </Button>
                                             </StackPanel>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
-                                                    VerticalAlignment="Center">
-                                            <!-- 文案随链接类型变：直链写「下载」，网盘写「前往网盘」、
-                                                 官网下载页写「前往官网」（Data/DownloadLinkKind.cs） -->
-                                            <Button Content="{x:Bind ActionText}" Tag="{x:Bind Url}"
-                                                    Style="{StaticResource AccentButtonStyle}"
-                                                    Click="Download_Click" />
-                                            <Button Tag="{x:Bind Url}" Click="Mirror_Click"
-                                                    Visibility="{x:Bind MirrorVisibility}">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <FontIcon Glyph="&#xE945;" FontSize="12" />
-                                                    <TextBlock Text="加速下载" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                    <!-- 数据问题（该软件的 JSON 有问题时会提示） -->
-                    <InfoBar x:Name="IssueBar" Severity="Warning" IsOpen="False" IsClosable="False" />
-                </StackPanel>
-        </Grid>
+                        <!-- 数据问题（该软件的 JSON 有问题时会提示） -->
+                        <InfoBar x:Name="IssueBar" Severity="Warning" IsOpen="False" IsClosable="False"
+                                 Margin="0,18,0,0" />
+                    </StackPanel>
+
+                    <!-- ===== 右栏：推荐应用 ===== -->
+                    <StackPanel x:Name="Rail" Grid.Column="1">
+                        <TextBlock Text="推荐应用" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+                        <ItemsControl x:Name="RecommendList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="data:SoftwareApp">
+                                    <!-- 名称 + **短简介**（不再用分类：Nick 2026-10-17 指定）。
+                                         简介优先 Tagline、退 Description，最多两行。 -->
+                                    <Button Click="Recommend_Click" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            Background="Transparent" BorderThickness="0"
+                                            Padding="0" MinHeight="0" CornerRadius="6">
+                                        <Grid ColumnSpacing="14" Padding="8,13">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Width="44" Height="44" CornerRadius="10"
+                                                    Background="{x:Bind IconBrush}">
+                                                <!-- ⛔ 购物袋只是「没有图标/还没加载完」的占位，
+                                                     图标一旦加载成功必须收起（绑 IconPlaceholder），
+                                                     否则会叠在真图标中间（GeoGebra 那个 bug）。 -->
+                                                <FontIcon Glyph="&#xE7B8;" FontSize="17" Opacity="0.35"
+                                                          Visibility="{x:Bind IconPlaceholder, Mode=OneWay}"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center" />
+                                            </Border>
+
+                                            <StackPanel Grid.Column="1" Spacing="3"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Name}" FontSize="13.5"
+                                                           FontWeight="SemiBold"
+                                                           TextWrapping="Wrap" MaxLines="2"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{x:Bind IntroText}" FontSize="11.5"
+                                                           Opacity="0.55"
+                                                           TextWrapping="Wrap" MaxLines="2"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock x:Name="RailEmpty" Visibility="Collapsed" FontSize="12" Opacity="0.55"
+                                   TextWrapping="Wrap" Text="暂无推荐应用。" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
     </Grid>
-    </ScrollViewer>
 </Page>

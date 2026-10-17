@@ -3,7 +3,8 @@
     x:Class="ClassSoftwareHub.Desktop.Pages.WelcomePage"
     NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
     <Page.Resources>
         <!-- 快捷入口模板：颜色全走 {ThemeResource}，浅色/深色自己会变。
@@ -12,8 +13,13 @@
         <DataTemplate x:Key="QuickLinkNormal">
             <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center"
-                              Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95" />
+                    <Grid Height="24">
+                        <FontIcon Glyph="{Binding Glyph}" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.95"
+                                  Visibility="{Binding IconSvg, Converter={StaticResource NotNullToCollapsed}}" />
+                        <Image Source="{Binding IconSource}" Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Visibility="{Binding IconSource, Converter={StaticResource NullToCollapsed}}" />
+                    </Grid>
                     <TextBlock Text="{Binding Name}" FontSize="14" HorizontalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 </StackPanel>
@@ -81,7 +87,7 @@
             <TextBlock Text="ClassSoftwareHub - Desktop" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" />
 
             <!-- 「已收录 XX 款软件」原来就挂在大标题下面这一行。2026-10-07 Nick 说位置太隐蔽，
-                 已**整行挪进**「设置」卡片下面那条 InfoBar（见 CollectedBar），和「今日新增」住一起。
+                 已**整行挪进**「设置」卡片下面那条 InfoBar（见 CollectedBar），和「过去48小时收录」住一起。
                  ⛔ 别再往大标题底下补回任何数字行。 -->
 
             <!-- ⚠️ 这里原来还有一行站点名副标题（HomeTitleText，内容＝"电教委员常用软件下载站"），
@@ -101,18 +107,19 @@
                     <Image x:Name="Banner" Height="140" Stretch="Uniform" />
                 </Border>
 
+                <!-- 版本号 + 应用代号：**上下两行、都靠左**（Nick 2026-10-17）。
+                     ⛔ 原来是一个在左、一个贴右端，窗口一窄两者就在中间叠成一团（实测确实重合）。
+                     ⚠️ 别再往代号上面补「代号」两个字 —— 只要英文代号本身（2026-10-06 定的）。
+                     ⚠️ 别再把它挪回右端对齐。 -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="2" HorizontalAlignment="Left">
                     <!-- 只显示**软件自己**的版本。以前这行下面还挂着"网站版本：xxx"小字，
                          把软件版本陪衬成网站版本的附属品 —— 软件已经是独立发布的东西了，
                          没必要再摆出依附的样子，那一行已删（2026-09-26）。 -->
-                    <TextBlock x:Name="ShellVersionText" FontSize="28" FontWeight="Bold" />
-                </StackPanel>
-
-                <!-- 应用代号：与左上角的版本号同一水平线、贴右端（左右各占一头，不打架）。
-                     ⚠️ 别再往它上面补「代号」两个字 —— Nick 2026-10-06 说那行中文莫名其妙，只要英文代号本身。 -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Right">
+                    <TextBlock x:Name="ShellVersionText" FontSize="28" FontWeight="Bold"
+                               TextWrapping="Wrap" />
                     <TextBlock x:Name="CodeNameText" Text="Synesthesia" FontSize="28" FontWeight="Bold"
-                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
 
@@ -121,6 +128,43 @@
                  版本状态文案改在「查看更新内容」那张卡上显示，卡片自带的 banner 缩略图一并取消。
                  ⚠️ 状态逻辑没有删！还活在 code-behind 的 RefreshUpdateCard() 里，
                     只是目标元素从 UpdateCard* 换成了 ChangelogCardTitle / ChangelogCardSubtitle。 -->
+
+            <!-- ===== 推荐应用（2026-10-17 重做成 Store「精选实用软件」样式）=====
+                 一排整卡缓慢向左匀速滚动、无缝循环。每张卡是一整块圆角卡：
+                 上半 = 图标放大 + 亚克力模糊当底、中央叠圆角清晰图标；
+                 下半 = 加粗名称 + 一句短简介。鼠标悬停暂停，点卡片进详情页。
+                 ⚠️ 位置在「快速开始」标题正上方（Nick 2026-10-17 指定）。
+                 ⚠️ 卡片在 code-behind 的 BuildRecommendations() 里生成（要复制一份做无缝循环，
+                    用不到 DataTemplate）；视口裁剪靠 Clip，见 LayoutRecommend()。 -->
+            <Grid x:Name="RecommendSection" Visibility="Collapsed" Margin="0,22,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="推荐应用" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="换一批" Click="Recommend_Reroll"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="Transparent" BorderThickness="0" Padding="8,2"
+                            FontSize="12" Opacity="0.7" />
+                </Grid>
+
+                <Border Grid.Row="1" x:Name="RecommendViewport" HorizontalAlignment="Stretch"
+                        MaxWidth="960" VerticalAlignment="Top" Background="Transparent"
+                        PointerEntered="Recommend_PointerEntered" PointerExited="Recommend_PointerExited">
+                    <StackPanel x:Name="RecommendStrip" Orientation="Horizontal" Spacing="12"
+                                HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <StackPanel.RenderTransform>
+                            <TranslateTransform x:Name="RecommendTransform" />
+                        </StackPanel.RenderTransform>
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <TextBlock Text="快速开始" FontSize="20" FontWeight="Bold" Margin="0,20,0,4" />
 
@@ -374,16 +418,19 @@
 
             <!-- ===== 收录情况（InfoBar，2026-10-07 第二版）=====
                  Nick：「把已收录 87 款软件也移到 InfoBar」「使用内置提示的组件，加在首页的那个设置卡片的下面」。
-                 ⇒ 「已收录」和「今日新增」现在**同住这一条**，贴在**设置卡片正下方**、快捷入口之上。
+                 ⇒ 「已收录」和「过去48小时收录」现在**同住这一条**，贴在**设置卡片正下方**、快捷入口之上。
                  标题 = 已收录 N 款软件（常驻：只要清单同步下来就显示）；
-                 正文 = 今日新增 N 款：具体是哪几款（只有算出 >0 时才有，平时是空串）。
+                 正文(Message) = 过去48小时收录 N 款：具体是哪几款（只有算出 >0 时才有，平时是空串）。
                  ⚠️ IsClosable=False —— 这是常驻信息，关掉就没地方看数字了。
                  ⚠️ 默认 IsOpen=False，开不开由 code-behind 的 RefreshCollectedCount() 按"清单到没到"决定。
-                 ⛔ 不摆「今日新增 0 款」这种占位。 -->
+                 ⛔ 不摆「过去48小时收录 0 款」这种占位。
+                 ✅ 长文本走 Message（原生即支持自动换行 + 卡片随内容撑高）；不要塞进 Content（会被裁切）。 -->
             <InfoBar x:Name="CollectedBar" IsOpen="False" IsClosable="False"
                      Severity="Informational" Margin="0,4,0,0" />
 
-            <!-- ===== 一行快捷入口：图标在上、文字在下（不用卡片、不加标题） ===== -->
+            <!-- ===== 一行快捷入口：图标在上、文字在下（不用卡片、不加标题） =====
+                 ⚠️ 五颗必须在**一行内**：窗口变窄时压缩格宽（code-behind 的 FitQuickRow 按可用宽度重算
+                    ItemWidth，上限 192、下限 104），而不是折成两行（Nick 2026-10-17）。 -->
             <GridView x:Name="QuickGrid" Margin="0,14,0,0" Padding="0" SelectionMode="None"
                       IsItemClickEnabled="True" ItemClick="Quick_ItemClick"
                       ItemTemplate="{StaticResource QuickLinkNormal}"

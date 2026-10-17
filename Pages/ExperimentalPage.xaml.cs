@@ -49,6 +49,18 @@ public sealed partial class ExperimentalPage : Page
             Desc = "先看清是哪些文件夹在占地方，再把能安全清理的缓存挑出来",
             Glyph = "\uE8B7", Tag = "appdata"
         },
+        new ExperimentalFeature
+        {
+            Id = "startup", Name = "开机启动项",
+            Desc = "查看开机时会自动启动的程序，并逐个关掉",
+            Glyph = "\uE945", Tag = "startup"
+        },
+        new ExperimentalFeature
+        {
+            Id = "repair", Name = "系统修复",
+            Desc = "用 Windows 自带命令修复系统文件、组件存储与网络",
+            Glyph = "\uE7EF", Tag = "repair"
+        },
         // ⚠️ 原来是四项，第三项是「虚拟键盘」—— 该功能 2026-10-09 整体下线，卡片一并删除
         //    （导航分组里的子项、NavigateTagCore 的 case 也同步删了）。
         // ⚠️「自动关机」2026-10-12 转正搬去「内置工具」（Nick 定）——

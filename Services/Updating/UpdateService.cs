@@ -484,10 +484,16 @@ public sealed class UpdateService
             return;
         }
 
-        // Inno Setup 静默参数：/SP- 不显示"准备安装"提示，/CLOSEAPPLICATIONS 自动关掉占用的应用，
-        // /TASKS="desktopicon" 保证升级后桌面快捷方式还在
-        const string installerArgs =
-            "/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES /TASKS=\"desktopicon\"";
+        // Inno Setup 静默参数：/SP- 不显示"准备安装"提示，/CLOSEAPPLICATIONS 自动关掉占用的应用。
+        // ⚠️ 桌面快捷方式（desktopicon 任务）**不再强制勾选**：升级时尊重用户当前的选择 ——
+        //   桌面上还留着旧图标就带上 /TASKS="desktopicon" 保留它；用户之前删过就别再建回来。
+        //   （手动重跑安装包走交互式「附加任务」页时，.iss 的 InitializeWizard 会按同一逻辑预填。）
+        var desktopLnk = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            "ClassSoftwareHub.lnk");
+        var tasksArg = File.Exists(desktopLnk) ? "/TASKS=\"desktopicon\"" : "";
+        var installerArgs =
+            $"/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES {tasksArg}".Trim();
 
         // ⚠️ 计时用 ping 而不是 timeout：timeout 在没有控制台（CreateNoWindow=true）时会报
         //    "输入重定向不受支持，立即退出"，等于根本没等。

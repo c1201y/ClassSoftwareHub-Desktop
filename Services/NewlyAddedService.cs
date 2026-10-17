@@ -9,25 +9,25 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>「今日新增」的结果。拿不到数据时整个返回 <c>null</c>（不显示 0，免得像坏了）。</summary>
+/// <summary>「近期新增」的结果。拿不到数据时整个返回 <c>null</c>（不显示 0，免得像坏了）。</summary>
 public sealed record NewlyAddedResult(IReadOnlyList<string> Ids)
 {
     public int Count => Ids.Count;
 }
 
 /// <summary>
-/// 今天新收录了几款软件 —— 拿「今天 0 点那一刻的仓库清单」和「本机现在的清单」做差集。
+/// 最近一段时间新收录了几款软件 —— 拿「窗口起点（now − window）那一刻的仓库清单」和「本机现在的清单」做差集。
 ///
 /// 为什么只能这么算：软件 json 里**没有任何日期字段**（id / name / icon / category / sort… 全看过了），
 /// 「回声洞」字条只有 <c>{"text"}</c>，「提交 / 反馈」只在服务端 —— 三个来源里只有**软件**这一条
 /// 能从 git 的历史里问出时间，而且它不在文件内容里。
 ///
 /// 做法（固定 2 个请求，与当天提交数无关；未登录的 GitHub 接口只有 60 次/小时）：
-///   ① <c>commits?until=&lt;本地今天 0 点&gt;&amp;path=软件数据/apps&amp;per_page=1</c>
+///   ① <c>commits?until=&lt;(now − window)&gt;&amp;path=软件数据/apps&amp;per_page=1</c>
 ///      —— apps 目录在那一刻的最后一个版本（拿它的 sha）。
 ///   ② <c>git/trees/{sha}?recursive=1</c> —— 那个版本的完整文件清单，筛出 apps 下的软件 id。
 ///   ③ 拿本机 content/apps 的清单（＝同步链路拉下来的 head 那一版，不必再问 GitHub）减掉 ②。
-///   ④ 结果按「日期 + 仓库 sha」缓存到内容目录的 <c>.newlyadded.json</c>，同一天同一版本只算一次。
+///   ④ 结果按「窗口锚点 + 仓库 sha」缓存到内容目录的 <c>.newlyadded.json</c>，同一锚点同一版本只算一次。
 ///
 /// ⛔⛔ 走过的两条弯路，别再回去：
 ///   · <c>commits?since=…&amp;path=…</c> 再逐个取 commit 详情收 <c>status=="added"</c> ——
@@ -37,7 +37,7 @@ public sealed record NewlyAddedResult(IReadOnlyList<string> Ids)
 ///     今天被改一下，同样报 <c>added</c>，会算成"今天新增"。
 ///   ⇒ tree 差集既省（固定 2 次）又准（比的是"那一刻存在不存在"）。
 ///
-/// ⚠️ 口径是**净新增**：今天加了又被删掉的不算，删了又加回来的也不算（那一刻它本来就在）。
+/// ⚠️ 口径是**净新增**：窗口里加了又被删掉的不算，删了又加回来的也不算（那一刻它本来就在）。
 /// ⚠️ 缓存文件名以 <c>.</c> 开头是刻意的 —— 同步的清理环节只删**不以点开头**的文件
 /// （见 <c>GithubContentSync.DeleteUnknownFiles</c>），放这儿不会被误删。
 ///
@@ -60,20 +60,21 @@ public static class NewlyAddedService
     private static string Repo =>
         $"repos/{ShellConfig.SiteRepoOwner}/{ShellConfig.SiteRepoName}";
 
-    /// <summary>取「今天新收录的软件」。算不出来返回 <c>null</c>。</summary>
-    public static async Task<NewlyAddedResult?> GetTodayAsync(CancellationToken ct = default)
+    /// <summary>取「窗口内新收录的软件」（调用方传 <c>TimeSpan.FromHours(48)</c> 即「过去48小时」）。算不出来返回 <c>null</c>。</summary>
+    public static async Task<NewlyAddedResult?> GetRecentAsync(TimeSpan window, CancellationToken ct = default)
     {
         await Gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var today = DateTime.Today.ToString("yyyy-MM-dd");
+            var anchor = DateTime.UtcNow;
             var head = ReadLocalHeadSha();
 
-            // ① 命中（内存 → 磁盘）：同一天 + 仓库 sha 没变 → 直接用，零请求
+            // ① 命中（内存 → 磁盘）：同一窗口锚点 + 仓库 sha 没变 → 直接用，零请求
             foreach (var entry in new[] { _memo, ReadCache() })
             {
-                if (entry is null || entry.Date != today) continue;
+                if (entry is null) continue;
                 if (head.Length > 0 && !string.Equals(entry.Head, head, StringComparison.OrdinalIgnoreCase)) continue;
+                if ((anchor - entry.Anchor) > window) continue;   // 缓存比窗口还老就废掉，重新算
                 _memo = entry;
                 return new NewlyAddedResult(entry.Ids);
             }
@@ -82,8 +83,8 @@ public static class NewlyAddedService
             var headIds = ReadLocalAppIds();
             if (headIds.Count == 0) return null;
 
-            // ③ 基准：本地今天 0 点之前，apps 目录的最后一次变更
-            var until = DateTime.Today.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            // ③ 基准：窗口起点（now − window）之前，apps 目录的最后一次变更
+            var until = anchor.Subtract(window).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
             var path = string.Join("/", AppsDirInRepo.Split('/').Select(Uri.EscapeDataString));
             var baseSha = ReadFirstSha(await GithubContentSync.GetApiTextAsync(
                 $"{Repo}/commits?until={until}&path={path}&per_page=1", ct).ConfigureAwait(false));
@@ -98,7 +99,7 @@ public static class NewlyAddedService
             // 清单被 GitHub 截断＝不完整，减出来的"新增"会是一堆假货 —— 宁可不报
             if (truncated)
             {
-                AppLog.Warning("ui", "今日新增：基准清单被 GitHub 截断，这次不显示");
+                AppLog.Warning("ui", "近期新增：基准清单被 GitHub 截断，这次不显示");
                 return null;
             }
 
@@ -106,12 +107,12 @@ public static class NewlyAddedService
                              .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                              .ToList();
 
-            var fresh = new CacheEntry(today, head, ids);
+            var fresh = new CacheEntry(anchor, head, ids);
             _memo = fresh;
             WriteCache(fresh);
 
             AppLog.Info("ui",
-                $"今日新增：{ids.Count} 款（{today}，基准 {(baseSha.Length >= 7 ? baseSha[..7] : baseSha)}，"
+                $"近期新增：{ids.Count} 款（窗口 {window.TotalHours:0} 小时，基准 {(baseSha.Length >= 7 ? baseSha[..7] : baseSha)}，"
                 + $"清单 {baseIds.Count} → {headIds.Count}）");
             return new NewlyAddedResult(ids);
         }
@@ -122,7 +123,7 @@ public static class NewlyAddedService
         catch (Exception ex)
         {
             // 拿不到就是拿不到 —— 调用方不显示这一句，而不是显示 0
-            AppLog.Warning("ui", "今日新增：算不出来，这次不显示（" + ex.Message + "）");
+            AppLog.Warning("ui", "近期新增：算不出来，这次不显示（" + ex.Message + "）");
             return null;
         }
         finally
@@ -209,7 +210,7 @@ public static class NewlyAddedService
 
     // ── 缓存 ────────────────────────────────────────────────────────
 
-    private sealed record CacheEntry(string Date, string Head, List<string> Ids);
+    private sealed record CacheEntry(DateTime Anchor, string Head, List<string> Ids);
 
     private static CacheEntry? ReadCache()
     {
@@ -220,16 +221,18 @@ public static class NewlyAddedService
             using var doc = JsonDocument.Parse(File.ReadAllText(CacheFile));
             var root = doc.RootElement;
 
-            var date = root.TryGetProperty("date", out var d) ? d.GetString() : null;
+            if (!root.TryGetProperty("anchor", out var a)
+                || !DateTime.TryParse(a.GetString(), null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var anchor))
+                return null;
             var head = root.TryGetProperty("head", out var h) ? h.GetString() : "";
-            if (string.IsNullOrEmpty(date)) return null;
 
             var ids = new List<string>();
             if (root.TryGetProperty("ids", out var arr) && arr.ValueKind == JsonValueKind.Array)
                 foreach (var item in arr.EnumerateArray())
                     if (item.GetString() is { } s) ids.Add(s);
 
-            return new CacheEntry(date, head ?? "", ids);
+            return new CacheEntry(anchor, head ?? "", ids);
         }
         catch { return null; }
     }
@@ -241,7 +244,7 @@ public static class NewlyAddedService
             Directory.CreateDirectory(ShellConfig.CachedContentDir);
             var json = JsonSerializer.Serialize(new Dictionary<string, object>
             {
-                ["date"] = entry.Date,
+                ["anchor"] = entry.Anchor.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                 ["head"] = entry.Head,
                 ["ids"] = entry.Ids,
             });

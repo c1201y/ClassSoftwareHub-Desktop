@@ -163,6 +163,8 @@ public sealed partial class SoftwarePage : Page
         TileGrid.ItemsSource = list;
         CompactGrid.ItemsSource = list;
 
+        WarmPalette(list);
+
         TitleText.Text = _category.Length == 0
             ? (_keyword.Length == 0 ? "软件下载" : $"搜索：{_keyword}")
             : App.Content.CategoryName(_category);
@@ -170,6 +172,21 @@ public sealed partial class SoftwarePage : Page
         UpdateEmptyState(list.Count);
 
         _appliedKey = Fingerprint();   // 记下这次是按什么状态建的，下次同状态直接跳过
+    }
+
+    /// <summary>
+    /// 预热详情页色带要用的图标主色。
+    ///
+    /// ⛔⛔ 详情页不能"等页面画完再去取色"—— 那必然是先显示一种颜色、过一会儿跳成另一种。
+    /// 列表这里提前把前几十个算好（`IconPalette.Preload` 内部有缓存与去重，重复调用不重复下载）。
+    /// 只做首屏那几十个：再往后滚到的软件，用户点进去时图标早就加载过了，那时再算也来得及。
+    /// </summary>
+    private static void WarmPalette(List<SoftwareApp> list)
+    {
+        const int limit = 32;
+
+        for (var i = 0; i < list.Count && i < limit; i++)
+            Services.IconPalette.Preload(list[i].Icon);
     }
 
     /// <summary>
