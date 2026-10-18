@@ -5,6 +5,8 @@ using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
@@ -13,10 +15,14 @@ namespace ClassSoftwareHub.Desktop.Pages;
 public sealed partial class SoftwarePage : Page
 {
     private string _category = "";
+    /// <summary>
+    /// 关键词过滤链（2026-10-18 起**没有 UI 入口** —— 页内搜索框已删，顶部总搜索接手了）。
+    /// 刻意保留字段与 <see cref="Apply"/> 里的过滤：以后若要把"筛列表"接回顶部搜索，
+    /// 只需要给它赋值，不用再把整条链路重写一遍。当前恒为空串，行为等于不过滤。
+    /// </summary>
     private string _keyword = "";
     private string _view = "tile";          // tile | grid
     private bool _loading;
-    private readonly List<ToggleButton> _chips = new();
 
     /// <summary>
     /// 上一次真正重建列表时的「状态指纹」（分类|关键词|视图|内容包版本|内容来源）。
@@ -41,9 +47,16 @@ public sealed partial class SoftwarePage : Page
         base.OnNavigatedTo(e);
         _category = e.Parameter as string ?? "";
 
+        // 总闸关掉时入口卡整体隐藏（Nick 2026-10-18 定：不占位、不留灰块）。
+        // ⚠️ 必须每次导航都重读一次 —— 本页 NavigationCacheMode=Enabled 实例长驻，
+        //    用户去设置里开关一次再回来，页面不会重建，只在构造时读一次会一直是旧状态。
+        HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
         _view = App.Settings.Current.AppCardView == "grid" ? "grid" : "tile";
         _loading = true;
-        ViewChoice.SelectedIndex = _view == "grid" ? 1 : 0;
+        ViewPicker.SelectedIndex = _view == "grid" ? 1 : 0;
         _loading = false;
         UpdateView();
 
@@ -98,10 +111,10 @@ public sealed partial class SoftwarePage : Page
                        App.Content.Revision.ToString(), App.Content.Source);
 
     /// <summary>磁贴（3 列，带简介）/ 网格（5 列，紧凑）切换，选择会记进设置。</summary>
-    private void ViewChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void ViewPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
-        if (ViewChoice.SelectedItem is not RadioButton rb || rb.Tag is not string tag) return;
+        if (ViewPicker.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
 
         _view = tag == "grid" ? "grid" : "tile";
         App.Settings.Current.AppCardView = _view;
@@ -116,40 +129,52 @@ public sealed partial class SoftwarePage : Page
         CompactGrid.Visibility = tile ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    /// <summary>
+    /// 分类条（2026-10-18 换成系统 <see cref="SelectorBar"/>）。
+    /// ⚠️ 原来是一排自绘 ToggleButton + 横向 ScrollViewer：选中态要自己维护、
+    /// 键盘导航没有、滚动条还占一行。SelectorBar 自带下划线指示器与键盘操作。
+    /// </summary>
     private void BuildChips()
     {
-        Chips.Children.Clear();
-        _chips.Clear();
+        CategoryBar.Items.Clear();
 
-        AddChip("全部", "");
-        foreach (var c in App.Content.Categories)
-            AddChip(c.Name, c.Key);
+        CategoryBar.Items.Add(new SelectorBarItem
+        {
+            Text = $"全部 {App.Content.Apps.Count}",
+            Tag = "",
+        });
+
+        foreach (var category in App.Content.Categories)
+        {
+            CategoryBar.Items.Add(new SelectorBarItem
+            {
+                Text = $"{category.Name} {App.Content.CountInCategory(category.Key)}",
+                Tag = category.Key,
+            });
+        }
+
+        // 回填时不触发 Apply（否则每次切页都会重建一遍列表）
+        _loading = true;
+        try
+        {
+            CategoryBar.SelectedItem = CategoryBar.Items
+                .FirstOrDefault(i => (string?)i.Tag == _category);
+
+            if (CategoryBar.SelectedItem is null && CategoryBar.Items.Count > 0)
+                CategoryBar.SelectedItem = CategoryBar.Items[0];
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
-    private void AddChip(string text, string key)
+    private void CategoryBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        var chip = new ToggleButton
-        {
-            Content = key.Length == 0 ? $"{text} {App.Content.Apps.Count}" : $"{text} {App.Content.CountInCategory(key)}",
-            Tag = key,
-            IsChecked = key == _category,
-        };
-        chip.Click += (s, _) =>
-        {
-            _category = (string)((ToggleButton)s).Tag;
-            foreach (var other in _chips)
-                if (!ReferenceEquals(other, s)) other.IsChecked = false;
-            ((ToggleButton)s).IsChecked = true;
-            Apply();
-        };
-        _chips.Add(chip);
-        Chips.Children.Add(chip);
-    }
+        if (_loading) return;
+        if (sender.SelectedItem is not SelectorBarItem item) return;
 
-    private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
-    {
-        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
-        _keyword = sender.Text ?? "";
+        _category = item.Tag as string ?? "";
         Apply();
     }
 
@@ -296,4 +321,144 @@ public sealed partial class SoftwarePage : Page
     // 占位字形（购物袋）的显隐由 SoftwareApp.IconPlaceholder 驱动（见 Data/SoftwareApp.cs）：
     // 没图 / 加载中 / 加载失败都显示，加载成功才收掉。用属性 + INotifyPropertyChanged 而不是
     // Image 元素事件，是因为 GridView 回收容器时属性会重新求值，不会被上一次的状态卡住。
+
+    // ══════════════════════════════════════════════════════
+    //  Hub AI 入口与浮层（2026-10-18）
+    //  ⚠️ 现在**没有接模型**：发送只回一句占位。AiClient / 诊断采集都还没写，
+    //     这一版只为把形态定下来（尺寸、配色、展开位置），别当成能用。
+    // ══════════════════════════════════════════════════════
+
+    private void HubAiEntry_Click(object sender, RoutedEventArgs e) => ShowHubAiPanel(true);
+
+    private void HubAiClose_Click(object sender, RoutedEventArgs e) => ShowHubAiPanel(false);
+
+    /// <summary>
+    /// 浮层升到完整页（2026-10-18）。走 <c>Shell.NavigateTo</c> 而不是 <c>Frame.Navigate</c> ——
+    /// 后者只会换掉内容区，导航栏的选中态还停在「软件下载」，看着像点错了。
+    /// </summary>
+    private void HubAiExpand_Click(object sender, RoutedEventArgs e)
+    {
+        ShowHubAiPanel(false);
+        App.MainWindow?.Shell.NavigateTo("hubai");
+    }
+
+    /// <summary>浮层显隐。展开时把焦点给输入框 —— 用户点进来的目的就是打字。</summary>
+    /// <summary>
+    /// 浮窗显隐（2026-10-18 加动画）。
+    /// ⚠️ 原来是瞬间 Visibility 切换，弹出来很生硬（Nick：「有点生硬，能不能滑入滑出」）。
+    /// 现在：展开 = 从下往上滑 24px + 淡入；收起 = 反向，动画结束后才真正 Collapsed
+    /// （过早设 Collapsed 会让动画直接消失）。
+    /// </summary>
+    private void ShowHubAiPanel(bool show)
+    {
+        if (show)
+        {
+            HubAiPanel.Visibility = Visibility.Visible;
+
+            // ⚠️ 必须先摆到起点：DoubleAnimation 只给 To 时会从**当前值**动画过去，
+            //    不设起点就是 0→0，只剩淡入、看不出滑动。
+            HubAiPanelTransform.Y = 24;
+            HubAiPanel.Opacity = 0;
+
+            AnimatePanel(toY: 0, toOpacity: 1, durationMs: 240);
+            HubAiInput.Focus(FocusState.Programmatic);
+            return;
+        }
+
+        if (HubAiPanel.Visibility != Visibility.Visible) return;
+
+        AnimatePanel(toY: 24, toOpacity: 0, durationMs: 170,
+            onDone: () => HubAiPanel.Visibility = Visibility.Collapsed);
+    }
+
+    /// <summary>滑入滑出。⚠️ 位移与透明度都是**非合成动画**，必须开 EnableDependentAnimation 才会动。</summary>
+    private void AnimatePanel(double toY, double toOpacity, int durationMs, Action? onDone = null)
+    {
+        var slide = new DoubleAnimation
+        {
+            To = toY,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EasingFunction = new CubicEase
+            {
+                EasingMode = toOpacity > 0.5 ? EasingMode.EaseOut : EasingMode.EaseIn,
+            },
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(slide, HubAiPanelTransform);
+        Storyboard.SetTargetProperty(slide, "Y");
+
+        var fade = new DoubleAnimation
+        {
+            To = toOpacity,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(fade, HubAiPanel);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(slide);
+        storyboard.Children.Add(fade);
+
+        if (onDone is not null) storyboard.Completed += (_, _) => onDone();
+
+        storyboard.Begin();
+    }
+
+    private void HubAiSend_Click(object sender, RoutedEventArgs e) => SendHubAiMessage();
+
+    private void HubAiInput_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Enter) return;
+        e.Handled = true;
+        SendHubAiMessage();
+    }
+
+    /// <summary>
+    /// 浮层里发送 = 把问题交给完整页，不在浮层里做对话（2026-10-18）。
+    /// 完整页有历史、工具调用、推荐卡片与用量统计，这里再实现一套必然两边行为不一致。
+    /// </summary>
+    private void SendHubAiMessage()
+    {
+        var text = HubAiInput.Text?.Trim();
+        if (string.IsNullOrEmpty(text)) return;
+
+        HubAiInput.Text = string.Empty;
+        ShowHubAiPanel(false);
+
+        HubAiPage.PendingQuestion = text;
+        App.MainWindow?.Shell.NavigateTo("hubai");
+    }
+
+    /// <summary>
+    /// 造一条消息气泡。背景走系统的 <c>SubtleFillColorSecondaryBrush</c> 而不是 App.xaml 里那套
+    /// HubAi 资源 —— 代码里取主题字典的键很别扭（ThemeDictionaries 是延迟解析的），
+    /// 而这条气泡本来就该跟系统"次级填充"一致，不必另立品牌色。
+    /// </summary>
+    private static Border MakeBubble(string text, bool alignRight)
+    {
+        var bubble = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(12, 9, 12, 9),
+            MaxWidth = alignRight ? 310 : 320,
+            HorizontalAlignment = alignRight ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            Child = new TextBlock { Text = text, FontSize = 12.5, TextWrapping = TextWrapping.Wrap },
+        };
+
+        try
+        {
+            if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out var brush)
+                && brush is Brush b)
+            {
+                bubble.Background = b;
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("hubai", ex, "取气泡背景画刷");
+        }
+
+        return bubble;
+    }
 }

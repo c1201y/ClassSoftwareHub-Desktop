@@ -485,7 +485,7 @@ public sealed partial class WelcomePage : Page
             CornerRadius = new CornerRadius(RecommendCardRadius),
             // ⚠️ 整卡底色用**主题卡片面**，不跟图标色走 —— 下半文字区是一块统一的深色面（Store 就是这样），
             //    图标色只留在上半的模糊底里。主题画刷保证浅色主题下也不会白字配浅底。
-            Background = ThemeBrushOf("CardBackgroundFillColorDefaultBrush") ?? new SolidColorBrush(baseTint),
+            Background = ThemeBrushOf("CardBackgroundFillColorDefaultBrush"),
             BorderThickness = new Thickness(1),
             BorderBrush = ThemeBrushOf("CardStrokeColorDefaultBrush"),
         };
@@ -731,8 +731,14 @@ public sealed partial class WelcomePage : Page
     }
 
     /// <summary>安全取主题画刷：键不存在时返回 null（不抛 KeyNotFoundException）。</summary>
-    private static Brush? ThemeBrushOf(string key) =>
-        Application.Current.Resources.TryGetValue(key, out var v) ? v as Brush : null;
+    /// <summary>
+    /// 按**元素所在那棵树**的主题取画刷。
+    /// ⛔ 原来这里查的是 <c>Application.Current.Resources</c> —— 那个认的是应用级主题（跟着系统定死），
+    /// 和窗口自己的 RequestedTheme 不一致时（应用浅色 + 系统深色）会拿到反色的画刷，
+    /// 表现就是浅色首页上推荐卡片的字是白的（2026-10-18 Nick 截图指出）。
+    /// 传 null 也能工作：<see cref="ThemeBrush.IsDark"/> 会依次回退到主窗口与实际设置。
+    /// </summary>
+    private static Brush ThemeBrushOf(string key) => ThemeBrush.Get(null, key);
 
     /// <summary>短简介：优先一句话标语，其次长简介，最后退分类名。</summary>
     private static string IntroOf(SoftwareApp app)

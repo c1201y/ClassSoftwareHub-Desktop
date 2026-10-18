@@ -132,6 +132,13 @@ public sealed partial class SidebarLayoutPage : Page
     private bool _swapping;                 // ↑/↓ 的滑动动画正在进行（这段时间别再点）
     private bool _footerSync;               // 正在把设置刷进底排的那五个开关（此时 Toggled 是"回声"，别当用户拨的）
     private bool _toolSync;                 // 同上，但针对「常用工具」与「截图」那几张卡（开关 / 下拉的"回声"）
+
+    /// <summary>
+    /// 「展开面板高度」滑块的落盘防抖（2026-10-18）。拖动一次会连着触发几十次 ValueChanged，
+    /// 每次写一遍 settings.json 太浪费 —— 停手 350ms 再写。
+    /// ⚠️ 必须挂字段：局部变量会被 GC 回收，timer 就再也不 tick 了（踩过）。
+    /// </summary>
+    private DispatcherQueueTimer? _heightSaveTimer;
     private bool _edgeRebuild;              // 「贴在哪条边」下拉正在按模式重建选项（期间忽略 SelectionChanged）
     private double _pageScrollOffset;       // 拖起来之前的滚动位置（拖的时候要把整页滚动锁掉）
     private double _maxMove;                // 按下之后指针走过的最大直线距离（用来看"这是想滚还是想拖"）
@@ -320,6 +327,20 @@ public sealed partial class SidebarLayoutPage : Page
                 if (SidebarGapCombo.SelectedIndex != index) SidebarGapCombo.SelectedIndex = index;
             }
 
+            // 「展开面板高度」（2026-10-18）：滑块存的是整数百分比，存档里是 0.45~0.95 的小数。
+            // ⚠️ 老存档没这个键 ⇒ 反序列化后是字段默认 0.75，这里不必特判。
+            if (HeightRatioSlider is not null)
+            {
+                var raw = s.SidebarHeightRatio;
+                if (double.IsNaN(raw) || raw <= 0) raw = ToolSidebarWindow.DefaultHeightRatio;
+                var percent = Math.Clamp((int)Math.Round(raw * 100), 45, 95);
+                if (Math.Abs(HeightRatioSlider.Value - percent) > 0.01) HeightRatioSlider.Value = percent;
+                if (HeightRatioText is not null) HeightRatioText.Text = percent + "%";
+            }
+
+            // 「自适应高度」：开 = 按内容伸缩、比例当上限；关 = 锁死那个比例
+            if (HeightAutoSwitch is not null) HeightAutoSwitch.IsOn = s.SidebarHeightAuto;
+
             // 「动画方案」：拖放卡片的落位收尾用哪种（两种都保留，Nick 2026-10-01 定）
             _dropDip = DropDipScale(s.SidebarDropAnim);
             if (DropAnimCombo is not null)
@@ -331,6 +352,13 @@ public sealed partial class SidebarLayoutPage : Page
             // 「截图」那两张卡（2026-10-01 从设置页搬来，同一套"回声"处理）
             if (ShotAutoSaveSwitch is not null) ShotAutoSaveSwitch.IsOn = s.ShotAutoSave;
             if (ShotDirText is not null) RefreshShotDir();
+
+            // 「关机方式」：侧边栏「关机」按钮走滑动关机还是立即关机（2026-10-18 加）
+            if (ShutdownModeCombo is not null)
+            {
+                var index = App.Settings.Current.ShutdownMode == "shutdown" ? 1 : 0;
+                if (ShutdownModeCombo.SelectedIndex != index) ShutdownModeCombo.SelectedIndex = index;
+            }
         }
         finally { _toolSync = false; }
     }
@@ -2366,6 +2394,61 @@ public sealed partial class SidebarLayoutPage : Page
         _ => 3,
     };
 
+    /// <summary>
+    /// 「展开面板高度」滑块（2026-10-18 Nick：0.65→0.75 一直调不明白，索性把这个通道开放给用户）。
+    /// 值域 45%～95%（占工作区高度），默认 75%，步长 5%。
+    ///
+    /// ⚠️ 拖动是**连续触发**的：每一下都走 <c>ApplyHeightRatio()</c> 那条轻路（重新量尺寸 + 贴边），
+    ///    ⛔ 别用 <c>ApplySetting()</c> —— 那是整条重建（拆按钮、重排），拖动时会一路闪。
+    /// ⚠️ 落盘用防抖（停手 350ms 才写），见 <see cref="_heightSaveTimer"/>。
+    /// ⚠️ 只有**展开着**的边条能立刻看出变化；收起态那条抓手跟这个值无关。
+    /// ⚠️ 只在「工具排列模式 → 紧凑模式」（单列）下生效。
+    /// </summary>
+    private void HeightRatio_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_toolSync) return;
+
+        // XAML 已经把范围限在 45~95，这里再夹一道并吸到 5 的整数倍 ——
+        // 触摸拖动 / 键盘微调都可能停在非整档上，存档里留个 62.37 没意义
+        var percent = Math.Clamp(
+            (int)Math.Round(e.NewValue / 5.0, MidpointRounding.AwayFromZero) * 5, 45, 95);
+
+        App.Settings.Current.SidebarHeightRatio = percent / 100.0;
+        if (HeightRatioText is not null) HeightRatioText.Text = percent + "%";
+
+        if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplyHeightRatio();
+
+        _heightSaveTimer ??= DispatcherQueue.CreateTimer();
+        _heightSaveTimer.Interval = TimeSpan.FromMilliseconds(350);
+        _heightSaveTimer.IsRepeating = false;
+        _heightSaveTimer.Tick -= HeightSaveTimer_Tick;
+        _heightSaveTimer.Tick += HeightSaveTimer_Tick;
+        _heightSaveTimer.Start();
+    }
+
+    private void HeightSaveTimer_Tick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        try { App.Settings.Save(); } catch { }
+    }
+
+    /// <summary>
+    /// 「自适应高度」开关（2026-10-18 Nick 要）：开 = 面板高度随模块数量伸缩，上面的比例只当上限；
+    /// 关 = 高度锁死为那个比例，模块少时下方留白。
+    ///
+    /// ⚠️ 改完必须**重新量一遍尺寸**（<see cref="ToolSidebarWindow.ApplyHeightRatio"/>）——
+    ///    这个开关不改变面板里的元素，只改变"量高度时算不算内容"，光刷设置界面上的字没用。
+    /// </summary>
+    private void HeightAuto_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_toolSync) return;
+
+        App.Settings.Current.SidebarHeightAuto = HeightAutoSwitch.IsOn;
+        App.Settings.Save();
+
+        if (App.Settings.Current.SidebarEnabled) ToolSidebarWindow.ApplyHeightRatio();
+    }
+
     // ── 动画方案（2026-10-01：两种落位收尾都挺好，留给用户自己挑） ──────────
 
     /// <summary>「动画方案」的取值 → 落位收缩幅度。认不出的值一律当「轻落一下」。</summary>
@@ -2384,6 +2467,18 @@ public sealed partial class SidebarLayoutPage : Page
         App.Settings.Save();
 
         _dropDip = DropDipScale(style);
+    }
+
+    // ── 关机方式（2026-10-18 Nick 要） ──────────────────────────
+
+    /// <summary>「侧边布局 → 关机方式」切换：手动关机（滑动关机）／直接关机。</summary>
+    private void ShutdownMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_toolSync) return;
+        if (ShutdownModeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string mode) return;
+
+        App.Settings.Current.ShutdownMode = mode;
+        App.Settings.Save();
     }
 
     // ── 截图（2026-10-01 整组从「设置」页搬来，逻辑原样） ────────────────

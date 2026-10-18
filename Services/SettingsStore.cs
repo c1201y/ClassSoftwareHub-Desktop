@@ -129,6 +129,13 @@ public sealed class AppSettings
     public string[] SidebarModuleIds { get; set; } = { "pick-number", "timer", "stopwatch", "clock" };
 
     /// <summary>
+    /// 学科工具窗上次停在哪个工具（<c>function-plot</c> / <c>equation</c> / <c>chemistry</c>）。
+    /// 侧边栏那颗「学科」只传 null，窗口就按这个值恢复 —— 上次算化学，下次点开还是化学。
+    /// 认不出的值由 <c>SubjectToolsWindow.Normalize</c> 兜回第一件，不用在这里校验。
+    /// </summary>
+    public string SubjectToolsLastTool { get; set; } = "function-plot";
+
+    /// <summary>
     /// 侧边栏展开面板**底部那一排按钮**（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用）里
     /// **被关掉**的那几颗，key 见 <see cref="SidebarFooterKeys"/>。空数组 = 五颗全显示（默认）。
     /// 在「侧边布局」页底部**逐颗**切换；关掉任意一颗后侧边栏按剩余内容收缩
@@ -188,6 +195,107 @@ public sealed class AppSettings
     ///    边条会被推到屏幕中间去，那就不是"贴边"了。
     /// </summary>
     public int SidebarCollapsedGap { get; set; } = 6;
+
+    /// <summary>
+    /// 侧边栏展开面板的高度上限占工作区高度的几成（2026-10-18 Nick：别再固定调死，交给用户自己拖）。
+    /// 取值 <c>0.45</c>～<c>0.95</c>，默认 <c>0.75</c>。对应「侧边布局 → 展开面板高度」那根滑块。
+    ///
+    /// ⚠️ 它只是**封顶**，不是"给个固定高度"：面板仍按内容实测，模块少时该多矮就多矮
+    ///    （见 <c>ToolSidebarWindow.ExpandedHeight</c> / <c>ApplyScrollLimit</c>）。
+    /// ⚠️ 只在**单列**（「工具排列模式 → 紧凑模式」）生效；每行三个时行数天然少、不受这一项约束。
+    /// ⚠️ 用的人自行夹取（<c>ToolSidebarWindow.SingleColumnMaxHeightRatio</c>），存档里出现怪值也不会撑爆屏幕。
+    /// </summary>
+    public double SidebarHeightRatio { get; set; } = 0.75;
+
+    /// <summary>
+    /// 展开面板的高度是否**跟随内容**（2026-10-18 Nick 要，默认开）。
+    /// · <c>true</c>（自适应）= 高度由里面模块的数量实测决定，<see cref="SidebarHeightRatio"/> 只当**上限**；
+    ///   只有两个模块时面板就矮矮的，下面不留白。
+    /// · <c>false</c>（锁定）= 高度固定为 <see cref="SidebarHeightRatio"/> × 工作区高度，
+    ///   模块少时下面会留白。两者用「侧边布局 → 自适应高度」切换。
+    /// ⚠️ 都只在单列（紧凑模式）下有意义；横条是固定厚度，不参与。
+    /// </summary>
+    public bool SidebarHeightAuto { get; set; } = true;
+
+    /// <summary>
+    /// 侧边栏「关机」按钮的关机方式（2026-10-18 Nick 要）：
+    /// <list type="bullet">
+    ///   <item><c>slide</c>（**默认**）= 手动关机：调系统的 <c>SlideToShutDown.exe</c>，弹出「下滑关机」界面，
+    ///         下滑滑块才真正关机；不滑就一直停着，本身即确认步骤。</item>
+    ///   <item><c>shutdown</c> = 直接关机：直接执行 <c>shutdown /s /f /t 0</c>，立即关闭计算机。</item>
+    /// </list>
+    /// ⚠️ 认不出的值一律当 <c>slide</c>（见 <c>TeachingActions</c> 的归一化）。
+    /// </summary>
+    public string ShutdownMode { get; set; } = "slide";
+
+    /// <summary>
+    /// Hub AI 的**总闸**（2026-10-18）。
+    ///
+    /// <para>
+    /// 闸门关闭后的表现（Nick 14:00 定）：
+    /// <list type="bullet">
+    ///   <item>软件下载页的**入口卡隐藏**（不占位、不留灰块）；</item>
+    ///   <item>导航里的「Hub AI」**保留**，点进去给一张"去启用"的引导，而不是直接报错；</item>
+    ///   <item>已经填过的配置全部保留。</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// 默认 <c>true</c>：先让人看见有这么个东西，再用引导带他去配置。
+    /// ⚠️ 模型服务商 / 模型名 / Base URL / 参数这些**不放这里**：密钥要单独走 DPAPI 加密存文件，
+    /// 其余配置等二级设置页做的时候另开一组字段，⛔ 别把密钥塞进 settings.json。
+    /// </para>
+    /// </summary>
+    public bool HubAiEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 模型服务商预设 id（见 <c>AiProviders</c>）：deepseek / tongyi / zhipu / openai / local / custom。
+    /// ⚠️ 只是"预设"不是"事实" —— 用户改过服务地址后，这里仍然记着当初选的预设，
+    /// 界面按 <see cref="HubAiBaseUrl"/> 的实际值显示，别拿预设去覆盖用户填的地址。
+    /// </summary>
+    public string HubAiProvider { get; set; } = "deepseek";
+
+    /// <summary>兼容 OpenAI 协议的服务根地址，例如 <c>https://api.deepseek.com/v1</c>。</summary>
+    public string HubAiBaseUrl { get; set; } = "https://api.deepseek.com/v1";
+
+    /// <summary>模型名。<see cref="HubAiProvider"/> 换了预设时由界面带出默认值，用户可改。</summary>
+    public string HubAiModel { get; set; } = "deepseek-v4-flash";
+
+    /// <summary>
+    /// 是否开启思考模式（2026-10-18）。默认开 —— 主流思考模型现在都默认开，关掉反而要额外解释。
+    /// ⚠️ 各家写法不同（<c>thinking.type</c> / <c>enable_thinking</c> / 仅 <c>reasoning_effort</c>），
+    /// 由 <c>AiClient.ApplyThinking</c> 按服务商翻译，⛔ 别在这里存"最终发给服务商的字段"。
+    /// </summary>
+    public bool HubAiThinking { get; set; } = true;
+
+    /// <summary>思考强度：<c>low</c> / <c>high</c> / <c>max</c>。服务商不支持时会被忽略。</summary>
+    public string HubAiEffort { get; set; } = "high";
+
+    /// <summary>
+    /// 用户希望 AI 怎么称呼自己（2026-10-18）。空 = 未设置，AI 就用「你」。
+    /// ⚠️ 只进 prompt，**不进日志**、不参与统计。
+    /// </summary>
+    public string UserDisplayName { get; set; } = "";
+
+    /// <summary>
+    /// 已配置的模型列表（2026-10-18）。同一个服务商可以配多条。
+    /// ⚠️ 上面的 <c>HubAiProvider/HubAiBaseUrl/HubAiModel/HubAiThinking/HubAiEffort</c> 现在只是
+    /// **当前那条的镜像**，供尚未改造的代码读取；真正的数据源是这里 + <see cref="HubAiActiveModelId"/>。
+    /// </summary>
+    public System.Collections.Generic.List<HubAi.AiModelEntry> HubAiModels { get; set; } = new();
+
+    /// <summary>当前使用哪一条模型（对应 <see cref="HubAiModels"/> 里的 Id）。</summary>
+    public string? HubAiActiveModelId { get; set; }
+
+    /// <summary>
+    /// 是否启用 AI 工具包（2026-10-18）。
+    ///
+    /// <para>
+    /// 工具包是**可选安装**：不装就不占空间，装了才有"查磁盘明细 / 检索软件库"这些能力。
+    /// ⚠️ 开关关掉只是不把工具交给模型，**不删已下载的包** —— 用户可能只是想暂时不用，
+    /// 下次打开不该再等一次下载。真要删走「移除」按钮。
+    /// </para>
+    /// </summary>
+    public bool HubAiToolsEnabled { get; set; }
 
     /// <summary>
     /// 侧边栏「新模块补入」的批次号。
@@ -416,6 +524,10 @@ public sealed class SettingsStore
     ///     三个一起插在讲台动作组最前面。
     ///   · revision 6（2026-10-12）：结束希沃白板（杀希沃）—— 插在讲台动作组**末尾**，
     ///     它属于特定场景的低频动作，不挤占那几颗常用的位置。
+    ///   · revision 7（2026-10-18）：学科工具（合并成一项「学科」）—— **已被 revision 8 取代**。
+    ///   · revision 8（2026-10-18）：把 rev7 那**一项**拆成**三个独立入口**
+    ///     （函数图像 / 方程求解 / 化学配平）。Nick 定：三个工具各一个按钮，不合并。
+    ///     存过 subject-tools 的**原地**替换成三项，保持用户排好的位置。
     /// </summary>
     private void EnsureNewSidebarModules()
     {
@@ -553,6 +665,112 @@ public sealed class SettingsStore
             }
 
             Current.SidebarModulesRevision = 6;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 7)
+        {
+            // revision 7（2026-10-18）：学科工具 —— 函数图像 / 方程求解 / 化学配平单开一扇窗。
+            // ⚠️ 插在**工具组末尾**（第一个既不是浮窗也不是整页、也不是独立窗的模块之前），
+            //    不打断用户已经排好的顺序；用户自己已经加过就跳过，别插重复。
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+
+                if (!list.Contains("subject-tools"))
+                {
+                    var at = list.FindIndex(id =>
+                    {
+                        var kind = Data.SidebarModules.Find(id)?.Kind;
+                        return kind is not (Data.SidebarModuleKinds.Palette
+                            or Data.SidebarModuleKinds.Page
+                            or Data.SidebarModuleKinds.Window);
+                    });
+
+                    if (at < 0) list.Add("subject-tools");
+                    else list.Insert(at, "subject-tools");
+
+                    Current.SidebarModuleIds = list.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 7;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 8)
+        {
+            // revision 8（2026-10-18）：rev7 那个合并的「学科工具」一项，拆成**三个独立入口**
+            // （函数图像 / 方程求解 / 化学配平 —— Nick 定：三个工具各一个按钮，不要合并）。
+            // · 存过 subject-tools 的：**原地**换成三项，保持用户已经排好的位置；
+            // · 没存过的（新装或自己删过）：按工具组末尾补入，跟 rev7 的位置规则一致。
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+                string[] wanted = { "subject-function", "subject-equation", "subject-chemistry" };
+
+                var legacy = list.IndexOf("subject-tools");
+                if (legacy >= 0)
+                {
+                    list.RemoveAt(legacy);
+                    list.InsertRange(legacy, wanted.Where(id => !list.Contains(id)));
+                }
+
+                foreach (var id in wanted)
+                {
+                    if (list.Contains(id)) continue;
+
+                    var at = list.FindIndex(x =>
+                    {
+                        var kind = Data.SidebarModules.Find(x)?.Kind;
+                        return kind is not (Data.SidebarModuleKinds.Palette
+                            or Data.SidebarModuleKinds.Page
+                            or Data.SidebarModuleKinds.Window);
+                    });
+
+                    if (at < 0) list.Add(id);
+                    else list.Insert(at, id);
+                }
+
+                Current.SidebarModuleIds = list.ToArray();
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 8;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 9)
+        {
+            // revision 9（2026-10-18）：侧边栏新增「关机」按钮（手动 / 直接关机，受设置控制）。
+            // 插在动作组里、紧挨着「取消关机」之前（两者都跟关机相关，凑一块好找）；
+            // 多数用户没勾过「取消关机」，列表里没有那个 id，就直接追加到末尾。
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+
+                if (!list.Contains("shutdown"))
+                {
+                    var at = list.IndexOf("cancelshutdown");
+                    if (at < 0) list.Add("shutdown");
+                    else list.Insert(at, "shutdown");
+
+                    Current.SidebarModuleIds = list.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 9;
             changed = true;
         }
 

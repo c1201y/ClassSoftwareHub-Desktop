@@ -337,6 +337,14 @@ public sealed partial class ShellPage : UserControl
             case "apps":
                 ContentFrame.Navigate(typeof(SoftwarePage), "");
                 return;
+            case "hubai":
+                // Hub AI 对话页（2026-10-18 加，导航上半区，紧跟软件下载）
+                ContentFrame.Navigate(typeof(HubAiPage));
+                return;
+            case "hubai-settings":
+                // Hub AI 二级设置页：不在导航栏，入口是「设置 → Hub AI」那张卡
+                ContentFrame.Navigate(typeof(HubAiSettingsPage));
+                return;
             case "home":
             default:
                 if (tag.StartsWith("cat:", StringComparison.Ordinal))

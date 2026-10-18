@@ -19,6 +19,12 @@ public sealed class DiskScanResult
     public int FileCount { get; init; }
     /// <summary>没有权限、读不了的目录数（界面上要说出来，否则数字对不上会让人以为漏算）。</summary>
     public int SkippedDirectories { get; init; }
+
+    /// <summary>
+    /// 扫描到了时间预算就停止，**结果是不完整的**（2026-10-18 加）。
+    /// ⚠️ 用它的地方必须把这件事告诉用户/模型 —— 不标注的话，"总占用"看着像个准确数。
+    /// </summary>
+    public bool Truncated { get; init; }
     public TimeSpan Elapsed { get; init; }
 }
 
@@ -47,10 +53,16 @@ public static class DiskUsage
     /// 扫描 <paramref name="root"/> 的每个直接子项。
     /// </summary>
     /// <param name="onProgress">扫描进度（当前目录路径、已累计字节、已数文件数）。</param>
+    /// <param name="budget">
+    /// 时间预算（2026-10-18）。到点就停止递归，返回**已统计到的部分**并置 <see cref="DiskScanResult.Truncated"/>。
+    /// ⚠️ 整盘扫描动辄上百万文件，靠"超时就整条失败"体验极差 —— 让用户/模型先拿到部分结果，
+    /// 比等一分半然后什么也没有强。传 <c>null</c> 表示不设限（老行为）。
+    /// </param>
     public static Task<DiskScanResult> ScanAsync(
         string root,
         CancellationToken token,
-        Action<string, long, int>? onProgress = null)
+        Action<string, long, int>? onProgress = null,
+        TimeSpan? budget = null)
     {
         return Task.Run(() =>
         {
@@ -59,6 +71,7 @@ public static class DiskUsage
             var skipped = 0;
             long total = 0;
             var files = 0;
+            var truncated = false;
 
             var rootInfo = new DirectoryInfo(root);
             if (!rootInfo.Exists) throw new DirectoryNotFoundException(root);
@@ -79,10 +92,12 @@ public static class DiskUsage
 
                 if (IsReparse(dir)) continue;   // junction：跳过，否则重复计数
 
-                var (bytes, count) = Measure(dir, token, ref skipped, watch, onProgress);
+                var (bytes, count, cut) = Measure(dir, token, ref skipped, watch, onProgress, budget);
                 children.Add(new DiskEntry(dir.Name, dir.FullName, true, bytes, count));
                 total += bytes;
                 files += count;
+
+                if (cut) truncated = true;
             }
 
             children.RemoveAll(c => c.Bytes <= 0);   // 0 字节的东西在树图上没有面积，画不出来
@@ -97,18 +112,20 @@ public static class DiskUsage
                 TotalBytes = total,
                 FileCount = files,
                 SkippedDirectories = skipped,
+                Truncated = truncated,
                 Elapsed = watch.Elapsed,
             };
         }, token);
     }
 
     /// <summary>递归求一个目录的大小（显式栈，不用递归调用以防深目录爆栈）。</summary>
-    private static (long Bytes, int Files) Measure(
+    private static (long Bytes, int Files, bool Truncated) Measure(
         DirectoryInfo start,
         CancellationToken token,
         ref int skipped,
         Stopwatch watch,
-        Action<string, long, int>? onProgress)
+        Action<string, long, int>? onProgress,
+        TimeSpan? budget)
     {
         long bytes = 0;
         var files = 0;
@@ -118,13 +135,14 @@ public static class DiskUsage
         var lastReport = 0L;
         var visited = 0;
         var localSkipped = 0;
+        var truncated = false;
 
         while (stack.Count > 0)
         {
             var dir = stack.Pop();
             visited++;
 
-            // 每 64 个目录看一次取消/进度，太频繁反而拖慢
+            // 每 64 个目录看一次取消/进度/预算，太频繁反而拖慢
             if ((visited & 0x3F) == 0)
             {
                 token.ThrowIfCancellationRequested();
@@ -134,6 +152,14 @@ public static class DiskUsage
                 {
                     lastReport = now;
                     onProgress(dir.FullName, bytes, files);
+                }
+
+                // 到预算就停，把已统计的部分交出去 —— 注意这是**完整目录量之和**，
+                // 中途停下会让"总占用"偏小，所以必须置 Truncated 让调用方标注。
+                if (budget is { } limit && watch.Elapsed >= limit)
+                {
+                    truncated = true;
+                    break;
                 }
             }
 
@@ -152,7 +178,7 @@ public static class DiskUsage
         }
 
         skipped += localSkipped;
-        return (bytes, files);
+        return (bytes, files, truncated);
     }
 
     /// <summary>

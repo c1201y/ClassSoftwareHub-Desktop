@@ -308,6 +308,38 @@ public static class AutoShutdown
         return "当前没有待执行的关机";
     }
 
+    /// <summary>
+    /// 立即执行一次关机（侧边栏「关机」按钮调它，按 <paramref name="method"/> 走滑动或直关）。
+    /// </summary>
+    public static void ShutdownNow(string method, int delaySeconds = 0)
+    {
+        try
+        {
+            if (AutoShutdownConfig.NormalizeMethod(method) == ShutdownMethods.Slide)
+            {
+                var exe = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.System), "SlideToShutDown.exe");
+                if (!File.Exists(exe))
+                {
+                    Log("滑动关机：找不到 " + exe);
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+                Log("已调起滑动关机（手动触发）");
+                return;
+            }
+
+            var delay = Math.Clamp(delaySeconds, 0, MaxDelaySeconds);
+            var code = RunShutdown($"/s /f /t {delay}", out var error);
+            Log($"直接关机 delay={delay}s exit={code}" + (error.Length > 0 ? " " + error : ""));
+        }
+        catch (Exception ex)
+        {
+            Log("执行关机失败: " + ex.Message);
+        }
+    }
+
     /// <summary>跑一次 shutdown.exe，返回进程退出码（起不来 / 超时返回 -1）。</summary>
     private static int RunShutdown(string arguments, out string error)
     {

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.SubjectToolsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      学科工具窗 —— 独立 AppWindow（2026-10-18 Nick 要）。
+
+      来由：函数图像 / 方程求解 / 化学配平这三件"用完就走"的学科工具，原来只能
+      先进主界面再从导航翻过去；用户只想算一道题时，为这个把整个应用调出来太重。
+      这扇窗把三件工具单拎出来，侧边栏点一下就出来，不碰主窗口。
+
+      · 左侧是原生 NavigationView 的**紧凑栏**（只有图标 + 悬停提示），不另排标题 ——
+        三个工具页自己都有 28px 大标题（函数图像那页干脆没有标题、三栏铺满），
+        再在窗口顶上堆一层文字档位就重复了。
+      · 右侧 Frame 直接承载三个工具页：它们都不依赖 ShellPage / Frame，能独立跑
+        （已逐页核过，没有 App.MainWindow / Navigation 引用）。
+      · **系统标题栏**（不读自绘）：工具窗，系统原生最省事也最像样（同 LegalWindow）。
+
+      ⚠️ 关掉 = 真销毁（不像工具浮窗"收起来"）：学科窗没有留着复用的价值，
+         真关最省事，也不会在退出链路上留一个没关的窗口把进程吊住。
+    -->
+
+    <Grid x:Name="Root">
+        <NavigationView x:Name="Nav"
+                        PaneDisplayMode="LeftCompact"
+                        IsPaneToggleButtonVisible="False"
+                        IsBackButtonVisible="Collapsed"
+                        IsSettingsVisible="False"
+                        AlwaysShowHeader="False"
+                        SelectionChanged="Nav_SelectionChanged">
+            <NavigationView.MenuItems>
+                <!-- 字形只走 E7/E8/E9 老码位（ED 段是 Win10 空框） -->
+                <NavigationViewItem Content="函数图像" Tag="function-plot"
+                                    ToolTipService.ToolTip="函数图像">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Content="方程求解" Tag="equation"
+                                    ToolTipService.ToolTip="方程求解">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8EF;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Content="化学方程式配平" Tag="chemistry"
+                                    ToolTipService.ToolTip="化学方程式配平">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80A;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
+</Window>

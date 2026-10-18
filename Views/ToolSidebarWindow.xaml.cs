@@ -107,9 +107,19 @@ public sealed partial class ToolSidebarWindow : Window
     private const int PanelThicknessFlatDip = 112;  // 上/下边时：两行（工具一行、按钮一行）的高度
     private const int PanelLengthFlatDip = 470;     // 上/下边时：展开面板长度的**下限**（真实宽度按内容算，见 PlannedSize）
 
+    /// <summary>展开面板高度占比的允许区间（「侧边布局」页那根滑块的上下限）。</summary>
+    public const double MinHeightRatio = 0.45;
+    public const double MaxHeightRatio = 0.95;
+    /// <summary>没调过时的默认占比（2026-10-12 从 0.65 抬到 0.75 的那一档）。</summary>
+    public const double DefaultHeightRatio = 0.75;
+
     /// <summary>
-    /// 单列（竖着一条）时，展开面板最多能占工作区高度的几成（Nick 2026-10-11：「一列下来的时候还是
-    /// 长长的一长条，太长了，要加个限高」）。
+    /// 单列（竖着一条）时，展开面板最多能占工作区高度的几成。
+    ///
+    /// 来历：Nick 2026-10-11「一列下来的时候还是长长的一长条，太长了，要加个限高」→ 先写死 0.65，
+    /// 10-12 又说「有点太少，稍微再扩大一点」→ 0.75。**2026-10-18 Nick 定：别再替他调了，
+    /// 把这个通道开放给用户自己拖**（0.45～0.95，默认 0.75，见「侧边布局 → 展开面板高度」）。
+    /// 存档字段 <c>AppSettings.SidebarHeightRatio</c>；⛔ 别再把这里改回 const。
     ///
     /// 为什么只管单列：每行三个时行数天然少（14 个模块也才 5 行），用不着限；横条是固定厚度，也不走这里。
     /// 单列才是一路往下排、模块一多就顶到工作区下沿的那一种。
@@ -118,17 +128,39 @@ public sealed partial class ToolSidebarWindow : Window
     ///    模块少的时候该多矮就多矮（2026-10-11 才从"按个数算高度"改成实测 —— 那正是
     ///    「模块少还空一大块」的根因，⛔ 别改回去）。超出的部分交给工具区滚动：
     ///    <c>ApplyScrollLimit</c> 里的 <c>ToolsScroll.MaxHeight</c> 就是拿这个上限算出来的。
-    ///
-    /// ⚠️ 取值怎么定的（本机 125% 缩放、工作区 784 dip 实测）：
-    ///    底排五颗竖排自己就吃掉 ~228 dip，加标题/分隔线/内边距，"框架"就要 ~287 dip。
-    ///    · 0.60 → 上限 470：连**默认的四个模块**都开始滚动（它们自然高 507），不合格；
-    ///    · 0.65 → 上限 510：默认那档刚好放得下、不滚；
-    ///    · 0.75 → 上限 588：默认那档富余一截，模块堆起来时也能多露两行。
-    ///    ⇒ 2026-10-12 Nick「感觉有点太少了，稍微再扩大一点」⇒ 从 0.65 抬到 0.75。
-    ///      当时写下的「0.75 又偏长了」作废 —— 他那条边条上模块较多，0.65 反而频繁滚动。
-    /// 嫌长或嫌短就调这一个数（工具区可见行数跟着变）。
     /// </summary>
-    private const double SingleColumnMaxHeightRatio = 0.75;
+    private static double SingleColumnMaxHeightRatio
+    {
+        get
+        {
+            try
+            {
+                var v = App.Settings.Current.SidebarHeightRatio;
+                // 存档里可能是 0（老档没这个键）、NaN、或者被人手改成离谱值 —— 一律夹回来
+                if (double.IsNaN(v) || v <= 0) return DefaultHeightRatio;
+                return Math.Clamp(v, MinHeightRatio, MaxHeightRatio);
+            }
+            catch
+            {
+                return DefaultHeightRatio;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 展开面板高度是否**跟随内容**（2026-10-18 Nick：要一个能自己缩的开关）。
+    /// · true = 自适应：高度按里面模块实测，<see cref="SingleColumnMaxHeightRatio"/> 只当上限；
+    /// · false = 锁定：高度就是「占比 × 工作区高度」，模块少时下面留白。
+    /// 存档字段 <c>AppSettings.SidebarHeightAuto</c>，默认 true（= 保持原来那套"按内容实测"的行为）。
+    /// </summary>
+    private static bool HeightAuto
+    {
+        get
+        {
+            try { return App.Settings.Current.SidebarHeightAuto; }
+            catch { return true; }
+        }
+    }
 
     /// <summary>
     /// 收起动画的第二段：面板滑出屏幕之后，**抓手从屏幕外滑回贴边位**要花的毫秒（2026-10-01）。
@@ -516,6 +548,27 @@ public sealed partial class ToolSidebarWindow : Window
         foreach (var w in _pool.Values)
         {
             try { w.SnapToSetting(); }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// 「展开面板高度」占比改了（2026-10-18）：重新量一遍尺寸再贴边，**不重建按钮**。
+    ///
+    /// ⚠️ 走 <c>SnapToSetting</c> 那条轻路（= 算布局 + 改尺寸 + 重新贴边），⛔ 别用
+    ///    <c>ApplySetting</c> —— 那是整条重建（拆按钮、重排、重新显示），只为改个高度不值当，
+    ///    而且滑块是**拖动时连续触发**的，重建会一路闪。
+    /// ⚠️ 只有展开着的实例才看得出变化；收起态的抓手尺寸与这个值无关。
+    /// </summary>
+    public static void ApplyHeightRatio()
+    {
+        foreach (var w in _pool.Values)
+        {
+            try
+            {
+                if (!w._expanded) continue;
+                w.SnapToSetting();
+            }
             catch { }
         }
     }
@@ -1281,6 +1334,8 @@ public sealed partial class ToolSidebarWindow : Window
             Collapse();                                        // 先把边条收起来，别挡着工具窗口
             if (m.Kind == SidebarModuleKinds.Page && m.Page is not null)
                 App.MainWindow?.OpenToolSettings(m.Page);      // 拉出主窗口并跳到那一页
+            else if (m.Kind == SidebarModuleKinds.Window)
+                SubjectToolsWindow.ShowTool(m.WindowTool);     // 单开一扇轻量窗，不碰主界面
             else
                 ToolPaletteWindow.ShowTool(m.Id);              // 小浮窗
         }
@@ -2453,6 +2508,10 @@ public sealed partial class ToolSidebarWindow : Window
     /// </summary>
     private int ExpandedHeight(int dipW, double limitH)
     {
+        // 锁定高度（「自适应高度」关掉）：滑块值就是面板高度，内容少也照撑满 —— 下面留白是预期的。
+        // ⚠️ 只对单列（紧凑模式）生效：每行三个时上限是**整个工作区**，锁死会撑成一大块空面板。
+        if (!HeightAuto && Columns <= 1) return (int)Math.Round(limitH);
+
         try
         {
             ExpandedView.Measure(new Windows.Foundation.Size(dipW, double.PositiveInfinity));
@@ -2513,6 +2572,7 @@ public sealed partial class ToolSidebarWindow : Window
                 var chrome = 12 + 24;                                    // 面板 padding + 间距余量
                 ToolsScroll.MaxWidth = Math.Max(120, work.Width / scale - 32 - chrome);
                 ToolsScroll.MaxHeight = double.PositiveInfinity;
+                ToolsScroll.MinHeight = 0;                               // 横条厚度固定，不吃自适应这套
             }
             else
             {
@@ -2524,7 +2584,12 @@ public sealed partial class ToolSidebarWindow : Window
                 var frows = fn > 0 ? (int)Math.Ceiling(fn / (double)fcols) : 0;
                 var footer = frows > 0 ? frows * FooterButtonH + (frows - 1) * 2 : 0;
                 var chrome = title + 7 + footer + 17 + 9;                // + 分隔线 + 面板 padding + 几个间距
-                ToolsScroll.MaxHeight = Math.Max(120, ExpandedLimits().H - chrome);
+                var max = Math.Max(120, ExpandedLimits().H - chrome);
+                ToolsScroll.MaxHeight = max;
+                // 锁定高度时把工具区撑到上限：底排按钮贴住面板下沿，空白留在工具与底排之间会很难看
+                // （自适应时 MinHeight 归零，让内容自己决定多高 —— 2026-10-18）
+                // ⚠️ 只有单列才锁：三列的上限是整个工作区，撑满会变成一大块空面板。
+                ToolsScroll.MinHeight = !HeightAuto && Columns <= 1 ? max : 0;
                 ToolsScroll.MaxWidth = double.PositiveInfinity;
             }
         }

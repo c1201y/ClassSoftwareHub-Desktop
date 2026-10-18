@@ -25,10 +25,10 @@
          预览版末段跟着 insider 迭代号走（insider1.5 → 1.2.0.5），
          **转正式版时末段回落 0**（1.2.0 → 1.2.0.0）。
          界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
-    <Version>1.2.0-insider1.1</Version>
+    <Version>1.2.0-insider1.2</Version>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
-    <InformationalVersion>1.2.0-insider1.1</InformationalVersion>
+    <InformationalVersion>1.2.0-insider1.2</InformationalVersion>
     <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
          否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

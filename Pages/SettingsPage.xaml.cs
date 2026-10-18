@@ -435,6 +435,12 @@ public sealed partial class SettingsPage : Page
         Frame.Navigate(typeof(LogViewerPage));
     }
 
+    /// <summary>Hub AI 二级设置页（2026-10-18）。和日志查看同一套走法：Frame 直跳，返回靠导航栏。</summary>
+    private void OpenHubAiSettings_Click(object sender, RoutedEventArgs e)
+    {
+        Frame.Navigate(typeof(HubAiSettingsPage));
+    }
+
     // ══════════ 条款与声明（用户协议 / 隐私政策 / 免责声明）══════════
     //
     // 三份内容与站点同源：站点仓库根目录 `法律文本.ts` ⇒ Core/LegalText.cs

@@ -51,6 +51,7 @@ public static class TeachingActions
                 // 杀希沃（2026-10-12 Nick 要）：立刻清一次白板5 的残留进程，不带时间点。
                 // ⚠️ 安全闸在 EasiNoteGuard.RunOnce 里 —— **有可见窗口的一律放过**（老师正开着白板讲课）。
                 case "killseewo": return KillEasiNote();
+                case "shutdown": return PrepareShutdown();
                 default: Log($"不认识的动作: {id}"); break;
             }
         }
@@ -95,7 +96,7 @@ public static class TeachingActions
     /// （比如截屏启动失败 `return "截屏启动失败，看日志"`），那种没什么可确认的。
     /// 以后再加"要先问一句"的动作，记得往这里补 id。
     /// </summary>
-    public static bool AsksFirst(string id) => id is "closeall" or "logout";
+    public static bool AsksFirst(string id) => id is "closeall" or "logout" or "shutdown";
 
     /// <summary>
     /// 焦点观察器（保留）：只在"确实是个能用的应用窗口"时才记一下。
@@ -236,6 +237,39 @@ public static class TeachingActions
 
         return r.Summary;
     }
+
+    /// <summary>
+    /// 「关机」第一步：**只准备要问用户的那句话**（按当前关机方式给不同说明），真关机在 <see cref="ConfirmPending"/>("shutdown") 里。
+    /// 这么拆是因为关机是破坏性操作，必须先问一句（走 <see cref="AsksFirst"/> + 侧边栏的确认浮层）。
+    /// </summary>
+    private static string? PrepareShutdown()
+    {
+        var mode = App.Settings.Current.ShutdownMode;
+        return NormalizeShutdownMode(mode) == Data.ShutdownMethods.Slide
+            ? "确认关机？\n将打开系统「滑动关机」界面，下滑滑块才会真正关闭计算机"
+            : "确认关机？\n将立即关闭计算机，未保存的工作内容会丢失";
+    }
+
+    /// <summary>执行关机（确认浮层里按了红键之后）：读设置里的关机方式，交给 <see cref="Data.AutoShutdown.ShutdownNow"/>。</summary>
+    private static string? ExecuteShutdown()
+    {
+        try
+        {
+            Data.AutoShutdown.ShutdownNow(App.Settings.Current.ShutdownMode);
+        }
+        catch (Exception ex)
+        {
+            Log("关机失败: " + ex.Message);
+        }
+
+        return null;
+    }
+
+    /// <summary>把存档里可能写歪的关机方式归一到合法值（认不出的一律当「滑动关机」）。</summary>
+    private static string NormalizeShutdownMode(string? mode) =>
+        string.Equals(mode, Data.ShutdownMethods.Shutdown, StringComparison.OrdinalIgnoreCase)
+            ? Data.ShutdownMethods.Shutdown
+            : Data.ShutdownMethods.Slide;
 
     /// <summary>锁定电脑：Win+L 用的就是这个 API，它也是 Ctrl+Alt+Del 界面上的第一项。</summary>
     private static void LockScreen()
@@ -485,6 +519,7 @@ public static class TeachingActions
             {
                 "closeall" => ExecuteCloseAll(),
                 "logout" => ExecuteLogout(),
+                "shutdown" => ExecuteShutdown(),
                 _ => null,
             };
         }

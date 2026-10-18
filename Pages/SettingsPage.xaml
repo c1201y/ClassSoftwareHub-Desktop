@@ -99,8 +99,8 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard Header="外部组件单独设置外观"
-                                           Description="外部组件指屏幕侧边栏、常用工具浮窗与截图编辑窗；主界面不受影响。">
+                    <controls:SettingsCard Header="桌面悬浮窗单独设置外观"
+                                           Description="只作用于桌面上的悬浮窗：随机抽号、课堂计时、秒表计时、全局时钟。主界面与侧边栏不受影响。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE772;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -180,6 +180,23 @@
                         </controls:SettingsCard.HeaderIcon>
                         <ToggleSwitch x:Name="TraySwitch" OnContent="开" OffContent="关" MinWidth="0"
                                       Toggled="TraySwitch_Toggled" />
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+                <!-- ================= Hub AI ================= -->
+                <!-- 2026-10-18：Nick 要求放在「诊断」上方 —— 它是诊断类功能里唯一需要配置的那个，
+                     单独成组而不是塞进诊断组：关掉总闸时整组可以一起处理，也不会让诊断组继续膨胀。 -->
+                <TextBlock Text="Hub AI" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+
+                    <controls:SettingsCard Header="Hub AI"
+                                           Description="电脑顾问的总开关与模型配置。模型服务由你自己提供，本软件不代收费用、不托管密钥。"
+                                           IsClickEnabled="True" Click="OpenHubAiSettings_Click">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8F2;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <!-- 右侧留空：IsClickEnabled=True 时 SettingsCard 自带一颗 Chevron，别自己再放箭头 -->
                     </controls:SettingsCard>
 
                 </StackPanel>

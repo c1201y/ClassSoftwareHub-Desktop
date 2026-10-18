@@ -181,6 +181,32 @@
                             </ComboBox>
                         </controls:SettingsCard>
 
+                        <controls:SettingsCard Header="展开面板高度"
+                                               Description="侧边栏展开后最多占屏幕可用高度的比例，拖动即时生效。上方数值是上限，实际高度见下一条。仅对「紧凑模式」（单列）有效。">
+                            <controls:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE740;" />
+                            </controls:SettingsCard.HeaderIcon>
+                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <Slider x:Name="HeightRatioSlider" Width="190"
+                                        Minimum="45" Maximum="95"
+                                        StepFrequency="5" TickFrequency="5"
+                                        IsThumbToolTipEnabled="False"
+                                        ValueChanged="HeightRatio_ValueChanged" />
+                                <TextBlock x:Name="HeightRatioText" MinWidth="40" VerticalAlignment="Center"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="自适应高度"
+                                               Description="展开面板的高度随其中模块的数量伸缩，上方设置的比例只作为上限：模块较少时面板随之收短，不会在下方留出空白。关闭后高度固定为上方比例，模块较少时下方会留白。">
+                            <controls:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE9A6;" />
+                            </controls:SettingsCard.HeaderIcon>
+                            <ToggleSwitch x:Name="HeightAutoSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                                          Toggled="HeightAuto_Toggled" />
+                        </controls:SettingsCard>
+
                         <controls:SettingsCard Header="收起时离屏幕边缘"
                                                Description="侧边栏收起成那条小抓手时，与屏幕边缘之间留出的距离。选「0」即紧贴屏幕边缘。此项仅对收起状态生效，展开后的面板始终紧贴边缘。">
                             <controls:SettingsCard.HeaderIcon>
@@ -292,6 +318,33 @@
                             </controls:SettingsCard.HeaderIcon>
                             <ToggleSwitch x:Name="OpenAppToggle" Tag="openapp" OnContent="显示" OffContent="隐藏"
                                           MinWidth="0" Toggled="FooterItem_Toggled" />
+                        </controls:SettingsCard>
+
+                    </StackPanel>
+
+                    <!--
+                      ============ 关机 ============
+                      2026-10-18 Nick 要：侧边栏「关机」按钮的两种方式在这里选。
+                      ⚠️ 版式照旧：组标题 + Caption 说明 + SettingsCard + 4px 组内间距。
+                    -->
+                    <TextBlock Text="关机" Style="{StaticResource BodyStrongTextBlockStyle}"
+                               Margin="0,24,0,8" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,-4,0,8"
+                               Text="侧边栏「关机」按钮触发后的行为。该按钮按下后会先弹出确认，避免误触。" />
+                    <StackPanel Spacing="4">
+
+                        <controls:SettingsCard Header="关机方式"
+                                               Description="手动关机：调用系统「滑动关机」界面，下滑滑块才真正关机。直接关机：立即关闭计算机。">
+                            <controls:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE7E8;" />
+                            </controls:SettingsCard.HeaderIcon>
+                            <ComboBox x:Name="ShutdownModeCombo" MinWidth="170"
+                                      SelectionChanged="ShutdownMode_SelectionChanged">
+                                <ComboBoxItem Content="手动关机（滑动关机）" Tag="slide" />
+                                <ComboBoxItem Content="直接关机" Tag="shutdown" />
+                            </ComboBox>
                         </controls:SettingsCard>
 
                     </StackPanel>

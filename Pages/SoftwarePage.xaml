@@ -40,27 +40,40 @@
 
             <TextBlock x:Name="TitleText" Text="软件下载" FontSize="30" FontWeight="Bold" />
 
-            <StackPanel Grid.Row="1" Spacing="10">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <AutoSuggestBox x:Name="SearchBox" MaxWidth="460" HorizontalAlignment="Left"
-                                    PlaceholderText="搜索软件（名称 / 简介 / id）" QueryIcon="Find"
-                                    TextChanged="SearchBox_TextChanged" />
-                    <!-- 视图切换：磁贴（3 列，带简介）/ 网格（5 列，紧凑） -->
-                    <RadioButtons x:Name="ViewChoice" Grid.Column="1" MaxColumns="2" VerticalAlignment="Center"
-                                  SelectionChanged="ViewChoice_SelectionChanged">
-                        <RadioButton Content="磁贴视图" Tag="tile" />
-                        <RadioButton Content="网格视图" Tag="grid" />
-                    </RadioButtons>
-                </Grid>
-                <ScrollViewer HorizontalScrollMode="Auto" VerticalScrollMode="Disabled"
-                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="Chips" Orientation="Horizontal" Spacing="8" />
-                </ScrollViewer>
-            </StackPanel>
+            <!--
+              工具条（2026-10-18 重排）：**分类 · 视图 · AI 一行解决**。
+              ⚠️ 原来这里是「一整张 AI 大卡 + 单选按钮组 + 一条横向滚动 chip 列表」，
+                 三层各占一行，Nick 说"太混乱"。现在：
+                 · 分类换成系统 SelectorBar（自带下划线指示器与键盘导航，比自绘 ToggleButton 规矩）
+                 · 视图切换收进下拉（两个选项不值得占一整行）
+                 · AI 缩成右侧一个小按钮，点开仍是右下浮层
+            -->
+            <Grid Grid.Row="1" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <SelectorBar x:Name="CategoryBar" Grid.Column="0" HorizontalAlignment="Left"
+                             SelectionChanged="CategoryBar_SelectionChanged" />
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center">
+                    <ComboBox x:Name="ViewPicker" MinWidth="112"
+                              SelectionChanged="ViewPicker_SelectionChanged">
+                        <ComboBoxItem Content="磁贴视图" Tag="tile" />
+                        <ComboBoxItem Content="网格视图" Tag="grid" />
+                    </ComboBox>
+
+                    <Button x:Name="HubAiEntry" Padding="12,6" Click="HubAiEntry_Click"
+                            ToolTipService.ToolTip="打开 Hub AI 顾问">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8F2;" FontSize="13" />
+                            <TextBlock Text="AI" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
 
             <Grid Grid.Row="2">
                 <!-- ===== 磁贴视图（3 列 = 302 + 16 间距，正好 960；带简介） ===== -->
@@ -169,5 +182,100 @@
                 </StackPanel>
             </Grid>
         </Grid>
+
+        <!-- ════════════ Hub AI 浮层（2026-10-18）════════════
+             贴右下角浮在内容之上，不挤压列表（Nick 选的 Copilot 叠加形态）。
+             放在最外层 Grid 的最后一格 = 天然盖住三列内容；盖不到左侧导航栏 ——
+             导航在 NavigationView 的 Pane 里，不在这棵树，所以它永远压不过来。
+             ⚠️ 宽 380 ≈ 960 内容区的 40%：再宽列表就看不出东西，再窄推荐的软件会挤成一行字。
+             ⚠️ 内容目前全是假消息，只为看形态；接模型是下一步（AiClient 还没写）。 -->
+        <!--
+          浮窗（2026-10-18 调整）：
+          ⚠️ 高度改成**固定 420**，原来只有 MaxHeight + 按内容自适应，实际展开时矮得像条提示，
+             根本不像一个能对话的窗口（Nick：「太低的不那么让人注意到」）。
+          动画见 ShowHubAiPanel：从下往上滑 24px + 淡入，收起时反向。
+        -->
+        <Border x:Name="HubAiPanel" Grid.ColumnSpan="3"
+                Width="380" Height="420"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Margin="0,0,20,20" Visibility="Collapsed"
+                CornerRadius="14" BorderThickness="1"
+                RenderTransformOrigin="0.5,1"
+                Background="{ThemeResource HubAiPanelBackground}"
+                BorderBrush="{ThemeResource HubAiPanelBorder}">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="HubAiPanelTransform" />
+            </Border.RenderTransform>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Padding="16,12,8,10" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="28" Height="28" CornerRadius="7"
+                            Background="{ThemeResource HubAiIconBackground}">
+                        <FontIcon Glyph="&#xE8F2;" FontSize="13"
+                                  Foreground="{ThemeResource HubAiIconForeground}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+                        <TextBlock Text="Hub AI" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource HubAiTitleForeground}" />
+                        <TextBlock Text="电脑顾问" FontSize="11"
+                                   Foreground="{ThemeResource HubAiSubForeground}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                        <Button Padding="7" Background="Transparent" BorderThickness="0"
+                                Click="HubAiExpand_Click" ToolTipService.ToolTip="在页面中打开">
+                            <FontIcon Glyph="&#xE8A7;" FontSize="12" />
+                        </Button>
+                        <Button Padding="7" Background="Transparent" BorderThickness="0"
+                                Click="HubAiClose_Click" ToolTipService.ToolTip="收起">
+                            <FontIcon Glyph="&#xE711;" FontSize="12" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Padding="16,0,16,6" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="HubAiMessages" Spacing="10">
+                        <!--
+                          浮层**不做对话**（2026-10-18 改）：它只是个"提问入口"。
+                          理由：完整页那边有历史、工具调用、推荐卡片、用量统计，
+                          在这里重做一套只会两套逻辑各说各话（之前这里挂着假消息，用户以为坏了）。
+                          发送后把问题交给 HubAiPage，浮层收起。
+                        -->
+                        <Border Background="{ThemeResource HubAiBubbleBackground}" CornerRadius="10"
+                                Padding="14,11">
+                            <StackPanel Spacing="6">
+                                <TextBlock FontSize="12.5" TextWrapping="Wrap" LineHeight="20"
+                                           Text="描述你的需求，按回车后会在 Hub AI 页面继续。" />
+                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                                           Text="那里会读取本机硬件与存储概况，再给出建议。全程只读。" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Grid Grid.Row="2" Padding="12,6,12,12" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="HubAiInput" PlaceholderText="描述你的需求"
+                             KeyDown="HubAiInput_KeyDown" />
+                    <Button Grid.Column="1" Padding="11,6"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="HubAiSend_Click" ToolTipService.ToolTip="发送">
+                        <FontIcon Glyph="&#xE724;" FontSize="13" />
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
     </Grid>
 </Page>

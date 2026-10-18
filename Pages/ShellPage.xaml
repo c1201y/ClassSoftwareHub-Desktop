@@ -160,6 +160,17 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <!--
+                  Hub AI（2026-10-18）：电脑顾问的完整对话页。
+                  ⚠️ 与「软件下载」页右下的浮层是同一个内核的两种外壳，浮层里「↗」会跳到这一页。
+                  ⚠️ 名字里必须带 AI（Nick 明确要求）—— 叫 Agent 会让人以为它能改电脑，
+                     实际全程只读，改个名字比加一句免责声明有效。
+                -->
+                <NavigationViewItem Content="Hub AI" Tag="hubai">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8F2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <!--
                   内置工具：和「实验性功能」一样是分组父项 —— 点它 = 进工具索引页 + 展开/收起分组，
                   子项（图片取色 / 随机抽号 / 课堂计时器 / 全屏时钟 / 编码哈希）直达各自页面。
                   子项由 ShellPage 构造时按 ToolCatalog.All 动态生成（tag = ToolDef.Id），

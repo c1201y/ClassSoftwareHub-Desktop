@@ -287,6 +287,71 @@
                    ② 把 MenuFlyout / 隐式 Style 写在这里 → **应用启动即崩**，而且 crash.log 零新增
                       （死在 InitializeComponent，连 UnhandledException 都来不及挂，查都没法查）。
                  挪进代码后能 try/catch + 记日志，最坏也只是菜单不出现，不会拖垮整个应用。 -->
+
+            <!--
+              ════════════ Hub AI 品牌资源（2026-10-18）════════════
+              为什么集中在这里：AI 的品牌色**不跟随系统强调色** —— 用户把 Windows 强调色改成
+              绿色，AI 图标也跟着变绿会很怪。所以这里是全项目唯一允许写死色值的地方，
+              页面只引用键名，⛔ 别在页面里散落颜色。
+
+              配色口径（Nick 2026-10-18 定，改之前先问）：借鉴 Copilot 官网那套
+              「极淡多色过渡」—— 彩色不当装饰贴在图标上，而是当空气铺在背景里。
+              三个渐变停靠点彼此只差 5~8 级明度，看上去像纸的色温变化，不像渐变。
+              图标反过来保持中性（暖石灰 + 深褐符号），因为任何单一色相看久了都普通。
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <LinearGradientBrush x:Key="HubAiCardBackground" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#ECF3F0" Offset="0" />
+                        <GradientStop Color="#EBEFF6" Offset="0.52" />
+                        <GradientStop Color="#F4ECEF" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="HubAiCardBorder" Color="#E7E4DF" />
+                    <SolidColorBrush x:Key="HubAiIconBackground" Color="#DED8D0" />
+                    <SolidColorBrush x:Key="HubAiIconForeground" Color="#3E382F" />
+                    <SolidColorBrush x:Key="HubAiTitleForeground" Color="#15181A" />
+                    <SolidColorBrush x:Key="HubAiSubForeground" Color="#69726F" />
+                    <SolidColorBrush x:Key="HubAiPanelBackground" Color="#FCFCFD" />
+                    <SolidColorBrush x:Key="HubAiPanelBorder" Color="#DFE2E2" />
+                    <SolidColorBrush x:Key="HubAiBubbleBackground" Color="#F1F2F2" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <!--
+                      ⚠️ 深色**不做多色氛围渐变**（2026-10-18 实测翻车）：
+                          浅色下 5~8 级色差看着是"有温度"，同样的差值放在深色大面积上
+                          会变成脏斑 —— 尤其原来末端那个 #1E1519 偏红褐，整块看着像发霉。
+                          这里改成**冷灰只走明度**：三个停靠点明度一致，色相只挪 2~3 级，
+                          靠 1px 描边（#343A3F）把卡片从页面底上"拎起来"。
+                    -->
+                    <LinearGradientBrush x:Key="HubAiCardBackground" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#292F33" Offset="0" />
+                        <GradientStop Color="#292E36" Offset="0.52" />
+                        <GradientStop Color="#2B2E35" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="HubAiCardBorder" Color="#3E4449" />
+                    <SolidColorBrush x:Key="HubAiIconBackground" Color="#413C35" />
+                    <SolidColorBrush x:Key="HubAiIconForeground" Color="#EDE6DC" />
+                    <SolidColorBrush x:Key="HubAiTitleForeground" Color="#E8EDF0" />
+                    <SolidColorBrush x:Key="HubAiSubForeground" Color="#93A0A6" />
+                    <SolidColorBrush x:Key="HubAiPanelBackground" Color="#24282C" />
+                    <SolidColorBrush x:Key="HubAiPanelBorder" Color="#3C4247" />
+                    <SolidColorBrush x:Key="HubAiBubbleBackground" Color="#2E3338" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <LinearGradientBrush x:Key="HubAiCardBackground" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="{ThemeResource SystemColorWindowColor}" Offset="0" />
+                        <GradientStop Color="{ThemeResource SystemColorWindowColor}" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="HubAiCardBorder" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HubAiIconBackground" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="HubAiIconForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HubAiTitleForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HubAiSubForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HubAiPanelBackground" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="HubAiPanelBorder" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="HubAiBubbleBackground" Color="{ThemeResource SystemColorWindowColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

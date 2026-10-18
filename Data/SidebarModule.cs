@@ -11,6 +11,13 @@ public static class SidebarModuleKinds
     public const string Palette = "palette";
     /// <summary>主窗口里的整页工具（拉出主窗口并跳到那一页）。</summary>
     public const string Page = "page";
+    /// <summary>
+    /// 独立窗口（2026-10-18）：单开一扇轻量窗，**不拉主界面**。
+    /// 目前只有三件学科工具用它 —— 函数图像 / 方程求解 / 化学配平那几页是"用完就走"的，
+    /// 为算一道题把整个应用调出来太重（见 <c>Views/SubjectToolsWindow</c>）。
+    /// 每个工具在侧边栏里是**各自独立的一项**（Nick 10-18 定：不要合并成一个「学科」入口）。
+    /// </summary>
+    public const string Window = "window";
     /// <summary>讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。</summary>
     public const string Action = "action";
     /// <summary>
@@ -50,6 +57,12 @@ public sealed class SidebarModule
     /// <summary>kind = page 时要跳转的页面类型。</summary>
     public Type? Page { get; init; }
 
+    /// <summary>
+    /// kind = window 时要在独立窗口里打开的工具 id（见 <c>SubjectToolsWindow.Tools</c>：
+    /// function-plot / equation / chemistry）。空 = 窗口自己决定（上次用的那个）。
+    /// </summary>
+    public string? WindowTool { get; init; }
+
     /// <summary>想给某个模块写更贴切的说明就填它（不填就用 Kind 的通用说法）。</summary>
     public string? Note { get; init; }
 
@@ -57,6 +70,7 @@ public sealed class SidebarModule
     public string Hint => Note ?? Kind switch
     {
         SidebarModuleKinds.Page => "打开主窗口中的该页面",
+        SidebarModuleKinds.Window => "在独立窗口中打开，不必拉出主界面",
         SidebarModuleKinds.Action => "单击即执行，不切换窗口、不抢占焦点",
         SidebarModuleKinds.Panel => "在侧边栏旁显示面板，不切换窗口、不占用主界面",
         _ => "显示浮窗，不占用主界面"
@@ -74,6 +88,14 @@ public static class SidebarModules
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
         new() { Id = "image-color", Name = "图片取色", ShortName = "取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
         new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", Glyph = "\uE943", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.EncodingToolPage) },
+        // 学科工具（2026-10-18 Nick 要）：函数图像 / 方程求解 / 化学配平**各占一项**，
+        // 点哪项就直接开那件工具，单开一扇窗、**不拉主界面** —— 这是重点。
+        // 以前点这类工具会把整个主窗口叫出来（Kind = Page），只想算一道题时太重。
+        // ⚠️ Nick 10-18 明确否过"合并成一个「学科」入口"：三个工具要有三个按钮。
+        // 字形与 Data/ToolDef.cs 里同一件工具保持一致，别一边一个样。
+        new() { Id = "subject-function", Name = "函数图像", ShortName = "函数", Glyph = "\uE9D2", Kind = SidebarModuleKinds.Window, WindowTool = "function-plot", Note = "在独立窗口中打开函数图像，不必打开主界面" },
+        new() { Id = "subject-equation", Name = "方程求解", ShortName = "方程", Glyph = "\uE8EF", Kind = SidebarModuleKinds.Window, WindowTool = "equation", Note = "在独立窗口中打开方程求解，不必打开主界面" },
+        new() { Id = "subject-chemistry", Name = "化学方程式配平", ShortName = "化学", Glyph = "\uE80A", Kind = SidebarModuleKinds.Window, WindowTool = "chemistry", Note = "在独立窗口中打开化学方程式配平，不必打开主界面" },
         // ⚠️ 原来这里还有一项「系统镜像下载（mirror-download）」：2026-10-09 该功能整体下线，一并删除。
         //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
 
@@ -106,6 +128,15 @@ public static class SidebarModules
         new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次单击即可还原（不关闭任何程序）" },
         new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同单击标题栏 ×，会提示是否保存，不强制结束）" },
         new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中的所有窗口（含最小化窗口）。防误触：首次单击仅计数，再次单击才会执行；均为正常关闭，不强制结束" },
+        // 「关机」（2026-10-18 Nick 要）：侧边栏一颗「关机」按钮，按设置里的「关机方式」执行。
+        // · 默认＝手动关机：调系统的 SlideToShutDown.exe（下滑滑块才真关，本身即确认步骤，不滑就一直停着）；
+        // · 直接关机：立刻 shutdown /s /f /t 0。
+        // ⚠️ 这是破坏性操作，点下去先弹确认（danger 红键），手动模式再叠加滑动界面的二次确认；
+        //    auto-add 走 revision 9（跟任务管理器 / 杀希沃那批动作同样默认进侧边栏）。
+        // ⚠️ 字形用 E7E8（系统电源键 ⏻）—— 与「取消关机」同一个字形；若想区分两者，
+        //    把「取消关机」换成 E7A7（撤销箭头）即可，两边一起改。
+        new() { Id = "shutdown", Name = "关机", ShortName = "关机", Glyph = "\uE7E8", Kind = SidebarModuleKinds.Action, Note = "关闭计算机：先弹窗确认；按设置中的「关机方式」执行（手动关机＝系统滑动关机界面，需下滑确认；直接关机＝立即关机）" },
+
         // ⚠️ 取消关机：只在用户**自己把它加到侧边栏**之后才出现。刻意**不**走 SidebarModulesRevision 补入 ——
         //    「自动关机」是实验性功能且默认关闭，往所有人侧边栏上塞一颗多数人用不上的按钮不合理。
         //    添加入口在「自动关机」页上（一个按钮追加到末尾），也可以在「侧边布局」页里手动勾。

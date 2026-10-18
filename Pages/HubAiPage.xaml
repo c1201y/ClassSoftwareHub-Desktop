@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.HubAiPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:hub="using:ClassSoftwareHub.Desktop.Services.HubAi">
+
+    <!--
+      Hub AI 完整对话页（2026-10-18）。
+      版式：三列把内容钉在 960，内部再分「历史 240 / 对话 *」，照「更新日志」页的分栏做法。
+      ⚠️ 与「软件下载」页右下那个浮层是**同一个内核的两种外壳**：浮层只负责把问题送进来
+         （见 HubAiPage.PendingQuestion），对话、历史、工具、用量都只在这一页实现。
+    -->
+    <Grid Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="24" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="1" MaxWidth="960" Margin="0,36,0,44">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ═══════════ 左：历史对话 ═══════════ -->
+            <Grid Margin="0,0,16,0" RowSpacing="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="历史对话" FontSize="13" FontWeight="SemiBold" />
+
+                <Button Grid.Row="1" Content="新对话" HorizontalAlignment="Stretch"
+                        Click="NewChat_Click" />
+
+                <!-- 原生 ListView：选中/悬停/键盘导航交给系统默认视觉，不自绘 -->
+                <ListView x:Name="SessionList" Grid.Row="2"
+                          SelectionMode="Single"
+                          SelectionChanged="SessionList_SelectionChanged"
+                          RightTapped="SessionList_RightTapped">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="hub:ChatSession">
+                            <!--
+                              ⚠️ 右键菜单**不要**挂在 DataTemplate 的元素上：
+                                 ListViewItem 会把 ContextFlyout 吞掉，实测右键毫无反应
+                                 （日志里"右键菜单…命中=（无）"就是这个）。统一走 ListView 的 RightTapped。
+                            -->
+                            <StackPanel Spacing="2" Padding="0,5">
+                                <TextBlock Text="{x:Bind Title}" FontSize="12.5"
+                                           MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind DateText}" FontSize="11" Opacity="0.55" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+
+            <!-- ═══════════ 右：对话 ═══════════ -->
+            <Grid Grid.Column="1" RowSpacing="14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Hub AI" FontSize="28" FontWeight="Bold" />
+
+                <!-- 已配置模型时这条自动收起（见 ApplyEnabledState） -->
+                <InfoBar x:Name="NotWiredBar" Grid.Row="1" Severity="Informational"
+                         IsOpen="True" IsClosable="False"
+                         Title="模型尚未配置"
+                         Message="下面这些是本机实时概况，由本地采集，不经过网络。配置模型之后，这里才会出现针对这台电脑的建议。" />
+
+                <!-- 总闸关闭时的替身：藏掉消息区与输入框，给一个"去启用"的出口 -->
+                <Border x:Name="DisabledPanel" Grid.Row="1" Visibility="Collapsed"
+                        Background="{ThemeResource HubAiCardBackground}"
+                        BorderBrush="{ThemeResource HubAiCardBorder}" BorderThickness="1"
+                        CornerRadius="12" Padding="24,22">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Hub AI 处于关闭状态" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource HubAiTitleForeground}" />
+                        <TextBlock FontSize="13" TextWrapping="Wrap" LineHeight="21"
+                                   Foreground="{ThemeResource HubAiSubForeground}"
+                                   Text="在设置里启用之后，这里会显示对话与诊断建议。已填过的配置不会因为关闭而丢失。" />
+                        <Button Content="去启用" Style="{StaticResource AccentButtonStyle}"
+                                HorizontalAlignment="Left" Click="GoEnable_Click" />
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer x:Name="ChatScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="HubAiMessages" Spacing="12" Padding="0,2,0,8">
+
+                        <!--
+                          本机概况：采集层的真实输出，**不需要模型**就能看。
+                          ⚠️ 标签列 Auto、值列 *，值一律单行省略 —— 不许撑高卡片。
+                        -->
+                        <Border Background="{ThemeResource HubAiCardBackground}"
+                                BorderBrush="{ThemeResource HubAiCardBorder}" BorderThickness="1"
+                                CornerRadius="12" Padding="20,18">
+                            <StackPanel Spacing="10">
+                                <Grid>
+                                    <TextBlock Text="本机概况" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{ThemeResource HubAiTitleForeground}" />
+                                    <TextBlock x:Name="SnapshotStatus" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="11.5" Opacity="0.55"
+                                               Foreground="{ThemeResource HubAiSubForeground}" />
+                                </Grid>
+
+                                <ProgressRing x:Name="SnapshotLoading" IsActive="True" Width="20" Height="20"
+                                              HorizontalAlignment="Left" />
+
+                                <Grid x:Name="SnapshotBody" Visibility="Collapsed"
+                                      ColumnSpacing="16" RowSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="处理器" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapCpu" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="1" Text="内存" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapMemory" Grid.Row="1" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="2" Text="系统" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapOs" Grid.Row="2" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="3" Text="磁盘" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapDisk" Grid.Row="3" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="4" Text="进程" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapProcess" Grid.Row="4" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="5" Text="启动项" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapStartup" Grid.Row="5" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="6" Text="已装软件" FontSize="12.5" Opacity="0.6" />
+                                    <TextBlock x:Name="SnapApps" Grid.Row="6" Grid.Column="1" FontSize="12.5"
+                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 本地规则结论（MachineDiagnosis）：不经过模型，模型抽风时它仍然是准的 -->
+                        <Border Background="{ThemeResource HubAiCardBackground}"
+                                BorderBrush="{ThemeResource HubAiCardBorder}" BorderThickness="1"
+                                CornerRadius="12" Padding="20,18">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="初步判断" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource HubAiTitleForeground}" />
+                                <StackPanel x:Name="FindingsPanel" Spacing="12" />
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <StackPanel x:Name="ChatInput" Grid.Row="3" Spacing="6">
+                    <!-- 工具调用时的状态提示（"正在统计目录占用…"）。平时收起，不占位。 -->
+                    <TextBlock x:Name="ChatStatus" FontSize="11.5" Opacity="0.6" Visibility="Collapsed" />
+
+                    <!--
+                      模型与思考参数（2026-10-18）。放在输入框上方而不是标题行：
+                        · 下拉展开时不会挡住正文；
+                        · 和"这次问什么"是同一层的操作，离输入框近才顺手。
+                      ⚠️ 只列**当前服务商**的模型 —— 把七家的模型全铺在一个下拉里，用户根本分不清哪些是自己配过的。
+                         换服务商去「设置 → Hub AI → 模型服务」。
+                    -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <ComboBox x:Name="ModelPicker" MinWidth="200"
+                                  SelectionChanged="ModelPicker_SelectionChanged" />
+                        <ToggleButton x:Name="ThinkToggle" Content="思考"
+                                      Click="ThinkToggle_Click" />
+                        <ComboBox x:Name="EffortPicker" MinWidth="90"
+                                  SelectionChanged="EffortPicker_SelectionChanged" />
+                    </StackPanel>
+
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <!--
+                          ⚠️ AcceptsReturn="False" 是关键：设为 True 时 **TextBox 会在自己的 KeyDown 里
+                             就把 Enter 当换行吃掉**，外面再怎么拦都晚一步（上一轮改 PreviewKeyDown 也没救回来）。
+                             现在由代码接管：Enter 发送，Shift+Enter 手动插换行。
+                        -->
+                        <TextBox x:Name="HubAiInput" PlaceholderText="描述你的需求，或直接问该装什么"
+                                 AcceptsReturn="False" MaxHeight="120" TextWrapping="Wrap"
+                                 VerticalAlignment="Bottom"
+                                 KeyDown="HubAiInput_KeyDown" />
+                        <!-- 同一个按钮在"发送"和"停止"之间切换：流式生成时点它就是取消 -->
+                        <Button x:Name="SendButton" Grid.Column="1" Padding="14,8" VerticalAlignment="Bottom"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="HubAiSend_Click" ToolTipService.ToolTip="发送">
+                            <FontIcon x:Name="SendIcon" Glyph="&#xE724;" FontSize="14" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

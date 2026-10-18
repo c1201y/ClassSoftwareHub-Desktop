@@ -64,6 +64,12 @@ public sealed partial class SubmitPage : Page
         ("应用商店", "store"),
     };
 
+    /// <summary>
+    /// 一稿最多几条下载项 —— 与网页端 <c>SubmitPage.vue</c> 的 <c>MAX_DOWNLOADS = 5</c> 一致。
+    /// 这是提交数据的约定（服务端与审核都按这个口径），桌面端不能比网页端更宽松。
+    /// </summary>
+    private const int MaxDownloads = 5;
+
     /// <summary>kind 值 → 下拉索引；空串（自动）返回 -1，让占位文案显示出来（与网页端一致）。</summary>
     private static int KindIndexOf(string kind)
     {
@@ -114,6 +120,9 @@ public sealed partial class SubmitPage : Page
 
     private void AddDownload()
     {
+        // 与网页端 MAX_DOWNLOADS（= 5）同一口径：这是提交数据的约定，超限的投稿服务端不收
+        if (_downloads.Count >= MaxDownloads) return;
+
         var draft = new DownloadDraft();
         _downloads.Add(draft);
 
@@ -168,33 +177,9 @@ public sealed partial class SubmitPage : Page
 
         var urlBox = Field("下载直链 *", "https://…/setup.exe", null, value => draft.Url = value);
 
-        var uploadButton = new Button { Content = "上传", MinWidth = 90, VerticalAlignment = VerticalAlignment.Bottom };
-        Grid.SetColumn(uploadButton, 1);
-        uploadButton.Click += async (_, _) =>
-        {
-            var picked = await PickFileAsync("选择要上传到本站的文件", new[] { "*" });
-            if (picked is null) return;
-
-            await UploadToSiteAsync(picked.Path, Services.OssPurpose.File, uploadButton, urlBar, urlHint, url =>
-            {
-                draft.Url = url;
-                urlBox.Text = url;
-                // 键是服务端生成的，手改一个字符就失效 ⇒ 锁住（跟网页版一样）
-                urlBox.IsReadOnly = true;
-            });
-        };
-
-        urlGrid.Children.Add(urlBox);
-        urlGrid.Children.Add(uploadButton);
-        // 输入框行 + 进度条 + 说明/状态行三件贴成一小块（间距 4，跟 TextBox 自带说明行的观感一致）
-        var urlBlock = new StackPanel { Spacing = 4 };
-        urlBlock.Children.Add(urlGrid);
-        urlBlock.Children.Add(urlBar);
-        urlBlock.Children.Add(urlHint);
-        stack.Children.Add(urlBlock);
-
         // 下载方式（对应网页端提交页同一个下拉）：决定详情页那颗按钮写「下载」还是
         // 「前往网盘 / 前往官网」。默认 -1 ＝不选 ＝自动识别，提交时不写 kind 字段。
+        // ⚠️ 在这里就建好（比直链那一行早），是因为上传成功后要立刻把它拨到「文件直链」。
         var kindCombo = new ComboBox
         {
             Header = "下载方式",
@@ -208,6 +193,36 @@ public sealed partial class SubmitPage : Page
         kindCombo.SelectedIndex = -1;
         kindCombo.SelectionChanged += (_, _) =>
             draft.Kind = kindCombo.SelectedIndex >= 1 ? DownloadKinds[kindCombo.SelectedIndex].Kind : "";
+
+        var uploadButton = new Button { Content = "上传", MinWidth = 90, VerticalAlignment = VerticalAlignment.Bottom };
+        Grid.SetColumn(uploadButton, 1);
+        uploadButton.Click += async (_, _) =>
+        {
+            var picked = await PickFileAsync("选择要上传到本站的文件", new[] { "*" });
+            if (picked is null) return;
+
+            await UploadToSiteAsync(picked.Path, Services.OssPurpose.File, uploadButton, urlBar, urlHint, url =>
+            {
+                draft.Url = url;
+                urlBox.Text = url;
+                // 键是服务端生成的，手改一个字符就失效 ⇒ 锁住（跟网页版一样）
+                urlBox.IsReadOnly = true;
+                // ⛔ 必须显式标「文件直链」：`oss://` 键推断不出类型，停在「自动识别」会被
+                //    当成网页跳转，详情页点一下就把人带走 —— 正是用户报的「上传了还要管直链」。
+                //    网页端同一处也是这么做的（SubmitPage.vue：kindIndex = 1）。
+                draft.Kind = "file";
+                kindCombo.SelectedIndex = 1;
+            });
+        };
+
+        urlGrid.Children.Add(urlBox);
+        urlGrid.Children.Add(uploadButton);
+        // 输入框行 + 进度条 + 说明/状态行三件贴成一小块（间距 4，跟 TextBox 自带说明行的观感一致）
+        var urlBlock = new StackPanel { Spacing = 4 };
+        urlBlock.Children.Add(urlGrid);
+        urlBlock.Children.Add(urlBar);
+        urlBlock.Children.Add(urlHint);
+        stack.Children.Add(urlBlock);
         stack.Children.Add(kindCombo);
 
         var hashBox = Field("校验值（选填，用于防篡改）", "纯十六进制，算法按位数自动识别", null, value => draft.Hash = value);
@@ -228,6 +243,7 @@ public sealed partial class SubmitPage : Page
         _titles.Add(title);
         DownloadsHost.Children.Add(card);
         RenumberDownloads();
+        SyncAddButton();
     }
 
     private void RemoveDownload(DownloadDraft draft)
@@ -241,12 +257,16 @@ public sealed partial class SubmitPage : Page
         _cards.RemoveAt(index);
         _titles.RemoveAt(index);
         RenumberDownloads();
+        SyncAddButton();
     }
 
     private void RenumberDownloads()
     {
         for (var i = 0; i < _titles.Count; i++) _titles[i].Text = $"下载项 {i + 1}";
     }
+
+    /// <summary>下载项到上限就把「添加」按钮灰掉（跟网页端同一表现，别让人点了没反应）。</summary>
+    private void SyncAddButton() => AddDownloadButton.IsEnabled = _downloads.Count < MaxDownloads;
 
     private TextBox Field(string header, string placeholder, string? description, Action<string>? onText)
     {

@@ -169,7 +169,8 @@
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                Text="没有自己的网盘也可以：点「上传到本站」把文件传到站点存储，回填的文件键在下载时同样走票据闸门（单文件上限 2.5 GB，超过请改填官网或 GitHub Releases 直链）。" />
                     <StackPanel x:Name="DownloadsHost" Spacing="12" />
-                    <Button Content="+ 添加下载项" Click="AddDownload_Click" HorizontalAlignment="Left" />
+                    <Button x:Name="AddDownloadButton" Content="+ 添加下载项" Click="AddDownload_Click"
+                            HorizontalAlignment="Left" />
 
                     <!-- ═══ 提交 ═══ -->
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,6,0,0">

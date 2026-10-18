@@ -32,7 +32,7 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.2.0-insider1.1";
+    public const string ShellVersion = "1.2.0-insider1.2";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -126,6 +126,40 @@ public static class ShellConfig
 
     /// <summary>仓库里软件数据所在目录（子目录 apps/ 一个软件一个 json，根上还有 categories.json）。</summary>
     public const string SiteRepoDataDir = "软件数据";
+
+    /// <summary>
+    /// Hub AI 工具包在站点仓库里的位置（2026-10-18）。
+    ///
+    /// <para>
+    /// ⚠️ 这个文件里**只有声明式 JSON**（工具名 / 说明 / 参数 schema），没有任何可执行内容 ——
+    /// 下载并执行远程代码等于把安全交给一个随时可能被改的文件，杀软也会直接拦。
+    /// 真正的实现永远在主程序里，按 id 分派。详见 <see cref="Services.HubAi.ToolPack"/>。
+    /// </para>
+    /// <para>
+    /// 放站点仓库而不是桌面版仓库：这里本来就是"内容源"（软件数据也在这），
+    /// 改工具清单不必动代码仓库；而且走同一套 <see cref="Services.GithubRoute"/> 多路下载。
+    /// </para>
+    /// </summary>
+    public const string HubAiToolPackPath = "AI工具/toolpack.json";
+
+    /// <summary>
+    /// 工具包的直连地址。下载时会再交给 <see cref="Services.GithubRoute"/> 生成多路候选
+    /// （GitHub 源 / 自建加速），跟随用户在设置里选的那条线路。
+    /// </summary>
+    public static string HubAiToolPackUrl
+    {
+        get
+        {
+            var segments = HubAiToolPackPath.Split('/');
+            var encoded = new string[segments.Length];
+            for (var i = 0; i < segments.Length; i++)
+                encoded[i] = Uri.EscapeDataString(segments[i]);
+
+            return "https://raw.githubusercontent.com/" +
+                   $"{SiteRepoOwner}/{SiteRepoName}/{SiteRepoBranch}/" +
+                   string.Join('/', encoded);
+        }
+    }
 
     // ════════════════════════════════════════════════════════════════
     // 自建提交服务 —— 「提交软件」与「回声洞投稿」共用
