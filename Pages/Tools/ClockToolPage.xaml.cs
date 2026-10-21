@@ -517,6 +517,7 @@ public sealed partial class ClockToolPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "保存为预设",
             Content = input,

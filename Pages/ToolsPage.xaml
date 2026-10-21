@@ -61,7 +61,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="内置工具" FontSize="30" FontWeight="Bold" />
+                <TextBlock x:Name="TitleText" Text="课堂工具" FontSize="30" FontWeight="Bold" />
 
                 <!-- 两列（首页「快速开始」同款：列间距 8、行间距 8）：
                      序号偶数的进左列、奇数的进右列，见 code-behind。
@@ -108,7 +108,7 @@
 
                         <FontIcon Glyph="&#xE71D;" FontSize="20" VerticalAlignment="Top" />
                         <StackPanel Grid.Column="1" Spacing="3">
-                            <TextBlock Text="常用工具窗口" FontSize="15" FontWeight="Bold" />
+                            <TextBlock x:Name="PaletteTitle" Text="常用工具窗口" FontSize="15" FontWeight="Bold" />
                             <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
                                        Text="置顶小窗口，仅包含四项常用工具：随机抽号、课堂计时、秒表计时、全屏时钟。无需打开主界面：系统托盘提供独立图标，单击即可显示（窗口可拖动，按 Esc 收起）。屏幕边缘另提供「侧边栏」入口，全屏播放 PPT 时仍可单击。" />
                             <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"

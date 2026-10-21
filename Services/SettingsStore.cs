@@ -108,6 +108,11 @@ public sealed class AppSettings
     public string SidebarDropAnim { get; set; } = "dip";
 
     /// <summary>侧边栏沿边位置（0~1）；-1 = 居中（默认）。拖动收起状态的抓手时记下来。两种模式共用。</summary>
+    /// <summary>
+    /// 沿边位置比例（0~1，-1 = 居中）。
+    /// ⛔ **已废弃（2026-10-19）**：位置记忆功能移除 —— 它和「开机最小化」冲突，且用户觉得手动调更顺手。
+    /// 运行时改用 <c>ToolSidebarWindow._liveRatio</c>（只在内存里），这里只保留字段免得旧存档反序列化报错。
+    /// </summary>
     public double SidebarPosRatio { get; set; } = -1;
 
     /// <summary>
@@ -285,6 +290,15 @@ public sealed class AppSettings
 
     /// <summary>当前使用哪一条模型（对应 <see cref="HubAiModels"/> 里的 Id）。</summary>
     public string? HubAiActiveModelId { get; set; }
+
+    /// <summary>Hub AI 左侧历史栏是否收起（2026-10-19）。</summary>
+    public bool HubAiHistoryCollapsed { get; set; }
+
+    /// <summary>
+    /// Hub AI 是否允许联网检索（2026-10-20，输入框上的「联网」开关）。
+    /// ⚠️ 只有开启且工具总闸也开着时，搜索工具才会交给模型。
+    /// </summary>
+    public bool HubAiWebEnabled { get; set; }
 
     /// <summary>
     /// 是否启用 AI 工具包（2026-10-18）。

@@ -1881,6 +1881,7 @@ public sealed partial class MainWindow : Window
 
             var dialog = new ContentDialog
             {
+                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                 XamlRoot = root,
                 Title = "当前已是最新版本",
                 Content = $"当前：dv{ShellConfig.ShellVersion}\n通道：{Services.Updating.UpdateChannels.ToDisplay(channel)}",
@@ -2217,6 +2218,10 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = root,
+            // ⚠️ ContentDialog 走的是独立的 popup 根，**不会自动继承窗口的 RequestedTheme** ——
+            //    不显式给就会跟系统主题走，于是浅色界面里弹出一个黑框（2026-10-19 用户截图）。
+            //    同类的坑：动态生成的 AI 气泡、首页推荐卡片（见 ThemeBrush 的注释）。
+            RequestedTheme = RootGrid.ActualTheme,
             Title = "下载 " + task.Title,
             Content = panel,
             PrimaryButtonText = "后台继续",     // 只是把弹窗收掉，下载继续
@@ -2273,6 +2278,7 @@ public sealed partial class MainWindow : Window
         {
             await new ContentDialog
             {
+                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                 XamlRoot = root,
                 Title = "下载失败",
                 Content = new TextBlock
@@ -2343,6 +2349,7 @@ public sealed partial class MainWindow : Window
 
         var done = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = root,
             Title = "下载完成",
             Content = body,
@@ -2410,6 +2417,7 @@ public sealed partial class MainWindow : Window
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = root,
             Title = "缺少 WebView2 运行时",
             Content = new TextBlock

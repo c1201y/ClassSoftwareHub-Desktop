@@ -402,7 +402,18 @@
                                 <TextBlock Text="自动" />
                             </ComboBoxItem>
                             <ComboBoxItem Tag="selfhosted">
-                                <TextBlock Text="自建加速服务" />
+                                <!--
+                                  2026-10-22 Nick：自建加速**不稳定**（签名接口在部分网络下拿不到），
+                                  右侧挂一个 Exp（Experimental）标记，用 WinUI 的警告色提示用户。
+                                  ⚠️ 标记只在选项里，不参与 Tag 判断。
+                                -->
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="自建加速服务" />
+                                    <TextBlock Text="Exp"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                </StackPanel>
                             </ComboBoxItem>
                             <ComboBoxItem Tag="github">
                                 <TextBlock Text="GitHub 源" />

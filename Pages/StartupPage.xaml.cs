@@ -258,6 +258,7 @@ public sealed partial class StartupPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "开机启动项：这里扫的是什么",
             Content = BuildAboutBody(),
@@ -327,6 +328,7 @@ public sealed partial class StartupPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = title,
             Content = new TextBlock

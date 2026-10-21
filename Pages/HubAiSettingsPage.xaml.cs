@@ -289,6 +289,7 @@ public sealed partial class HubAiSettingsPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             Title = editing ? "编辑模型" : "添加模型",
             PrimaryButtonText = "保存",
             CloseButtonText = "取消",

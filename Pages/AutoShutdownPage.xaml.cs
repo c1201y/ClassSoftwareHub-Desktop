@@ -202,6 +202,7 @@ public sealed partial class AutoShutdownPage : Page
         {
             var confirm = new ContentDialog
             {
+                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                 XamlRoot = XamlRoot,
                 Title = "套用前一天的关机点",
                 Content = $"{AutoShutdownConfig.DayNames[dayIndex]}现在有 {target.Count} 个关机点，"
@@ -389,6 +390,7 @@ public sealed partial class AutoShutdownPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = isNew ? "添加关机点" : "关机点",
             Content = root,

@@ -82,6 +82,10 @@ public static class ToolRunner
                 "search_software_library" => SearchLibrary(argumentsJson, session),
                 "list_installed_apps" => await ListInstalledAsync(argumentsJson, timeout.Token),
                 "list_startup_items" => await ListStartupAsync(timeout.Token),
+
+                // 联网（2026-10-21）：自建实现，不依赖第三方 key
+                "web_search" => await WebTools.SearchAsync(argumentsJson, timeout.Token),
+                "fetch_url" => await WebTools.FetchAsync(argumentsJson, timeout.Token),
                 _ => $"未知工具：{id}。只能使用工具清单中列出的工具。",
             };
 

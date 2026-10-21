@@ -176,11 +176,13 @@ public sealed partial class SubjectToolsWindow : Window
 
             if (_appWindow.Presenter is OverlappedPresenter p)
             {
-                p.SetBorderAndTitleBar(true, true);   // 系统标题栏（拖动 / 阴影 / 圆角交给系统）
                 p.IsResizable = true;
                 p.IsMaximizable = true;
                 p.IsMinimizable = true;
             }
+
+            // 自绘标题栏（2026-10-19）：不再用系统那根标题条，改成内容延伸样式
+            ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);

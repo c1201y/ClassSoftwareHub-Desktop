@@ -82,7 +82,7 @@
                           ItemContainerStyle="{StaticResource CshCardItemStyle}">
                     <GridView.ItemTemplate>
                         <DataTemplate x:DataType="data:SoftwareApp">
-                            <Border Style="{StaticResource CshCardStyle}" Width="302" Height="120" Padding="16,14" Margin="0,0,16,14"
+                            <Border Style="{StaticResource CshNavCardStyle}" Width="312" Height="126" Padding="16,12" Margin="0,0,8,8"
                                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                                 <Grid RowSpacing="8" ColumnSpacing="12">
                                     <Grid.RowDefinitions>
@@ -96,7 +96,7 @@
                                     </Grid.ColumnDefinitions>
                                     <!-- 图标统一成 1:1 正方形：ImageBrush + UniformToFill + AlignmentX/Y=Center
                                          ＝ 等比放大填满正方形，多出来的边从**正中间**裁掉（不是左上角） -->
-                                    <Border Width="44" Height="44" CornerRadius="9" VerticalAlignment="Top"
+                                    <Border Width="48" Height="48" CornerRadius="10" VerticalAlignment="Top"
                                             HorizontalAlignment="Left">
                                         <Border.Background>
                                             <ImageBrush ImageSource="{x:Bind IconImage, Mode=OneWay}" Stretch="UniformToFill"
@@ -110,7 +110,7 @@
                                         </Grid>
                                     </Border>
                                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Top">
-                                        <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="Bold"
+                                        <TextBlock Text="{x:Bind Name}" FontSize="15" FontWeight="SemiBold"
                                                    MaxLines="1" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{x:Bind Tagline}" FontSize="12" Opacity="0.75"
                                                    MaxLines="2" TextWrapping="Wrap"
@@ -133,7 +133,13 @@
                           ItemContainerStyle="{StaticResource CshCardItemStyle}">
                     <GridView.ItemTemplate>
                         <DataTemplate x:DataType="data:SoftwareApp">
-                            <Border Style="{StaticResource CshCardStyle}" Width="174" Height="112" Padding="12,10" Margin="0,0,16,14"
+                            <!--
+                              ⚠️ 2026-10-22 Nick：「把首页那些卡片的样式移植过来」。
+                              首页入口卡 = CshNavCardStyle（圆角 8、更宽松的留白），
+                              之前这里用的是内容卡 CshCardStyle（圆角 4），看着就是两套东西。
+                              ⚠️ 内联 Padding/Height 优先于 Style，所以这里要另写一份适配 174 宽的值。
+                            -->
+                            <Border Style="{StaticResource CshNavCardStyle}" Width="184" Height="114" Padding="14,12" Margin="0,0,8,8"
                                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited">
                                 <Grid RowSpacing="3">
                                     <Grid.RowDefinitions>
@@ -154,7 +160,7 @@
                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Grid>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{x:Bind Name}" FontSize="13.5" FontWeight="Bold"
+                                    <TextBlock Grid.Row="1" Text="{x:Bind Name}" FontSize="13.5" FontWeight="SemiBold"
                                                MaxLines="1" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Grid.Row="2" Text="{x:Bind Tagline}" FontSize="11.5" Opacity="0.75"
                                                MaxLines="1" TextTrimming="CharacterEllipsis" />

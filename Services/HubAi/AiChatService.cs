@@ -54,6 +54,13 @@ public sealed class AiChatService
         foreach (var message in messages)
         {
             if (message.Role == "system") continue;
+
+            // ⛔⛔ assistant 的 content 不能为空。存档里允许存「只有思考、没有正文」的那一轮（工具调用中间态），
+            //    但把它原样塞回上下文，下一轮请求会被服务端判成 400：
+            //    `Invalid assistant message: content or tool_calls must be set`（2026-10-21 实测）。
+            //    这种消息对后续对话也没有价值，直接丢掉。
+            if (message.Role == "assistant" && string.IsNullOrWhiteSpace(message.Content)) continue;
+
             _messages.Add(message);
         }
     }
@@ -76,7 +83,9 @@ public sealed class AiChatService
         Action<string>? onToolDone = null)
     {
         Session.Reset();
-        EnsureSystemPrompt(snapshot);
+        // ⚠️ 必须把 tools 传下去：没有工具时提示词里**绝不能**提"可以调用工具" ——
+        //    否则模型会自己编 `<tool_call>{...}</tool_call>` 的文本吐给用户（2026-10-19 实测截图）。
+        EnsureSystemPrompt(snapshot, tools);
 
         _messages.Add(AiMessage.User(userText));
         TrimHistory(cfg.ContextLimit);
@@ -132,12 +141,14 @@ public sealed class AiChatService
     //  提示词
     // ══════════════════════════════════════════════════════
 
-    private void EnsureSystemPrompt(MachineSnapshot snapshot)
+    private void EnsureSystemPrompt(MachineSnapshot snapshot, IReadOnlyList<ToolDefinition>? tools = null)
     {
         if (_messages.Count > 0 && _messages[0].Role == "system") return;
 
+        var hasTools = tools is { Count: > 0 };
+
         _messages.Insert(0, AiMessage.System(
-            BuildSystemPrompt(MachineDigest.ToPrompt(snapshot), App.Settings.Current.UserDisplayName)));
+            BuildSystemPrompt(MachineDigest.ToPrompt(snapshot), App.Settings.Current.UserDisplayName, hasTools)));
     }
 
     /// <summary>
@@ -159,23 +170,30 @@ public sealed class AiChatService
     /// 除此之外：**什么问题都可以答，想答多细就答多细**。
     /// </para>
     /// </summary>
-    private static string BuildSystemPrompt(string digest, string? userName) => $"""
+    private static string BuildSystemPrompt(string digest, string? userName, bool hasTools) => $"""
         你是 ClassSoftwareHub 内置的 AI 助手，一个通用型的对话助手。
 
         能力范围：
         - 可以回答任何领域的问题，不限于电脑相关。
-        - 可以读取这台电脑的信息（硬件、磁盘、进程、已装软件、启动项），用来回答与这台机器有关的问题。
-        - 可以检索站内软件库，帮用户挑选软件。
+        - 这台电脑的一份快照已经放在下方「本机数据」里，可以直接据此回答与这台机器有关的问题。
+        {(hasTools
+            ? "- 需要更细的数据时（磁盘明细、已装软件清单、开机启动项等），可以调用工具查询。\n- 可以检索站内软件库，帮用户挑选软件。"
+            : "- ⛔ 工具当前没有启用：不要声称要调用工具，不要输出任何 `<tool_call>`、XML 或 JSON 形式的调用语句，也不要描述你打算怎么调用。本机数据只有下面这一份，缺什么就直说没有。\n- ⛔ 无法联网检索、无法打开网页。")}
 
         必须遵守的三条：
         1. 你不能修改这台电脑：不删文件、不改设置、不装软件、不结束进程。需要用户动手的地方，告诉他去哪个页面。
-        2. 涉及本机状态的问题，先调用工具取数据，不要凭印象猜测。工具没读到的项就如实说"本次未读取到"。
-        3. 推荐软件之前必须先调用 search_software_library，只能从检索结果里选，不要推荐站外软件。
+        2. {(hasTools
+            ? "涉及本机状态、而下方数据不足时，先调用工具取数据，不要凭印象猜测。"
+            : "下方数据里没有的，如实说明「本次未读取到」，不要推测，不要编造。")}
+        3. {(hasTools
+            ? "推荐软件之前必须先调用 search_software_library，只能从检索结果里选，不要推荐站外软件。"
+            : "推荐软件时只说出软件名称与用途，不要声称正在检索站内软件库。")}
 
         回答风格：
         - 简体中文书面语，不使用口语和感叹号。
         - 先给结论，再展开理由；用户问得深就给足细节，不要为了简短牺牲信息量。
         - 需要分点时用列表，不要把一段话堆在一起。
+        - ⛔ 不要把「我要做什么」的过程写进回答里（例如"我可以尝试调用工具""让我先查一下"），直接给结果。
 
         [使用者]
         {(string.IsNullOrWhiteSpace(userName) ? "称呼：未设置（用「你」即可）" : $"称呼：{userName}")}

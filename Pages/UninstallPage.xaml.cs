@@ -417,6 +417,7 @@ public sealed partial class UninstallPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = inLeftover ? "残留判定说明" : "扫描范围与注意事项",
             Content = inLeftover ? BuildLeftoverAboutBody() : BuildAboutBody(),
@@ -537,6 +538,7 @@ public sealed partial class UninstallPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = $"卸载「{row.Name}」？",
             Content = BuildConfirmBody(row),
@@ -635,6 +637,7 @@ public sealed partial class UninstallPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = title,
             Content = new TextBlock { Text = body, FontSize = 13, TextWrapping = TextWrapping.Wrap },
@@ -759,6 +762,7 @@ public sealed partial class UninstallPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "隔离区",
             Content = body,
@@ -909,6 +913,7 @@ public sealed partial class UninstallPage : Page
 
         var confirm = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = $"确认清理 {chosen.Count} 项残留？",
             Content = BuildCleanConfirmBody(chosen.Count, size),
@@ -952,6 +957,7 @@ public sealed partial class UninstallPage : Page
         // 汇报：清完了什么、还剩什么、后悔药在哪
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "清理完成",
             Content = BuildReportBody(report),

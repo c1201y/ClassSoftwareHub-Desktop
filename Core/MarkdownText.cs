@@ -56,18 +56,42 @@ public static class MarkdownText
                 continue;
             }
 
-            // 标题：# / ## / ###
+            // 标题：# / ## / ### —— **字号必须分级**，否则标题和正文一样大，层级完全看不出来
             if (trimmed[0] == '#')
             {
                 FlushParagraph();
 
-                var text = trimmed.TrimStart('#').Trim();
+                var level = 0;
+                while (level < trimmed.Length && trimmed[level] == '#') level++;
+
+                var text = trimmed[level..].Trim();
+
+                var size = level switch
+                {
+                    1 => 21.0,
+                    2 => 18.0,
+                    _ => 16.0,
+                };
+
                 var p = new Paragraph
                 {
+                    FontSize = size,
                     FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(0, 8, 0, 2),
+                    Margin = new Thickness(0, level == 1 ? 12 : 9, 0, 3),
                 };
                 AppendInline(p, text);
+                target.Blocks.Add(p);
+                continue;
+            }
+
+            // 有序列表：1. / 2. / 12. （保留原编号，不重新数）
+            if (TryOrderedItem(trimmed, out var marker, out var rest))
+            {
+                FlushParagraph();
+
+                var p = new Paragraph { Margin = new Thickness(0, 0, 0, 3) };
+                p.Inlines.Add(new Run { Text = marker + "  " });
+                AppendInline(p, rest);
                 target.Blocks.Add(p);
                 continue;
             }
@@ -91,6 +115,24 @@ public static class MarkdownText
         }
 
         FlushParagraph();
+    }
+
+    /// <summary>识别「1. 」开头的有序列表项，marker 原样保留（不重新编号）。</summary>
+    private static bool TryOrderedItem(string line, out string marker, out string rest)
+    {
+        marker = "";
+        rest = "";
+
+        var i = 0;
+        while (i < line.Length && char.IsDigit(line[i])) i++;
+
+        if (i == 0 || i + 1 >= line.Length) return false;
+        if (line[i] != '.' && line[i] != ')') return false;
+        if (line[i + 1] != ' ') return false;
+
+        marker = line[..(i + 1)];
+        rest = line[(i + 1)..].Trim();
+        return true;
     }
 
     /// <summary>

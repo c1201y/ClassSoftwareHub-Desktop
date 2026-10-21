@@ -97,27 +97,35 @@
                         <TextBlock x:Name="DownloadsTitle" FontSize="17" FontWeight="SemiBold"
                                    Margin="0,54,0,6" />
 
-                        <!-- 应用商店入口（store 字段，或 downloads 里指向商店的那条） -->
-                        <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="4" Padding="20,18"
+                        <!--
+                          应用商店入口（2026-10-19 改版）：加微软商店图标 + 白底「获取」按钮。
+                          ⚠️ 原来只是一块纯色 + 两行字 + 透明按钮，没有任何商店标识，用户看不出这是商店通道。
+                        -->
+                        <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="8" Padding="18,16"
                                 Background="{ThemeResource AccentFillColorDefaultBrush}">
-                            <Grid ColumnSpacing="16">
+                            <Grid ColumnSpacing="14">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="4">
-                                    <TextBlock x:Name="StoreTitle" FontSize="15" FontWeight="Bold"
-                                               TextWrapping="Wrap"
+
+                                <Image x:Name="StoreLogo" Width="40" Height="40"
+                                       VerticalAlignment="Center" />
+
+                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock x:Name="StoreTitle" FontSize="16"
+                                               FontWeight="SemiBold" TextWrapping="Wrap"
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                                    <TextBlock x:Name="StoreDesc" FontSize="12" TextWrapping="Wrap" Opacity="0.85"
+                                    <TextBlock x:Name="StoreDesc" FontSize="12.5" TextWrapping="Wrap" Opacity="0.9"
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                 </StackPanel>
-                                <Button x:Name="StoreButton" Grid.Column="1" VerticalAlignment="Center"
+
+                                <Button x:Name="StoreButton" Grid.Column="2" VerticalAlignment="Center"
                                         Click="Store_Click"
-                                        Background="Transparent"
-                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1" />
+                                        Background="White" Foreground="#1B1B1B"
+                                        BorderThickness="0" Padding="20,7" CornerRadius="4"
+                                        FontSize="13.5" FontWeight="SemiBold" />
                             </Grid>
                         </Border>
 

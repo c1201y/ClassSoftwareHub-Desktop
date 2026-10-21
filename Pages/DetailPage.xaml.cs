@@ -77,10 +77,13 @@ public sealed partial class DetailPage : Page
         IntroTitle.Text = ui.T("detail.intro", "应用介绍");
         InfoTitle.Text = ui.T("detail.info", "详细信息");
         DownloadsTitle.Text = ui.T("detail.downloads", "下载");
-        StoreTitle.Text = ui.T("detail.store-title", "使用 Microsoft Store 下载");
-        StoreDesc.Text = ui.T("detail.store-desc", "由应用商店托管，安装后自动更新，无需手动跟随版本。");
-        StoreButton.Content = ui.T("detail.store-button", "下载");
+        StoreTitle.Text = ui.T("detail.store-title", "在 Microsoft Store 中获取");
+        StoreDesc.Text = ui.T("detail.store-desc", "由微软商店托管，安装后自动更新，无需手动下载安装包。");
+        StoreButton.Content = ui.T("detail.store-button", "获取");
         StoreOnlyHint.Text = ui.T("detail.store-only", "该软件通过 Microsoft Store 分发，单击上方按钮打开商店页面即可获取");
+
+        // 商店图标（2026-10-19）：内嵌资源解到缓存再绑，避免 ms-appx 在 unpackaged 下取不到
+        if (StoreLogo.Source is null) StoreLogo.Source = LoadStoreLogo();
 
         // 换软件时先把上一个的图标通知退订，避免占位字形被旧软件的状态带歪
         var app = App.Content.FindById(e.Parameter as string ?? "");
@@ -338,6 +341,25 @@ public sealed partial class DetailPage : Page
         };
     }
 
+    /// <summary>
+    /// 微软商店图标（`Assets/StoreLogo.png`，内嵌资源 ⇒ 跟着 exe 走、离线可用）。
+    /// ⚠️ unpackaged 应用里 `ms-appx:///` 取不到 Assets，这里走 <see cref="Services.EmbeddedAssets"/> 解到缓存再用文件路径。
+    /// 取不到就返回 null，卡片照样能用（只是少一个图标），⛔ 别让整页崩掉。
+    /// </summary>
+    private static Microsoft.UI.Xaml.Media.ImageSource? LoadStoreLogo()
+    {
+        try
+        {
+            var path = Services.EmbeddedAssets.ExtractToCache("StoreLogo.png", "store-logo.png");
+            return new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("detail", "商店图标加载失败：" + ex.Message);
+            return null;
+        }
+    }
+
     private async void Store_Click(object sender, RoutedEventArgs e)
     {
         if (_storeUrl.Length == 0) return;
@@ -390,6 +412,7 @@ public sealed partial class DetailPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "Microsoft Store（微软商店）",
             Content = new TextBlock
@@ -416,6 +439,7 @@ public sealed partial class DetailPage : Page
                 {
                     await new ContentDialog
                     {
+                                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                         XamlRoot = XamlRoot,
                         Title = "已开始安装微软商店",
                         Content = new TextBlock
@@ -431,6 +455,7 @@ public sealed partial class DetailPage : Page
                 {
                     await new ContentDialog
                     {
+                                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                         XamlRoot = XamlRoot,
                         Title = "无法启动安装",
                         Content = new TextBlock

@@ -41,6 +41,8 @@ public static class GithubRoutes
 /// 二者跟链接绑在一起走，才不会出现「探速带了、真下载忘了带」这类漏发。
 /// </summary>
 public sealed record DownloadCandidate(string Url, string? Referer, string? ApiKey = null)
+
+
 {
     public static DownloadCandidate Direct(string url) => new(url, null);
 
@@ -94,10 +96,10 @@ public static class GithubRoute
     private const string OfficialId = "github";
 
     /// <summary>探测窗口：到点就断开（不等它下完），拿这段时间的平均速度当排名依据。</summary>
-    private static readonly TimeSpan ProbeWindow = TimeSpan.FromSeconds(2.5);
+    private static readonly TimeSpan ProbeWindow = TimeSpan.FromSeconds(1.5);
 
     /// <summary>探测硬超时（比窗口宽一点，兜住"连上了但一个字节都不给"的情况）。</summary>
-    private static readonly TimeSpan ProbeHardTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan ProbeHardTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>探测读到的字节数低于此值 → 这条基本不能用。</summary>
     private const int ProbeMinBytes = 64 * 1024;
@@ -168,6 +170,17 @@ public static class GithubRoute
     }
 
     /// <summary>只取域名（日志里看"走了哪一家"就够，不必把带签名的整条 URL 铺进去）。</summary>
+    /// <summary>
+    /// 原始链接 → 候选链接（纯字符串），供 Win7 版下载实现直接使用。
+    /// ⚠️ Referer/Key 不在这里携带 —— 对方的实现会自己按 <c>IsAcceleratedUrl</c> 贴 Referer。
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> ResolveAcceleratedAsync(
+        string url, CancellationToken ct = default)
+    {
+        var candidates = await ResolveAsync(url, ct).ConfigureAwait(false);
+        return candidates.Select(c => c.Url).ToList();
+    }
+
     private static string HostOf(string url)
     {
         try { return new Uri(url).Host; } catch { return url; }
@@ -183,26 +196,37 @@ public static class GithubRoute
         var list = new List<DownloadCandidate>();
 
         var signed = await MirrorSign.GetSignedUrlAsync(url, ct).ConfigureAwait(false);
-        if (signed is not null)
-            list.Add(MirrorSign.Candidate(signed));
-        else
-            Core.AppLog.Info("download-route", "自建加速服务：未取得签名，改用公益镜像");
 
-        foreach (var channel in Core.GithubMirror.Channels)
-            list.Add(DownloadCandidate.Direct(Core.GithubMirror.MirrorUrl(url, channel)));
+        // ⛔⛔ **自建就是自建**（2026-10-21 Nick 明确要求）：
+        //    选了「自建加速服务」就**只走自建**，拿不到签名就当场报错，
+        //    不许静默回退到公益镜像或 GitHub 源。
+        //    回退是「自动」模式的职责 —— 用户选自建就是为了验它到底通不通，
+        //    偷偷换路会把故障掩盖成「能下但很慢」，反而更难排查。
+        if (signed is null)
+        {
+            Core.AppLog.Warn("download-route", "自建加速服务：未取得签名，按设置直接失败（不回退）");
 
-        list.Add(official);                                 // 兜底：谁都不行还有官方直连
-        return list;
+            throw new InvalidOperationException(
+                "自建加速服务未能取得下载签名，本次下载未开始。\n\n"
+                + "若需继续下载，请在「设置 → 网络」中将下载路径改为「自动」，\n"
+                + "程序将在各条可用线路之间测速并选择最优线路。\n\n"
+                + "具体原因已记录于应用日志。");
+        }
+
+        // 签名到手：只给自建节点（不再附带镜像与 GitHub 源）
+        return new[] { MirrorSign.Candidate(signed) };
     }
+
 
     /// <summary>
     /// 自动：把自建节点、各条公益镜像、GitHub 源一起探速，按快慢排候选；结果缓存 <see cref="CacheTtl"/>。
     /// 缓存里存的是**顺序标识**而不是链接本身 —— 签名链接是逐条目标签发的，直接缓存链接会串。
     /// </summary>
     private static async Task<IReadOnlyList<DownloadCandidate>> AutoAsync(
-        string url, DownloadCandidate official, CancellationToken ct)
+        string url, DownloadCandidate official, CancellationToken ct, bool includeOfficial = true)
     {
-        var cached = CachedOrder();
+        // ⚠️ 缓存里可能含 GitHub 源，自建模式不能直接用 —— 它会把 GitHub 又拉回来
+        var cached = includeOfficial ? CachedOrder() : null;
         if (cached is not null)
             return await FromOrderAsync(cached, url, official, ct).ConfigureAwait(false);
 
@@ -210,7 +234,8 @@ public static class GithubRoute
         var items = new List<Item>();
         foreach (var channel in Core.GithubMirror.Channels)
             items.Add(new Item(channel.Id, DownloadCandidate.Direct(Core.GithubMirror.MirrorUrl(url, channel))));
-        items.Add(new Item(OfficialId, official));
+        // 自建模式下不让 GitHub 源参与竞争（否则用户开着加速器时它会抢到第一）
+        if (includeOfficial) items.Add(new Item(OfficialId, official));
 
         var probes = items.ToDictionary(item => item.Id, item => ProbeAsync(item.Candidate, ct));
 
@@ -379,5 +404,29 @@ public static class GithubRoute
         {
             _autoOrder = null;
         }
+    }
+
+/// <summary>
+/// 与 Win7 版兼容层（2026-10-21）。
+/// <para>
+/// 下面三个成员是 Win7 版 <c>DownloadService.cs</c> 直接引用的名字。我们的实现用
+/// <see cref="DownloadCandidate"/> 携带 Referer/Key，而对方用纯字符串、在发请求时自己贴 Referer。
+/// 为了能直接复用他们的下载实现而加这层桥，行为保持一致。
+/// </para>
+/// </summary>
+// …… 兼容成员直接属于 GithubRoute（供 Win7 版下载实现引用）
+    /// <summary>自建节点主机。</summary>
+    public const string AcceleratorHost = "download.classsoftwarehub.cn";
+
+    /// <summary>访问节点必须带的 Referer（节点侧白名单，不带一律 403）。</summary>
+    public const string AcceleratorReferer = "https://classsoftwarehub.us.ci/";
+
+    /// <summary>这条链接是不是指向自建节点。</summary>
+    public static bool IsAcceleratedUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+
+        return Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+            && parsed.Host.Equals(AcceleratorHost, StringComparison.OrdinalIgnoreCase);
     }
 }

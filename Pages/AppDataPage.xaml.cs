@@ -762,6 +762,7 @@ public sealed partial class AppDataPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = work.Count == 1 ? $"清理「{work[0].Name}」？" : $"清理选中的 {work.Count} 个目录？",
             Content = BuildConfirmBody(work, total, fileCount, running),
@@ -956,6 +957,7 @@ public sealed partial class AppDataPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = title,
             Content = new TextBlock { Text = body, FontSize = 13, TextWrapping = TextWrapping.Wrap },
@@ -970,6 +972,7 @@ public sealed partial class AppDataPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "AppData 管理：能做什么、不能做什么",
             Content = BuildAboutBody(),

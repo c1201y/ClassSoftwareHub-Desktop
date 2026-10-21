@@ -178,6 +178,7 @@ public sealed partial class FeedbackPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "丢弃这份反馈草稿？",
             Content = "已填写的内容会被删除，且无法恢复。",

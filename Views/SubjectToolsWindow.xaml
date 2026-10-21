@@ -23,7 +23,17 @@
     -->
 
     <Grid x:Name="Root">
-        <NavigationView x:Name="Nav"
+        <Grid.RowDefinitions>
+            <!-- 自绘标题栏（2026-10-19）：内容延伸到标题栏区域，系统按钮浮在右上角 -->
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBarHost" Grid.Row="0" Padding="16,0,140,0" Background="Transparent">
+            <TextBlock Text="学科工具" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+        </Grid>
+
+        <NavigationView x:Name="Nav" Grid.Row="1"
                         PaneDisplayMode="LeftCompact"
                         IsPaneToggleButtonVisible="False"
                         IsBackButtonVisible="Collapsed"

@@ -70,6 +70,14 @@ public static class MirrorSign
     };
 
     private static readonly object Gate = new();
+
+    /// <summary>
+    /// 签名缓存（2026-10-21）：<c>原始链接 → (签名链接, 到期时刻)</c>。
+    /// ⚠️ 代签接口（cshapi / submit）在国内**时通时不通**，每次下载都重新签就必然频繁失败、
+    ///    一失败就掉到公益镜像（几百 KB/s）。签名本身带 15 分钟有效期（URL 里的 <c>e=</c>），
+    ///    缓存到过期前复用，能把对接口的依赖降到最低。
+    /// </summary>
+    private static readonly Dictionary<string, (string Signed, DateTime Expiry)> Cache = new(StringComparer.Ordinal);
     private static DateTime _retryAfter = DateTime.MinValue;
 
     private static readonly object KeyGate = new();
@@ -94,7 +102,39 @@ public static class MirrorSign
     {
         if (string.IsNullOrWhiteSpace(githubUrl)) return null;
 
-        // 没配密钥就直接放弃，连请求都不发（启动时 LogKeyStatus 已经说明过原因）
+        // 缓存命中且未过期就直接用，完全不碰网络（签名有效期约 15 分钟）
+        lock (Gate)
+        {
+            if (Cache.TryGetValue(githubUrl, out var hit) && hit.Expiry > DateTime.UtcNow.AddMinutes(1))
+            {
+                Core.AppLog.Info(LogTag, "自建加速：复用缓存签名（未过期）");
+                return hit.Signed;
+            }
+        }
+
+        // ── 第一步：**服务端代签**（2026-10-21）────────────────────────
+        // Win7 版用的就是这条：`/api/mirror-sign?url=...`，**不带任何认证头**，
+        // 密钥由 Worker 端持有。我们之前只走本地密钥直签（`/sign` + `X-Api-Key`），
+        // 密钥一旦轮换就全面 401，只能退到公益镜像（而公益镜像限并发）。
+        // 现在先试代签：不依赖本机任何密钥文件，能通就不会再掉进公益镜像。
+        // ⚠️ 代签接口会间歇性抽风（TLS 被重置 / 超时），单次失败不代表不可用 —— 重试 3 轮、间隔 800ms
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            var viaServer = await TryServerSignAsync(githubUrl, ct).ConfigureAwait(false);
+            if (viaServer is not null)
+            {
+                RememberSigned(githubUrl, viaServer);
+                return viaServer;
+            }
+
+            if (attempt < 2)
+            {
+                try { await Task.Delay(300, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { throw; }
+            }
+        }
+
+        // ── 第二步：本地密钥直签（旧路径，作为后备）──────────
         var apiKey = ResolveApiKey();
         if (apiKey is null) return null;
 
@@ -231,6 +271,94 @@ public static class MirrorSign
     /// 解析 <c>{"url":"https://download.classsoftwarehub.cn/d?u=…&amp;e=…&amp;s=…", "expiresAt":…, "ttl":900}</c>。
     /// 只认绝对 http(s) 地址 —— 拿到的必须是能直接抓的链接，别的都当失败。
     /// </summary>
+    /// <summary>
+    /// 服务端代签（免密钥）。回包形如 <c>{"success":true,"url":"https://..."}</c>。
+    /// ⚠️ 多个入口依次试：主域名优先，再试 Win7 版用的那两个 Worker 域名。
+    /// </summary>
+    private static async Task<string?> TryServerSignAsync(string githubUrl, CancellationToken ct)
+    {
+        var query = "?url=" + Uri.EscapeDataString(githubUrl);
+
+        var endpoints = new[]
+        {
+            // ⚠️ 实测（2026-10-21）：cshapi 这条是通的（HTTP 200，返回 /d?u=...&e=...&s=...），
+            //    download.* 域名并不提供代签接口（返回 400），放到后面免得白走一次。
+            "https://cshapi.132614.xyz/api/mirror-sign",
+            "https://submit.132614.xyz/api/mirror-sign",
+            NodeBaseUrl + "/api/mirror-sign",
+        };
+
+        foreach (var endpoint in endpoints)
+        {
+            try
+            {
+                using var response = await Http.GetAsync(endpoint + query, ct).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode) continue;
+
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("success", out var ok) && ok.ValueKind == System.Text.Json.JsonValueKind.True
+                    && root.TryGetProperty("url", out var u) && u.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var signed = u.GetString();
+                    if (!string.IsNullOrWhiteSpace(signed))
+                    {
+                        Core.AppLog.Info(LogTag, $"自建加速：已通过服务端代签取得链接（{endpoint}）");
+                        return signed;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // ⚠️ 不能静默吞掉：之前就是因为这里什么都不记，
+                //    “为什么 Win7 版能拿到签名、我们拿不到”完全无法定位。
+                // ⚠️ **SSL 失败的真因在 InnerException 里** —— 外层永远只说“The SSL connection could not be established”。
+                //    把整条链路都打出来，才能区分是证书、协议还是加密套件问题。
+                var chain = new System.Text.StringBuilder(ex.GetType().Name + " - " + ex.Message);
+                for (var inner = ex.InnerException; inner is not null; inner = inner.InnerException)
+                    chain.Append(" | ").Append(inner.GetType().Name).Append(": ").Append(inner.Message);
+
+                Core.AppLog.Warn(LogTag, $"代签 {endpoint} 失败：{chain}");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>把签名记进缓存；到期时间取自 URL 里的 <c>e=</c>（Unix 秒），解析不出就按 12 分钟算。</summary>
+    private static void RememberSigned(string githubUrl, string signedUrl)
+    {
+        var expiry = DateTime.UtcNow.AddMinutes(12);
+
+        try
+        {
+            var query = new Uri(signedUrl).Query.TrimStart('?');
+            foreach (var pair in query.Split('&'))
+            {
+                if (!pair.StartsWith("e=", StringComparison.Ordinal)) continue;
+
+                if (long.TryParse(pair[2..], out var seconds))
+                    expiry = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+
+                break;
+            }
+        }
+        catch { /* 解析失败就用默认值 */ }
+
+        lock (Gate)
+        {
+            if (Cache.Count > 40) Cache.Clear();   // 别无限长
+            Cache[githubUrl] = (signedUrl, expiry);
+        }
+    }
+
     private static string? Parse(string body)
     {
         try

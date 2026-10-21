@@ -29,7 +29,6 @@ public sealed partial class ShellPage : UserControl
     public ShellPage()
     {
         InitializeComponent();
-        ActualThemeChanged += (_, _) => UpdateThemeButton();
 
         InitSearch();
 
@@ -65,7 +64,10 @@ public sealed partial class ShellPage : UserControl
     {
         foreach (var def in ToolCatalog.All)
         {
-            ToolsNav.MenuItems.Add(new NavigationViewItem
+            // …… 按分组送到对应父项下（2026-10-22）
+            var parent = def.Group == ToolGroup.System ? SystemToolsNav : ClassroomToolsNav;
+
+            parent.MenuItems.Add(new NavigationViewItem
             {
                 Content = def.Name,
                 Tag = def.Id,
@@ -114,22 +116,6 @@ public sealed partial class ShellPage : UserControl
         UpdateBackButton();
     }
 
-    /// <summary>标题栏那个太阳/月亮按钮：图标显示"点了会切到的那一边"。</summary>
-    public void UpdateThemeButton()
-    {
-        var dark = ActualTheme == ElementTheme.Dark;
-        ThemeIcon.Glyph = dark ? "\uE706" : "\uE708";   // 深色时显示太阳（点了变浅色），反之显示月亮
-        ToolTipService.SetToolTip(ThemeButton, dark ? "切换到浅色模式" : "切换到深色模式");
-    }
-
-    private void ThemeButton_Click(object sender, RoutedEventArgs e)
-    {
-        var next = ActualTheme == ElementTheme.Dark ? "light" : "dark";
-        App.Settings.Current.Theme = next;
-        App.MainWindow?.SetTheme(next);
-        UpdateThemeButton();
-    }
-
     /// <summary>
     /// 当前所在页面的 tag（<see cref="NavigateTagCore"/> 每次导航时更新）。
     /// 用途：未处理异常写日志时带上它 —— 否则「布局循环」这类只在某一页出现的问题根本没法定位。
@@ -147,7 +133,6 @@ public sealed partial class ShellPage : UserControl
         var start = StartupPageTag();
         SelectTag(start);
         NavigateTag(start);
-        UpdateThemeButton();
     }
 
     /// <summary>
@@ -203,7 +188,8 @@ public sealed partial class ShellPage : UserControl
     public void NavigateToTools()
     {
         NavigateTo("tools");
-        ToolsNav.IsExpanded = true;
+        ClassroomToolsNav.IsExpanded = true;
+        SystemToolsNav.IsExpanded = false;
     }
 
     /// <summary>
@@ -331,8 +317,11 @@ public sealed partial class ShellPage : UserControl
             case "sidebar":
                 ContentFrame.Navigate(typeof(SidebarLayoutPage));
                 return;
-            case "tools":
-                ContentFrame.Navigate(typeof(ToolsPage));
+            case "tools-classroom":
+                ContentFrame.Navigate(typeof(ToolsPage), "classroom");
+                return;
+            case "tools-system":
+                ContentFrame.Navigate(typeof(ToolsPage), "system");
                 return;
             case "apps":
                 ContentFrame.Navigate(typeof(SoftwarePage), "");

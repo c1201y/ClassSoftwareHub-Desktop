@@ -129,6 +129,7 @@ public sealed partial class SystemRepairPage : Page
         var high = task.Risk == RepairRisk.High;
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = task.Name,
             Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
@@ -398,6 +399,7 @@ public sealed partial class SystemRepairPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "系统修复：这些任务是怎么定的",
             Content = new ScrollViewer { Content = panel, MaxHeight = 460 },
@@ -433,6 +435,7 @@ public sealed partial class SystemRepairPage : Page
     {
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = title,
             Content = new TextBlock

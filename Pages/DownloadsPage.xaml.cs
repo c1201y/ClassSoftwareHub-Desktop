@@ -136,6 +136,7 @@ public sealed partial class DownloadsPage : Page
         var size = task.Bytes > 0 ? Core.AppLog.Size(task.Bytes) + "　·　" : "";
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "删除已下载的文件？",
             Content = new TextBlock
@@ -198,6 +199,7 @@ public sealed partial class DownloadsPage : Page
 
             var fail = new ContentDialog
             {
+                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                 XamlRoot = XamlRoot,
                 Title = "没能删除",
                 Content = new TextBlock

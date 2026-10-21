@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
@@ -418,14 +419,59 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    // ── 显卡：适配器名（多显卡用 ｜ 分开） ─────────────────────
+    // ── 显卡 ────────────────────────────────────────────────────
+    //
+    // ⛔⛔ 2026-10-21 修：**不能只看注册表 Class\{4d36e968...}**。
+    //    那里每个子键是一个"装过的显示适配器驱动"，**卸载后仍会留下残骸** ——
+    //    用户反馈：实际是 Radeon R7 430 / 2 GB，我们却读成「RTX 3060 ｜ Radeon 520」和 12 GB
+    //    （那台机器以前装过 3060，驱动残留还在注册表里，而 VramText 又取了所有子键的**最大值**）。
+    //    现在先用 WMI `Win32_VideoController` 拿到**当前真实存在**的适配器，再据此筛选。
+    private static List<(string Name, string Pnp)> RealAdapters()
+    {
+        var list = new List<(string, string)>();
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Name, PNPDeviceID, ConfigManagerErrorCode FROM Win32_VideoController");
+
+            foreach (ManagementObject item in searcher.Get())
+            {
+                using var _ = item;
+
+                var name = (item["Name"] as string)?.Trim() ?? "";
+                if (Blank(name)) continue;
+
+                // 有故障码的设备（掉驱动、被禁用）不算
+                var error = item["ConfigManagerErrorCode"] is uint code ? code : 0u;
+                if (error != 0) continue;
+
+                if (IsVirtualAdapter(name)) continue;
+                if (name.Contains("Basic Display", StringComparison.OrdinalIgnoreCase)) continue;
+                if (name.Contains("Basic Render", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var pnp = (item["PNPDeviceID"] as string)?.Trim() ?? "";
+                list.Add((name, pnp));
+            }
+        }
+        catch { /* WMI 不可用时退回注册表（见下） */ }
+
+        return list;
+    }
+
     private static string GpuText()
     {
         try
         {
+            var real = RealAdapters();
+            if (real.Count > 0)
+                return string.Join(" ｜ ", real.Select(r => r.Name).Distinct().Take(2));
+
+            // 兜底：WMI 不可用（极少数精简系统）时才回退注册表
             using var cls = Registry.LocalMachine.OpenSubKey(
                 @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
             if (cls is null) return "";
+
             var names = new List<string>();
             foreach (var sub in cls.GetSubKeyNames().Where(n => n.All(char.IsDigit)).OrderBy(n => n))
             {
@@ -433,8 +479,9 @@ public static class SystemInfo
                 var d = (k?.GetValue("DriverDesc") as string)?.Trim();
                 if (!Blank(d) && !names.Contains(d!)) names.Add(d!);
             }
-            var real = names.Where(n => !IsVirtualAdapter(n)).ToList();
-            return string.Join(" ｜ ", (real.Count > 0 ? real : names).Take(2));
+
+            var filtered = names.Where(n => !IsVirtualAdapter(n)).ToList();
+            return string.Join(" ｜ ", (filtered.Count > 0 ? filtered : names).Take(2));
         }
         catch { return ""; }
     }
@@ -442,21 +489,38 @@ public static class SystemInfo
     private static bool IsVirtualAdapter(string name) =>
         name.Contains("Virtual", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Mirror", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("Remote", StringComparison.OrdinalIgnoreCase);
+        name.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("VMware", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Parsec", StringComparison.OrdinalIgnoreCase);
 
-    // ── 显存：显示适配器子键里的 qwMemorySize / MemorySize ─────
+    // ── 显存 ────────────────────────────────────────────────────
+    //
+    // ⛔ 只统计**真实适配器对应**的子键。以前遍历所有子键取最大值，
+    //    结果被卸载显卡的残留记录带偏（12 GB 的 3060 盖住了实际的 2 GB）。
+    // ⚠️ AdapterRAM（WMI）是 uint32，>4 GB 会溢出，所以显存一律走注册表的 qwMemorySize。
     private static string VramText()
     {
         try
         {
+            var real = RealAdapters().Select(a => a.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             using var cls = Registry.LocalMachine.OpenSubKey(
                 @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
             if (cls is null) return "";
+
             long best = 0;
+
             foreach (var sub in cls.GetSubKeyNames().Where(n => n.All(char.IsDigit)))
             {
                 using var k = cls.OpenSubKey(sub);
                 if (k is null) continue;
+
+                // 没有 WMI 结果时（real 为空）退化成"全部子键"，至少还有个数
+                var desc = (k.GetValue("DriverDesc") as string)?.Trim();
+                if (real.Count > 0 && (desc is null || !real.Contains(desc))) continue;
 
                 long v = k.GetValue("HardwareInformation.qwMemorySize") switch
                 {
@@ -464,11 +528,13 @@ public static class SystemInfo
                     int i => (uint)i,
                     _ => 0,
                 };
+
                 if (v <= 0 && k.GetValue("HardwareInformation.MemorySize") is byte[] b && b.Length >= 4)
                     v = BitConverter.ToUInt32(b, 0);
 
                 if (v > best) best = v;
             }
+
             return best > 0 ? Size(best) : "";
         }
         catch { return ""; }

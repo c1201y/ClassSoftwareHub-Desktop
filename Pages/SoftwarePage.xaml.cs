@@ -45,7 +45,13 @@ public sealed partial class SoftwarePage : Page
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        _category = e.Parameter as string ?? "";
+
+        // ⛔ **只有带了分类参数才改分类**（2026-10-22）。
+        //    以前无条件 `_category = e.Parameter as string ?? ""`，于是从「系统工具」点进某个软件、
+        //    再返回时参数是 null ⇒ 分类被清成「全部」，用户得重新点一遍（Nick 反馈的核心问题）。
+        //    现在：带参数 = 用户主动切分类；不带参数（返回/从导航进来）= **保持上次选择**。
+        if (e.Parameter is string requestedCategory && requestedCategory.Length > 0)
+            _category = requestedCategory;
 
         // 总闸关掉时入口卡整体隐藏（Nick 2026-10-18 定：不占位、不留灰块）。
         // ⚠️ 必须每次导航都重读一次 —— 本页 NavigationCacheMode=Enabled 实例长驻，

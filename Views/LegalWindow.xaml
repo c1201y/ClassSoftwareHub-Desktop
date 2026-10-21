@@ -52,12 +52,18 @@
         </Grid.Resources>
 
         <Grid.RowDefinitions>
+            <!-- 自绘标题栏：高度跟系统标题条一致（32），按钮和内容严丝合缝 -->
+            <RowDefinition Height="32" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <Grid x:Name="TitleBarHost" Grid.Row="0" Padding="20,0,140,0" Background="Transparent">
+            <TextBlock Text="条款与声明" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+        </Grid>
+
         <!-- 头部：标题 / 版本行 / 三档切换 -->
-        <StackPanel Grid.Row="0" Margin="28,22,28,10" Spacing="4">
+        <StackPanel Grid.Row="1" Margin="28,4,28,10" Spacing="4">
             <TextBlock x:Name="DocTitle" FontSize="26" FontWeight="Bold" TextWrapping="Wrap" />
             <TextBlock x:Name="DocVersion" FontSize="12" Opacity="0.75" />
             <!-- 档位文字在代码里按 Core/LegalText.cs 的 title 生成（⛔ 别在 XAML 写死） -->
@@ -67,7 +73,7 @@
 
         <!-- ⛔ 不在 ScrollViewer 上写 Padding：底部不参与滚动范围，滚到底最后一条会被裁（WinUI 3 已知坑）。
              间距一律写在里面那个 StackPanel 的 Margin 上。 -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <!-- 正文限宽居中：条款一行太长没法读（本机窗口 ~920dip，正文 ~820） -->
             <StackPanel x:Name="BodyHost" Margin="28,2,28,44" MaxWidth="820" />

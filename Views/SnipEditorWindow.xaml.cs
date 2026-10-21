@@ -643,6 +643,7 @@ public sealed partial class SnipEditorWindow : Window
             var box = new TextBox { PlaceholderText = "输入文字", AcceptsReturn = false, Width = 260 };
             var dlg = new ContentDialog
             {
+                        RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                 XamlRoot = RootGrid.XamlRoot,
                 Title = "添加文字",
                 Content = box,

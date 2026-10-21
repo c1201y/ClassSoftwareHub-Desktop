@@ -89,6 +89,7 @@ public static class UpdateFlow
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = xamlRoot,
             Title = "发现新版本",
             Content = body,
@@ -297,6 +298,7 @@ public static class UpdateFlow
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = xamlRoot,
             Title = title,
             Content = panel,

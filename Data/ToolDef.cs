@@ -5,10 +5,23 @@ using ClassSoftwareHub.Desktop.Pages.Tools;
 namespace ClassSoftwareHub.Desktop.Data;
 
 /// <summary>内置工具卡片定义（工具索引页用）。</summary>
+/// <summary>内置工具的分组（2026-10-22 Nick：导航把原「内置工具」拆成两项）。</summary>
+public enum ToolGroup
+{
+    /// <summary>课堂上用的：抽号、计时、时钟、学科工具等。</summary>
+    Classroom,
+
+    /// <summary>系统维护类：磁盘、关机、校验、取色等。</summary>
+    System,
+}
+
 public sealed class ToolDef
 {
     public string Id { get; init; } = "";
     public string Name { get; init; } = "";
+
+    /// <summary>归属分组（导航与工具索引页都按它分派）。⚠️ 默认课堂，新增系统工具时务必显式标注。</summary>
+    public ToolGroup Group { get; init; } = ToolGroup.Classroom;
     public string Desc { get; init; } = "";
     /// <summary>SEGOEICONS 字形码。</summary>
     public string Glyph { get; init; } = "";
@@ -32,6 +45,7 @@ public static class ToolCatalog
         new ToolDef
         {
             Id = "image-color", Name = "图片取色",
+            Group = ToolGroup.System,
             Desc = "导入图片后自动提取一组柔和的配色（种子色 + 7 档明暗变体），单击色块即可复制。",
             Glyph = "\uE790", Page = typeof(ImageColorToolPage)
         },
@@ -56,12 +70,14 @@ public static class ToolCatalog
         new ToolDef
         {
             Id = "encoding", Name = "编码 / 哈希工具",
+            Group = ToolGroup.System,
             Desc = "校验文件：拖入即得 MD5 / SHA-1 / SHA-256 / SHA-512，可粘贴官方值自动核对；也可做 Base64、URL 编解码。",
             Glyph = "\uE943", Page = typeof(EncodingToolPage)
         },
         new ToolDef
         {
             Id = "autoshutdown", Name = "自动关机",
+            Group = ToolGroup.System,
             Desc = "按星期设定关机时间点，到达时间后自动关机；可直接关机（可设延迟），也可用系统原生的滑动关机。",
             Glyph = "\uE787", Page = typeof(ClassSoftwareHub.Desktop.Pages.AutoShutdownPage)
         },
@@ -78,6 +94,7 @@ public static class ToolCatalog
         new ToolDef
         {
             Id = "disk-map", Name = "磁盘空间",
+            Group = ToolGroup.System,
             Desc = "按占用面积画出目录结构，一眼看出空间被谁吃掉了；单击方块可逐层下钻。",
             // E7F1 = 硬盘
             Glyph = "\uE7F1", Page = typeof(DiskMapPage)

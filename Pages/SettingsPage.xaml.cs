@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -221,7 +221,6 @@ public sealed partial class SettingsPage : Page
         if (_loading) return;
         if (ThemeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string theme) return;
         App.MainWindow?.SetTheme(theme);       // 里面会 Save + 重算背景 + 通知外部组件
-        App.MainWindow?.Shell.UpdateThemeButton();
     }
 
     // ── 外部组件（分体）外观 ─────────────────────────────────
@@ -830,6 +829,7 @@ public sealed partial class SettingsPage : Page
     {
         var confirm = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "回滚到这个版本？",
             Content = $"将要安装 {release.Tag}（{(release.Prerelease ? "Insider" : "正式版")}）。\n" +
@@ -997,6 +997,7 @@ public sealed partial class SettingsPage : Page
 
         var confirm = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = this.XamlRoot,
             Title = "用这个安装包覆盖安装",
             Content = body,
@@ -1013,6 +1014,7 @@ public sealed partial class SettingsPage : Page
     {
         var confirm = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = this.XamlRoot,
             Title = "删除安装包",
             Content = $"删除 {f.Name}？删除后装回该版本需重新下载。",
@@ -1164,6 +1166,7 @@ public sealed partial class SettingsPage : Page
     {
         var confirm = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = this.XamlRoot,
             Title = "删除缓存目录",
             Content = $"删除 {inst.Name}？\n\n里面的素材在下次用到时会自动重新解包，不影响设置与任何数据。",
@@ -1371,6 +1374,7 @@ public sealed partial class SettingsPage : Page
     {
         var confirm = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = this.XamlRoot,
             Title = "删除日志",
             Content = $"删除「{s.StartedLocal:yyyy-MM-dd HH:mm:ss}」这次运行的日志？\n\n"

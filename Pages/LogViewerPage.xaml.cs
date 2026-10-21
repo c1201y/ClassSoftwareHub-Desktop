@@ -504,6 +504,7 @@ public sealed partial class LogViewerPage : Page
 
         var dialog = new ContentDialog
         {
+                RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
             XamlRoot = XamlRoot,
             Title = "这些日志文件是干什么的",
             Content = new ScrollViewer

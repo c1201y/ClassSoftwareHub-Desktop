@@ -84,14 +84,6 @@
                 </AutoSuggestBox.ItemTemplate>
             </AutoSuggestBox>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Margin="0,0,170,0" Spacing="10">
-                <!-- 深色 / 浅色 一键切换（图标显示"点了会切到的那一边"） -->
-                <Button x:Name="ThemeButton" Click="ThemeButton_Click"
-                        Background="Transparent" BorderThickness="0" Padding="7,4" CornerRadius="4">
-                    <FontIcon x:Name="ThemeIcon" Glyph="&#xE708;" FontSize="14" />
-                </Button>
-            </StackPanel>
         </Grid>
 
         <!-- 2026-10-01 Nick 反馈「页面还够宽导航栏就自动收进去了，阈值太大」：
@@ -177,9 +169,20 @@
                   ⛔ 别在 XAML 里手写 —— 工具清单只有 ToolCatalog 一份，手写会变成两处维护。
                   父项自己也是入口（进 ToolsPage），不进 NavigationView 的选中体系（原因同实验性功能）。
                 -->
-                <NavigationViewItem x:Name="ToolsNav" Content="内置工具" Tag="tools">
+                <!--
+                  内置工具拆成两项（2026-10-22 Nick）：**课堂工具** 与 **系统工具**。
+                  ⚠️ 子项仍由 ShellPage 按 ToolCatalog.All 动态生成，只是按 <c>ToolDef.Group</c> 分到不同父项。
+                  ⚠️ 两个父项各自有 tag（tools-classroom / tools-system），
+                     分别进**同一个 ToolsPage 的两种形态**（参数决定显示哪组）。
+                -->
+                <NavigationViewItem x:Name="ClassroomToolsNav" Content="课堂工具" Tag="tools-classroom">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="SystemToolsNav" Content="系统工具" Tag="tools-system">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE945;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="侧边布局" Tag="sidebar">

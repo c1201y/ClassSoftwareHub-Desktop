@@ -213,6 +213,13 @@ public sealed partial class ToolSidebarWindow : Window
     private AppWindow? _appWindow;
     private bool _expanded;
 
+    /// <summary>
+    /// 拖动过程中的沿边位置比例（0~1，-1 = 居中）。
+    /// ⛔ **只在内存里**，不写存档 —— 位置记忆功能已移除（2026-10-19，与开机最小化冲突）。
+    /// 它只负责"拖一边时对面实时跟随"这一件事，下次启动不会恢复。
+    /// </summary>
+    private double _liveRatio = -1;
+
     private int _collapseEpoch;                            // 收起滑出/抓手淡入的批次号：展开、再次收起都能把它作废
     private bool _shownOnce;
     private bool _visible;
@@ -1965,15 +1972,8 @@ public sealed partial class ToolSidebarWindow : Window
                 }
             }
 
-            // 沿边位置存成 0~1 的比例，这样收起/展开尺寸不一样时也能对得上
-            var flat = edge is "top" or "bottom";
-            var alongStart = flat ? work.X : work.Y;
-            var alongLen = flat ? work.Width : work.Height;
-            var at = flat ? pos.X : pos.Y;
-            var myLen = flat ? size.Width : size.Height;
-            var free = Math.Max(0, alongLen - myLen);
-            App.Settings.Current.SidebarPosRatio =
-                free <= 0 ? 0.5 : Math.Clamp((at - alongStart) / (double)free, 0, 1);
+            // ⛔ 位置记忆已移除（2026-10-19）：松手后**不再记录**沿边位置，
+            //    下一次贴边一律从头居中。只保留"换边"这件事本身。
 
             App.Settings.Save();
 
@@ -2014,8 +2014,7 @@ public sealed partial class ToolSidebarWindow : Window
         {
             var work = DisplayArea.Primary.WorkArea;
             var free = Math.Max(0, work.Height - myHeight);
-            App.Settings.Current.SidebarPosRatio =
-                free <= 0 ? 0.5 : Math.Clamp((myY - work.Y) / (double)free, 0, 1);
+            _liveRatio = free <= 0 ? 0.5 : Math.Clamp((myY - work.Y) / (double)free, 0, 1);
             other.MoveToEdge(verify: false);
         }
         catch (Exception ex)
@@ -2709,8 +2708,10 @@ public sealed partial class ToolSidebarWindow : Window
         var myLen = flat ? width : height;
         var free = Math.Max(0, alongLen - myLen);
 
-        var ratio = App.Settings.Current.SidebarPosRatio;
-        var offset = ratio < 0 ? free / 2.0 : Math.Clamp(ratio * free, 0, free);
+        // ⛔ 位置记忆已移除（2026-10-19，Nick）：它和「开机最小化」相互打架，而且拖完记住的位置
+        //    常常不再合适，手动调反而更顺手。启动/重建时一律沿边**居中**；
+        //    拖动过程中对面靠 <see cref="_liveRatio"/> 跟随，但那只是内存状态，不落盘。
+        var offset = _liveRatio < 0 ? free / 2.0 : Math.Clamp(_liveRatio * free, 0, free);
 
         // 收起态往屏幕**内侧**让出几个像素（Nick 2026-10-11：不贴死看着更灵动、也更好点）。
         // ⚠️ 只收起态让 —— 展开态的面板悬空一条缝很难看。

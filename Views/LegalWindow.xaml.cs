@@ -196,11 +196,14 @@ public sealed partial class LegalWindow : Window
 
             if (_appWindow.Presenter is OverlappedPresenter p)
             {
-                p.SetBorderAndTitleBar(true, true);   // 系统标题栏（拖动 / 阴影 / 圆角交给系统）
+                // 边框交给 ModernWindow 保留（圆角与阴影靠系统）；这里只调能不能拉伸/最大化
                 p.IsResizable = true;                 // 条款要能拉大着看
                 p.IsMaximizable = true;
                 p.IsMinimizable = true;
             }
+
+            // 自绘标题栏（2026-10-19）：没有独立标题条，系统按钮浮在右上角
+            ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
