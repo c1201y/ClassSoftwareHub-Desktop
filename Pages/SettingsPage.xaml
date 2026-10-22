@@ -518,12 +518,15 @@
                                       Toggled="AutoCheckSwitch_Toggled" />
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard Header="检查更新"
-                                           Description="发现新版本会先询问是否安装，不会自动更新；最小化启动时会通过系统通知提醒。">
+                    <!--
+                      ⚠️ 2026-10-22：Description 写得太长会把 Header 挤成**竖排**（一个字一行）——
+                      SettingsCard 的 Header 列是自适应宽度，内容区一宽就没地方了。改成短句 + 内容区限宽。
+                    -->
+                    <controls:SettingsCard Header="检查更新" Description="发现新版本先询问，不会自动安装。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE896;" />
                         </controls:SettingsCard.HeaderIcon>
-                        <StackPanel Spacing="10">
+                        <StackPanel Spacing="10" MaxWidth="420" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button x:Name="CheckButton" Content="检查更新" Click="CheckUpdate_Click"
                                         Style="{ThemeResource AccentButtonStyle}" />
@@ -532,9 +535,16 @@
                             <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="UpdateNotes" TextWrapping="Wrap" MaxLines="8" Visibility="Collapsed"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <!--
+                              ⛔⛔ 2026-10-23：RichTextBlock **不能**套 CaptionTextBlockStyle ——
+                                  那个 Style 的 TargetType 是 TextBlock，套到 RichTextBlock 上会在**运行时**抛
+                                  「样式目标类型不匹配」。XAML 编译不报，表现为**整个设置页加载失败**，
+                                  再被 ShellPage 的兜底逻辑送去首页 ⇒ 点「设置」变成打开首页。
+                                  这里改成内联字号（12 = Caption 那一档）。
+                            -->
+                            <RichTextBlock x:Name="UpdateNotes" TextWrapping="Wrap" Visibility="Collapsed"
+                                           FontSize="12" LineHeight="18"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
                     </controls:SettingsCard>
 

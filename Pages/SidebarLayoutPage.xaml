@@ -187,8 +187,15 @@
                                 <FontIcon Glyph="&#xE740;" />
                             </controls:SettingsCard.HeaderIcon>
                             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <!--
+                                  ⛔⛔ 2026-10-22：**必须写 Value**。
+                                      只写 Minimum=45 时 Slider 初始值就是 45，解析 XAML 就触发一次 ValueChanged；
+                                      那会儿 _toolSync 还没置 true，于是存档里的比例被直接写成 0.45
+                                      —— 用户每次更新后打开这一页，下次就看到默认 45%。
+                                      这里写上 75 只是兵底：真值仍由 LoadAsync 按存档回填。
+                                -->
                                 <Slider x:Name="HeightRatioSlider" Width="190"
-                                        Minimum="45" Maximum="95"
+                                        Minimum="45" Maximum="95" Value="75"
                                         StepFrequency="5" TickFrequency="5"
                                         IsThumbToolTipEnabled="False"
                                         ValueChanged="HeightRatio_ValueChanged" />

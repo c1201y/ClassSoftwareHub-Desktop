@@ -215,7 +215,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE81C;" FontSize="20" VerticalAlignment="Center"
+                        <!-- ⚠️ 2026-10-22：有更新时换成绿色横幅（InfoBar Success 那套配色），
+                             图标从时钟 E81C 换成对勾 E930。 -->
+                        <FontIcon x:Name="ChangelogIcon" Glyph="&#xE81C;" FontSize="20" VerticalAlignment="Center"
                                   Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <TextBlock x:Name="ChangelogCardTitle" Text="查看更新内容" FontSize="14"

@@ -1096,17 +1096,27 @@ public sealed partial class MainWindow : Window
             var s = _settings.Current;
             s.WindowMaximized = false;
 
+            // ⛔⛔ 2026-10-22：这里原来是 `if (sizeChanged) {...} else if (posChanged) {...}` ——
+            //    只要**大小**变了就再也不存位置。窗口拖动时尺寸往往同时微变（贴边、吸附），
+            //    于是位置永远写不进去，重启后回到旧坐标。改成两件独立的事，各存各的。
+            var dirty = false;
+
             if (sizeW > 0 && sizeH > 0 && (sizeW != s.WindowWidth || sizeH != s.WindowHeight))
             {
                 s.WindowWidth = sizeW;
                 s.WindowHeight = sizeH;
-                try { _settings.Save(); }
-                catch (Exception saveEx) { Core.AppLog.Exception("shell", saveEx, "写回窗口大小"); }
+                dirty = true;
             }
-            else if (rc.Left != s.WindowLeft || rc.Top != s.WindowTop)
+
+            if (rc.Left != s.WindowLeft || rc.Top != s.WindowTop)
             {
                 s.WindowLeft = rc.Left;
                 s.WindowTop = rc.Top;
+                dirty = true;
+            }
+
+            if (dirty)
+            {
                 try { _settings.Save(); }
                 catch (Exception saveEx) { Core.AppLog.Exception("shell", saveEx, "写回窗口位置"); }
             }

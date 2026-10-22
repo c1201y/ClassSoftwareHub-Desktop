@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -131,7 +131,10 @@ public sealed partial class SidebarLayoutPage : Page
     private double _rowsTop;                // 第一行在 PreviewPanel 里的 Y（按下那一刻量的）
     private bool _swapping;                 // ↑/↓ 的滑动动画正在进行（这段时间别再点）
     private bool _footerSync;               // 正在把设置刷进底排的那五个开关（此时 Toggled 是"回声"，别当用户拨的）
-    private bool _toolSync;                 // 同上，但针对「常用工具」与「截图」那几张卡（开关 / 下拉的"回声"）
+    // ⛔⛔ 2026-10-22：**默认 true**。XAML 解析控件时就会触发 ValueChanged / Toggled 等事件，
+    //    那时候 LoadAsync 还没把 _toolSync 置 true，等于完全裸奔 —— 存的就是"空档默认值"（正是 45% 的来源）。
+    //    构造期一律挡住，等 LoadAsync 回填完再放开。
+    private bool _toolSync = true;          // 同上，但针对「常用工具」与「截图」那几张卡（开关 / 下拉的"回声"）
 
     /// <summary>
     /// 「展开面板高度」滑块的落盘防抖（2026-10-18）。拖动一次会连着触发几十次 ValueChanged，

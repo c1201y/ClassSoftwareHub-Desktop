@@ -218,6 +218,12 @@ public sealed partial class ToolSidebarWindow : Window
     /// ⛔ **只在内存里**，不写存档 —— 位置记忆功能已移除（2026-10-19，与开机最小化冲突）。
     /// 它只负责"拖一边时对面实时跟随"这一件事，下次启动不会恢复。
     /// </summary>
+    /// <summary>
+    /// 沿边位置比例（0~1，-1 = 居中）。
+    /// ⛔ **只在内存里**，不写存档 —— 位置记忆功能已废弃（2026-10-19），
+    /// 重启/重建时一律回中心。但**拖动期间必须能停在任意位置** ——
+    /// 所以拖动循环里要无条件更新它（愿先只有双边模式更新，单边永远居中）。
+    /// </summary>
     private double _liveRatio = -1;
 
     private int _collapseEpoch;                            // 收起滑出/抓手淡入的批次号：展开、再次收起都能把它作废
@@ -1794,6 +1800,28 @@ public sealed partial class ToolSidebarWindow : Window
 
         _appWindow.Move(new PointInt32(targetX, targetY));
 
+        // ⛔⛔ 2026-10-22：**单边也得记位置**。
+        //    原先只有 IsDual 才调 FollowPartner，而 _liveRatio 只在它里面赋值
+        //    ⇒ 单边模式下 _liveRatio 永远是 -1，EdgePosition 一律按 free/2 算
+        //    ⇒ 拖完松手永远回到这条边的**正中间**（Nick 报的「锁在中心」）。
+        //    这里按当前边是否为横条选长度参考，与 EdgePosition 保持一致。
+        {
+            var wa = DisplayArea.Primary.WorkArea;
+            var flatEdge = _edge is "top" or "bottom";
+            var along = flatEdge ? wa.Width : wa.Height;
+            var mine = flatEdge ? _appWindow.Size.Width : _appWindow.Size.Height;
+            var span = Math.Max(0, along - mine);
+            var alongPos = flatEdge ? targetX - wa.X : targetY - wa.Y;
+
+            _liveRatio = span <= 0 ? 0.5 : Math.Clamp(alongPos / (double)span, 0, 1);
+
+            // 诊断日志（2026-10-23 临时）：拖动时记下算出来的比例与目标点，用来定位「自由模式位置不对」。
+            // ⚠️ 定位完可以删，只在高频拖动里每帧一条，量不大。
+            Core.AppLog.Info("sidebar",
+                $"拖动 edge={_edge} flat={flatEdge} along={alongPos} span={span} ratio={_liveRatio:F3} " +
+                $"target=({targetX},{targetY})");
+        }
+
         // 双边：对面那条实时跟到同一高度（拖动中不落盘，松手才存）
         if (IsDual) FollowPartner(targetY, _appWindow.Size.Height);
 
@@ -1972,9 +2000,10 @@ public sealed partial class ToolSidebarWindow : Window
                 }
             }
 
-            // ⛔ 位置记忆已移除（2026-10-19）：松手后**不再记录**沿边位置，
-            //    下一次贴边一律从头居中。只保留"换边"这件事本身。
-
+            // ⛔ 2026-10-22 Nick 定调：**不落盘**。
+            //    位置记忆那个功能本来就是多余的，它把开机最小化和自由拖动都搞坏了；
+            //    刚才我把它“恢复”回来是方向错了。正确行为：
+            //    拖动期间能停在任意位置（靠 _liveRatio 的内存值），**重启后回中心**。
             App.Settings.Save();
 
             // ⚠️⚠️ 2026-09-28 修：单边模式换不了边（Nick 报的"拖了但固定不到上/下/左边"）。
@@ -1984,7 +2013,27 @@ public sealed partial class ToolSidebarWindow : Window
             if (edge != _edge)
             {
                 Log("换边: " + _edge + " → " + edge);
+
+                // ⛔⛔ 2026-10-23：换边后必须**按鼠标在新边上的真实位置**重算比例。
+                //    原因：_pool 是按边名存的实例池，换到右边时 _pool["right"] 多半早就建过了，
+                //    SyncInstances() 会**直接复用它**，连带它上一次的 _liveRatio 一起复活 ——
+                //    于是「左边靠下 → 拖到右边上部」会吸附到右下（Nick 报的那个）。
+                //    这里先把鼠标点投影到**新边**上算成比例，重建后再扣到新实例上。
+                var flatNew = edge is "top" or "bottom";
+                var alongNow = flatNew ? cx - work.X : cy - work.Y;
+                var mineNow = flatNew ? Math.Max(1, _appWindow?.Size.Width ?? 1) : Math.Max(1, _appWindow?.Size.Height ?? 1);
+                var spanNow = Math.Max(0, (flatNew ? work.Width : work.Height) - mineNow);
+                var newRatio = spanNow <= 0 ? 0.5 : Math.Clamp(alongNow / (double)spanNow, 0, 1);
+
                 ApplySetting();
+
+                // 复用/新建的那条实例，把比例与边对齐一次（不然它还是上次的值）
+                if (_pool.TryGetValue(edge, out var fresh))
+                {
+                    fresh._liveRatio = newRatio;
+                    fresh.SnapToSetting();
+                    fresh.Present();
+                }
                 return;
             }
 
@@ -2015,6 +2064,12 @@ public sealed partial class ToolSidebarWindow : Window
             var work = DisplayArea.Primary.WorkArea;
             var free = Math.Max(0, work.Height - myHeight);
             _liveRatio = free <= 0 ? 0.5 : Math.Clamp((myY - work.Y) / (double)free, 0, 1);
+
+            // ⛔⛔ 2026-10-22：**必须把比例同步给对面**。
+            //    原先只改了 self 的 _liveRatio 就调 other.MoveToEdge()，而 MoveToEdge 读的是
+            //    **对面自己的** _liveRatio（还是它上次的旧值）⇒ 对面根本不跟，两条越拖越分家
+            //    （Nick 报的「左右两边高度不一致、左边能拖走右边不动」就是这个）。
+            other._liveRatio = _liveRatio;
             other.MoveToEdge(verify: false);
         }
         catch (Exception ex)

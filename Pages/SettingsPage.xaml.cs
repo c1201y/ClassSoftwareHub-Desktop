@@ -560,7 +560,8 @@ public sealed partial class SettingsPage : Page
             if (result is { HasUpdate: true, Release: { } release })
             {
                 var notes = Snip(release.Notes, 400);
-                UpdateNotes.Text = notes;
+                // ⛔ 不能直接赋 Text：那样把 `![..](..)`、`---`、`#` 原样显示成源码（2026-10-22）
+                MarkdownText.Apply(UpdateNotes, notes);
                 UpdateNotes.Visibility = notes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 UpdateStatus.Text = $"发现新版本 {release.Tag}，可自行选择是否安装。";
 

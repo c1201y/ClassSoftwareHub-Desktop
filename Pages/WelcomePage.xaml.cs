@@ -148,6 +148,10 @@ public sealed partial class WelcomePage : Page
 
         // 目标元素＝快速开始区那张「查看更新内容」主题色卡（2026-10-06 从顶部独立卡片并入这里）。
         // 注意：卡片本身就是强调色底 ⇒ 不再靠 BorderBrush 表达"待装"，改用右端那颗按钮。
+        // ⚠️ 2026-10-22 Nick：「立即更新的标志很不明显，有更新的话用这个横幅（Success 的 InfoBar 颜色）」。
+        //    有更新时整张卡片变绿底 + 对勾图标 + 深色字，一眼能和其它入口卡分开。
+        ApplyUpdateHighlight(pending || Services.Updating.UpdateNotice.Pending is not null);
+
         if (pending)
         {
             // ① 待装：**离"装上"最近，优先级最高** —— 哪怕这会儿又查到别的版本，也先把手上这个装掉。
@@ -189,6 +193,34 @@ public sealed partial class WelcomePage : Page
         if (UpdateInstallButton.Visibility == Visibility.Visible) return;
         if (QuickUpdateButton.Visibility == Visibility.Visible) return;
         App.MainWindow?.Shell.NavigateTo("changelog");
+    }
+
+    /// <summary>
+    /// 有更新时把「查看更新内容」卡片换成绿色横幅（与 InfoBar Success 同套配色）；
+    /// 无更新时恢复原来的强调色卡片——它仍是「查看更新内容」的入口。
+    /// </summary>
+    private void ApplyUpdateHighlight(bool highlight)
+    {
+        Brush Fill(string key) => (Brush)Application.Current.Resources[key];
+
+        if (highlight)
+        {
+            ChangelogCard.Background = Fill("SystemFillColorSuccessBackgroundBrush");
+            ChangelogIcon.Glyph = "\uE930";                      // 对勾
+            ChangelogIcon.Foreground = Fill("TextFillColorPrimaryBrush");
+            ChangelogCardTitle.Foreground = Fill("TextFillColorPrimaryBrush");
+            ChangelogCardSubtitle.Foreground = Fill("TextFillColorPrimaryBrush");
+            ChangelogChevron.Foreground = Fill("TextFillColorPrimaryBrush");
+        }
+        else
+        {
+            ChangelogCard.Background = Fill("AccentFillColorDefaultBrush");
+            ChangelogIcon.Glyph = "\uE81C";                      // 时钟
+            ChangelogIcon.Foreground = Fill("TextOnAccentFillColorPrimaryBrush");
+            ChangelogCardTitle.Foreground = Fill("TextOnAccentFillColorPrimaryBrush");
+            ChangelogCardSubtitle.Foreground = Fill("TextOnAccentFillColorPrimaryBrush");
+            ChangelogChevron.Foreground = Fill("TextOnAccentFillColorPrimaryBrush");
+        }
     }
 
     /// <summary>
