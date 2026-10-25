@@ -269,7 +269,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Column="1" Tag="tools" CornerRadius="8" Padding="14,18"
+                <Border Grid.Column="1" Tag="tools-classroom" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -282,8 +282,60 @@
                         </Grid.ColumnDefinitions>
                         <FontIcon Glyph="&#xE71D;" Style="{StaticResource CardIcon}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                            <TextBlock Text="内置工具" Style="{StaticResource CardTitle}" />
-                            <TextBlock Text="常用小工具集合" Style="{StaticResource CardSubtitle}" />
+                            <TextBlock Text="课堂工具" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="抽号、计时、时钟与学科工具" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!--
+              ⚠️ 2026-10-23：导航把「内置工具」拆成课堂 / 系统两组之后，首页还挂着一张「内置工具」指向总索引
+                  —— 点进去看到的是一个混在一起的列表，跟左侧导航对不上。这里跟着拆开，并补一张 Hub AI 卡。
+            -->
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Tag="tools-system" CornerRadius="8" Padding="14,18"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE945;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="系统工具" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="取色、编码、关机与磁盘空间" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
+                </Border>
+
+                <!-- Hub AI：只读的电脑顾问。副标固定写「电脑顾问」，⛔ 别写 Agent（Nick 定的口径）。 -->
+                <Border Grid.Column="1" Tag="hubai" CornerRadius="8" Padding="14,18"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8BD;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="Hub AI" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="查看本机状况并给出建议" Style="{StaticResource CardSubtitle}" />
                         </StackPanel>
                         <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
                     </Grid>

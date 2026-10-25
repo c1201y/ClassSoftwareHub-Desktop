@@ -114,15 +114,7 @@ public sealed partial class DetailPage : Page
         // 占位字形先兜底（没图/加载中/失败都显示），图片加载成功后由 IconPlaceholder 通知收掉
         _app = app;
         app.PropertyChanged += App_PropertyChanged;
-        IconBox.Background = app.IconImage is null
-            ? null
-            : new ImageBrush
-            {
-                ImageSource = app.IconImage,
-                Stretch = Stretch.UniformToFill,   // 填满 72×72，多的部分裁掉
-                AlignmentX = AlignmentX.Center,    // 关键：从正中间裁，不是左上角
-                AlignmentY = AlignmentY.Center,
-            };
+        IconBox.Background = MakeIconBrush(app);
         IconFallback.Visibility = app.IconPlaceholder;
 
         // ── 应用介绍 ──
@@ -608,10 +600,31 @@ public sealed partial class DetailPage : Page
         try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(url)); } catch { /* 打不开就算了 */ }
     }
 
-    // 图标加载状态变了（成功 → 收掉占位字形；失败 → 继续顶着）
+    // 图标加载状态变了：成功 → 收掉占位字形；失败但本机有旧图 → 换成那张（IconImage 变了）
     private void App_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SoftwareApp.IconPlaceholder) && _app is not null)
+        if (_app is null) return;
+
+        // ⛔ 只监听 IconPlaceholder 是不够的（2026-10-24 实测 ClassIsland）：
+        //    网络源失败后 SoftwareApp 会把 _icon 换成**本机那张旧图**再 Raise(IconImage)，
+        //    这里若不重建 ImageBrush，详情页就一直顶着购物袋占位 —— 盘上明明有图却显示不出来。
+        if (e.PropertyName == nameof(SoftwareApp.IconImage))
+            IconBox.Background = MakeIconBrush(_app);
+
+        if (e.PropertyName is nameof(SoftwareApp.IconImage) or nameof(SoftwareApp.IconPlaceholder))
             IconFallback.Visibility = _app.IconPlaceholder;
+    }
+
+    /// <summary>图标底：ImageBrush 从正中间裁、填满 72×72（`Border` 不裁剪子元素，所以用 Background 铺）。</summary>
+    private static Brush? MakeIconBrush(SoftwareApp app)
+    {
+        var source = app.IconImage;
+        return source is null ? null : new ImageBrush
+        {
+            ImageSource = source,
+            Stretch = Stretch.UniformToFill,
+            AlignmentX = AlignmentX.Center,
+            AlignmentY = AlignmentY.Center,
+        };
     }
 }

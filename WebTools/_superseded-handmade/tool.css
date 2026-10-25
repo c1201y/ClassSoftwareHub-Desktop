@@ -1,0 +1,346 @@
+/* ═══════════════════════════════════════════════════════════════════
+   函数图像 · Web 载体（ToolHostPage 内嵌）
+   视觉规格全部对齐 WinUIonWeb 组件库（Vue 3.5 + theme.css）：
+   - 变量名与 theme.css 保持一致（--text-primary / --ctrl-fill-default / --accent-base …），
+     将来组件库改值，这里同步改一处即可，不会各自漂移。
+   - Button / TextBox / ComboBox 的圆角、高度、三态底色、底部描边按 WinUI 3 规格抄。
+   ⛔ 本页不使用 WinTitleBar —— WebView 里有真标题栏，会双重。
+   ⛔ 颜色一律走变量 + 兜底，不写死 RGB；深浅两套由宿主注入 data-theme 切换。
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light dark;
+
+  --fast-duration: .167s;
+  --normal-duration: .2s;
+  --fast-out-slow-in: cubic-bezier(0, 0, 0, 1);
+
+  /* ── 亮色（抄 WinUIonWeb theme.css :root）── */
+  --app-bg: #F3F3F3;
+  --card-bg: rgba(255, 255, 255, 0.70);
+  --card-bg-secondary: rgba(246, 246, 246, 0.50);
+  --card-stroke: rgba(0, 0, 0, 0.06);
+  --stroke-divider: rgba(0, 0, 0, 0.06);
+  --ctrl-border: rgba(0, 0, 0, 0.06);
+  --ctrl-border-accent: rgba(0, 0, 0, 0.16);
+  --ctrl-fill-default: rgba(255, 255, 255, 0.70);
+  --ctrl-fill-secondary: rgba(249, 249, 249, 0.50);
+  --ctrl-fill-tertiary: rgba(249, 249, 249, 0.30);
+  --ctrl-fill-input-active: #FFFFFF;
+  --ctrl-strong-stroke: rgba(0, 0, 0, 0.45);
+  --accent-base: #0067C0;
+  --accent-hover: rgba(0, 103, 192, 0.90);
+  --accent-pressed: rgba(0, 103, 192, 0.80);
+  --text-primary: rgba(0, 0, 0, 0.89);
+  --text-secondary: rgba(0, 0, 0, 0.62);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+  --text-disabled: rgba(0, 0, 0, 0.36);
+  --subtle-secondary: rgba(0, 0, 0, 0.0373);
+  --critical: #C42B1C;
+  --caution: #9D5D00;
+
+  /* 曲线色板 = 原生 LightPalette（数据用色，不跟界面主题走但随主题换套） */
+  --curve-0: #0F6CBD;
+  --curve-1: #D95309;
+  --curve-2: #0F7B0F;
+  --curve-3: #C42B1C;
+  --curve-4: #6B3FC4;
+  --curve-5: #9A6A00;
+  --curve-6: #0B6E8A;
+  --curve-7: #B02A6E;
+
+  --grid: rgba(0, 0, 0, 0.07);
+  --axis: rgba(0, 0, 0, 0.35);
+  --axis-text: rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] {
+  /* ── 暗色（抄 WinUIonWeb theme.css @media prefers-color-scheme: dark）── */
+  --app-bg: #202020;
+  --card-bg: rgba(255, 255, 255, 0.0512);
+  --card-bg-secondary: rgba(255, 255, 255, 0.0326);
+  --card-stroke: rgba(0, 0, 0, 0.10);
+  --stroke-divider: rgba(255, 255, 255, 0.08);
+  --ctrl-border: rgba(255, 255, 255, 0.0706);
+  --ctrl-border-accent: rgba(255, 255, 255, 0.0941);
+  --ctrl-fill-default: rgba(255, 255, 255, 0.0605);
+  --ctrl-fill-secondary: rgba(255, 255, 255, 0.0837);
+  --ctrl-fill-tertiary: rgba(255, 255, 255, 0.0326);
+  --ctrl-fill-input-active: rgba(30, 30, 30, 0.70);
+  --ctrl-strong-stroke: rgba(255, 255, 255, 0.54);
+  --accent-base: #4CC2FF;
+  --accent-hover: rgba(96, 205, 255, 0.90);
+  --accent-pressed: rgba(96, 205, 255, 0.80);
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255, 255, 255, 0.77);
+  --text-tertiary: rgba(255, 255, 255, 0.53);
+  --text-disabled: rgba(255, 255, 255, 0.36);
+  --subtle-secondary: rgba(255, 255, 255, 0.0605);
+  --critical: #FF87A0;
+  --caution: #FCE100;
+
+  /* 原生 DarkPalette */
+  --curve-0: #4CC2FF;
+  --curve-1: #FFA94D;
+  --curve-2: #69DB7C;
+  --curve-3: #FF8787;
+  --curve-4: #B197FC;
+  --curve-5: #FFD43B;
+  --curve-6: #66D9E8;
+  --curve-7: #F783AC;
+
+  --grid: rgba(255, 255, 255, 0.07);
+  --axis: rgba(255, 255, 255, 0.38);
+  --axis-text: rgba(255, 255, 255, 0.53);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: transparent;                 /* 画布要露窗口底，整页不铺底色 */
+  color: var(--text-primary);
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI",
+               "Microsoft YaHei UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;                        /* 三栏各自滚，页面本身不滚 */
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  display: grid;
+  grid-template-columns: 272px minmax(300px, 1fr) 332px;
+  height: 100vh;
+}
+/* 窗口窄时先压缩分析栏（Nick 定）：JS 里切换 class，和原生 SizeChanged 收窄到 0 等价 */
+#root.narrow { grid-template-columns: 0 minmax(300px, 1fr) 332px; }
+#root.narrow #analysisPanel { border-right-width: 0; }
+#root.narrow #analysisPanel > * { visibility: hidden; }
+
+/* ══════════════════ 通用控件（规格抄 WinButton / WinTextBox / WinComboBox）══════════════ */
+
+.win-btn {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 11px 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-primary);
+  background: var(--ctrl-fill-default);
+  /* WinUI 的描边上下不对称：上 --ctrl-border、下 --ctrl-border-accent（浅色更深、暗色更亮） */
+  border: 1px solid var(--ctrl-border);
+  border-bottom-color: var(--ctrl-border-accent);
+  border-radius: 4px;                      /* --ControlCornerRadius，WinUI 3 = 4 */
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--fast-duration) var(--fast-out-slow-in),
+              color var(--fast-duration);
+}
+.win-btn:hover { background: var(--ctrl-fill-secondary); }
+.win-btn:active { background: var(--ctrl-fill-tertiary); color: var(--text-secondary); }
+/* focus 视觉：WinUI 是 1px 主题色内描边，别用浏览器默认 outline */
+.win-btn:focus-visible,
+.win-select:focus-visible,
+.win-textbox:focus-visible { outline: none; }
+.win-btn:focus-visible { box-shadow: inset 0 0 0 1px var(--text-primary); }
+.win-select:focus-visible { box-shadow: inset 0 0 0 1px var(--text-primary); }
+.win-textbox:focus-visible { box-shadow: inset 0 -2px 0 0 var(--accent-base); }
+
+.win-btn-sm { min-height: 26px; padding: 2px 10px 3px; font-size: 12.5px; }
+.win-btn-icon { min-width: 32px; padding: 5px 6px 6px; }
+
+/* 浮在画布上的那排按钮：底色比控件再深一档，照原生 SolidBackgroundFillColorSecondaryBrush */
+#zoomBar .win-btn,
+#analysisExpand .win-btn {
+  background: var(--ctrl-fill-secondary);
+  border-color: var(--card-stroke);
+  backdrop-filter: blur(30px) saturate(160%);
+}
+
+.glyph {
+  font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ── ComboBox ── */
+.win-select {
+  appearance: none;
+  min-height: 32px;
+  padding: 5px 30px 6px 11px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  background-color: var(--ctrl-fill-default);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  border: 1px solid var(--ctrl-border);
+  border-bottom-color: var(--ctrl-border-accent);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color var(--fast-duration) var(--fast-out-slow-in);
+}
+.win-select:hover { background-color: var(--ctrl-fill-secondary); }
+.win-select option { background: var(--app-bg); color: var(--text-primary); }
+
+/* ── TextBox：focus 时底部 2px 主题色线（WinUI 的 TextControl 焦点视觉）── */
+.win-textbox {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 8px 6px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--ctrl-fill-default);
+  border: 1px solid var(--ctrl-border);
+  border-bottom-color: var(--ctrl-border-accent);
+  border-radius: 4px;
+  transition: background var(--fast-duration) var(--fast-out-slow-in);
+}
+.win-textbox::placeholder { color: var(--text-secondary); }
+.win-textbox:hover { background: var(--ctrl-fill-secondary); }
+.win-textbox:focus {
+  outline: none;
+  background: var(--ctrl-fill-input-active);
+  /* 底部 2px 主题色：用 inset box-shadow 画，不撑布局 */
+  box-shadow: inset 0 -2px 0 0 var(--accent-base);
+  border-bottom-color: var(--accent-base);
+}
+
+/* ══════════════════ 左栏：函数分析 ══════════════════ */
+#analysisPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border-right: 1px solid var(--card-stroke);
+  overflow: hidden;
+}
+.ana-head { display: flex; align-items: center; gap: 8px; }
+.ana-title { flex: 1; font-size: 14px; font-weight: 600; }
+.ana-mode { font-size: 11px; color: var(--text-tertiary); }
+
+#analysisScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ana-empty {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-wrap: wrap;
+}
+
+/* 一项＝「标签（固定宽）＋ 值」同行。同行比上下堆紧凑，能省出画布高度 */
+.ana-field { display: grid; grid-template-columns: 86px 1fr; gap: 10px; align-items: end; }
+.ana-field .label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-bottom: 1px;          /* 底对齐＝对齐文字基线，值里带上标时不吊着 */
+}
+.ana-field .value { font-size: 13px; color: var(--text-primary); }
+.ana-field .value sup { font-size: .72em; vertical-align: super; line-height: 0; }
+.ana-footnote { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+
+/* ══════════════════ 中栏：画布 ══════════════════ */
+#plotArea { position: relative; min-width: 0; overflow: hidden; }
+#cv { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+#cv.dragging { cursor: grabbing; }
+
+#zoomBar {
+  position: absolute;
+  left: 12px; bottom: 12px;
+  display: flex; gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--card-stroke);
+  border-radius: 8px;
+  background: var(--card-bg-secondary);
+  backdrop-filter: blur(30px) saturate(160%);
+}
+#analysisExpand {
+  position: absolute;
+  left: 12px; top: 12px;
+  padding: 4px;
+  border: 1px solid var(--card-stroke);
+  border-radius: 8px;
+  background: var(--card-bg-secondary);
+  backdrop-filter: blur(30px) saturate(160%);
+}
+
+/* ══════════════════ 右栏：输入 + 键盘 ══════════════════ */
+#inputPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  background: var(--card-bg);
+  border-left: 1px solid var(--card-stroke);
+  overflow: hidden;
+}
+.input-row { display: flex; gap: 8px; margin: 12px 12px 0; }
+.input-row .win-select { flex: 1; min-width: 0; }
+
+#curveScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 0 16px;        /* 右侧留 12：滚动条是浮层，别让输入框贴死它 */
+}
+#curveList { display: flex; flex-direction: column; gap: 8px; }
+
+/* 曲线行：第一行「圆点｜y =｜输入框｜删除」，第二行错误提示横跨输入框那一列 */
+.curve-row { display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: center; }
+.curve-dot { width: 10px; height: 10px; border-radius: 50%; }
+.curve-prefix { font-size: 14px; color: var(--text-tertiary); }
+.curve-remove { min-width: 30px; min-height: 30px; padding: 4px; }
+.curve-tip {
+  grid-column: 3 / 5;
+  font-size: 12px;
+  color: var(--critical);
+  text-wrap: wrap;
+}
+.curve-tip[hidden] { display: none; }
+
+/* 键盘区：底色微深一档、铺满右栏整宽直到窗口底边、按键拉伸占满 */
+#keypadWrap {
+  padding: 10px 10px 12px;
+  background: var(--card-bg-secondary);
+}
+#keypad {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+#keypad .win-btn {
+  min-height: 30px;
+  padding: 4px 2px 5px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 滚动条：WinUI 是浮层细条，hover 才明显 ── */
+#analysisScroll::-webkit-scrollbar,
+#curveScroll::-webkit-scrollbar { width: 6px; }
+#analysisScroll::-webkit-scrollbar-thumb,
+#curveScroll::-webkit-scrollbar-thumb {
+  background: var(--ctrl-strong-stroke);
+  border-radius: 3px;
+}
+#analysisScroll::-webkit-scrollbar-track,
+#curveScroll::-webkit-scrollbar-track { background: transparent; }

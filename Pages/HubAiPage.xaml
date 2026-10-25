@@ -129,7 +129,9 @@
                               HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
                     <!-- ⛔ 不要在这里写 MaxWidth：StackPanel 一旦比 ScrollViewer 视口宽就会溢出并被裁，
                          里面的 HorizontalAlignment=Center 会按溢出后的宽度居中，整体看起来偏右。 -->
-                    <StackPanel x:Name="HubAiMessages" Spacing="22" Padding="0,4,0,16"
+                    <!-- ⚠️ 右侧留 16px：WinUI 的滚动条是**浮层**，不占布局宽度 ——
+                         不留白的话正文最后几个字会被压在滚动条底下（2026-10-23 Nick 截图）。 -->
+                    <StackPanel x:Name="HubAiMessages" Spacing="22" Padding="0,4,16,16"
                                 HorizontalAlignment="Stretch">
 
                         <!-- 欢迎屏：空对话时露出，发出第一条消息后收起 -->

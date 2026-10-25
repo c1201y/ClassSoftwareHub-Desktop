@@ -145,11 +145,18 @@
                                 <TextBox x:Name="SizeBox" Grid.Column="1" Header="体积" PlaceholderText="如 1.6 MB" />
                             </Grid>
 
-                            <TextBox x:Name="SystemBox" PlaceholderText="如 Windows 10/11（x86 / x64 / ARM64）">
-                                <TextBox.Header>
-                                    <TextBlock><Run Text="系统限制" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
-                                </TextBox.Header>
-                            </TextBox>
+                            <!-- 适用系统（2026-10-24 对齐网页版 submit.platforms）：
+                                 这里勾的会写进 JSON 的 platforms[]，**列表页的系统筛选只认它**。
+                                 下面那行自由文本只负责「Windows 10/11（x64）」这类给人看的说明，二者都要。 -->
+                            <StackPanel Spacing="6">
+                                <TextBlock>
+                                    <Run Text="适用系统" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                                </TextBlock>
+                                <StackPanel x:Name="PlatformChecks" Orientation="Horizontal" Spacing="14" />
+                            </StackPanel>
+
+                            <TextBox x:Name="SystemBox" Header="系统说明（选填）"
+                                     PlaceholderText="如 Windows 10/11（x86 / x64 / ARM64）" />
 
                             <TextBox x:Name="WebsiteBox" Header="官网地址（选填）" PlaceholderText="https://…" />
                             <TextBox x:Name="GithubBox" Header="GitHub 仓库（选填）" PlaceholderText="https://github.com/…" />

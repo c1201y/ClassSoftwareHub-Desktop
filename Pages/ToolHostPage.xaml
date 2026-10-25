@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.ToolHostPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Disabled">
+
+    <!--
+      工具宿主页（2026-10-23）：整页只有一个 WebView2，负责把本地工具包（HTML）跑起来。
+      ⛔ 全应用**只应该有一个**这样的宿主在跑：每个 WebView2 都是一组浏览器子进程，
+         一页一个会立刻吃掉几百 MB。
+      ⚠️ 背景色要跟网页一致，否则加载那一下会闪白。
+    -->
+    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+        <WebView2 x:Name="Web" />
+    </Grid>
+</Page>

@@ -47,8 +47,10 @@ public sealed partial class ToolsPage : Page
         TitleText.Text = group == ToolGroup.System ? "系统工具" : "课堂工具";
 
         // 「常用工具窗口」那一块讲的是抽号/计时/时钟，只属于课堂组
-        if (PaletteTitle.Parent is FrameworkElement paletteBlock)
-            paletteBlock.Visibility = group == ToolGroup.System ? Visibility.Collapsed : Visibility.Visible;
+        // ⚠️ 必须整张 Border（PaletteCard）一起藏，不能只藏 PaletteTitle 的父级那个 StackPanel ——
+        //    「打开窗口」按钮和「关闭时收进系统托盘」开关都在 StackPanel 外面，
+        //    只藏里面文字会剩下一张空壳卡片（2026-10-24 Nick 截图指出的就是这个）。
+        PaletteCard.Visibility = group == ToolGroup.System ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OpenPalette_Click(object sender, RoutedEventArgs e)

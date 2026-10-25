@@ -34,6 +34,15 @@ public partial class App : Application
     /// <summary>软件内容（原生界面用）。启动时 Load 一次，内含容错解析与问题清单。</summary>
     public static Core.ContentStore Content { get; } = new();
 
+    /// <summary>
+    /// 全应用**共享**的 WebView2 运行时服务（2026-10-23）。
+    /// <para>
+    /// ⛔ 必须是同一个实例：同一个 UserDataFolder 建两个环境，WebView2 会互相打架。
+    /// 主窗口的网页浮层、工具宿主页、提交窗口都从这里取环境。
+    /// </para>
+    /// </summary>
+    public static WebViewRuntimeService WebRuntime { get; } = new();
+
     // ── 文本框右键菜单（2026-10-06 补）─────────────────────────────────
     //
     // 症状：WinUI 3 的 TextBox 本该自带「剪切 / 复制 / 粘贴 / 全选 / 撤销」，
@@ -891,6 +900,27 @@ public partial class App : Application
         // 所以得有这么一句，才能一眼看出「这版包到底带没带钥匙」。
         // 没带 = 下载仍可用，只是绕过节点走公益镜像。
         Services.MirrorSign.LogKeyStatus();
+
+        // 教室喊话轮询（2026-10-25）。Start 内部会看设置开关：默认关，只有用户在
+        // 「内置工具 → 教室喊话」主动打开后才真正上电 —— 不替所有用户默认后台轮询。
+        try
+        {
+            Services.AnnounceService.Start();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("announce", ex, "启动喊话轮询");
+        }
+
+        // 教室喊话的局域网通道（发现 + 收件）。同样看开关，默认关。
+        try
+        {
+            Services.AnnounceLanService.Start();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("announce-lan", ex, "启动局域网通道");
+        }
     }
 
     /// <summary>

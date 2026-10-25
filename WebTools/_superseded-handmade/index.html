@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>函数图像</title>
+<link rel="stylesheet" href="tool.css" />
+</head>
+<body>
+<!-- ⛔⛔ 版式照原生 FunctionPlotPage.xaml：**全屏三列** [函数分析][画布][输入+键盘]，
+     没有标题、没有说明文字、没有页面边距、不锁 960 —— 主角就是图，其余塞进两侧栏里。
+     272 / * / 332 与原生 ColumnDefinition 完全一致，切载体时用户不会察觉版式差异。 -->
+<div id="root">
+  <!-- ═══ 左栏：函数分析 ═══ -->
+  <!-- ⛔ 必须给面板底色（比窗口底亮一档）：露窗口底会黑乎乎，还跟键盘区断成两截（Nick 截图点名过） -->
+  <aside id="analysisPanel">
+    <div class="ana-head">
+      <span class="ana-title">函数分析</span>
+      <button id="basisBtn" class="win-btn win-btn-sm" title="这些结论怎么来的、精度边界在哪">依据</button>
+      <button id="collapseBtn" class="win-btn win-btn-icon" title="收起函数分析">
+        <span class="glyph">&#xE76B;</span>
+      </button>
+    </div>
+
+    <!-- 多条曲线时才出现：选一条作为分析目标 -->
+    <select id="targetBox" class="win-select" hidden></select>
+
+    <div id="analysisMode" class="ana-mode"></div>
+
+    <!-- 内容多时内部滚动，不挤外面 -->
+    <div id="analysisScroll">
+      <div id="analysisEmpty" class="ana-empty">输入表达式后显示分析结果。</div>
+      <div id="analysisList"></div>
+      <div id="basisNote" class="ana-footnote" hidden>
+        以上结论只来自表达式的<strong>标准形式</strong>（a·f(x)+c 中 f 为已知函数），
+        按符号关系严格给出；拖动视图、缩放都不会改变它们。
+        超出标准形式的表达式不给出结论 —— 宁可少说，也不说错。
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ 中栏：画布（占满，不套卡片边框）═══ -->
+  <main id="plotArea">
+    <canvas id="cv"></canvas>
+
+    <!-- 分析栏收起后，画布左上角留一个展开入口（不占布局，浮在画布上） -->
+    <div id="analysisExpand" hidden>
+      <button id="expandBtn" class="win-btn win-btn-icon" title="展开函数分析">
+        <span class="glyph">&#xE76C;</span>
+      </button>
+    </div>
+
+    <!-- 缩放工具浮在画布左下角，不占布局行 -->
+    <div id="zoomBar">
+      <button id="resetBtn" class="win-btn win-btn-icon" title="回到初始视角"><span class="glyph">&#xE72C;</span></button>
+      <button id="zoomOutBtn" class="win-btn win-btn-icon" title="缩小"><span class="glyph">&#xE71F;</span></button>
+      <button id="zoomInBtn" class="win-btn win-btn-icon" title="放大"><span class="glyph">&#xE8A3;</span></button>
+    </div>
+  </main>
+
+  <!-- ═══ 右栏：输入 + 数学键盘（键盘常驻，照计算器）═══ -->
+  <aside id="inputPanel">
+    <div class="input-row">
+      <select id="angleBox" class="win-select" title="三角函数按弧度还是角度解释">
+        <option value="rad">弧度制</option>
+        <option value="deg">角度制</option>
+      </select>
+      <button id="addBtn" class="win-btn win-btn-icon" title="添加一条曲线">
+        <span class="glyph">&#xE710;</span>
+      </button>
+    </div>
+
+    <!-- 曲线列表铺满键盘上方**全部剩余高度**（曾写死 MaxHeight 只能露出四条，被点名） -->
+    <div id="curveScroll">
+      <div id="curveList"></div>
+    </div>
+
+    <!-- ⛔⛔ 键盘是右栏的**一部分**，不是浮在面板上的小卡片（Nick：浮卡有喜感）——
+         无圆角、无边框，底色铺满右栏整宽直到窗口底边，按键拉伸占满可用宽度；
+         底色比右栏面板**微深一档**，视觉上独立但镶在面板里，不挑出来。 -->
+    <div id="keypadWrap"><div id="keypad"></div></div>
+  </aside>
+</div>
+
+<script src="tool.js"></script>
+</body>
+</html>

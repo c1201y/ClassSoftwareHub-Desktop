@@ -8,9 +8,24 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.HubAi;
 
-/// <summary>历史对话里的一条消息。只存**文本轮次**，不存工具调用与工具结果。</summary>
+/// <summary>
+/// 历史对话里的一个消息节点。
+/// <para>
+/// ⛔⛔ 2026-10-23 起是**树**，不再是数组：同一条 <see cref="ParentId"/> 下的多个节点
+/// 就是同一个位置的多个版本（对提问"编辑后重发"、对回答"重新生成"都只是长出一个兄弟节点）。
+/// 旧文件（线性 entries、没有 id/parentId）由 <see cref="ChatSession.EnsureTree"/> 自动补齐，
+/// 不用迁移脚本。
+/// </para>
+/// </summary>
 public sealed class SessionEntry
 {
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    /// <summary>父节点；根为 null。</summary>
+    [JsonPropertyName("parentId")]
+    public string? ParentId { get; set; }
+
     [JsonPropertyName("role")]
     public string Role { get; set; } = "";
 
@@ -46,16 +61,107 @@ public sealed class ChatSession
     [JsonPropertyName("tokens")]
     public int Tokens { get; set; }
 
+    /// <summary>当前显示的那一支的叶子节点（2026-10-23 加）。空 = 取最后一条。</summary>
+    [JsonPropertyName("currentId")]
+    public string? CurrentId { get; set; }
+
     [JsonPropertyName("entries")]
     public List<SessionEntry> Entries { get; set; } = new();
 
     /// <summary>列表副标题用。⭐ 只读属性，不进 JSON。</summary>
     [JsonIgnore]
     public string DateText => CreatedAt.ToString("MM-dd HH:mm");
+
+    /// <summary>
+    /// 补齐树结构。兼容三种历史数据：
+    /// ① 旧版线性文件（没有 id、没有 parentId）→ 补 id 并串成一条链；
+    /// ② 有 id 但 currentId 缺失 → 指到最后一条；
+    /// ③ 正常树 → 只校验 currentId 是否还存在。
+    /// </summary>
+    public void EnsureTree()
+    {
+        for (var i = 0; i < Entries.Count; i++)
+        {
+            if (!string.IsNullOrEmpty(Entries[i].Id)) continue;
+
+            // ⛔⛔ 必须**确定性**生成，不能用随机 id。
+            //    旧文件在磁盘上没有 id，每次加载都补一遍 —— 若每次补出来的不一样，
+            //    页面拿到的 id 和 `SaveBranch` 里 `Load()` 补出来的就会对不上，
+            //    新节点挂到 parentId 上等于挂到空处，整棵树直接断掉（2026-10-23 踩过）。
+            var candidate = $"e{i}";
+            var n = i;
+            while (Entries.Any(e => string.Equals(e.Id, candidate, StringComparison.Ordinal)))
+                candidate = $"e{n++}x";
+
+            Entries[i].Id = candidate;
+        }
+
+        // 全新格式里根节点也是 null，所以"所有节点都没父"才当作旧版线性数据
+        if (Entries.Count > 1 && Entries.All(e => string.IsNullOrEmpty(e.ParentId)))
+            for (var i = 1; i < Entries.Count; i++)
+                Entries[i].ParentId = Entries[i - 1].Id;
+
+        if (string.IsNullOrEmpty(CurrentId) || Entries.All(e => e.Id != CurrentId))
+            CurrentId = Entries.Count > 0 ? Entries[^1].Id : null;
+    }
+
+    /// <summary>当前分支：根 → 叶子。</summary>
+    public List<SessionEntry> Branch() => BranchUpTo(CurrentId);
+
+    /// <summary>根 → 指定节点（含自己）。id 为空时返回空表。</summary>
+    public List<SessionEntry> BranchUpTo(string? entryId)
+    {
+        var result = new List<SessionEntry>();
+        if (string.IsNullOrEmpty(entryId)) return result;
+
+        var byId = Entries
+            .GroupBy(e => e.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var cursor = entryId;
+        var guard = 0;
+
+        while (!string.IsNullOrEmpty(cursor)
+               && byId.TryGetValue(cursor, out var entry)
+               && guard++ < 4096)
+        {
+            result.Add(entry);
+            cursor = entry.ParentId;
+        }
+
+        result.Reverse();
+        return result;
+    }
+
+    /// <summary>同一个父节点下、同角色的兄弟节点（按写入顺序）。分支切换靠它。</summary>
+    public List<SessionEntry> Siblings(SessionEntry entry) =>
+        Entries
+            .Where(e => e.Role == entry.Role && string.Equals(e.ParentId, entry.ParentId, StringComparison.Ordinal))
+            .ToList();
+
+    /// <summary>
+    /// 从某个节点一路往下走到叶子（有多条子分支时取最后写入的那条）。
+    /// 切换兄弟节点时要落到它的叶子上 —— 否则只显示半截，后面的回合看起来"没了"。
+    /// </summary>
+    public string LeafOf(string entryId)
+    {
+        var cursor = entryId;
+        var guard = 0;
+
+        while (guard++ < 4096)
+        {
+            var child = Entries.LastOrDefault(e => string.Equals(e.ParentId, cursor, StringComparison.Ordinal));
+            if (child is null) return cursor;
+            cursor = child.Id;
+        }
+
+        return cursor;
+    }
 }
 
 /// <summary>
-/// 历史对话的本地存取（2026-10-18）。一次对话一个文件，放在 <c>AppDataDir\hubai-sessions\</c>。
+/// 历史对话的本地存取（2026-10-18，2026-10-23 改为树）。一次对话一个文件，
+/// 放在 <c>AppDataDir\hubai-sessions\</c>。
 ///
 /// <para>
 /// ⛔ 刻意**只存 user / assistant 的文本**，不存工具调用与工具结果：
@@ -66,7 +172,7 @@ public sealed class ChatSession
 /// </list>
 /// </para>
 /// <para>
-/// 文件按启动时生成的时间戳命名，列表按文件时间倒序 —— 不建索引文件，少一份可能写坏的东西。
+/// 文件按创建时间命名，列表按时间倒序 —— 不建索引文件，少一份可能写坏的东西。
 /// </para>
 /// </summary>
 public static class ChatSessionStore
@@ -82,6 +188,9 @@ public static class ChatSessionStore
 
     public static string Dir => Path.Combine(AppPaths.DataDir, "hubai-sessions");
 
+    /// <summary>节点 id（短、可读、无冲突即可，不需要全局唯一）。</summary>
+    public static string NewId() => Guid.NewGuid().ToString("N")[..10];
+
     /// <summary>按时间倒序读全部历史。坏文件直接跳过，不影响其他的。</summary>
     public static List<ChatSession> LoadAll()
     {
@@ -96,7 +205,10 @@ public static class ChatSessionStore
                 try
                 {
                     var session = JsonSerializer.Deserialize<ChatSession>(File.ReadAllText(file), JsonOpts);
-                    if (session is not null && session.Entries.Count > 0) list.Add(session);
+                    if (session is null || session.Entries.Count == 0) continue;
+
+                    session.EnsureTree();
+                    list.Add(session);
                 }
                 catch (Exception ex)
                 {
@@ -113,66 +225,97 @@ public static class ChatSessionStore
     }
 
     /// <summary>
-    /// 保存一次对话。返回会话 id（新建时生成，续聊时沿用）。
-    /// ⚠️ 只保存有实际内容的轮次 —— 空对话不落盘，免得列表里全是噪声。
+    /// 把一段新产生的轮次挂到 <paramref name="parentId"/> 下面（null = 从空白的根开始）。
+    ///
+    /// <para>
+    /// ⭐ 这是树的核心：不再"整篇覆盖"，而是**只追加一条链**。
+    /// 于是"编辑重发"和"重新生成"都变成"在同一个父节点下多一个兄弟"，
+    /// 旧分支原样留在文件里，随时可以切回去。
+    /// </para>
     /// </summary>
-    public static string? Save(
-        IReadOnlyList<AiMessage> messages,
+    /// <returns>会话 id（新建时生成）；没有可存的内容时返回原 id。</returns>
+    public static string? SaveBranch(
+        string? sessionId,
+        string? parentId,
+        IReadOnlyList<AiMessage> turns,
         string fallbackTitle,
-        string? existingId = null,
         string? model = null,
         int tokens = 0)
     {
         try
         {
-            var entries = new List<SessionEntry>();
+            var session = (string.IsNullOrEmpty(sessionId) ? null : Load(sessionId))
+                          ?? new ChatSession
+                          {
+                              Id = DateTime.Now.ToString("yyyyMMdd-HHmmss"),
+                              CreatedAt = DateTime.Now,
+                          };
 
-            foreach (var message in messages)
+            session.EnsureTree();
+
+            var cursor = parentId;
+            var added = 0;
+
+            foreach (var message in turns)
             {
-                // system 是每次现拼的，tool 会破坏恢复后的消息结构（见类注释）
                 if (message.Role != "user" && message.Role != "assistant") continue;
 
                 // ⚠️ 有思考但没正文的那一轮也要留（模型可能只想着就调工具了）
                 if (string.IsNullOrWhiteSpace(message.Content) && string.IsNullOrEmpty(message.Reasoning)) continue;
 
-                entries.Add(new SessionEntry
+                var entry = new SessionEntry
                 {
+                    Id = NewId(),
+                    ParentId = cursor,
                     Role = message.Role,
                     Content = message.Content,
                     Reasoning = message.Role == "assistant" ? message.Reasoning : null,
-                });
+                };
+
+                session.Entries.Add(entry);
+                cursor = entry.Id;
+                added++;
             }
 
-            if (entries.Count == 0) return null;
+            // 什么都没存进去：新会话就当没发生（别留一个空文件），老会话沿用原 id
+            if (added == 0) return string.IsNullOrEmpty(sessionId) ? null : session.Id;
 
-            var id = string.IsNullOrEmpty(existingId)
-                ? DateTime.Now.ToString("yyyyMMdd-HHmmss")
-                : existingId;
+            session.CurrentId = cursor;
+            session.Model = model ?? session.Model;
+            session.Tokens += tokens;
 
-            var previous = existingId is null ? null : Load(existingId);
+            if (string.IsNullOrWhiteSpace(session.Title))
+                session.Title = MakeTitle(session.Branch(), fallbackTitle);
 
-            var session = new ChatSession
-            {
-                Id = id,
-                CreatedAt = previous?.CreatedAt ?? DateTime.Now,
-                Title = MakeTitle(entries, fallbackTitle),
-                Model = model,
-                // 续聊时累加，不是覆盖
-                Tokens = (previous?.Tokens ?? 0) + tokens,
-                Entries = entries,
-            };
-
-            Directory.CreateDirectory(Dir);
-            File.WriteAllText(Path.Combine(Dir, id + ".json"), JsonSerializer.Serialize(session, JsonOpts));
-
+            Write(session);
             PruneOld();
-            return id;
+            return session.Id;
         }
         catch (Exception ex)
         {
             // 存历史失败不该影响对话本身，记一条就够
             AppLog.Exception("hubai", ex, "保存历史对话");
-            return null;
+            return sessionId;
+        }
+    }
+
+    /// <summary>切换当前显示的分支（用户点 ‹1/2›）。</summary>
+    public static void SetCurrent(string sessionId, string entryId)
+    {
+        try
+        {
+            var session = Load(sessionId);
+            if (session is null) return;
+
+            session.EnsureTree();
+            if (session.Entries.All(e => e.Id != entryId)) return;
+
+            session.CurrentId = entryId;
+            Write(session);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("hubai", ex, "切换历史分支");
         }
     }
 
@@ -183,7 +326,9 @@ public static class ChatSessionStore
             var path = Path.Combine(Dir, id + ".json");
             if (!File.Exists(path)) return null;
 
-            return JsonSerializer.Deserialize<ChatSession>(File.ReadAllText(path), JsonOpts);
+            var session = JsonSerializer.Deserialize<ChatSession>(File.ReadAllText(path), JsonOpts);
+            session?.EnsureTree();
+            return session;
         }
         catch (Exception ex)
         {
@@ -205,9 +350,17 @@ public static class ChatSessionStore
         }
     }
 
-    private static string MakeTitle(List<SessionEntry> entries, string fallback)
+    private static void Write(ChatSession session)
     {
-        var first = entries.FirstOrDefault(e => e.Role == "user")?.Content ?? fallback;
+        Directory.CreateDirectory(Dir);
+        File.WriteAllText(
+            Path.Combine(Dir, session.Id + ".json"),
+            JsonSerializer.Serialize(session, JsonOpts));
+    }
+
+    private static string MakeTitle(List<SessionEntry> branch, string fallback)
+    {
+        var first = branch.FirstOrDefault(e => e.Role == "user")?.Content ?? fallback;
 
         // 去掉换行、压成一行，太长就截断 —— 列表上一行放不下就变成两行，很难看
         var line = string.Join(' ', first.Split('\n', '\r', StringSplitOptions.RemoveEmptyEntries)).Trim();

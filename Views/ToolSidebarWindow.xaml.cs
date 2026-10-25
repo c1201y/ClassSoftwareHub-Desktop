@@ -214,15 +214,11 @@ public sealed partial class ToolSidebarWindow : Window
     private bool _expanded;
 
     /// <summary>
-    /// 拖动过程中的沿边位置比例（0~1，-1 = 居中）。
-    /// ⛔ **只在内存里**，不写存档 —— 位置记忆功能已移除（2026-10-19，与开机最小化冲突）。
-    /// 它只负责"拖一边时对面实时跟随"这一件事，下次启动不会恢复。
-    /// </summary>
-    /// <summary>
     /// 沿边位置比例（0~1，-1 = 居中）。
-    /// ⛔ **只在内存里**，不写存档 —— 位置记忆功能已废弃（2026-10-19），
-    /// 重启/重建时一律回中心。但**拖动期间必须能停在任意位置** ——
-    /// 所以拖动循环里要无条件更新它（愿先只有双边模式更新，单边永远居中）。
+    ///
+    /// 内存里的实时值，拖动期间必须无条件更新（原先只有双边模式更新，单边永远居中）。
+    /// 存档那份在 <see cref="SettingsStore.SidebarPosRatio"/>：**松手时写**（<see cref="DockToNearestEdge"/>）、
+    /// **启动/重建时读**（<see cref="SyncInstances"/>）。2026-10-24 按 Nick 要求恢复了这条路。
     /// </summary>
     private double _liveRatio = -1;
 
@@ -432,7 +428,13 @@ public sealed partial class ToolSidebarWindow : Window
     /// 按设置把实例集合对齐到"该有哪几条边"：该显示的建出来/显示，不该显示的藏起来。
     /// 返回**本次该显示的那些实例**（顺序：左 → 右；单条就是一个）。
     /// </summary>
-    private static List<ToolSidebarWindow> SyncInstances()
+    /// <param name="ratioEdge">
+    /// 需要**在显示之前**就把沿边比例准备好的那条边（换边时用）。
+    /// ⛔⛔ 2026-10-23 Nick：「拖到左边再拖到右边上部，会先在右边下部出现再突变上去」。
+    ///    原因就是先 ApplySetting() 让它按**旧比例** Present 出来，再 SnapToSetting() 挪走 —— 中间态被看见了。
+    ///    这里在实例"建出来 / 从池里取出来"的那一瞬间就写好吃到的比例，后面 Present 一次到位。
+    /// </param>
+    private static List<ToolSidebarWindow> SyncInstances(string? ratioEdge = null, double ratio = -1)
     {
         var want = DesiredEdges();
 
@@ -447,8 +449,22 @@ public sealed partial class ToolSidebarWindow : Window
                 w = new ToolSidebarWindow(e);
                 _pool[e] = w;
             }
+
+            // 新建的和复用的都要覆盖 —— 复用那条带着它上次的比例，正是"跳一下"的另一个来源
+            if (ratioEdge == e && ratio >= 0)
+                w._liveRatio = ratio;
+
             list.Add(w);
         }
+
+        // 调用方没给比例（启动 / 重建 / 从侧边布局页回来）→ 用存档里那份。
+        // 2026-10-24 Nick 要求恢复位置记忆：他拖到的位置重启后就该还在。
+        // 双边模式下两边共用同一个比例（存档里只有一份，拖动时本来就靠 _liveRatio 互相同步）。
+        if (ratioEdge is null && App.Settings.Current.SidebarPosRatio >= 0)
+        {
+            foreach (var w in list) w._liveRatio = App.Settings.Current.SidebarPosRatio;
+        }
+
         return list;
     }
 
@@ -538,10 +554,10 @@ public sealed partial class ToolSidebarWindow : Window
     }
 
     /// <summary>设置里的开关/边选项变了：开就显示、关就藏起来；边变了重新贴过去。</summary>
-    public static void ApplySetting()
+    public static void ApplySetting(string? ratioEdge = null, double ratio = -1)
     {
         if (!App.Settings.Current.SidebarEnabled) { HideSidebar(); return; }
-        foreach (var w in SyncInstances())
+        foreach (var w in SyncInstances(ratioEdge, ratio))
         {
             w.Present();
             // ⚠️ 这里必须**整个重建**（不是只 SnapToSetting）：大小样式 / 每行几个都会换掉
@@ -2000,10 +2016,11 @@ public sealed partial class ToolSidebarWindow : Window
                 }
             }
 
-            // ⛔ 2026-10-22 Nick 定调：**不落盘**。
-            //    位置记忆那个功能本来就是多余的，它把开机最小化和自由拖动都搞坏了；
-            //    刚才我把它“恢复”回来是方向错了。正确行为：
-            //    拖动期间能停在任意位置（靠 _liveRatio 的内存值），**重启后回中心**。
+            // 2026-10-24 Nick 要求恢复位置记忆（他反馈「每次重启都跑回右边居中，明明调过位置」）。
+            // 松手这一刻把沿边比例落盘。
+            // ⚠️ 只在**松手**写，拖动过程中绝不写 —— 10-22 那次出问题正是拖动时反复 Save：
+            //    既卡，又会把「开机最小化」启动早期"窗口尺寸还没定"的中间态当成最终位置存下来。
+            App.Settings.Current.SidebarPosRatio = _liveRatio;
             App.Settings.Save();
 
             // ⚠️⚠️ 2026-09-28 修：单边模式换不了边（Nick 报的"拖了但固定不到上/下/左边"）。
@@ -2025,15 +2042,9 @@ public sealed partial class ToolSidebarWindow : Window
                 var spanNow = Math.Max(0, (flatNew ? work.Width : work.Height) - mineNow);
                 var newRatio = spanNow <= 0 ? 0.5 : Math.Clamp(alongNow / (double)spanNow, 0, 1);
 
-                ApplySetting();
-
-                // 复用/新建的那条实例，把比例与边对齐一次（不然它还是上次的值）
-                if (_pool.TryGetValue(edge, out var fresh))
-                {
-                    fresh._liveRatio = newRatio;
-                    fresh.SnapToSetting();
-                    fresh.Present();
-                }
+                // ⛔ 比例**交给 ApplySetting 在建/取实例时就写好**，⛔ 别在它之后再 SnapToSetting ——
+                //    那样会先按旧位置显示一次、再跳到新位置（Nick 说的「先在下面出现，然后突变到上面」）。
+                ApplySetting(edge, newRatio);
                 return;
             }
 

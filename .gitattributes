@@ -1,0 +1,8 @@
+# 换行符统一：仓库里一律存 LF，检出也按 LF。
+#
+# ⛔ 为什么必须有（2026-10-23 加）：本机 core.autocrlf=false，编辑器一旦把某个文件
+#    整篇存成 CRLF，git 就会把它当成"全文件重写" —— Views/ToolSidebarWindow.xaml.cs
+#    真实改动只有 29 行，diff 却报 5871 行，评审、blame、合并全被淹没。
+#
+# ⚠️ 二进制（png / ico / xlsx / wav / exe）由 git 自动识别，不受这条影响。
+* text=auto eol=lf

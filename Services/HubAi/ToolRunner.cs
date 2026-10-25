@@ -62,6 +62,35 @@ public static class ToolRunner
     /// <summary>给模型的单条结果最多多少字符。太长的清单它读不完，也浪费额度。</summary>
     private const int MaxResultChars = 2400;
 
+    /// <summary>只读工具：随便调，不需要问人。</summary>
+    private static readonly HashSet<string> ReadOnlyTools = new(StringComparer.Ordinal)
+    {
+        "get_machine_snapshot",
+        "list_disk_folders",
+        "search_software_library",
+        "list_installed_apps",
+        "list_startup_items",
+        "web_search",
+        "fetch_url",
+    };
+
+    /// <summary>
+    /// 会改动系统的工具。⛔ 目前**故意为空** —— 写操作通道没做好之前不加进来。
+    /// 加之前必须先确认 UI 侧的审批对话框已经通了（<see cref="RequiresApproval"/> 会拦住它）。
+    /// </summary>
+    private static readonly HashSet<string> MutatingTools = new(StringComparer.Ordinal);
+
+    public static bool IsReadOnly(string id) => ReadOnlyTools.Contains(id);
+
+    /// <summary>
+    /// 执行前是否必须问过用户。
+    /// 未知 id 返回 false —— 它反正会被 <see cref="ExecuteAsync"/> 的 default 分支拒绝。
+    /// </summary>
+    public static bool RequiresApproval(string id) => MutatingTools.Contains(id);
+
+    /// <summary>白名单里认得的工具（只读 + 改动）。</summary>
+    public static bool IsKnown(string id) => ReadOnlyTools.Contains(id) || MutatingTools.Contains(id);
+
     public static async Task<string> ExecuteAsync(
         string id,
         string argumentsJson,

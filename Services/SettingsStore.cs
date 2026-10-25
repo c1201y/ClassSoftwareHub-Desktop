@@ -107,11 +107,13 @@ public sealed class AppSettings
     /// </summary>
     public string SidebarDropAnim { get; set; } = "dip";
 
-    /// <summary>侧边栏沿边位置（0~1）；-1 = 居中（默认）。拖动收起状态的抓手时记下来。两种模式共用。</summary>
     /// <summary>
     /// 沿边位置比例（0~1，-1 = 居中）。
-    /// ⛔ **已废弃（2026-10-19）**：位置记忆功能移除 —— 它和「开机最小化」冲突，且用户觉得手动调更顺手。
-    /// 运行时改用 <c>ToolSidebarWindow._liveRatio</c>（只在内存里），这里只保留字段免得旧存档反序列化报错。
+    ///
+    /// 历史：2026-10-19 曾一度废弃（说它与「开机最小化」冲突）、10-22 又明确"不落盘"；
+    /// **2026-10-24 按 Nick 要求恢复**——他反馈"每次重启都跑回右边居中，明明调过位置"。
+    /// 现在的写入时机只有一处：<c>ToolSidebarWindow.DockToNearestEdge()</c>（松手那一下），
+    /// 拖动过程中绝不写盘 —— 当初出问题正是拖动时反复 Save（卡顿 + 把启动早期的中间尺寸当成最终位置）。
     /// </summary>
     public double SidebarPosRatio { get; set; } = -1;
 
@@ -301,6 +303,14 @@ public sealed class AppSettings
     public bool HubAiWebEnabled { get; set; }
 
     /// <summary>
+    /// Hub AI **上次停留的那个会话 id**（空 = 新对话）。
+    /// 2026-10-23 加：Nick 报「对话到一半切到别的页面，回来对话被吞了」。
+    /// 页面虽然是 NavigationCacheMode=Required，但一旦因为任何原因被重建（缓存被顶掉 / 导航栈清理），
+    /// 内存里的 _chat 与当前会话 id 全丢。把 id 落到存档，重建后能自动选回那一段。
+    /// </summary>
+    public string HubAiLastSessionId { get; set; } = "";
+
+    /// <summary>
     /// 是否启用 AI 工具包（2026-10-18）。
     ///
     /// <para>
@@ -446,6 +456,57 @@ public sealed class AppSettings
     ///    <see cref="GithubRoutes.Normalize"/>）。
     /// </summary>
     public string GithubDownloadRoute { get; set; } = GithubRoutes.Official;
+
+    // ── 教室喊话（2026-10-25：对齐设计稿 docs/教室喊话功能设计.md 的 §6 配置表）──────────
+
+    /// <summary>是否接收喊话（= 是否开轮询）。默认关：不该替所有用户默认后台上报。</summary>
+    public bool AnnounceEnabled { get; set; }
+
+    /// <summary>轮询间隔（秒）。页面提供 15 / 30 / 60 三档，默认 30（设计稿 §3.4 的额度核算结论）。</summary>
+    public int AnnounceIntervalSec { get; set; } = 30;
+
+    /// <summary>安静模式：只弹窗，不响提示音、不朗读。</summary>
+    public bool AnnounceQuietMode { get; set; }
+
+    /// <summary>语音朗读：用系统中文语音念正文；系统没有中文语音时自动跳过。</summary>
+    public bool AnnounceSpeakText { get; set; } = true;
+
+    /// <summary>
+    /// 打开教室喊话页时默认展开哪一栏：<c>receive</c> | <c>send</c>（2026-10-25 Nick：
+    /// 有些用户主要是发，不该每次都先看到接收）。认不出的值按接收处理。
+    /// </summary>
+    public string AnnounceDefaultView { get; set; } = "receive";
+
+    /// <summary>
+    /// 本机标识（2026-10-25 Nick 提）：例如「高28班」「三楼办公室」。
+    /// 随局域网心跳广播出去，发送端的设备列表直接显示它 —— 老师一眼知道这台机是哪里的。
+    /// 空 = 显示机器名。
+    /// </summary>
+    public string AnnounceLabel { get; set; } = "";
+
+    /// <summary>局域网接收开关（默认关：开了会占用 UDP/TCP 两个端口并接受同网段的喊话）。</summary>
+    public bool AnnounceLanEnabled { get; set; }
+
+    /// <summary>发送端「已保存的电脑」（手动填过的配对码，勾选即发）。</summary>
+    public System.Collections.Generic.List<AnnounceSavedPeer> AnnounceSavedPeers { get; set; } = new();
+
+    /// <summary>
+    /// 接收端「谁保存了本机配对码」（对方保存时经局域网登记的）。
+    /// ⚠️ 只是登记记录，不是白名单：删掉它不等于对方失去发送能力（见页面上的说明）。
+    /// </summary>
+    public System.Collections.Generic.List<AnnounceBinder> AnnounceBinders { get; set; } = new();
+
+    /// <summary>删除登记时对方不在线、还没通知到它的移除请求（等它下次出现再补发）。</summary>
+    public System.Collections.Generic.List<PendingUnbind> AnnouncePendingUnbinds { get; set; } = new();
+
+    /// <summary>
+    /// 全屏喊话的出场方式（2026-10-25）：<c>typewriter</c> 打字机 / <c>slide</c> 按行交错划入 /
+    /// <c>pop</c> 弹入 / <c>none</c> 不做动画（兜底，给不喜欢动画的人）。认不出的值按 none 处理。
+    /// </summary>
+    public string AnnounceAnimation { get; set; } = "typewriter";
+
+    /// <summary>提示音路径；空 = 用内嵌的 announce-alert.wav。文件不存在时自动退回内嵌。</summary>
+    public string AnnounceSoundPath { get; set; } = "";
 }
 
 /// <summary>设置存储：%LOCALAPPDATA%\ClassSoftwareHub\settings.json</summary>

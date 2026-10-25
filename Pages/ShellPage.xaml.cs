@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data;
+using ClassSoftwareHub.Desktop.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -133,6 +134,34 @@ public sealed partial class ShellPage : UserControl
         var start = StartupPageTag();
         SelectTag(start);
         NavigateTag(start);
+
+        // 开发用：--tool=<id> 直接落到某个内置工具（会走载体选择）。
+        // 有了它验"Web 版 / 原生版"两条路都只编一趟，不用手点工具列表。
+        if (StartupToolId() is { } toolId
+            && ToolCatalog.All.FirstOrDefault(t => t.Id == toolId)?.Page is { } page)
+        {
+            NavigateToTool(page);
+        }
+    }
+
+    /// <summary><c>--tool=&lt;id&gt;</c>，id 跟 <see cref="ToolCatalog"/> 里的一致。没给返回 null。</summary>
+    private static string? StartupToolId()
+    {
+        try
+        {
+            foreach (var arg in Environment.GetCommandLineArgs())
+            {
+                if (!arg.StartsWith("--tool=", StringComparison.OrdinalIgnoreCase)) continue;
+                var id = arg["--tool=".Length..].Trim();
+                if (id.Length > 0) return id;
+            }
+        }
+        catch
+        {
+            // 命令行读不到就当没给
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -193,6 +222,25 @@ public sealed partial class ShellPage : UserControl
     }
 
     /// <summary>
+    /// 从外部（首页卡片等）进「课堂工具」：切到该组列表页，并把这一组展开、另一组收起。
+    /// 2026-10-23 加 —— 首页卡片跟着导航一起拆了（原先只有一张「内置工具」指向总索引）。
+    /// </summary>
+    public void NavigateToClassroomTools()
+    {
+        NavigateTo("tools-classroom");
+        ClassroomToolsNav.IsExpanded = true;
+        SystemToolsNav.IsExpanded = false;
+    }
+
+    /// <summary>从外部进「系统工具」：同上，展开的组相反。</summary>
+    public void NavigateToSystemTools()
+    {
+        NavigateTo("tools-system");
+        ClassroomToolsNav.IsExpanded = false;
+        SystemToolsNav.IsExpanded = true;
+    }
+
+    /// <summary>
     /// 跳到「内置工具」里的某个工具页（浮窗里的「详细设置」用）。
     /// 先把工具列表页铺一层，这样工具页左上角的返回按钮能正常退回列表。
     /// </summary>
@@ -209,6 +257,16 @@ public sealed partial class ShellPage : UserControl
         SelectTag("tools");
         if (viaList && ContentFrame.CurrentSourcePageType != typeof(ToolsPage))
             ContentFrame.Navigate(typeof(ToolsPage));
+
+        // ⭐ 载体选择（2026-10-23）：这个工具有 Web 版、且本机跑得起来 → 交给宿主页；
+        //    否则走原生页。⛔ 别在这里加提示或角标 —— 降级对用户是无感的（Nick 定）。
+        var def = ToolCatalog.All.FirstOrDefault(t => t.Page == pageType);
+        if (def is not null && ToolCarrier.RequestFor(def.WebToolId, pageType, parameter) is { } request)
+        {
+            ContentFrame.Navigate(typeof(ToolHostPage), request);
+            return;
+        }
+
         ContentFrame.Navigate(pageType, parameter);
     }
 
@@ -253,12 +311,25 @@ public sealed partial class ShellPage : UserControl
         var toolDef = ToolCatalog.All.FirstOrDefault(t => t.Id == tag);
         if (toolDef?.Page is not null)
         {
-            ContentFrame.Navigate(toolDef.Page);
+            // ⭐ 载体选择（2026-10-25 补，与 NavigateToTool 同一套）：有 Web 版、本机跑得起来 → 宿主页；
+            //    否则原生页。⛔ 别在这里加提示或角标 —— 降级对用户是无感的（Nick 定）。
+            // ⚠️ 为什么补：以前这里直接 Navigate 原生页，漏了载体检查 —— 导航栏点击、--page= 直达、
+            //    工具索引页卡片点击三条路全都进不了网页版。2026-10-25 实测 --page=function-plot
+            //    落在原生 FunctionPlotPage，而 --tool= 和学科工具浮窗却走 Web，同一工具两副嘴脸。
+            if (ToolCarrier.RequestFor(toolDef.WebToolId, toolDef.Page, null) is { } toolRequest)
+                ContentFrame.Navigate(typeof(ToolHostPage), toolRequest);
+            else
+                ContentFrame.Navigate(toolDef.Page);
             return;
         }
 
         switch (tag)
         {
+            case "announce":
+                // 教室喊话（2026-10-25 Nick：从工具里提出来单独成项）。纯原生页，不经 ToolCarrier ——
+                // 它的本体是「开关 + 后台轮询 + 全屏播报」，不是可替换的网页小工具。
+                ContentFrame.Navigate(typeof(Tools.AnnouncePage));
+                return;
             case "submit":
                 ContentFrame.Navigate(typeof(SubmitPage));
                 return;
@@ -446,6 +517,11 @@ public sealed partial class ShellPage : UserControl
 
     private void InitSearch()
     {
+        // ⛔ 关掉加速键的**自动提示**：WinUI 默认会在焦点/鼠标经过时把 "Ctrl+K" 做成一个小浮块
+        //    弹出来（2026-10-24 Nick 反馈"时不时冒出来"）。PlacementMode.Hidden 只压住这个提示，
+        //    加速键本身照常触发 —— 想告诉用户快捷键，靠输入框的 PlaceholderText 就够了。
+        RootGrid.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+
         // Ctrl + K 聚焦搜索框（与站点同）。
         var accel = new KeyboardAccelerator { Key = VirtualKey.K, Modifiers = VirtualKeyModifiers.Control };
         accel.Invoked += (_, e) =>

@@ -396,7 +396,7 @@ public static class TeachingActions
     /// <summary>
     /// 系统放大镜（Windows 自带那个 `Magnify.exe`）：
     /// 没开就调起来（起来后自动切到"镜头"模式 = 跟着鼠标跑的那块），开着就**优雅关掉**（发关闭消息，不硬杀）。
-    /// ⚠️ 自研那版（自抓屏 + 自绘控制条）已封存到 `_csh_scratch\magnifier-v3-archive\`，想捡回来再改。
+    /// （自研那版「自抓屏 + 自绘控制条」因显示效果与跟随手感不满意已放弃，2026-10-24 连同封存档一并清除，不再保留。）
     /// </summary>
     private static void ToggleSystemMagnifier()
     {

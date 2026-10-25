@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
@@ -29,12 +30,44 @@ public sealed class AiChatService
 
     private readonly List<AiMessage> _messages = new();
 
+    /// <summary>
+    /// 被裁掉、但**还没压成摘要**的那些轮次（2026-10-23 加）。
+    /// 攒够一定量才真正调模型压缩 —— 每轮都压一次不划算，而摘要本身也要花钱。
+    /// </summary>
+    private readonly List<AiMessage> _pendingDrop = new();
+
+    /// <summary>已经压出来的历史要点（会拼进 system 提示）。</summary>
+    private string? _historySummary;
+
+    /// <summary>不含摘要的原始 system 提示 —— 每次重拼摘要都从它起算，避免摘要层层叠加。</summary>
+    private string? _baseSystemPrompt;
+
+    /// <summary>攒到多少字符才开始压缩。太小会"每轮都调一次模型"，太大等于没压。</summary>
+    private const int SummarizeTriggerChars = 3000;
+
+    /// <summary>送去压缩的原文上限（再长就截断，压不动也没有意义）。</summary>
+    private const int SummarizeInputChars = 8000;
+
+    private const string SummaryHeader = "【早前对话摘要】";
+
+    private const string SummaryPrompt =
+        """
+        你是对话压缩器。把下面这段更早的对话压成不超过 200 字的要点，供后续继续对话使用。
+
+        必须保留：用户的真实目标、已经确认的结论、用户给出的硬性约束、还没做完的事。
+        不要保留：寒暄、重复的追问、工具返回的原始清单、已经作废的中间推理。
+        只输出要点本身，不要开场白、不要评论、不要分点标题。
+        """;
+
     /// <summary>本轮的工具上下文：命中过的软件、调用轨迹。UI 从这儿取推荐卡。</summary>
     public ToolSession Session { get; } = new();
 
     public void Reset()
     {
         _messages.Clear();
+        _pendingDrop.Clear();
+        _historySummary = null;
+        _baseSystemPrompt = null;
         Session.Reset();
     }
 
@@ -49,6 +82,10 @@ public sealed class AiChatService
     public void Restore(IEnumerable<AiMessage> messages)
     {
         _messages.Clear();
+        // 换了一支/换了一段，之前那份摘要就不再代表当前上下文
+        _pendingDrop.Clear();
+        _historySummary = null;
+        _baseSystemPrompt = null;
         Session.Reset();
 
         foreach (var message in messages)
@@ -61,6 +98,15 @@ public sealed class AiChatService
             //    这种消息对后续对话也没有价值，直接丢掉。
             if (message.Role == "assistant" && string.IsNullOrWhiteSpace(message.Content)) continue;
 
+            // ⛔⛔ 2026-10-23：**`tool` 角色的消息必须在恢复时丢掉**。
+            //    协议要求：`role=tool` 只能作为「上一条 assistant 的 tool_calls」的应答出现。
+            //    而上面那行恰好把「带 tool_calls、但正文为空」的那一轮 assistant 丢了 ——
+            //    它后面的 tool 消息就失去了配对，服务端直接 400：
+            //    `Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`
+            //    （Nick 截图里那条报错就是这个）。
+            //    tool 结果只是中间态，对后续对话没有价值，一并丢掉最稳妥。
+            if (message.Role == "tool") continue;
+
             _messages.Add(message);
         }
     }
@@ -70,6 +116,17 @@ public sealed class AiChatService
     /// 所以第一次工具调用之后要换气泡 —— 否则"我先看看磁盘"和最终回答会糊成一段。
     /// </summary>
     /// <returns>本轮所有请求的**累计用量**（含工具往返产生的每一轮）。</returns>
+    /// <param name="appendUserMessage">
+    /// 是否把 <paramref name="userText"/> 作为一条新的 user 消息追加进上下文。
+    /// <para>
+    /// ⚠️ 2026-10-23 加：「重新生成」时提问已经在上下文里了，只需要模型再答一次 ——
+    /// 这时传 false，否则同一句话会在上下文里出现两遍（模型会以为自己被追问）。
+    /// </para>
+    /// </param>
+    /// <param name="approveTool">
+    /// 需要人工确认的工具（会改动系统的那些）执行前的闸门：返回 false 表示用户拒绝。
+    /// 当前工具全部只读，所以这个回调暂时不会被调用 —— 但通道留着，加写类工具时不用再改这里。
+    /// </param>
     public async Task<AiUsage> RunAsync(
         AiConfig cfg,
         MachineSnapshot snapshot,
@@ -80,15 +137,18 @@ public sealed class AiChatService
         Action? onNewBubble,
         CancellationToken ct,
         Action<string>? onReasoning = null,
-        Action<string>? onToolDone = null)
+        Action<string>? onToolDone = null,
+        bool appendUserMessage = true,
+        Func<string, string, Task<bool>>? approveTool = null)
     {
         Session.Reset();
         // ⚠️ 必须把 tools 传下去：没有工具时提示词里**绝不能**提"可以调用工具" ——
         //    否则模型会自己编 `<tool_call>{...}</tool_call>` 的文本吐给用户（2026-10-19 实测截图）。
         EnsureSystemPrompt(snapshot, tools);
 
-        _messages.Add(AiMessage.User(userText));
+        if (appendUserMessage) _messages.Add(AiMessage.User(userText));
         TrimHistory(cfg.ContextLimit);
+        await SummarizeIfNeededAsync(cfg, ct);
 
         var total = AiUsage.Empty;
 
@@ -118,6 +178,24 @@ public sealed class AiChatService
             {
                 ct.ThrowIfCancellationRequested();
 
+                // ⛔ 会改动系统的工具必须先问人（2026-10-23 加）。当前全部只读，不会走到这儿。
+                if (ToolRunner.RequiresApproval(call.Name) && approveTool is not null)
+                {
+                    onStatus?.Invoke($"等待确认：{call.Name}");
+                    AppLog.Step("hubai", $"请求授权：{call.Name}");
+
+                    var approved = await approveTool(call.Name, call.Arguments);
+
+                    if (!approved)
+                    {
+                        AppLog.Step("hubai", $"用户拒绝了 {call.Name}");
+                        _messages.Add(AiMessage.Tool(call.Id,
+                            "用户拒绝了这次操作。不要重试同一动作，如实说明，并给出不需要改动系统的替代方案。"));
+                        onToolDone?.Invoke("已拒绝这次操作");
+                        continue;
+                    }
+                }
+
                 onStatus?.Invoke(DescribeTool(call.Name));
                 AppLog.Step("hubai", $"工具调用：{call.Name}");
 
@@ -138,6 +216,99 @@ public sealed class AiChatService
     }
 
     // ══════════════════════════════════════════════════════
+    //  上下文压缩（2026-10-23）
+    // ══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 把这段时间裁掉的历史压成一段要点，拼进 system 提示。
+    ///
+    /// <para>
+    /// ⛔ 只在**攒够量**时才真调模型：本方法每轮请求前都会跑，若每次都压，
+    ///    每轮就多一次往返（时间和钱都翻倍），摘要也会退化成流水账。
+    /// </para>
+    /// <para>
+    /// ⚠️ 失败不影响对话：压不出来就算了，这些轮次本来就已经被裁掉（等于回到旧的纯截断行为）。
+    /// </para>
+    /// </summary>
+    private async Task SummarizeIfNeededAsync(AiConfig cfg, CancellationToken ct)
+    {
+        if (_pendingDrop.Count == 0) return;
+        if (_pendingDrop.Sum(TokenChars) < SummarizeTriggerChars) return;
+
+        var material = new StringBuilder();
+
+        if (!string.IsNullOrWhiteSpace(_historySummary))
+            material.AppendLine("（更早的对话已经压过一次，要点如下）").AppendLine(_historySummary).AppendLine();
+
+        foreach (var message in _pendingDrop)
+        {
+            if (string.IsNullOrWhiteSpace(message.Content)) continue;
+            material.AppendLine(message.Role == "user" ? $"用户：{message.Content}" : $"助手：{message.Content}");
+        }
+
+        if (material.Length == 0)
+        {
+            _pendingDrop.Clear();
+            return;
+        }
+
+        var input = material.ToString();
+        if (input.Length > SummarizeInputChars) input = input[..SummarizeInputChars];
+
+        var count = _pendingDrop.Count;
+        var chars = _pendingDrop.Sum(TokenChars);
+
+        try
+        {
+            // 摘要不需要深度思考：关掉能省一大截 token，也避免"只想不说"根本压不出东西
+            var cheap = cfg with { Thinking = false, Effort = "low" };
+
+            var request = new List<AiMessage>
+            {
+                AiMessage.System(SummaryPrompt),
+                AiMessage.User(input),
+            };
+
+            var sb = new StringBuilder();
+            await AiClient.StreamTurnAsync(cheap, request, null, chunk => sb.Append(chunk), null, ct);
+
+            var summary = sb.ToString().Trim();
+            if (summary.Length == 0)
+            {
+                AppLog.Warn("hubai", "上下文摘要为空，本次退回截断");
+                _pendingDrop.Clear();
+                return;
+            }
+
+            _historySummary = summary;
+            ApplySummary(summary);
+            AppLog.Step("hubai", $"上下文摘要完成：压掉 {count} 条 / {chars} 字 → {summary.Length} 字");
+            _pendingDrop.Clear();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("hubai", ex, "上下文摘要");
+            _pendingDrop.Clear();      // 别每轮重试同一批，直接退回纯截断
+        }
+    }
+
+    /// <summary>
+    /// 把摘要拼到系统提示后面。
+    /// ⚠️ 每次都从**原始提示**重拼，否则摘要会一层套一层，上下文反而越压越大。
+    /// </summary>
+    private void ApplySummary(string summary)
+    {
+        if (_messages.Count == 0 || _messages[0].Role != "system") return;
+
+        var basePrompt = _baseSystemPrompt ?? _messages[0].Content;
+        _messages[0] = new AiMessage("system", $"{basePrompt}\n\n{SummaryHeader}\n{summary}");
+    }
+
+    // ══════════════════════════════════════════════════════
     //  提示词
     // ══════════════════════════════════════════════════════
 
@@ -147,8 +318,11 @@ public sealed class AiChatService
 
         var hasTools = tools is { Count: > 0 };
 
-        _messages.Insert(0, AiMessage.System(
-            BuildSystemPrompt(MachineDigest.ToPrompt(snapshot), App.Settings.Current.UserDisplayName, hasTools)));
+        // 摘要要拼在**原始提示**之后，所以先把原始提示记下来（见 ApplySummary）
+        var prompt = BuildSystemPrompt(MachineDigest.ToPrompt(snapshot), App.Settings.Current.UserDisplayName, hasTools);
+        _baseSystemPrompt = prompt;
+
+        _messages.Insert(0, AiMessage.System(prompt));
     }
 
     /// <summary>
@@ -205,37 +379,135 @@ public sealed class AiChatService
     /// <summary>
     /// 裁剪历史。
     /// <para>
-    /// 两条约束叠加：条数上限 <see cref="MaxHistoryMessages"/>（防上下文无限长），
-    /// 以及用户给这条模型设的 <paramref name="contextLimitChars"/>（近似字符数，0 = 不限制）。
-    /// ⚠️ 永远保住 system（第 0 条）与最后一条用户消息，否则模型会答非所问。
+    /// ⛔⛔ 2026-10-23 改成**按回合裁剪**。原来是从前面**逐条** <c>RemoveAt</c>，落点可以正好切在
+    /// 「assistant(tool_calls) → tool(result)」这一组中间：assistant 被删掉、tool 留下，
+    /// 下一次请求服务端直接 400 ——`Messages with role 'tool' must be a response to a preceding
+    /// message with 'tool_calls'`。这类错误只在"攒够消息 + 恰好调过工具"时才复现，
+    /// 手测几乎撞不上，所以裁剪单位必须是**整个回合**，不能是单条消息。
+    /// </para>
+    /// <para>
+    /// 回合 = 一条 user 起到下一条 user 之前（含中间所有 assistant / tool）。
+    /// 永远保住 system 与**最后一个回合**（用户这次问的话），否则等于答非所问。
     /// </para>
     /// </summary>
+    /// <param name="contextLimitChars">用户给这条模型设的近似字符预算，0 = 不限。</param>
     private void TrimHistory(int contextLimitChars = 0)
     {
-        // 条数上限
-        while (_messages.Count > MaxHistoryMessages && _messages.Count > 2)
-        {
-            var start = _messages[0].Role == "system" ? 1 : 0;
-            if (start >= _messages.Count - 1) break;
+        var system = _messages.Count > 0 && _messages[0].Role == "system" ? _messages[0] : null;
+        var body = system is null ? _messages.ToList() : _messages.Skip(1).ToList();
 
-            _messages.RemoveAt(start);
-            if (start < _messages.Count) _messages.RemoveAt(start);
+        // 开头若有不以 user 起始的残段（历史被更早的版本裁过 / 手工改过），单独算作第 0 个回合
+        var turns = new List<List<AiMessage>>();
+        foreach (var message in body)
+        {
+            if (message.Role == "user" || turns.Count == 0) turns.Add(new List<AiMessage>());
+            turns[^1].Add(message);
         }
 
-        if (contextLimitChars <= 0) return;
-
-        // 字符预算：从最新往回累加，超了就停，保留连续的一段
-        var total = _messages.Sum(m => m.Content.Length + (m.Reasoning?.Length ?? 0));
-        var startIndex = _messages[0].Role == "system" ? 1 : 0;
-
-        while (total > contextLimitChars && startIndex < _messages.Count - 1)
+        var drop = 0;
+        while (turns.Count - drop > 1)
         {
-            total -= _messages[startIndex].Content.Length + (_messages[startIndex].Reasoning?.Length ?? 0);
-            _messages.RemoveAt(startIndex);
+            var count = (system is null ? 0 : 1) + turns.Skip(drop).Sum(t => t.Count);
+            var chars = turns.Skip(drop).SelectMany(t => t).Sum(TokenChars);
 
-            // 一次删两条太粗暴，这里逐条删；system 不在范围内所以不会误删
-            if (total <= contextLimitChars) break;
+            var overCount = count > MaxHistoryMessages;
+            var overChars = contextLimitChars > 0 && chars > contextLimitChars;
+            if (!overCount && !overChars) break;
+
+            drop++;
         }
+
+        if (drop > 0)
+        {
+            _messages.Clear();
+            if (system is not null) _messages.Add(system);
+            foreach (var turn in turns.Skip(drop)) _messages.AddRange(turn);
+
+            // 丢掉的这部分不直接销毁：攒起来，够量了压成一段要点拼进 system。
+            // ⚠️ 别在这里同步调模型 —— 本方法在每轮请求前都会跑，压一次就多一次往返。
+            foreach (var turn in turns.Take(drop)) _pendingDrop.AddRange(turn);
+
+            AppLog.Step("hubai", $"历史裁剪：丢掉最早 {drop} 个回合，保留 {_messages.Count} 条");
+        }
+
+        EnsureToolPairing();
+    }
+
+    /// <summary>一条消息占的近似字符数（思考过程也要算，它同样占上下文）。</summary>
+    private static int TokenChars(AiMessage message) =>
+        message.Content.Length + (message.Reasoning?.Length ?? 0);
+
+    /// <summary>
+    /// 兜底：保证 <c>tool</c> 消息永远有配对的 <c>assistant.tool_calls</c>，反之亦然。
+    /// <para>
+    /// 按回合裁剪本身不会产生孤儿；这里防的是**历史里本来就有的破损结构**
+    /// （更早的版本逐条裁过、或存档来自旧格式）。OpenAI 兼容接口对这类结构一律直接 400，不容错。
+    /// </para>
+    /// </summary>
+    private void EnsureToolPairing()
+    {
+        if (_messages.All(m => m.Role != "tool")) return;
+
+        var rebuilt = new List<AiMessage>(_messages.Count);
+        HashSet<string>? awaiting = null;
+        var awaitingOwner = -1;
+        var dropped = 0;
+
+        void CloseToolGroup()
+        {
+            if (awaiting is null) return;
+
+            var pending = awaiting;
+            var ownerIndex = awaitingOwner;
+            awaiting = null;
+            awaitingOwner = -1;
+
+            if (pending.Count == 0 || ownerIndex < 0) return;
+
+            // 这组 tool_calls 没被答全 —— 留着它服务端照样报错，整条摘掉
+            var owner = rebuilt[ownerIndex];
+            if (string.IsNullOrWhiteSpace(owner.Content))
+            {
+                rebuilt.RemoveAt(ownerIndex);
+            }
+            else
+            {
+                rebuilt[ownerIndex] = new AiMessage(owner.Role, owner.Content) { Reasoning = owner.Reasoning };
+            }
+
+            dropped++;
+        }
+
+        foreach (var message in _messages)
+        {
+            if (message.Role == "tool")
+            {
+                if (awaiting is not null && message.ToolCallId is { } id && awaiting.Remove(id))
+                    rebuilt.Add(message);
+                else
+                    dropped++;
+
+                continue;
+            }
+
+            CloseToolGroup();
+
+            if (message.Role == "assistant" && message.ToolCalls is { Count: > 0 } calls)
+            {
+                awaiting = new HashSet<string>(calls.Select(c => c.Id), StringComparer.Ordinal);
+                awaitingOwner = rebuilt.Count;
+            }
+
+            rebuilt.Add(message);
+        }
+
+        CloseToolGroup();
+
+        if (dropped == 0) return;
+
+        _messages.Clear();
+        _messages.AddRange(rebuilt);
+        AppLog.Step("hubai", $"历史修复：清掉 {dropped} 条无法配对的工具调用/结果");
     }
 
     private static string DescribeTool(string id) => id switch

@@ -36,7 +36,7 @@
             -->
             <AutoSuggestBox x:Name="SearchBox" Grid.Column="1" Width="360" VerticalAlignment="Center"
                             QueryIcon="Find"
-                            PlaceholderText="搜索软件、内置工具、页面…"
+                            PlaceholderText="Ctrl+K 搜索软件、内置工具、页面…"
                             TextChanged="SearchBox_TextChanged"
                             SuggestionChosen="SearchBox_SuggestionChosen"
                             QuerySubmitted="SearchBox_QuerySubmitted">
@@ -175,6 +175,25 @@
                   ⚠️ 两个父项各自有 tag（tools-classroom / tools-system），
                      分别进**同一个 ToolsPage 的两种形态**（参数决定显示哪组）。
                 -->
+                <!-- 2026-10-24 Nick：侧边布局提到课堂工具上面 —— 它是「调界面」的页，比工具分组更常进。 -->
+                <NavigationViewItem Content="侧边布局" Tag="sidebar">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A0;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <!--
+                  教室喊话（2026-10-25 Nick：从「内置工具」里提出来，单独成一个功能项；
+                  同日 Nick 又把它挪到「侧边布局」正下方 —— 也是常驻开关类的功能，跟工具分组分开）。
+                  ⚠️ 为什么不留在 ToolCatalog：它的形态是「开/关 + 后台常驻轮询」，
+                     跟其余「点开用一下就走」的小工具不是一类，塞在工具索引里容易被当成一次性页面。
+                  ⚠️ 因此它不参与工具的动态子项与载体选择，tag 与 NavigateTagCore 的 case 单独写。
+                  ⚠️ 出现顺序：紧挨「侧边布局」之下、两个工具分组之上 —— 实验性功能永远保持最后一位。
+                -->
+                <NavigationViewItem Content="教室喊话" Tag="announce">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE720;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="ClassroomToolsNav" Content="课堂工具" Tag="tools-classroom">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
@@ -183,11 +202,6 @@
                 <NavigationViewItem x:Name="SystemToolsNav" Content="系统工具" Tag="tools-system">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE945;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="侧边布局" Tag="sidebar">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8A0;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <!--

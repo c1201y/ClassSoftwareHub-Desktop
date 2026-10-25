@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
@@ -448,6 +449,9 @@ public sealed partial class WelcomePage : Page
         DispatcherQueue.TryEnqueue(LayoutRecommend);
     }
 
+    private readonly List<SoftwareApp> _iconSubscribed = new();
+    private readonly Dictionary<SoftwareApp, List<(Image? Backdrop, Border? Crisp, Border? Monogram)>> _iconLayers = new();
+
     /// <summary>
     /// 按视口宽度铺卡片：一组 = 挑中的软件循环铺满视口（至少 picks.Count 张），
     /// 再**复制一组**首尾相接 ⇒ 位移一整组宽度后画面完全重合，做到无缝循环。
@@ -465,6 +469,12 @@ public sealed partial class WelcomePage : Page
 
         var group = new List<SoftwareApp>(perGroup);
         for (var i = 0; i < perGroup; i++) group.Add(_recommendPicks[i % _recommendPicks.Count]);
+
+        // 上一批卡片连订阅一起作废：本页 NavigationCacheMode=Enabled，LayoutRecommend 会被
+        // 反复调用，不退订会越攒越多（还都指向已经 Clear 掉的图层）
+        foreach (var a in _iconSubscribed) a.PropertyChanged -= OnAppIconChanged;
+        _iconSubscribed.Clear();
+        _iconLayers.Clear();
 
         RecommendStrip.Children.Clear();
 
@@ -505,6 +515,37 @@ public sealed partial class WelcomePage : Page
     /// 中央叠一个圆角清晰图标；下半部分是**加粗名称 + 一句短简介**。
     /// ⛔ 不是把图标拉满整格。
     /// </summary>
+    /// <summary>本机已有的那张图标（不论新旧）。没有就 null —— 交给调用方走网络。</summary>
+    private static Microsoft.UI.Xaml.Media.ImageSource? LocalIcon(SoftwareApp app)
+    {
+        if (string.IsNullOrWhiteSpace(app.Icon)) return null;
+        return AppIconCache.TryGet(app.Icon, out var local, out _) ? local : null;
+    }
+
+    /// <summary>图标源被换掉（网络源失败 → 回落本机旧图）：把两层图层的 Source 一起换掉。</summary>
+    private void OnAppIconChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SoftwareApp.IconImage)) return;
+        if (sender is not SoftwareApp app) return;
+        if (!_iconLayers.TryGetValue(app, out var layers)) return;
+
+        var next = app.IconImage;
+        if (next is null)
+        {
+            // 网络也失败了、本机又没图 → 首字母放回来兜底，别剩一块纯空白
+            foreach (var (_, _, mono) in layers)
+                if (mono is not null) mono.Visibility = Visibility.Visible;
+            return;
+        }
+
+        foreach (var (backdrop, crisp, mono) in layers)
+        {
+            if (backdrop is not null) backdrop.Source = next;
+            if (crisp is { Background: ImageBrush brush }) brush.ImageSource = next;
+            if (mono is not null) mono.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private FrameworkElement BuildRecommendCard(SoftwareApp app)
     {
         // 先给一个散列色兜底，等图标主色取回来再回填
@@ -541,13 +582,19 @@ public sealed partial class WelcomePage : Page
         var topGrid = new Grid();
 
         // 放大铺满的图标（AcrylicBrush 就在它上面做实时模糊）
-        if (app.IconImage is { } backdrop)
+        // ⚠️ 优先用**本机已有那份**，不跟着网络源跑：网络慢/失败期间上半部分会空一块，
+        //    失败后还会跳回旧图 —— 这正是「图标有时候会闪」的来源（2026-10-24 Nick）。
+        //    推荐卡的图标只是装饰，旧图比空白好。本机没有才交给 IconImage 走网络 + 回落。
+        var icon = LocalIcon(app) ?? app.IconImage;
+        Image? backdropLayer = null;
+        if (icon is { } backdrop)
         {
-            topGrid.Children.Add(new Image
+            backdropLayer = new Image
             {
                 Source = backdrop,
                 Stretch = Stretch.UniformToFill,
-            });
+            };
+            topGrid.Children.Add(backdropLayer);
         }
 
         // 亚克力层：盖在放大图标上
@@ -576,18 +623,18 @@ public sealed partial class WelcomePage : Page
                 VerticalAlignment = VerticalAlignment.Center,
             },
         };
-        BindingOperations.SetBinding(monogram, UIElement.VisibilityProperty, new Binding
-        {
-            Path = new PropertyPath(nameof(SoftwareApp.IconPlaceholder)),
-            Source = app,
-            Mode = BindingMode.OneWay,
-        });
+        // ⛔ 不要用 BindingOperations 绑 IconPlaceholder 来驱动首字母的显隐
+        //    （2026-10-24 Nick：「WPS 后面有个 W 是啥玩意儿」）：WPS / Chrome 这类图标的
+        //    空白区本来就是透明的，底下垫一个首字母会直接透出来。
+        //    改成「本机有图就立刻收起」，网络成功后由 OnAppIconChanged 统一收起，失败再放回来。
+        monogram.Visibility = icon is null ? Visibility.Visible : Visibility.Collapsed;
         topGrid.Children.Add(monogram);
 
         // 中央清晰图标：用 Border 的 ImageBrush 画，才能把图标自身的直角裁成圆角
-        if (app.IconImage is { } crisp)
+        Border? crispLayer = null;
+        if (icon is { } crisp)
         {
-            topGrid.Children.Add(new Border
+            crispLayer = new Border
             {
                 Width = RecommendIconSize,
                 Height = RecommendIconSize,
@@ -595,7 +642,20 @@ public sealed partial class WelcomePage : Page
                 Background = new ImageBrush { ImageSource = crisp, Stretch = Stretch.UniformToFill },
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
-            });
+            };
+            topGrid.Children.Add(crispLayer);
+        }
+
+        // 兜底链路：万一最终还是走了网络源且失败，SoftwareApp 会把 _icon 换成本机旧图并
+        // 发 IconImage 通知 —— 这里不接就永远停在那个失败的源上（上半部分空白）。
+        if (!_iconLayers.TryGetValue(app, out var layers))
+            _iconLayers[app] = layers = new List<(Image? Backdrop, Border? Crisp, Border? Monogram)>();
+        layers.Add((backdropLayer, crispLayer, monogram));
+
+        if (!_iconSubscribed.Contains(app))
+        {
+            app.PropertyChanged += OnAppIconChanged;
+            _iconSubscribed.Add(app);
         }
 
         top.Child = topGrid;
@@ -932,9 +992,15 @@ public sealed partial class WelcomePage : Page
             case "apps":
                 App.MainWindow?.Shell.NavigateTo("apps");
                 break;
-            case "tools":
-                // 走专用入口：除了切到工具索引页，还要把导航里的分组展开（从外面跳进来时看不出里面有子项）
-                App.MainWindow?.Shell.NavigateToTools();
+            case "tools-classroom":
+                // 走专用入口：切到课堂工具列表页，并把这一组在导航里展开
+                App.MainWindow?.Shell.NavigateToClassroomTools();
+                break;
+            case "tools-system":
+                App.MainWindow?.Shell.NavigateToSystemTools();
+                break;
+            case "hubai":
+                App.MainWindow?.Shell.NavigateTo("hubai");
                 break;
             case "sidebar":
                 App.MainWindow?.Shell.NavigateTo("sidebar");

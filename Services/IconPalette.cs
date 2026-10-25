@@ -96,12 +96,27 @@ public static class IconPalette
         Color? picked = null;
         try
         {
-            var bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
-            if (bytes.Length > 0) picked = await FromBytesAsync(bytes).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Core.AppLog.Exception("palette", ex, "取图标主色");
+            // ① 本机已经有这张图 → **直接拿它算色，不走网络**。
+            //    取色只要"大致对"，而这张就是同一个 URL 下下来的，没有先等 2.5 秒超时的理由
+            //    （2026-10-24：网络不通时详情页会先顶强调色、再跳成正确色，观感就是"颜色换了一下"）。
+            picked = await PickFromLocalAsync(url).ConfigureAwait(false);
+
+            // ② 本机没有才联网；联网失败再退回本机那张试一次
+            //    （覆盖"缓存是陈旧的、刚刚才被下载下来"这种本机有但时序靠后的情况）。
+            if (picked is null)
+            {
+                try
+                {
+                    var bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
+                    if (bytes.Length > 0) picked = await FromBytesAsync(bytes).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Core.AppLog.Exception("palette", ex, "取图标主色");
+                }
+
+                if (picked is null) picked = await PickFromLocalAsync(url).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -115,6 +130,30 @@ public static class IconPalette
         }
 
         return picked;
+    }
+
+    /// <summary>
+    /// 从本机缓存的那张图标算主色。没有文件、或文件解不出来（格式怪 / 内容是错误页）→ null。
+    ///
+    /// 为什么单独走原始字节而不用 <see cref="AppIconCache.TryGet"/>：后者给的是已经解码过、
+    /// 还限宽 128 的 <c>ImageSource</c>；主色统计要自己按 48×48 采样，必须拿到原始字节。
+    /// </summary>
+    private static async Task<Color?> PickFromLocalAsync(string url)
+    {
+        if (!AppIconCache.TryGetLocalPath(url, out var path)) return null;
+
+        try
+        {
+            var bytes = await System.IO.File.ReadAllBytesAsync(path).ConfigureAwait(false);
+            if (bytes.Length == 0) return null;
+
+            var color = await FromBytesAsync(bytes).ConfigureAwait(false);
+            if (color is not null)
+                Core.AppLog.Debug("palette", "本机缓存取色：" + System.IO.Path.GetFileName(path));
+
+            return color;
+        }
+        catch { return null; }
     }
 
     private static async Task<Color?> FromBytesAsync(byte[] bytes)

@@ -1,6 +1,5 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
-using System.Text.Json.Nodes;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Views;
@@ -8,7 +7,6 @@ using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -28,14 +26,9 @@ namespace ClassSoftwareHub.Desktop;
 public sealed partial class MainWindow : Window
 {
     private readonly SettingsStore _settings = App.Settings;
-    private readonly BridgeService _bridge;
-    private readonly WebViewRuntimeService _runtime = new();
-    private readonly DispatcherQueueTimer _loadTimer;
+    private readonly WebViewRuntimeService _runtime = App.WebRuntime;
 
     private AppWindow? _appWindow;
-    private bool _webReady;
-    private bool _navigatedOk;
-    private bool _themeFromWeb;
     private bool _firstActivated;
     private readonly bool _startMinimized;
     private readonly bool _startPalette;
@@ -51,27 +44,16 @@ public sealed partial class MainWindow : Window
     private ContentDialog? _downloadDialog;
     private string? _downloadDialogTaskId;
 
-    /// <summary>网页上报的「可拖动矩形」（物理像素），仅在开启原生 caption 区域时使用。</summary>
-    private readonly List<RectInt32> _webCaptionRects = new();
-
     public MainWindow()
     {
         InitializeComponent();
 
         Title = ShellConfig.WindowTitle;
 
-        _loadTimer = DispatcherQueue.CreateTimer();
-        _loadTimer.Interval = TimeSpan.FromSeconds(ShellConfig.LoadTimeoutSeconds);
-        _loadTimer.IsRepeating = false;
-        _loadTimer.Tick += (_, _) => ShowNetworkError("连接超时");
-
-        _bridge = new BridgeService(this, _settings);
-
         ConfigureWindow();
         ConfigureTitleBar();
         ApplyTheme(_settings.Current.Theme);
         ApplyBackdrop(_settings.Current.Backdrop);
-        LoadLoadingIcon();
 
         Closed += OnWindowClosed;
 
@@ -86,7 +68,7 @@ public sealed partial class MainWindow : Window
         //    清单要等下面的 SyncContentAsync() 联网拉回来 —— 首启的"空 → 有"靠 ContentStore.Changed 通知界面。
         App.Content.Load();
         NativeShell.Init();
-        NativeShell.SetIcon(LoadingIcon.Source);
+        NativeShell.SetIcon(LoadAppIcon());
         SetTitleBar(NativeShell.TitleBarElement);
 
         // 后台同步内容（从站点仓库读「软件数据/」；一次 ref 请求就知道有没有变）
@@ -166,6 +148,30 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// 预热 WebView2 环境（2026-10-23）。
+    ///
+    /// <para>
+    /// 只创建环境，**不建控件、不导航** —— 目的是把"用户目录创建 + 浏览器进程拉起"那 2~3 秒
+    /// 挪到启动阶段，这样点进 Web 工具页时不用等（切载体要"无感"，慢一步就白搭）。
+    /// </para>
+    /// <para>⚠️ 失败一律静默：没有运行时的机器本来就该走原生工具，这不叫错误。</para>
+    /// </summary>
+    private static async System.Threading.Tasks.Task PrewarmWebRuntimeAsync()
+    {
+        try
+        {
+            if (!WebViewRuntimeService.IsRuntimeInstalled()) return;
+
+            await App.WebRuntime.GetEnvironmentAsync();
+            Core.AppLog.Step("startup", "WebView2 环境已预热");
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("startup", ex, "预热 WebView2");
+        }
+    }
+
+    /// <summary>
     /// 等主窗口**真的画出第一帧**之后再挂侧边栏。
     ///
     /// 为什么不能直接在 <see cref="OnFirstActivated"/> 里挂：那个回调在 <c>Activate()</c>
@@ -199,6 +205,11 @@ public sealed partial class MainWindow : Window
 
             Core.AppLog.Info("startup", $"主窗口首帧就绪（{how}）→ 挂工具侧边栏");
             StartToolSidebar();
+
+            // 预热 WebView2 环境（2026-10-23）：工具页走 Web 内核时，第一次进页面要
+            // 创建用户目录 + 拉起浏览器进程，冷启动 2~3 秒。在这里先用后台任务起一遍，
+            // 用户点进工具时就不用等 —— 这是"降级/切换无感"的前提。
+            _ = PrewarmWebRuntimeAsync();
         }
 
         onFrame = (_, _) => Fire("首帧");
@@ -652,8 +663,6 @@ public sealed partial class MainWindow : Window
         {
             if (args.DidSizeChange || args.DidPositionChange || args.DidPresenterChange)
             {
-                SendCaptionInsets();
-                RequestTitlebarRegions();
                 ApplyWindowRounding();   // 最大化 / 还原 → 圆角跟着切换（最大化必须直角）
 
                 // 大小 / 位置 / 最大化状态随时记一笔（内部有节流）——
@@ -741,137 +750,6 @@ public sealed partial class MainWindow : Window
             bar.ButtonPressedBackgroundColor = dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
         }
         catch { }
-    }
-
-    private double GetScale()
-    {
-        try
-        {
-            var s = RootGrid.XamlRoot?.RasterizationScale ?? 0;
-            return s > 0 ? s : 1.0;
-        }
-        catch { return 1.0; }
-    }
-
-    private double GetCaptionInsetCss()
-    {
-        if (_appWindow is null) return 138;
-        try { return Math.Round(_appWindow.TitleBar.RightInset / GetScale()); }
-        catch { return 138; }
-    }
-
-    private void SendCaptionInsets()
-    {
-        if (_appWindow is null) return;
-        try
-        {
-            var bar = _appWindow.TitleBar;
-            var scale = GetScale();
-            _bridge.Send("shell.captionInset", new
-            {
-                value = Math.Round(bar.RightInset / scale),
-                height = Math.Round(bar.Height / scale),
-                left = Math.Round(bar.LeftInset / scale),
-                scale
-            });
-        }
-        catch { }
-    }
-
-    private void RequestTitlebarRegions()
-        => _ = ExecuteScriptAsync("window.cshShell && window.cshShell.post('titlebarUpdate');");
-
-    // ============================================================
-    // 拖动 / 最大化
-    // ============================================================
-
-    [DllImport("user32.dll")]
-    private static extern bool ReleaseCapture();
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-    private const uint WM_NCLBUTTONDOWN = 0x00A1;
-    private const int HTCAPTION = 2;
-
-    /// <summary>
-    /// 网页判定「这里是空白拖动区」后调用：
-    /// ReleaseCapture() 释放鼠标捕获，再 SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) 把事件重定向到非客户区，
-    /// 交给系统的窗口拖动机制（含贴边、双击最大化）。
-    /// </summary>
-    public void BeginWindowDrag()
-    {
-        try
-        {
-            var hwnd = WindowNative.GetWindowHandle(this);
-            if (hwnd == IntPtr.Zero) return;
-            ReleaseCapture();
-            SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
-        }
-        catch (Exception ex)
-        {
-            Core.AppLog.Warn("shell", "窗口拖动失败：" + ex.Message);
-        }
-    }
-
-    /// <summary>双击空白区：按 Presenter 状态在 Maximize / Restore 间切换。</summary>
-    public void ToggleWindowMaximize() => HandleWindowCommand("toggleMaximize");
-
-    /// <summary>
-    /// 网页算好的「可拖动矩形」。
-    /// 默认不注册成原生 caption 区域（按规格书走网页→原生消息），
-    /// 但保留开关 settings.NativeCaptionRegions 以便对比手感。
-    /// </summary>
-    public void ApplyTitleBarRegions(JsonObject payload)
-    {
-        _webCaptionRects.Clear();
-
-        if (_settings.Current.NativeCaptionRegions)
-        {
-            var scale = GetScale();
-            if (payload["caption"] is JsonArray arr)
-            {
-                foreach (var item in arr)
-                {
-                    if (item is not JsonObject o) continue;
-                    var x = Num(o, "x");
-                    var y = Num(o, "y");
-                    var w = Num(o, "w");
-                    var h = Num(o, "h");
-                    if (w < 8 || h < 8) continue;
-                    _webCaptionRects.Add(new RectInt32(
-                        (int)Math.Round(x * scale),
-                        (int)Math.Round(y * scale),
-                        (int)Math.Round(w * scale),
-                        (int)Math.Round(h * scale)));
-                }
-            }
-        }
-
-        ApplyCaptionRegions();
-    }
-
-    private static double Num(JsonObject o, string key)
-    {
-        try { return o[key]?.GetValue<double>() ?? 0; }
-        catch { return 0; }
-    }
-
-    /// <summary>网页上报主题：仅记录用于诊断，**不再反向覆盖原生界面主题**。</summary>
-    /// <remarks>
-    /// ⚠️ 旧实现会把 <c>RootGrid.RequestedTheme</c> 直接覆盖成网页报来的主题。但网页（站点）有
-    /// 自己的外观偏好、首屏常默认浅色；一旦它报 <c>light</c>，整窗原生界面（含首页快捷入口的
-    /// SVG 图标）就被强行切到浅色 → 图标按浅色取色得到黑色，在深色 mica 背景上即表现为
-    /// 「深色模式下黑图标」。原生主题由 <see cref="ApplyTheme"/>（应用设置）独占决定；站点主题
-    /// 通过 <c>shell.applyWebTheme</c> 反向跟随应用，故这里不再用网页上报去改原生主题。
-    /// </remarks>
-    public void OnWebThemeReported(string theme)
-    {
-        if (string.IsNullOrWhiteSpace(theme)) return;
-        var normalized = theme.Trim().ToLowerInvariant();
-        if (normalized is not ("light" or "dark")) return;
-        _themeFromWeb = true;
-        // 原生主题不再随网页上报变化；站点与系统 / 应用的同步由 ApplyTheme 经 shell.applyWebTheme 下发。
     }
 
     /// <summary>上一次 saveBounds 的时刻：窗口**随时在写**，别每拖一帧都落一次盘。</summary>
@@ -1127,10 +1005,8 @@ public sealed partial class MainWindow : Window
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         Core.AppLog.Info("exit", $"主窗口 Closed (exitRequested={_exitRequested})");
-        _loadTimer.Stop();
         DownloadManager.Current.Finished -= OnDownloadFinished;
         try { _settings.Save(); } catch { }
-        try { Web.Close(); } catch { }
         try { _tray?.Dispose(); } catch { }
         _tray = null;
         try { _trayTools?.Dispose(); } catch { }
@@ -1150,46 +1026,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void LoadLoadingIcon()
+    /// <summary>AppIcon → 原生外壳标题栏的图标。</summary>
+    /// <remarks>原先挂在网页加载层的 Image 控件上，那个控件已随网页承载一并删除，改为直接返回图像。</remarks>
+    private static Microsoft.UI.Xaml.Media.ImageSource? LoadAppIcon()
     {
         try
         {
             var path = EmbeddedAssets.ExtractToCache("AppIcon-512.png", "app-icon.png");
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-            LoadingIcon.Source = new BitmapImage(new Uri(path));
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            return new BitmapImage(new Uri(path));
         }
-        catch { }
-    }
-
-    // ============================================================
-    // caption 区域（原生侧，可选）
-    //   网页上报的标题栏拖动区 → 注册成原生 caption 区域。
-    //   默认关闭（拖动走「网页判断 + 桥接消息」的规格书路径），
-    //   想对比手感可打开 settings.NativeCaptionRegions。
-    // ============================================================
-
-    private static RectInt32 ToPhysical(double x, double y, double w, double h, double scale) => new(
-        (int)Math.Round(x * scale),
-        (int)Math.Round(y * scale),
-        (int)Math.Round(w * scale),
-        (int)Math.Round(h * scale));
-
-    private void ApplyCaptionRegions()
-    {
-        if (_appWindow is null) return;
-        try
-        {
-            var source = InputNonClientPointerSource.GetForWindowId(_appWindow.Id);
-            if (_webCaptionRects.Count > 0)
-                source.SetRegionRects(NonClientRegionKind.Caption, _webCaptionRects.ToArray());
-            else
-                source.ClearRegionRects(NonClientRegionKind.Caption);
-        }
-        catch (Exception ex)
-        {
-            // 老系统不支持：拖动完全走网页端消息兜底
-            Core.AppLog.Warn("shell", "caption 区域注册失败（改用网页端拖动）：" + ex.Message);
-        }
+        catch { return null; }
     }
 
     // ============================================================
@@ -1268,7 +1115,6 @@ public sealed partial class MainWindow : Window
         }
 
         _settings.Current.Backdrop = kind;
-        _bridge.Send("shell.backdropChanged", new { value = kind });
     }
 
     private Color FallbackSolidColor()
@@ -1278,11 +1124,11 @@ public sealed partial class MainWindow : Window
 
     public void SetTheme(string theme)
     {
-        ApplyTheme(theme, notifyWeb: true);
+        ApplyTheme(theme);
         _settings.Save();
     }
 
-    private void ApplyTheme(string theme, bool notifyWeb = false)
+    private void ApplyTheme(string theme)
     {
         theme = string.IsNullOrWhiteSpace(theme) ? "system" : theme.Trim().ToLowerInvariant();
         RootGrid.RequestedTheme = theme switch
@@ -1301,247 +1147,19 @@ public sealed partial class MainWindow : Window
 
         UpdateCaptionButtonColors();
         Services.ThemeBrush.Probe(RootGrid, "MainWindow.ApplyTheme(" + theme + ")");
-        _bridge.Send("shell.themeChanged", new { value = theme, actual = RootGrid.ActualTheme.ToString() });
 
-        if (notifyWeb)
-            _bridge.Send("shell.applyWebTheme", new { value = theme });
     }
-
-    public void SetWebTransparent(bool transparent)
-    {
-        _settings.Current.WebTransparent = transparent;
-        _bridge.Send("shell.webTransparent", new { value = transparent });
-        _settings.Save();
-    }
-
-    public void SetTitleBarColor(string? hex)
-    {
-        if (string.IsNullOrWhiteSpace(hex)) return;
-        try { _settings.Current.TitleBarTint = hex.Trim(); } catch { }
-    }
-
-    public void SetWebZoom(double zoom)
-    {
-        _settings.Current.WebZoom = Math.Clamp(zoom, 0.5, 3.0);
-        _ = ExecuteScriptAsync(
-            $"document.documentElement.style.zoom = '{_settings.Current.WebZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}';");
-        _settings.Save();
-    }
-
-    // ============================================================
-    // 启动 / WebView2 初始化
-    // ============================================================
 
     private Task BootAsync()
     {
-        // 原生界面完全不依赖 WebView2 —— 所以缺了也照常进主界面。
-        // 只有应用内网页浮层（WebSheet）需要它，那边会给「去安装 / 用浏览器打开」的兜底。
+        // 启动不做任何网页初始化：原生界面完全不依赖 WebView2，唯一用到它的是应用内网页浮层
+        // （WebSheet），由那边按需创建；缺运行时时它自己给「去安装 / 用浏览器打开」的兜底。
         _runtime.Probe();
         RuntimePanel.Visibility = Visibility.Collapsed;
 
         // 记一笔"这台电脑运行过的版本"（更新页的「历史版本」读的就是这份记录）
         Services.VersionHistory.Record();
-
-        // 原生界面优先：启动时不加载任何网页，所以这里不再初始化 WebView2。
-        // 需要网页的地方只有应用内网页浮层（MainWindow 的 WebSheet），
-        // 它自己按需创建 WebView2 —— 启动更快，也少两个浏览器进程。
         return Task.CompletedTask;
-    }
-
-    /// <summary>WebView2 装配：注入外壳脚本、拒绝权限、文档请求禁缓存、桥接消息。</summary>
-    private void WireWebView(WebView2 web)
-    {
-        var core = web.CoreWebView2;
-        if (core is null) return;
-
-        web.DefaultBackgroundColor = Colors.Transparent;
-
-        core.Settings.AreDefaultContextMenusEnabled = true;
-        core.Settings.IsStatusBarEnabled = false;
-        core.Settings.AreDevToolsEnabled = true;          // 开发期方便调试
-        core.Settings.IsSwipeNavigationEnabled = false;
-        core.Settings.IsZoomControlEnabled = true;
-        core.Settings.IsPasswordAutosaveEnabled = false;
-        core.Settings.IsGeneralAutofillEnabled = false;
-
-        var shim = EmbeddedAssets.ReadText("shell-shim.js");
-        if (!string.IsNullOrEmpty(shim))
-            _ = core.AddScriptToExecuteOnDocumentCreatedAsync(shim);
-
-        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Document);
-        core.WebResourceRequested += (_, e) =>
-        {
-            try
-            {
-                e.Request.Headers.SetHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-                e.Request.Headers.SetHeader("Pragma", "no-cache");
-            }
-            catch { }
-        };
-
-        core.PermissionRequested += (_, e) =>
-        {
-            e.State = CoreWebView2PermissionState.Deny;
-            e.Handled = true;
-        };
-
-        core.NewWindowRequested += OnNewWindowRequested;
-
-        core.NavigationStarting += (_, _) => _navigatedOk = false;
-
-        core.NavigationCompleted += (_, e) =>
-        {
-            _loadTimer.Stop();
-            if (!e.IsSuccess)
-            {
-                ShowNetworkError(DescribeWebError(e.WebErrorStatus));
-                return;
-            }
-
-            _navigatedOk = true;
-            OnMainNavigationCompleted(core);
-        };
-
-        core.DocumentTitleChanged += (_, _) =>
-        {
-            try
-            {
-                var t = core.DocumentTitle;
-                if (!string.IsNullOrWhiteSpace(t))
-                    Title = t + " — " + ShellConfig.AppName;
-            }
-            catch { }
-        };
-
-        core.ProcessFailed += (_, e) =>
-        {
-            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
-                ShowNetworkError("网页进程已退出");
-            else
-                ShowNetworkError("网页进程异常（" + e.ProcessFailedKind + "）");
-        };
-
-        core.WebMessageReceived += (_, e) =>
-        {
-            // 网页发的是 JSON 对象 → 用 WebMessageAsJson；万一发字符串再退回 TryGetWebMessageAsString
-            string? json = null;
-            try { json = e.WebMessageAsJson; }
-            catch
-            {
-                try { json = e.TryGetWebMessageAsString(); }
-                catch { }
-            }
-            if (string.IsNullOrEmpty(json)) return;
-
-            _bridge.HandleWebMessage(json);
-        };
-    }
-
-    /// <summary>新窗口请求（target=_blank 等）→ 交系统默认浏览器。</summary>
-    /// <remarks>应用内标签页方案暂缓（Nick 觉得样式不够好，待重新设计后再启用）。</remarks>
-    private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs e)
-    {
-        e.Handled = true;
-        OpenExternal(e.Uri);
-    }
-
-    private void NavigateToSite() => NavigateTo(ShellConfig.SiteUrl);
-
-    /// <summary>打开指定网页（现在只有应用内网页浮层 WebSheet 会用到）。</summary>
-    private void NavigateTo(string url)
-    {
-        if (!_webReady || Web.CoreWebView2 is null) return;
-        _navigatedOk = false;
-        ErrorPanel.Visibility = Visibility.Collapsed;
-        LoadingPanel.Visibility = Visibility.Visible;
-        LoadingRing.IsActive = true;
-        LoadingText.Text = "正在加载";
-        try
-        {
-            Web.CoreWebView2.Navigate(url);
-            _loadTimer.Start();
-        }
-        catch (Exception ex)
-        {
-            ShowNetworkError(ex.Message);
-        }
-    }
-
-    private void OnMainNavigationCompleted(CoreWebView2 core)
-    {
-        _loadTimer.Stop();
-        ErrorPanel.Visibility = Visibility.Collapsed;
-
-        _bridge.Send("shell.webTransparent", new { value = _settings.Current.WebTransparent });
-        SendCaptionInsets();
-        FadeInWeb();
-
-        _bridge.Send("shell.navigated", new { url = core.Source, title = core.DocumentTitle });
-    }
-
-    /// <summary>加载完成：淡入网页，淡出加载层（避免白屏闪烁）。</summary>
-    private void FadeInWeb()
-    {
-        try
-        {
-            var da = new DoubleAnimation
-            {
-                To = 1,
-                Duration = new Duration(TimeSpan.FromMilliseconds(260)),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(da, Web);
-            Storyboard.SetTargetProperty(da, "Opacity");
-            var sb = new Storyboard();
-            sb.Children.Add(da);
-            sb.Begin();
-
-            var fadeOut = new DoubleAnimation
-            {
-                To = 0,
-                Duration = new Duration(TimeSpan.FromMilliseconds(180)),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(fadeOut, LoadingPanel);
-            Storyboard.SetTargetProperty(fadeOut, "Opacity");
-            var sb2 = new Storyboard();
-            sb2.Children.Add(fadeOut);
-            sb2.Completed += (_, _) =>
-            {
-                LoadingRing.IsActive = false;
-                LoadingPanel.Visibility = Visibility.Collapsed;
-                LoadingPanel.Opacity = 1;
-            };
-            sb2.Begin();
-        }
-        catch
-        {
-            Web.Opacity = 1;
-            LoadingRing.IsActive = false;
-            LoadingPanel.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private static string DescribeWebError(CoreWebView2WebErrorStatus status) => status switch
-    {
-        CoreWebView2WebErrorStatus.HostNameNotResolved => "无法解析域名（可能为网络断开或 DNS 问题）",
-        CoreWebView2WebErrorStatus.ServerUnreachable => "无法连接到服务器",
-        CoreWebView2WebErrorStatus.Timeout => "连接超时",
-        CoreWebView2WebErrorStatus.ConnectionAborted => "连接被中断",
-        CoreWebView2WebErrorStatus.ConnectionReset => "连接被重置",
-        CoreWebView2WebErrorStatus.Disconnected => "网络已断开",
-        CoreWebView2WebErrorStatus.CannotConnect => "无法建立连接",
-        _ => status.ToString()
-    };
-
-    private void ShowNetworkError(string? tip = null)
-    {
-        _loadTimer.Stop();
-        LoadingRing.IsActive = false;
-        LoadingPanel.Visibility = Visibility.Collapsed;
-        ErrorTitle.Text = ShellConfig.NetworkErrorMessage;
-        ErrorTip.Text = tip ?? string.Empty;
-        ErrorPanel.Visibility = Visibility.Visible;
     }
 
     // ============================================================
@@ -1561,9 +1179,6 @@ public sealed partial class MainWindow : Window
         if (choice == "install")
             OpenExternal(ShellConfig.WebView2DownloadUrl);
 
-        ErrorPanel.Visibility = Visibility.Collapsed;
-        LoadingRing.IsActive = false;
-        LoadingPanel.Visibility = Visibility.Collapsed;
         RuntimePanel.Visibility = Visibility.Visible;
         if (NoPromptCheck is not null && choice.Length > 0)
             NoPromptCheck.IsChecked = true;
@@ -1586,51 +1201,15 @@ public sealed partial class MainWindow : Window
 
     private void ExitApp_Click(object sender, RoutedEventArgs e) => ExitApp();
 
-    private void RetryButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_webReady)
-        {
-            _ = BootAsync();
-            return;
-        }
-        NavigateToSite();
-    }
-
     // ============================================================
     // 桥接动作
     // ============================================================
-
-    public void HandleWindowCommand(string action)
-    {
-        if (_appWindow?.Presenter is not OverlappedPresenter presenter) return;
-        switch (action)
-        {
-            case "minimize":
-                presenter.Minimize();
-                break;
-            case "maximize":
-                presenter.Maximize();
-                break;
-            case "restore":
-                presenter.Restore();
-                break;
-            case "toggleMaximize":
-                if (presenter.State == OverlappedPresenterState.Maximized) presenter.Restore();
-                else presenter.Maximize();
-                break;
-            case "close":
-                Close();
-                break;
-        }
-        _bridge.Send("shell.state", BuildStatePayload());
-    }
 
     public void SetAlwaysOnTop(bool value)
     {
         _settings.Current.AlwaysOnTop = value;
         if (_appWindow?.Presenter is OverlappedPresenter p) p.IsAlwaysOnTop = value;
         _settings.Save();
-        _bridge.Send("shell.state", BuildStatePayload());
     }
 
     public void SetTelemetryEnabled(bool value)
@@ -1645,7 +1224,6 @@ public sealed partial class MainWindow : Window
         _settings.Current.AutoStart = value;
         ApplyAutoStart();
         _settings.Save();
-        _bridge.Send("shell.state", BuildStatePayload());
     }
 
     /// <summary>开机最小化启动（依赖开机自启：不打开自启时不会被用到）。</summary>
@@ -1654,7 +1232,6 @@ public sealed partial class MainWindow : Window
         _settings.Current.MinimizeOnStart = value;
         ApplyAutoStart();
         _settings.Save();
-        _bridge.Send("shell.state", BuildStatePayload());
     }
 
     /// <summary>点关闭时收进托盘（true）/ 直接退出（false）。</summary>
@@ -2527,55 +2104,5 @@ public sealed partial class MainWindow : Window
         { IsBackground = true, Name = "csh-exit-watchdog" }.Start();
     }
 
-    private async Task ExecuteScriptAsync(string script)
-    {
-        try
-        {
-            if (_webReady && Web.CoreWebView2 is not null)
-                await Web.CoreWebView2.ExecuteScriptAsync(script);
-        }
-        catch { }
-    }
 
-    // ============================================================
-    // 给网页的信息
-    // ============================================================
-
-    public object BuildInfoPayload() => new
-    {
-        appName = ShellConfig.AppName,
-        appVersion = ShellConfig.ShellVersion,
-        shell = "winui3",
-        shellVersion = ShellConfig.ShellVersion,
-        siteVersionTarget = ShellConfig.SiteVersionTarget,
-        os = Environment.OSVersion.VersionString,
-        osBuild = Environment.OSVersion.Version.Build,
-        isWin11 = Environment.OSVersion.Version.Build >= 22000,
-        webView2 = _runtime.Version ?? string.Empty,
-        theme = _settings.Current.Theme,
-        actualTheme = RootGrid.ActualTheme.ToString(),
-        backdrop = _settings.Current.Backdrop,
-        alwaysOnTop = _settings.Current.AlwaysOnTop,
-        autoStart = _settings.Current.AutoStart,
-        telemetryEnabled = _settings.Current.TelemetryEnabled,
-        webTransparent = _settings.Current.WebTransparent,
-        zoom = _settings.Current.WebZoom,
-        titleBarHeight = ShellConfig.TitleBarHeight,
-        themeFromWeb = _themeFromWeb,
-        siteUrl = ShellConfig.SiteUrl
-    };
-
-    public object BuildStatePayload() => new
-    {
-        theme = _settings.Current.Theme,
-        actualTheme = RootGrid.ActualTheme.ToString(),
-        backdrop = _settings.Current.Backdrop,
-        alwaysOnTop = _settings.Current.AlwaysOnTop,
-        autoStart = _settings.Current.AutoStart,
-        telemetryEnabled = _settings.Current.TelemetryEnabled,
-        webTransparent = _settings.Current.WebTransparent,
-        zoom = _settings.Current.WebZoom,
-        isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized,
-        navigated = _navigatedOk,
-    };
 }

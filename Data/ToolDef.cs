@@ -28,6 +28,15 @@ public sealed class ToolDef
     /// <summary>点开要导航到的页面。</summary>
     public Type? Page { get; init; }
 
+    /// <summary>
+    /// 网页版工具包的 id（2026-10-23）。空 = 这个工具没有 Web 版，永远走 <see cref="Page"/>。
+    /// <para>
+    /// ⚠️ 填了它只是"有这个可能"：真正走不走 Web 由 <c>ToolCarrier</c> 现场判定
+    /// （WebView2 运行时在不在 + 本地有没有这个工具包）。两样缺一就静默走原生页。
+    /// </para>
+    /// </summary>
+    public string? WebToolId { get; init; }
+
     /// <summary>无障碍 / 调试用：列表项名字就是工具名。</summary>
     public override string ToString() => Name;
 }
@@ -89,7 +98,9 @@ public static class ToolCatalog
         {
             Id = "function-plot", Name = "函数图像",
             Desc = "输入含 x 的表达式即可绘制函数曲线，可同时绘制多条以便比较；支持滚轮缩放与拖动查看。",
-            Glyph = "\uE9D2", Page = typeof(ClassSoftwareHub.Desktop.Pages.FunctionPlotPage)
+            Glyph = "\uE9D2", Page = typeof(ClassSoftwareHub.Desktop.Pages.FunctionPlotPage),
+            // 网页版工具包 id：有它且本机跑得起来就走 Web，否则静默走上面那个原生页。
+            WebToolId = "function-plot"
         },
         new ToolDef
         {
@@ -113,5 +124,8 @@ public static class ToolCatalog
             // E80A = 九宫格（像元素周期表）。⛔ 只用 E7/E8/E9 老码位，ED 段在 Win10 是空框
             Glyph = "\uE80A", Page = typeof(ChemistryPage)
         },
+        // ⚠️「教室喊话」曾于 2026-10-25 上午作为工具加在这里，当天下午 Nick 要求「提出来单独做」——
+        //    已改为导航栏一级功能项（ShellPage.xaml 的 Tag=announce + NavigateTagCore 的 case），
+        //    不要再往工具清单里加回来（否则导航里会出现两个入口）。
     };
 }

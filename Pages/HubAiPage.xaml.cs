@@ -105,6 +105,16 @@ public sealed partial class HubAiPage : Page
     {
         _sessions = ChatSessionStore.LoadAll();
 
+        // ⛔⛔ 2026-10-23：页面被重建时 _currentSessionId 是空的 —— 从存档把「上次看的会话」捡回来。
+        //    Nick 报的「聊到一半切页，回来对话被吞」就是这么来的：页面一重建，内存状态全丢，
+        //    列表里又没有选中项 ⇒ 回来的是一张空白页。
+        if (string.IsNullOrEmpty(_currentSessionId))
+        {
+            var last = App.Settings.Current.HubAiLastSessionId;
+            if (!string.IsNullOrEmpty(last) && _sessions.Any(s => s.Id == last))
+                _currentSessionId = last;
+        }
+
         _switchingSession = true;
         try
         {
@@ -118,12 +128,30 @@ public sealed partial class HubAiPage : Page
         {
             _switchingSession = false;
         }
+
+        // ⛔⛔ 2026-10-23：**把选中项重设一次，让 SelectionChanged 真正跑一遍**。
+        //    上面那段是在 _switchingSession=true 下选中会话的，事件被守卫吃掉了 ——
+        //    于是页面重建后「列表里选中了、消息区却是空的」。这里清一下再设回去，触发渲染。
+        if (SessionList.SelectedItem is ChatSession restored)
+        {
+            SessionList.SelectedItem = null;
+            SessionList.SelectedItem = restored;
+        }
     }
 
     private void NewChat_Click(object sender, RoutedEventArgs e)
     {
-        _chat.Reset();
+        BindRuntime(HubAiRuntime.For(null));
+        _liveBubble = null;
+
+        // 「↑ 编辑上一条」的状态必须在这里断掉（2026-10-23 修）：
+        // 否则用户拉回上一条后改主意点了"新对话"，下一条消息会去截断一个已经空了的会话。
+        _editingFromHistory = false;
+
+        _runtime.Reset();
         _currentSessionId = null;
+        App.Settings.Current.HubAiLastSessionId = "";
+        App.Settings.Save();
 
         _switchingSession = true;
         try { SessionList.SelectedItem = null; }
@@ -177,6 +205,9 @@ public sealed partial class HubAiPage : Page
 
         ChatSessionStore.Delete(id);
 
+        // 存档删了，内存里那条运行时也要放掉（否则上下文一直挂着；在跑的顺手停掉）
+        HubAiRuntime.Drop(id);
+
         if (_currentSessionId == id)
             NewChat_Click(sender, e);
 
@@ -189,12 +220,35 @@ public sealed partial class HubAiPage : Page
         if (_switchingSession) return;
         if (SessionList.SelectedItem is not ChatSession session) return;
 
-        _currentSessionId = session.Id;
+        // ⛔⛔ 2026-10-23（方案 B）：切会话**不再被拦住**。
+        //    每个会话有独立的运行时，正在跑的那条会在后台继续，不会被这里的 Restore 覆盖。
+        //    这里只把自己切到目标会话的运行时上，并把它现有的内容画出来。
+        BindRuntime(HubAiRuntime.For(session.Id));
+        _liveBubble = null;
 
-        // 恢复时只回放文本轮次（存档里本来也只有这些）
-        _chat.Restore(session.Entries.Select(entry => entry.Role == "user"
-            ? AiMessage.User(entry.Content)
-            : AiMessage.Assistant(entry.Content)));
+        // 换了会话 / 重新进页，「↑ 编辑上一条」的状态就作废 ——
+        // 否则下一条消息会把这段会话的最后一轮误删（2026-10-23 修）。
+        _editingFromHistory = false;
+
+        // ⚠️ 下面这两行**必须**在判断 `IsRunning` 之前落定（2026-10-23 修）：
+        //    原来它们写在"正在生成"的早退分支后面，切到生成中的会话时 id 还停在上一条上，
+        //    等那一轮跑完，存档就写进**别的会话**里去了。
+        _currentSessionId = session.Id;
+        App.Settings.Current.HubAiLastSessionId = session.Id;   // 重建后靠它选回来
+        App.Settings.Save();
+
+        var running = _runtime.IsRunning;
+
+        // ⚠️ 正在生成时**不能 Restore**：运行中的上下文归它自己管，
+        //    拿存档覆盖等于把在飞的那一轮抹掉。
+        //    （`LoadSessions` 每次收尾都会回到这里，所以这条不是理论风险。）
+        // 恢复时只回放文本轮次（存档里本来也只有这些）。
+        // ⭐ 2026-10-23：用 `Branch()` 而不是 `Entries` —— 上下文必须与界面上显示的那一支一致，
+        //    否则切到 ‹1/2› 的另一支、上下文还是原来那支，模型会"答非所见"。
+        if (!running)
+        {
+            _runtime.Chat.Restore(session.Branch().Select(ToMessage));
+        }
 
         ClearConversation();
 
@@ -205,24 +259,32 @@ public sealed partial class HubAiPage : Page
         // ⚠️ ⚠️ 2026-10-20：**相邻的 assistant 记录必须合并成一个气泡**。
         //    一次工具调用会存下两条 assistant（“想一段” + “结论”），
         //    若逐条渲染，历史里就会出现两个「已完成」两段深度思考，中间还夹着一大块空白。
+        // ⭐ 2026-10-23：数据源从 `session.Entries` 换成 `session.Branch()` —— 只画**当前那一支**；
+        //    同一位置的多个版本（编辑 / 重试产生的兄弟节点）用 ‹1/2› 切换。
+        var branch = session.Branch();
+        _branch = branch;
+        AppLog.Step("hubai", $"渲染分支：current={session.CurrentId} 节点={branch.Count} 存档={session.Entries.Count}");
+
         var index = 0;
-        while (index < session.Entries.Count)
+        while (index < branch.Count)
         {
-            var entry = session.Entries[index];
+            var entry = branch[index];
 
             if (entry.Role == "user")
             {
                 HubAiMessages.Children.Add(MakeBubble(entry.Content, alignRight: true));
+                AddBranchSwitcher(session, entry);
                 index++;
                 continue;
             }
 
+            var head = entry;      // 这一坨的起点：切分支 / 重试都以它为准
             var mergedContent = new StringBuilder();
             var mergedReasoning = new StringBuilder();
 
-            while (index < session.Entries.Count && session.Entries[index].Role != "user")
+            while (index < branch.Count && branch[index].Role != "user")
             {
-                var part = session.Entries[index];
+                var part = branch[index];
 
                 if (!string.IsNullOrWhiteSpace(part.Content))
                 {
@@ -239,38 +301,26 @@ public sealed partial class HubAiPage : Page
                 index++;
             }
 
+            // 正文和思考都空的一轮（旧存档里出现过：只存下角色、什么都没存到）——
+            // 画出来就是一个没有内容的「已完成」气泡，直接跳过（2026-10-23 补）。
+            if (mergedContent.Length == 0 && mergedReasoning.Length == 0) continue;
+
             var bubble = NewAssistantBubble();
             bubble.Box.Visibility = Visibility.Visible;
 
+            // ⚠️ 只有真的攒到思考内容才画折叠块 —— 空的一块展开后什么都没有（Nick 截图里的"思考被腰斩"）
             if (mergedReasoning.Length > 0)
             {
-                var palette = BubblePalette();
-
-                var thinkText = new TextBlock
-                {
-                    Text = mergedReasoning.ToString(),
-                    FontSize = 13,
-                    TextWrapping = TextWrapping.Wrap,
-                    LineHeight = 21,
-                    Foreground = palette.SubText,
-                };
-
-                bubble.Steps.Children.Add(new Expander
-                {
-                    // ⚠️ 不设透明就会出现一条全宽的灰底（系统模板 header 底色）
-                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                    BorderThickness = new Thickness(0),
-                    Header = "深度思考",
-                    Content = thinkText,
-                    IsExpanded = false,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Foreground = palette.SubText,
-                });
+                // ⚠️ 2026-10-23：历史回放也换成**轻量折叠**（原来这里还是 Expander）——
+                //    实时气泡早就不用了，历史却留着那条系统灰底下拉框，切回旧会话又是那个样子。
+                // ⚠️ 存档里只存了思考文本，没有工具调用记录 ⇒ 回放只有一段思考，这属于正常。
+                var think = MakeCollapsible("深度思考", null);
+                think.Body.Children.Add(MakeThinkSegment(mergedReasoning.ToString()));
+                bubble.Steps.Children.Add(think.Root);
             }
 
             bubble.Status.Text = "已完成";
-            MarkdownText.Apply(bubble.Body, mergedContent.ToString());
+            MarkdownText.Apply(bubble.Body, mergedContent.ToString(), bubble.BodyForeground);
 
             // ⚠️ 历史里只存了文本，但**元数据行不能少** —— Nick 要求“切回来原封不动”，
             //    没有复制/重试和模型用量，看起来就是“全丢了”。
@@ -297,11 +347,43 @@ public sealed partial class HubAiPage : Page
             }
 
             bubble.MetaActions.Children.Add(MakeIconButton("\uE8C8", "复制", histPalette.SubText, () => CopyText(copyText)));
-            bubble.MetaActions.Children.Add(MakeIconButton("\uE72C", "重试", histPalette.SubText, RetryLast));
+
+            // ⭐ 2026-10-23：「重试」改成**在这一轮的提问下面长出一个兄弟回答**，
+            //    不再以"再问一遍"的方式追加一条新提问（那样两个回答会串在一条线上）。
+            bubble.MetaActions.Children.Add(MakeIconButton("\uE72C", "重试", histPalette.SubText, () => RetryFrom(head)));
+            AddBranchSwitcher(session, head);
         }
 
-        if (!string.IsNullOrEmpty(session.Model) && session.Tokens > 0)
+        // 页脚属于"这一段对话的存档"，正在生成时不能压在实时气泡上面
+        if (!running && !string.IsNullOrEmpty(session.Model) && session.Tokens > 0)
             AddHistoryFooter(session.Model, session.Tokens);
+
+        if (running)
+        {
+            // 在飞的那一轮的**提问**还没进存档（新对话的首轮尤其明显）—— 补一个用户气泡，
+            // 否则切回来只能看到一段光秃秃的回答，不知道自己问的是什么。
+            var asked = _runtime.Chat.Snapshot().LastOrDefault(m => m.Role == "user");
+            if (asked?.Content is { Length: > 0 } question
+                && _branch.LastOrDefault(x => x.Role == "user")?.Content != question)
+            {
+                HubAiMessages.Children.Add(MakeBubble(question, alignRight: true));
+            }
+
+            // 这段正在后台生成：历史照常画，末尾再接一个实时气泡。
+            // ⛔ 别像原来那样 `ClearConversation()` 之后只画实时那一段 ——
+            //    那样切回来看到的是"前面的对话全没了"，而这正是方案 B 要解决的场景。
+            var resumed = NewAssistantBubble();
+            _liveBubble = resumed;
+            resumed.Box.Visibility = Visibility.Visible;
+            SetBusy(true);
+            PaintLive(force: true);
+        }
+        else if (_busy)
+        {
+            // ⚠️ 必须复位（2026-10-23 修）：从"生成中的会话"切到空闲会话时，原来这里什么都不做，
+            //    输入框一直是灰的、按钮还显示"停止"，点下去也没有反应 —— 用户被卡在里面。
+            SetBusy(false);
+        }
 
         ScrollToBottom();
     }
@@ -312,6 +394,117 @@ public sealed partial class HubAiPage : Page
     /// ⚠️ 2026-10-20 重做后：诊断卡已搬到右栏，消息流里只剩「欢迎屏（静态）+ 动态消息」，
     /// 所以这里改成保留 1 个。以前保留 2 个是因为消息流里还压着两张卡片。
     /// </summary>
+    /// <summary>存档节点 → 上下文消息（分支切换、分叉前置恢复都用它）。</summary>
+    private static AiMessage ToMessage(SessionEntry entry) =>
+        entry.Role == "user"
+            ? AiMessage.User(entry.Content)
+            : AiMessage.Assistant(entry.Content) with { Reasoning = entry.Reasoning };
+
+    /// <summary>
+    /// 在气泡下面挂一条「‹ 1/2 ›」—— 同一个位置有多个版本时才出现。
+    /// ⛔ 别自作主张把旧版本删掉：那是用户"编辑 / 重试"之前的内容，删了就找不回来。
+    /// </summary>
+    private void AddBranchSwitcher(ChatSession session, SessionEntry entry)
+    {
+        var siblings = session.Siblings(entry);
+        if (siblings.Count < 2) return;
+
+        var position = siblings.FindIndex(e => e.Id == entry.Id);
+        if (position < 0) return;
+
+        var palette = BubblePalette();
+
+        Button MakeArrow(string glyph) => new()
+        {
+            Content = new FontIcon { Glyph = glyph, FontSize = 10 },
+            Background = null,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(4, 1, 4, 1),
+            MinHeight = 0,
+            MinWidth = 0,
+            Foreground = palette.SubText,
+        };
+
+        var prev = MakeArrow("\uE76B");   // ChevronLeft
+        var next = MakeArrow("\uE76D");   // ChevronRight
+
+        prev.IsEnabled = position > 0;
+        next.IsEnabled = position < siblings.Count - 1;
+
+        prev.Click += (_, _) => SwitchBranch(session, siblings[Math.Max(0, position - 1)]);
+        next.Click += (_, _) => SwitchBranch(session, siblings[Math.Min(siblings.Count - 1, position + 1)]);
+
+        var label = new TextBlock
+        {
+            Text = $"{position + 1}/{siblings.Count}",
+            FontSize = 11,
+            Foreground = palette.SubText,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = entry.Role == "user" ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            Margin = new Thickness(entry.Role == "user" ? 0 : 8, 0, entry.Role == "user" ? 8 : 0, 4),
+        };
+
+        row.Children.Add(prev);
+        row.Children.Add(label);
+        row.Children.Add(next);
+
+        HubAiMessages.Children.Add(row);
+    }
+
+    /// <summary>
+    /// 切到同一位置的另一个版本：把 currentId 挪到那一支的**叶子**上再整页重画。
+    /// ⚠️ 必须落到叶子，否则只显示半截，后面的回合看起来像"没了"。
+    /// </summary>
+    private void SwitchBranch(ChatSession session, SessionEntry target)
+    {
+        ChatSessionStore.SetCurrent(session.Id, session.LeafOf(target.Id));
+        LoadSessions();
+        AppLog.Step("hubai", "切换历史分支");
+    }
+
+    /// <summary>
+    /// 「重试」：以这条回答的**提问**为父节点，重新生成一个兄弟回答。
+    /// 旧回答不删 —— 它变成同一位置的另一个版本，用 ‹1/2› 切回来。
+    /// </summary>
+    private void RetryFrom(SessionEntry assistant)
+    {
+        if (_busy) return;
+
+        var user = _branch.FirstOrDefault(e => e.Id == assistant.ParentId);
+        if (user is null || user.Role != "user") return;
+
+        ForkForRetry(user);
+        HubAiInput.Text = user.Content;
+        _ = SendAsync();
+    }
+
+    /// <summary>编辑重发：新的提问挂在**旧提问的父节点**下（与旧提问并列成两支）。</summary>
+    private void ForkForEdit(SessionEntry oldUser)
+    {
+        var index = _branch.FindIndex(e => e.Id == oldUser.Id);
+
+        _forkPending = true;
+        _forkAppendUser = true;
+        _forkParentId = oldUser.ParentId;
+        _forkKeep = index < 0 ? 0 : index;
+    }
+
+    /// <summary>重新生成：新的回答挂在**同一个提问**下（与旧回答并列成两支）。</summary>
+    private void ForkForRetry(SessionEntry user)
+    {
+        var index = _branch.FindIndex(e => e.Id == user.Id);
+
+        _forkPending = true;
+        _forkAppendUser = false;             // 提问已经在上下文里，别再加一遍
+        _forkParentId = user.Id;
+        _forkKeep = index < 0 ? _branch.Count : index + 1;
+    }
+
     private void ClearConversation()
     {
         while (HubAiMessages.Children.Count > 1)
@@ -319,20 +512,54 @@ public sealed partial class HubAiPage : Page
     }
 
     /// <summary>回答结束后存档。⛔ 没等到回答（比如刚发就取消）不存，免得列表里堆半截空对话。</summary>
-    private void PersistSession(AiUsage usage)
+    /// <param name="rt">发起这一轮的那个运行时。⛔ 不要读页面上的 `_runtime`。</param>
+    /// <param name="sessionId">发起时那一段的存档 id；新对话为 null（存档完才拿到）。</param>
+    /// <param name="forkParentId">新节点挂到哪个父节点下；null = 从根起。</param>
+    /// <param name="before">这一轮开始前的消息条数，之后多出来的才是新产生的轮次。</param>
+    /// <remarks>
+    /// ⚠️ 2026-10-23 改成"参数传入"而不是读页面字段：这一轮可能在后台跑完，
+    ///    那时用户早就切到别的会话了，读 `_runtime` / `_currentSessionId` 会把结果写进别人那段。
+    /// <para>
+    /// ⭐ 同时改成**只追加这一轮的新节点**（树）：不再拿整篇快照覆盖存档，
+    ///    于是重试 / 编辑重发产生的旧分支不会被执行"替换"掉。
+    /// </para>
+    /// </remarks>
+    private void PersistSession(HubAiRuntime rt, string? sessionId, string? forkParentId, int before, AiUsage usage)
     {
-        var snapshot = _chat.Snapshot();
-        if (snapshot.Count == 0) return;
-        if (snapshot.All(m => m.Role != "assistant")) return;
+        var snapshot = rt.Chat.Snapshot();
 
-        var firstUser = snapshot.FirstOrDefault(m => m.Role == "user")?.Content ?? "未命名对话";
+        // 这一轮真正新增的部分（用户的那条提问 + 模型的回答，含工具往返产生的中间 assistant）
+        var turns = snapshot.Skip(before).ToList();
+        if (turns.Count == 0) return;
 
-        _currentSessionId = ChatSessionStore.Save(
-            snapshot,
-            firstUser,
-            _currentSessionId,
+        // ⛔ 判据是「**有正文的**助手回合」，不是「有 assistant 角色」。
+        //    2026-10-23 修：原来只判 `All(m => m.Role != "assistant")`，于是"只出了思考、正文一个字没回来"
+        //    的那一轮也会被存档 —— 历史里就留下一个展开只有思考、正文空白的「已完成」气泡。
+        if (!turns.Any(m => m.Role == "assistant" && !string.IsNullOrWhiteSpace(m.Content))) return;
+
+        var fallbackTitle = turns.FirstOrDefault(m => m.Role == "user")?.Content ?? "未命名对话";
+
+        var savedId = ChatSessionStore.SaveBranch(
+            sessionId,
+            forkParentId,
+            turns,
+            fallbackTitle,
             App.Settings.Current.HubAiModel,
             usage.TotalTokens);
+
+        // 新对话第一次存档才拿到 id —— 运行时要从 draft 键改挂到真实 id 上。
+        // ⛔ 不挂过去的话，同一个会话会有两个运行时：draft 那个带着完整上下文永不释放，
+        //    列表里点进来的又是另一个空的（2026-10-23 修，`AdoptDraft` 原先写了没人调用）。
+        if (string.IsNullOrEmpty(sessionId) && !string.IsNullOrEmpty(savedId))
+            HubAiRuntime.AdoptDraft(savedId);
+
+        // 只有"页面还停在这条运行时上"才回写页面状态（存盘失败时 savedId 为 null，那时不动）
+        if (savedId is { Length: > 0 } && ReferenceEquals(rt, _runtime))
+        {
+            _currentSessionId = savedId;
+            App.Settings.Current.HubAiLastSessionId = savedId;
+            App.Settings.Save();
+        }
 
         LoadSessions();
     }
@@ -683,9 +910,12 @@ public sealed partial class HubAiPage : Page
     private void HubAiSend_Click(object sender, RoutedEventArgs e)
     {
         // 生成过程中这个按钮就是"停止"
+        // ⛔⛔ 2026-10-23：原来这里调 `_streamCts?.Cancel()`，而 `_streamCts` 在换成会话运行时之后
+        //    **再没有任何赋值点**（编译器 CS0649 点出来的就是它）—— 点下去什么都不会发生。
+        //    取消现在归运行时管。
         if (_busy)
         {
-            _streamCts?.Cancel();
+            _runtime.Stop();
             return;
         }
 
@@ -706,6 +936,27 @@ public sealed partial class HubAiPage : Page
     /// </summary>
     private void HubAiInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // ↑ 键（输入框为空时）：把最后一条提问拉回输入框，进入"编辑重发"状态。
+        // 对标成熟工具的做法：改完直接替换那一轮，而不是再追加一条"我说错了"。
+        if (e.Key == Windows.System.VirtualKey.Up
+            && string.IsNullOrWhiteSpace(HubAiInput.Text)
+            && !_busy)
+        {
+            var lastUser = _runtime.Chat.Snapshot().LastOrDefault(m => m.Role == "user");
+            if (lastUser is not null)
+            {
+                HubAiInput.Text = lastUser.Content ?? "";
+                HubAiInput.SelectionStart = HubAiInput.Text.Length;
+                _editingFromHistory = true;
+
+                // 记住"改的是存档里的哪一条" —— 提交时要挂到它的父节点下（新开一支），
+                // 而不是把后面整段截掉（2026-10-23）。
+                _editSource = _branch.LastOrDefault(x => x.Role == "user");
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (e.Key != Windows.System.VirtualKey.Enter) return;
 
         var shiftState = Microsoft.UI.Input.InputKeyboardSource
@@ -735,8 +986,297 @@ public sealed partial class HubAiPage : Page
     //  对话（真调用，2026-10-18）
     // ══════════════════════════════════════════════════════
 
-    private readonly AiChatService _chat = new();
-    private CancellationTokenSource? _streamCts;
+    // ⛔⛔ 2026-10-23（方案 B）：对话上下文**不再归页面所有**。
+    //    改成按会话取的运行时（Services/HubAi/HubAiRuntime），流式跑在它里面 ——
+    //    页面切走/切会话都不影响它跑完，回来重新订阅就能看到。
+    private HubAiRuntime _runtime = HubAiRuntime.For(null);
+
+    /// <summary>当前绑定的运行时对应的会话 id 变化时，重新订阅。</summary>
+    private void BindRuntime(HubAiRuntime runtime)
+    {
+        if (ReferenceEquals(_runtime, runtime)) return;
+
+        _runtime.Changed -= OnRuntimeChanged;
+        _runtime.ToolDone -= OnToolDone;
+
+        _runtime = runtime;
+
+        _runtime.Changed += OnRuntimeChanged;
+        _runtime.ToolDone += OnToolDone;
+    }
+
+    /// <summary>
+    /// 一个工具调完（2026-10-23 接上）。
+    /// ⛔ 改成会话运行时那一版把这条通路漏了 —— 界面上只剩思考，"已读取 xxx" 的痕迹整段消失。
+    /// 现在它进「深度思考」折叠块，与思考段落排在同一条时间线上。
+    /// </summary>
+    private void OnToolDone(string note) => OnUi(() =>
+    {
+        if (_liveBubble is null) return;
+        AddToolStep(_liveBubble, note);
+    });
+
+    /// <summary>
+    /// 运行时内容有变化 → 节流刷新当前气泡。
+    /// ⚠️ 走"全量重绘"而不是"增量 append" —— 切走再回来时，页面手上没有增量，
+    ///    只能按运行时的完整快照重画一遍。
+    /// </summary>
+    private void OnRuntimeChanged() => OnUi(() => PaintLive(force: false));
+
+    /// <summary>上一次真正重绘的时刻（TickCount64），用来做 80ms 节流。</summary>
+    private long _lastPaint;
+
+    /// <summary>
+    /// 把运行时的当前快照画到正在生成的那个气泡上。
+    /// <para>
+    /// ⚠️ 2026-10-23 补回 80ms 节流：原来每个增量都做一次**全量 Markdown 解析 + 贴底滚动**，
+    ///    一个 token 一次，长回答时主线程会被明显拖慢（旧实现里本来有这道闸，重构时丢了）。
+    ///    收尾时 <see cref="FinishRun"/> 会再全量重绘一次，所以最后一段不会丢。
+    /// </para>
+    /// </summary>
+    private void PaintLive(bool force)
+    {
+        if (_liveBubble is null) return;
+
+        var body = _runtime.LiveBody;
+        var reasoning = _runtime.LiveReasoning;
+
+        if (body.Length > 0 || reasoning.Length > 0 || _runtime.LiveStatus is not null)
+        {
+            _liveBubble.Box.Visibility = Visibility.Visible;
+            if (!_liveBubble.EnterPlayed)
+            {
+                _liveBubble.EnterPlayed = true;
+                PlayEnter(_liveBubble.Box);
+            }
+        }
+
+        var now = Environment.TickCount64;
+        if (!force && now - _lastPaint < 80) return;
+        _lastPaint = now;
+
+        if (reasoning.Length > 0) EnsureThinkBlock(_liveBubble, reasoning);
+        if (body.Length > 0) MarkdownText.Apply(_liveBubble.Body, body, _liveBubble.BodyForeground);
+
+        ShowStatus(_runtime.LiveStatus);
+        ScrollToBottom();
+    }
+
+    /// <summary>当前正在生成的那个助手气泡（换会话/重开后重置）。</summary>
+    private Bubble? _liveBubble;
+
+    /// <summary>当前会话正在显示的那一支（根 → 叶子）。分支切换、分叉定位都靠它。</summary>
+    private List<SessionEntry> _branch = new();
+
+    /// <summary>
+    /// 「下一次发送要分叉」的标记（编辑重发 / 重新生成用）。
+    /// <para>
+    /// ⛔ 2026-10-23：以前是 `Restore(snap.Take(idx))` 把上下文截断 —— 旧的回答就永久没了。
+    /// 现在改成"挂到某个父节点下再发"，旧的那一支原样留在存档里，界面上用 ‹1/2› 切回来。
+    /// </para>
+    /// </summary>
+    private bool _forkPending;
+
+    /// <summary>分叉要挂到哪个节点下（null = 从根开始，等于新开一支）。</summary>
+    private string? _forkParentId;
+
+    /// <summary>分叉时保留的前缀条数（父节点在分支里的下标 + 1）。</summary>
+    private int _forkKeep;
+
+    /// <summary>这次分叉要不要把输入框的文字当成一条新提问追加（重新生成时为 false）。</summary>
+    private bool _forkAppendUser = true;
+
+    /// <summary>
+    /// 造一个「可折叠的小标题行」（深度思考 / 工具调用用同一个样式）。
+    ///
+    /// ⚠️ 2026-10-23 换掉 Expander：Nick 说「深度思考用那个下拉对话框太丑了」。
+    ///    Expander 自带一整条 system header 底色 + 大块留白，放在消息流里像块控件；
+    ///    这里改成一枚**透明按钮**：左侧一个小箭头 + 一行小字，点一下展开下面的正文。
+    ///    视觉上只有文字，跟消息本体一个层次。
+    /// </summary>
+    /// <param name="title">标题文字（如「深度思考」「工具调用」）。</param>
+    /// <param name="subtitle">可选：标题右侧的补充（如调用次数）。</param>
+    /// <returns>
+    /// <c>Body</c> 是**容器**（StackPanel）而不是一段文字：
+    /// 里面按时间顺序排「思考段落 → 工具调用行 → 思考段落 → …」，见 <see cref="EnsureThinkBlock"/>。
+    /// </returns>
+    private (StackPanel Root, StackPanel Body, FontIcon Chevron, Button Toggle, TextBlock Caption) MakeCollapsible(
+        string title, string? subtitle)
+    {
+        var palette = BubblePalette();
+        var chevron = new FontIcon
+        {
+            Glyph = "\uE76C",            // 右向小箭头（收起）
+            FontSize = 10,
+            Foreground = palette.SubText,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var caption = new TextBlock
+        {
+            Text = title,
+            FontSize = 12.5,
+            Foreground = palette.SubText,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(chevron);
+        row.Children.Add(caption);
+
+        if (!string.IsNullOrEmpty(subtitle))
+        {
+            row.Children.Add(new TextBlock
+            {
+                Text = subtitle,
+                FontSize = 11.5,
+                Opacity = 0.7,
+                Foreground = palette.SubText,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
+        var toggle = new Button
+        {
+            // ⛔ 必须是"看起来不像按钮"的按钮：透明底、无边框、无最小宽度
+            Background = null,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0, 2, 0, 2),
+            MinHeight = 0,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Content = row,
+        };
+
+        var body = new StackPanel
+        {
+            Spacing = 4,
+            Visibility = Visibility.Collapsed,
+            Margin = new Thickness(16, 4, 0, 0),   // 与标题缩进对齐（箭头那点宽度）
+        };
+
+        toggle.Click += (_, _) =>
+        {
+            var expand = body.Visibility != Visibility.Visible;
+            body.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+            chevron.Glyph = expand ? "\uE70D" : "\uE76C";   // 下 / 右
+        };
+
+        var root = new StackPanel { Spacing = 2 };
+        root.Children.Add(toggle);
+        root.Children.Add(body);
+        return (root, body, chevron, toggle, caption);
+    }
+
+    /// <summary>折叠块里的一段思考文字（颜色跟随气泡副文字色）。</summary>
+    private TextBlock MakeThinkSegment(string text) => new()
+    {
+        Text = text,
+        FontSize = 13,
+        TextWrapping = TextWrapping.Wrap,
+        LineHeight = 21,
+        Foreground = BubblePalette().SubText,
+    };
+
+    /// <summary>
+    /// 建「深度思考」折叠块（已经有了就跳过）。内容容器见 <see cref="Bubble.ThinkBody"/>。
+    /// </summary>
+    private void EnsureThinkContainer(Bubble bubble)
+    {
+        if (bubble.ThinkToggle is not null) return;
+
+        var (root, body, chevron, toggle, caption) = MakeCollapsible("深度思考", null);
+
+        bubble.ThinkBody = body;
+        bubble.ThinkToggle = toggle;
+        bubble.ThinkChevron = chevron;
+        bubble.ThinkCaption = caption;
+        bubble.ThinkText = null;
+
+        bubble.Steps.Children.Add(root);
+    }
+
+    /// <summary>
+    /// 把思考过程画进「深度思考」折叠块。
+    /// <para>
+    /// ⚠️ 2026-10-23：**工具调用也排在这条时间线里**（Nick 要求）。
+    ///    运行时每调完一个工具就会清空思考缓冲，所以这里的 <see cref="Bubble.ThinkText"/>
+    ///    被置空 —— 下一段思考会新起一个文字块，而不是覆写到工具行上面那一段。
+    /// </para>
+    /// </summary>
+    private void EnsureThinkBlock(Bubble bubble, string reasoning)
+    {
+        EnsureThinkContainer(bubble);
+
+        if (bubble.ThinkText is null)
+        {
+            bubble.ThinkText = MakeThinkSegment("");
+            bubble.ThinkBody!.Children.Add(bubble.ThinkText);
+        }
+
+        bubble.ThinkText.Text = reasoning;
+        bubble.ThinkBuffer.Clear();
+        bubble.ThinkBuffer.Append(reasoning);
+    }
+
+    /// <summary>
+    /// 往「深度思考」里追加一条工具调用记录（2026-10-23）。
+    /// 与思考段落按真实发生顺序排列：想一段 → 调一个工具 → 再想一段 → …
+    /// </summary>
+    private void AddToolStep(Bubble bubble, string note)
+    {
+        EnsureThinkContainer(bubble);
+
+        var palette = BubblePalette();
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(0, 1, 0, 1),
+        };
+
+        row.Children.Add(new FontIcon
+        {
+            Glyph = "\uE9D9",              // 工具/扳手
+            FontSize = 11,
+            Foreground = palette.SubText,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        row.Children.Add(new TextBlock
+        {
+            Text = note,
+            FontSize = 12.5,
+            Foreground = palette.SubText,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        bubble.ThinkBody!.Children.Add(row);
+
+        bubble.ToolSteps++;
+        bubble.ThinkCaption!.Text = $"深度思考 · {bubble.ToolSteps} 次工具调用";
+
+        // 下一段思考另起一块，别把工具行上面那段覆写掉
+        bubble.ThinkText = null;
+    }
+
+    /// <summary>
+    /// 是否处于「编辑上一条重发」状态。
+    /// 2026-10-23 加（对标成熟 AI 工具：↑ 键把上一条 user 消息拉回输入框）。
+    /// ⭐ 提交时不再"截断那一轮"，而是以 <see cref="_editSource"/> 的父节点为新分支起点
+    /// （旧提问与它的回答都留在存档里）。
+    /// </summary>
+    private bool _editingFromHistory;
+
+    /// <summary>↑ 拉回来的是存档里的哪一条（提交时按它定位分叉点）。</summary>
+    private SessionEntry? _editSource;
+
     private bool _busy;
 
     /// <summary>最近一次采集的结果。对话时直接复用，不再重采（首屏那张卡已经采过一次）。</summary>
@@ -933,184 +1473,148 @@ public sealed partial class HubAiPage : Page
             return;
         }
 
+        // 同一条会话同时只允许一条流。`HubAiRuntime.Start` 也会挡，但那是不声不响地 return，
+        // 页面这边就会一直停在"生成中"（插进去的用户气泡永远等不到回答）。
+        if (_runtime.IsRunning)
+        {
+            AddNotice("这一条还在生成中，请等它结束，或先点停止。");
+            return;
+        }
+
+        // ⭐ 2026-10-23：编辑重发不再"截断重写"，而是**新开一支**。
+        //    旧的提问和它的回答原样留在存档里，界面上用 ‹1/2› 切回来。
+        if (_editingFromHistory)
+        {
+            _editingFromHistory = false;
+            if (_editSource is not null) ForkForEdit(_editSource);
+            _editSource = null;
+        }
+
+        var forkParentId = _forkParentId;      // 这一轮产生的新节点挂到谁下面
+        var appendUser = _forkAppendUser;
+
+        if (_forkPending)
+        {
+            _forkPending = false;
+            _forkAppendUser = true;
+            _forkParentId = null;
+
+            // 上下文截到分叉点：旧分支的内容不能带进这一轮，否则模型会同时看到"两条并行的问题"
+            var prefix = _forkKeep <= 0
+                ? new List<SessionEntry>()
+                : _branch.Take(_forkKeep).ToList();
+
+            _runtime.Chat.Restore(prefix.Select(ToMessage));
+        }
+
         HubAiInput.Text = string.Empty;
         SetBusy(true);
         _lastUserText = text;
 
-        HubAiMessages.Children.Add(MakeBubble(text, alignRight: true));
+        // 重新生成时不补提问气泡 —— 那一条本来就在界面上
+        if (appendUser) HubAiMessages.Children.Add(MakeBubble(text, alignRight: true));
 
         // 一旦开始对话，欢迎屏收起来、本机状态露出来（2026-10-20：本机状况等聊过再显示）
         WelcomePanel.Visibility = Visibility.Collapsed;
         SidePanel.Visibility = Visibility.Visible;
 
-        var buffer = new StringBuilder();
+        // 这一轮的气泡：运行时有变化就往它里面刷（切走再回来也能接上）
         var bubble = NewAssistantBubble();
-        var lastFlush = 0L;
+        _liveBubble = bubble;
 
-        void Flush(bool force = false)
-        {
-            var now = Environment.TickCount64;
-            if (!force && now - lastFlush < 80) return;
+        // ⚠️ 先把"这条消息属于哪个运行时、哪一段存档"钉住（2026-10-23 修）：
+        //    下面采集本机概况是 await 的，几百毫秒里用户完全可能已经切到别的会话；
+        //    等回来再读页面上的 `_runtime` / `_currentSessionId`，消息就启动到别人身上了。
+        var rt = _runtime;
+        var sessionId = _currentSessionId;
 
-            lastFlush = now;
+        var snapshot = _snapshot ?? await MachineProbe.CollectAsync();
+        _snapshot = snapshot;
 
-            // 正文或思考任一有内容就让气泡现身（否则会留一个空胶囊）
-            if (buffer.Length > 0 || bubble.ThinkBuffer.Length > 0)
-            {
-                bubble.Box.Visibility = Visibility.Visible;
+        // 记下"这一轮开始前上下文有多少条"：收尾时多出来的部分才是这一轮新产生的节点
+        var before = rt.Chat.Snapshot().Count;
 
-                if (!bubble.EnterPlayed)
-                {
-                    bubble.EnterPlayed = true;
-                    PlayEnter(bubble.Box);
-                }
-            }
+        // ⛔⛔ 2026-10-23（方案 B）：不 await、不等结果 —— 交给运行时在后台跑。
+        //    页面切走 / 切会话都不影响它跑完；回来重新订阅 Changed 就能看到实时内容。
+        rt.Start(
+            cfg,
+            snapshot,
+            LoadTools(),
+            text,
+            onCompleted: doneUsage => OnUi(() => FinishRun(rt, sessionId, forkParentId, before, bubble, doneUsage)),
+            onFailed: ex => OnUi(() => FailRun(rt, sessionId, forkParentId, before, bubble, ex)),
+            appendUserMessage: appendUser,
+            approveTool: ApproveToolAsync);
+    }
 
-            MarkdownText.Apply(bubble.Body, buffer.ToString());
-            ScrollToBottom();
-        }
+    /// <summary>
+    /// 一轮问答收尾（成功 / 用户停止都走这里）。
+    /// ⚠️ 单独抽出来是因为 `HubAiRuntime.Start` 是**不等待**的：原来的 try/finally 结构不再成立，
+    ///    收尾动作得由回调来触发。
+    /// <para>
+    /// ⚠️ `rt` / `sessionId` / `bubble` 都是**发起时**钉住的，⛔ 不能改成读页面字段
+    ///    （2026-10-23 修）：这一轮可能在后台跑完，那时用户早就切走了，
+    ///    读 `_runtime` / `_currentSessionId` 会把结果存进别的会话、还会往别人的气泡上写。
+    /// </para>
+    /// </summary>
+    /// <param name="forkParentId">这一轮的新节点要挂到哪个父节点下（null = 从根起，即新开一支）。</param>
+    /// <param name="before">这一轮开始前上下文里的消息条数 —— 之后多出来的才是新产生的节点。</param>
+    /// <param name="emptyText">一个 token 都没收到时写进气泡的占位文字；失败路径传 null（错误信息已经写上）。</param>
+    private void FinishRun(HubAiRuntime rt, string? sessionId, string? forkParentId, int before,
+                           Bubble? bubble, AiUsage usage, string? emptyText = "（已停止）")
+    {
+        // 只有页面还停在这条运行时上，才允许动界面
+        var onScreen = ReferenceEquals(rt, _runtime);
 
-        _streamCts = new CancellationTokenSource();
-
-        // 在 try 外面声明：finally 里存档要用（累计用量要写进历史）
-        var usage = AiUsage.Empty;
-
-        try
-        {
-            var snapshot = _snapshot ?? await MachineProbe.CollectAsync();
-            _snapshot = snapshot;
-
-            usage = await _chat.RunAsync(
-                cfg,
-                snapshot,
-                LoadTools(),
-                text,
-                onDelta: chunk => OnUi(() =>
-                {
-                    buffer.Append(chunk);
-                    Flush();
-                }),
-                onStatus: status => OnUi(() => ShowStatus(status)),
-                onNewBubble: () => OnUi(() =>
-                {
-                    Flush(force: true);
-                    ShowStatus(null);
-
-                    // ⛔ 不新建气泡（2026-10-20）：模型"想一段 → 调工具 → 再想一段 → 出结论"是**同一个回合**，
-                    //    以前每调一次工具就开一个新气泡，结果一条回答被切成「思考中」+「已完成」两截，
-                    //    两个计时、两个状态行并列，看着像两轮对话（Nick 截图指出）。
-                    //    现在：正文 buffer **不清空**，同一回合的多段输出连续渲染在一个气泡里；
-                    //    只把"思考段"切开 —— 下一段思考另起一个「深度思考」折叠块。
-                    bubble.Think = null;
-                    bubble.ThinkBuffer.Clear();
-                }),
-                ct: _streamCts.Token,
-                onReasoning: chunk => OnUi(() =>
-                {
-                    var palette = BubblePalette();
-
-                    // 第一次思考，或上一段思考已被一次工具调用"关掉" → 新开一个「深度思考」折叠段
-                    if (bubble.Think is null)
-                    {
-                        var thinkText = new TextBlock
-                        {
-                            FontSize = 13,
-                            TextWrapping = TextWrapping.Wrap,
-                            LineHeight = 21,
-                            Foreground = palette.SubText,
-                        };
-
-                        var expander = new Expander
-                        {
-                            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                            BorderThickness = new Thickness(0),
-                            Header = "深度思考",
-                            Content = thinkText,
-                            IsExpanded = false,
-                            HorizontalAlignment = HorizontalAlignment.Stretch,
-                            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                            Foreground = palette.SubText,
-                        };
-
-                        bubble.Steps.Children.Add(expander);
-                        bubble.Think = expander;
-                        bubble.ThinkText = thinkText;
-                        bubble.ThinkBuffer.Clear();
-                    }
-
-                    bubble.ThinkBuffer.Append(chunk);
-                    bubble.ThinkText.Text = bubble.ThinkBuffer.ToString();
-                    bubble.Box.Visibility = Visibility.Visible;
-
-                    if (!bubble.EnterPlayed)
-                    {
-                        bubble.EnterPlayed = true;
-                        PlayEnter(bubble.Box);
-                    }
-
-                    ScrollToBottom();
-                }),
-                onToolDone: note => OnUi(() =>
-                {
-                    var palette = BubblePalette();
-
-                    // 工具一调用，当前思考段就"结束"了 —— 之后的思考另起一段
-                    bubble.Think = null;
-                    bubble.ThinkBuffer.Clear();
-
-                    var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-                    row.Children.Add(new FontIcon
-                    {
-                        Glyph = "\uE9D9",
-                        FontSize = 12,
-                        Foreground = palette.SubText,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    });
-                    row.Children.Add(new TextBlock
-                    {
-                        Text = note,
-                        FontSize = 12.5,
-                        Foreground = palette.SubText,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    });
-
-                    bubble.Steps.Children.Add(row);
-                    ScrollToBottom();
-                }));
-
-            Flush(force: true);
-            FinishBubble(bubble, usage, buffer.ToString());
-        }
-        catch (OperationCanceledException)
-        {
-            Flush(force: true);
-            if (buffer.Length == 0)
-            {
-                MarkdownText.Apply(bubble.Body, "（已停止）");
-                bubble.Box.Visibility = Visibility.Visible;
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLog.Exception("hubai", ex, "对话请求");
-            Flush(force: true);
-            if (buffer.Length == 0)
-            {
-                MarkdownText.Apply(bubble.Body, ex.Message);
-                bubble.Box.Visibility = Visibility.Visible;
-            }
-        }
-        finally
+        if (onScreen)
         {
             ShowStatus(null);
             RenderSoftwareHits();
             SetBusy(false);
-
-            _streamCts?.Dispose();
-            _streamCts = null;
-
-            PersistSession(usage);
         }
+
+        var body = rt.LiveBody;
+
+        if (onScreen && bubble is not null)
+        {
+            // 一个 token 都没收到就结束了：把"已停止"写在气泡里，别留个空胶囊
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                if (emptyText is not null) MarkdownText.Apply(bubble.Body, emptyText, bubble.BodyForeground);
+            }
+            else
+            {
+                // ⚠️ 最后那一小段增量可能被 PaintLive 的 80ms 节流吃掉 —— 收尾补一次全量重绘
+                MarkdownText.Apply(bubble.Body, body, bubble.BodyForeground);
+            }
+
+            bubble.Box.Visibility = Visibility.Visible;
+            FinishBubble(bubble, usage, body);
+
+            if (ReferenceEquals(_liveBubble, bubble)) _liveBubble = null;
+        }
+
+        PersistSession(rt, sessionId, forkParentId, before, usage);
+    }
+
+    /// <summary>请求失败：先把错误写清楚，再走统一的收尾（存档它已经生成的半截内容）。</summary>
+    private void FailRun(HubAiRuntime rt, string? sessionId, string? forkParentId, int before,
+                         Bubble bubble, Exception ex)
+    {
+        AppLog.Exception("hubai", ex, "对话请求");
+
+        var onScreen = ReferenceEquals(rt, _runtime);
+
+        if (onScreen)
+        {
+            AddNotice("请求失败：" + ex.Message);
+
+            // 一个字都没生成出来 → 把错误顶在气泡里，否则那个气泡是空的
+            if (string.IsNullOrWhiteSpace(rt.LiveBody))
+                MarkdownText.Apply(bubble.Body, ex.Message, bubble.BodyForeground);
+        }
+
+        FinishRun(rt, sessionId, forkParentId, before, bubble, AiUsage.Empty, emptyText: null);
     }
 
     /// <summary>启用的工具。总闸关着、或工具包没装，都返回空 —— 模型于是只能看着体检单回答。</summary>
@@ -1131,6 +1635,80 @@ public sealed partial class HubAiPage : Page
         return tools;
     }
 
+    /// <summary>当前是否已经有一个授权框在等（同一时刻只允许一个）。</summary>
+    private bool _approvalOpen;
+
+    /// <summary>
+    /// 会改动系统的工具执行前的确认框（2026-10-23 加）。
+    /// <para>
+    /// ⛔ 默认动作是**拒绝**（<c>DefaultButton = Close</c>，Esc / 回车都不会误放行）。
+    /// ⚠️ 运行时在后台线程回调，这里必须先切回 UI 线程再弹窗。
+    /// </para>
+    /// </summary>
+    /// <returns>true = 用户允许。</returns>
+    private Task<bool> ApproveToolAsync(string id, string arguments)
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        OnUi(async () =>
+        {
+            if (_approvalOpen)
+            {
+                tcs.TrySetResult(false);
+                return;
+            }
+
+            _approvalOpen = true;
+
+            try
+            {
+                var detail = string.IsNullOrWhiteSpace(arguments) ? "（无参数）" : arguments.Trim();
+                if (detail.Length > 400) detail = detail[..400] + "…";
+
+                var content = new StackPanel { Spacing = 8 };
+
+                content.Children.Add(new TextBlock
+                {
+                    Text = $"助手要执行「{id}」，这个操作会改动本机状态。",
+                    TextWrapping = TextWrapping.Wrap,
+                });
+
+                content.Children.Add(new TextBlock
+                {
+                    Text = detail,
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                    FontSize = 12,
+                    Opacity = 0.75,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot,
+                    Title = "允许这次操作？",
+                    Content = content,
+                    PrimaryButtonText = "允许",
+                    CloseButtonText = "拒绝",
+                    DefaultButton = ContentDialogButton.Close,
+                };
+
+                var result = await dialog.ShowAsync();
+                tcs.TrySetResult(result == ContentDialogResult.Primary);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Exception("hubai", ex, "工具授权对话框");
+                tcs.TrySetResult(false);
+            }
+            finally
+            {
+                _approvalOpen = false;
+            }
+        });
+
+        return tcs.Task;
+    }
+
     /// <summary>一个 AI 气泡的三块内容：思考过程（可折叠）、正文、外框。</summary>
     /// <summary>
     /// 一个 AI 回合（2026-10-19 改成 WorkBuddy 式纯文本流）。
@@ -1149,13 +1727,36 @@ public sealed partial class HubAiPage : Page
         public Border Box = null!;
         public TextBlock Status = null!;      // 「思考中」/「已完成 3m26s」
         public StackPanel Steps = null!;      // 思考段 + 工具条目
-        public RichTextBlock Body = null!;    // 正文
+
+        /// <summary>
+        /// 正文容器。
+        /// ⚠️ 2026-10-23 从 <see cref="RichTextBlock"/> 换成 <see cref="StackPanel"/> ——
+        ///    表格要真的画成 Grid，而 RichTextBlock 里塞不进 Grid（表格只会挤成一行竖线）。
+        /// </summary>
+        public StackPanel Body = null!;
+
+        /// <summary>正文颜色。StackPanel 没有 Foreground 可继承，渲染时要显式传下去。</summary>
+        public Microsoft.UI.Xaml.Media.Brush BodyForeground = null!;
+
         public StackPanel MetaActions = null!;
         public TextBlock MetaText = null!;     // 末尾元数据行（模型 · token · 参考价）
 
-        /// <summary>当前思考段。⚠️ 每调用一次工具就作废，下一段思考重新开一个 Expander。</summary>
-        public Expander? Think;
-        public TextBlock ThinkText = null!;
+        /// <summary>思考段的折叠小标题（2026-10-23 起不再用 Expander，见 MakeCollapsible）。</summary>
+        public Button? ThinkToggle;
+        public FontIcon? ThinkChevron;
+
+        /// <summary>折叠块的标题文字（有工具调用时改成「深度思考 · N 次工具调用」）。</summary>
+        public TextBlock? ThinkCaption;
+
+        /// <summary>折叠块的内容容器：思考段落与工具调用行按发生顺序排。</summary>
+        public StackPanel? ThinkBody;
+
+        /// <summary>**当前这一段**思考的文字块（工具调用之后就换新的一段）。</summary>
+        public TextBlock? ThinkText;
+
+        /// <summary>这一回合调了几次工具。</summary>
+        public int ToolSteps;
+
         public readonly StringBuilder ThinkBuffer = new();
 
         public readonly Stopwatch Clock = Stopwatch.StartNew();
@@ -1163,7 +1764,7 @@ public sealed partial class HubAiPage : Page
         /// <summary>入场动画只播一次（首个 token 到达、气泡真正可见的那一刻）。</summary>
         public bool EnterPlayed;
 
-        public bool IsEmpty => Body.Blocks.Count == 0 && ThinkBuffer.Length == 0;
+        public bool IsEmpty => Body.Children.Count == 0 && ThinkBuffer.Length == 0;
     }
 
     /// <summary>动态气泡用的一套颜色。</summary>
@@ -1223,13 +1824,9 @@ public sealed partial class HubAiPage : Page
         var steps = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 10) };
 
         // ── 正文 ──
-        var body = new RichTextBlock
-        {
-            FontSize = 15,
-            TextWrapping = TextWrapping.Wrap,
-            LineHeight = 25,
-            Foreground = palette.Text,
-        };
+        // ⚠️ StackPanel 而不是 RichTextBlock：表格要真正的 Grid（见 MarkdownText 的 StackPanel 重载）。
+        //    字号/行高/颜色在这里定，渲染时按参数传给每个文本块。
+        var body = new StackPanel { Spacing = 0 };
 
         // ── 末尾元数据：模型 · token · 参考价 · 耗时，右側跟复制/重试图标 ──
         // ⚠️ 2026-10-19 从"左侧独立栏"改成"正文末尾"：WorkBuddy 就是把这一排放在正文下方
@@ -1281,6 +1878,7 @@ public sealed partial class HubAiPage : Page
             Status = status,
             Steps = steps,
             Body = body,
+            BodyForeground = palette.Text,
             MetaActions = metaActions,
             MetaText = metaText,
             ThinkText = null!,
@@ -1338,7 +1936,7 @@ public sealed partial class HubAiPage : Page
     /// <summary>本轮工具命中过的软件，渲染成可点的卡片，点进详情页。</summary>
     private void RenderSoftwareHits()
     {
-        var hits = _chat.Session.SoftwareHits;
+        var hits = _runtime.Chat.Session.SoftwareHits;
         if (hits.Count == 0) return;
 
         var panel = new StackPanel { Spacing = 8 };
@@ -1490,6 +2088,8 @@ public sealed partial class HubAiPage : Page
             MaxWidth = 620,
             HorizontalAlignment = alignRight ? HorizontalAlignment.Right : HorizontalAlignment.Left,
             BorderThickness = new Thickness(1),
+            // 用户气泡打个标记 —— 「↑ 编辑重发」要靠它把最后一轮从消息区摘掉
+            Tag = alignRight ? "hubai-user" : null,
         };
 
         var label = new TextBlock

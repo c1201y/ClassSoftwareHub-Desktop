@@ -99,6 +99,25 @@ public static class AppIconCache
     }
 
     /// <summary>
+    /// 本地缓存文件的物理路径（不论新鲜与否）。
+    ///
+    /// 给「拿不到网络图也必须有点东西可用」的场合 —— 目前是图标主色提取：
+    /// 那张图就躺在盘上，没理由因为网络断了就把详情页色带刷成强调色
+    /// （2026-10-24 Nick 报 ClassIsland：本地有图，详情页却是强调色 + 购物袋占位）。
+    /// </summary>
+    public static bool TryGetLocalPath(string url, out string path)
+    {
+        path = "";
+        if (!IsHttp(url)) return false;
+
+        var p = PathOf(url);
+        if (!File.Exists(p)) return false;
+
+        path = p;
+        return true;
+    }
+
+    /// <summary>
     /// 使本机图标缓存集体失效（标记为陈旧），下次被访问到时按需重下一次。
     /// 由 <see cref="GithubContentSync"/> 在「站点数据确实有变化」时调用 —— 软件清单换过，
     /// 里面的图标地址 / 图标本身就可能已经换了，老缓存不能当永久的用。

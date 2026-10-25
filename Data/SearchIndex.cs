@@ -124,19 +124,18 @@ public static class SearchIndex
     // ── ① 软件 ────────────────────────────────────────────────────
 
     /// <summary>软件：名称命中的排前面，简介/介绍命中排后面。</summary>
-    private static List<SearchHit> SearchApps(string q, int limit)
+    private static List<SearchHit> SearchApps(string q, string[] parts, int limit)
     {
         var byName = new List<SearchHit>();
         var byIntro = new List<SearchHit>();
 
         foreach (var app in App.Content.Apps)
         {
-            if (Normalize(app.Name).Contains(q, StringComparison.Ordinal))
+            if (Hit(app.Name, q, parts))
             {
                 byName.Add(AppHit(app, true));
             }
-            else if (Normalize(app.Tagline).Contains(q, StringComparison.Ordinal)
-                     || Normalize(app.Description).Contains(q, StringComparison.Ordinal))
+            else if (Hit(app.Tagline, q, parts) || Hit(app.Description, q, parts))
             {
                 byIntro.Add(AppHit(app, false));
             }
@@ -157,7 +156,7 @@ public static class SearchIndex
     // ── ② 内置工具 ────────────────────────────────────────────────
 
     /// <summary>内置工具：工具名命中优先，说明命中其次。</summary>
-    private static List<SearchHit> SearchTools(string q, int limit)
+    private static List<SearchHit> SearchTools(string q, string[] parts, int limit)
     {
         var byName = new List<SearchHit>();
         var byDesc = new List<SearchHit>();
@@ -174,8 +173,8 @@ public static class SearchIndex
                 Target = tool.Id,
             };
 
-            if (Normalize(tool.Name).Contains(q, StringComparison.Ordinal)) byName.Add(hit);
-            else if (Normalize(tool.Desc).Contains(q, StringComparison.Ordinal)) byDesc.Add(hit);
+            if (Hit(tool.Name, q, parts)) byName.Add(hit);
+            else if (Hit(tool.Desc, q, parts)) byDesc.Add(hit);
         }
 
         return byName.Concat(byDesc).Take(limit).ToList();
@@ -187,7 +186,7 @@ public static class SearchIndex
     /// 页面：标题 / 说明 / 关键词三处任一命中即可。
     /// 空关键词时返回全部**顶层**页面（面板一开始的"去哪儿"快捷入口）。
     /// </summary>
-    private static List<SearchHit> SearchPages(string q, int limit)
+    private static List<SearchHit> SearchPages(string q, string[] parts, int limit)
     {
         var hits = new List<SearchHit>();
 
@@ -199,9 +198,9 @@ public static class SearchIndex
             {
                 if (!page.TopLevel) continue;
             }
-            else if (!Normalize(page.Title).Contains(q, StringComparison.Ordinal)
-                     && !Normalize(page.Desc).Contains(q, StringComparison.Ordinal)
-                     && !Normalize(page.Keywords).Contains(q, StringComparison.Ordinal))
+            else if (!Hit(page.Title, q, parts)
+                     && !Hit(page.Desc, q, parts)
+                     && !Hit(page.Keywords, q, parts))
             {
                 continue;
             }
@@ -245,6 +244,8 @@ public static class SearchIndex
                 Keywords = "tools 工具 内置工具 小工具 计时器 二维码 取色 编码 哈希" },
         new() { Tag = "sidebar", Title = "侧边布局", Desc = "调整侧边栏收起条与浮窗的外观", Glyph = "\uE8A0", TopLevel = true,
                 Keywords = "sidebar 侧边栏 收起 布局 浮窗 贴边" },
+        new() { Tag = "announce", Title = "教室喊话", Desc = "接收远程喊话，也可向已配对的电脑发送", Glyph = "\uE720", TopLevel = true,
+                Keywords = "announce 喊话 教室喊话 通知 广播 消息 配对码 全屏 朗读" },
         new() { Tag = "experimental", Title = "实验性功能", Desc = "还在验证中的小功能", Glyph = "\uEA80", TopLevel = true,
                 Keywords = "experimental 实验 实验性 尝鲜 测试" },
         new() { Tag = "downloads", Title = "任务进行", Desc = "查看下载与应用更新的进度", Glyph = "\uE896", TopLevel = true,
@@ -284,9 +285,18 @@ public static class SearchIndex
     {
         var q = Normalize(query);
 
+        // 拆词只用于「顺序无关」那一档（见 Hit）：先按空白拆**原文**再各自归一化 ——
+        // q 里的空格已经被 Normalize 去掉了，没法再拆。
+        var parts = (query ?? "")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(Normalize)
+            .Where(p => p.Length > 0)
+            .Distinct()
+            .ToArray();
+
         if (q.Length == 0)
         {
-            var quick = SearchPages("", Pages.Count(p => p.TopLevel));
+            var quick = SearchPages("", Array.Empty<string>(), Pages.Count(p => p.TopLevel));
             return quick.Count > 0
                 ? new List<SearchGroup> { new() { Kind = SearchHitKind.Page, Hits = quick } }
                 : new List<SearchGroup>();
@@ -294,15 +304,56 @@ public static class SearchIndex
 
         var groups = new List<SearchGroup>
         {
-            new() { Kind = SearchHitKind.App, Hits = SearchApps(q, limitPerKind) },
-            new() { Kind = SearchHitKind.Tool, Hits = SearchTools(q, limitPerKind) },
-            new() { Kind = SearchHitKind.Page, Hits = SearchPages(q, limitPerKind) },
+            new() { Kind = SearchHitKind.App, Hits = SearchApps(q, parts, limitPerKind) },
+            new() { Kind = SearchHitKind.Tool, Hits = SearchTools(q, parts, limitPerKind) },
+            new() { Kind = SearchHitKind.Page, Hits = SearchPages(q, parts, limitPerKind) },
         };
 
         return groups.Where(g => g.Hits.Count > 0).ToList();
     }
 
-    private static string Normalize(string? value) => (value ?? "").Trim().ToLowerInvariant();
+    /// <summary>
+    /// 单字段是否命中。两级判定：
+    /// ① 整串包含 —— 「7 zip」归一成「7zip」，命中「7-Zip」归一成的「7zip」；
+    /// ② 每个词都出现即可，**顺序无关** —— 「zip 7」也命中「7-Zip」。
+    ///
+    /// ⚠️ ② 只在输入多于一个词时启用；单字输入走 ① 就够，否则「a」这种会把整张表都捞出来。
+    /// </summary>
+    private static bool Hit(string? text, string q, string[] parts)
+    {
+        var t = Normalize(text);
+        if (t.Length == 0) return false;
+
+        if (t.Contains(q, StringComparison.Ordinal)) return true;
+        if (parts.Length < 2) return false;
+
+        foreach (var part in parts)
+            if (!t.Contains(part, StringComparison.Ordinal)) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// 搜索用的归一化：转小写，**并去掉分隔符**。
+    ///
+    /// ⚠️ 去分隔符这一步是 2026-10-24 加的（Nick：搜「7 zip」找不到 7-Zip，加个横杠才搜到）。
+    ///    清单里带横杠/空格/点的名字很常见（7-Zip、Class Widgets 2、VLC media player），
+    ///    不去掉的话查询与目标永远差一个字符。中文名基本不涉及这些符号，不受影响。
+    /// </summary>
+    private static string Normalize(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+
+        var sb = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            // 只掐「词内连接用的符号」；括号、冒号之类保留，免得把语义也磨平了
+            if (ch is ' ' or '\t' or '-' or '_' or '.' or '/' or '\\' or '·' or '—' or '–') continue;
+            sb.Append(char.ToLowerInvariant(ch));
+        }
+
+        return sb.ToString();
+    }
 
     /// <summary>简介太长时截断（卡片只显示一行，没必要拼一个长字符串）。与站点同：空白折叠成单空格，90 字封顶。</summary>
     private static string Clip(string? value, int max = 90)

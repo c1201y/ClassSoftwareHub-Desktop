@@ -92,7 +92,7 @@
                 </Grid>
 
                 <!-- ===== 常用工具窗口：开关就放这儿，跟首页「体验网页版」那张卡一个意思 ===== -->
-                <Border Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,20,0,0"
+                <Border x:Name="PaletteCard" Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,20,0,0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                     <Grid ColumnSpacing="16" RowSpacing="12">

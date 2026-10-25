@@ -120,7 +120,7 @@ public sealed partial class SubjectToolsWindow : Window
             _suppress = was;
         }
 
-        NavigateTo(Tools[index].Page);
+        NavigateTo(Tools[index].Page, Tools[index].Id);
         Remember(Tools[index].Id);
     }
 
@@ -132,15 +132,25 @@ public sealed partial class SubjectToolsWindow : Window
         var index = Array.FindIndex(Tools, t => t.Id == id);
         if (index < 0) return;
 
-        NavigateTo(Tools[index].Page);
+        NavigateTo(Tools[index].Page, Tools[index].Id);
         Remember(Tools[index].Id);
     }
 
-    private void NavigateTo(Type page)
+    private void NavigateTo(Type nativePage, string? toolId)
     {
+        // Web 优先：这个工具有网页版、且本机跑得动 → 交给宿主页（与主页同一套渲染）；
+        // 否则走原生页。⛔ 不弹任何提示：降级对用户是无感的（与 ToolHostPage 一致，Nick 定）。
+        if (toolId is not null && ToolCarrier.RequestFor(toolId, nativePage, null) is { } request)
+        {
+            // 已经在网页版上就别重建（否则会把用户刚画的东西清掉）
+            if (ContentFrame.Content is Pages.ToolHostPage) return;
+            ContentFrame.Navigate(typeof(Pages.ToolHostPage), request);
+            return;
+        }
+
         // 已经停在这一页就别再 Navigate 一次（会白重建一遍页面、把用户刚输入的内容清掉）
-        if (ContentFrame.Content?.GetType() == page) return;
-        ContentFrame.Navigate(page);
+        if (ContentFrame.Content?.GetType() == nativePage) return;
+        ContentFrame.Navigate(nativePage);
     }
 
     private static void Remember(string id)

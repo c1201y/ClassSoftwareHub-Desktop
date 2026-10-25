@@ -25,10 +25,10 @@
          预览版末段跟着 insider 迭代号走（insider1.5 → 1.2.0.5），
          **转正式版时末段回落 0**（1.2.0 → 1.2.0.0）。
          界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
-    <Version>1.2.0-insider1.4</Version>
+    <Version>1.2.0-insider1.5</Version>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
-    <InformationalVersion>1.2.0-insider1.4</InformationalVersion>
+    <InformationalVersion>1.2.0-insider1.5</InformationalVersion>
     <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
          否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -87,11 +87,32 @@
          ⚠️ 运行时由 Services/TimerAlarm.cs 释放到 cache\ 再交给 MediaPlayer ——
             单文件发布下旁边没有散落文件可读，只能走内嵌这条路。 -->
     <EmbeddedResource Include="Assets\Audio\timer-alarm.wav" />
+    <!-- 教室喊话的默认提示音（2026-10-25，Nick 提供的 wav）。同样释放到 cache\ 再交给 MediaPlayer；
+         用户在接收端自选音效后走 AnnounceSoundPath，不在了自动退回这一份。 -->
+    <EmbeddedResource Include="Assets\Audio\announce-alert.wav" />
+
+    <!-- 教室喊话的字体（2026-10-25 Nick 给的 HarmonyOS Sans SC，随桌面 Fonts 目录一起）。
+         ⚠️ 用 Content + 拷到输出目录，XAML 里以 ms-appx:///Assets/Fonts/xxx.ttf#HarmonyOS Sans SC 引用 ——
+            unpackaged 应用下 ms-appx 指向 exe 所在目录，所以必须真的拷过去。 -->
+    <Content Include="Assets\Fonts\HarmonyOS_Sans_SC_Medium.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fonts\HarmonyOS_Sans_SC_Bold.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fonts\HarmonyOS_Sans_SC_Light.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\Fonts\HarmonyOS_LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- 首页 / 设置页「快捷入口」的 3 个 SVG 图标（项目仓库 / 作者主页 / 加入Q群）。
          颜色用 __C__ 占位，运行时按主题色（TextFillColorPrimary）注入，浅色/深色自适应。 -->
     <EmbeddedResource Include="Assets\QuickLinks\GITHUB.svg" />
     <EmbeddedResource Include="Assets\QuickLinks\主页.svg" />
     <EmbeddedResource Include="Assets\QuickLinks\QQ.svg" />
+  </ItemGroup>
+
+  <!-- 随应用附带的网页工具包（ClassSoftwareHub-Desktop-MathTool 的构建产物，Nick 2026-10-25）。
+       ⚠️ 不放 DataDir\tools：那个目录会被内容同步整体镜像、清掉仓库里没有的文件。
+       放程序目录下、随安装包发出去；ToolCarrier 额外查这个"随包附带"位置。
+       index.html + vendor（jsxgraph / katex）一起拷进输出，安装包通配会带上。
+       ⚠️ 排除 _superseded-handmade：那是被 MathTool 取代的早期手写版备份（2026-10-25 从
+          DataDir\tools 移过来的，以防需要回退），只留在仓库里，不进安装包。 -->
+  <ItemGroup>
+    <Content Include="WebTools\**" Exclude="WebTools\_superseded-handmade\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- ⛔⛔ 安装包**不带**内容包（2026-10-05 Nick 定案"以后统统只有通过网络获取更新的途径"）。
