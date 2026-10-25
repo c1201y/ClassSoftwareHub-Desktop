@@ -550,12 +550,12 @@ public sealed partial class DetailPage : Page
         });
 
         var flyout = new Flyout { Content = panel };
-        foreach (var channel in GithubMirror.Channels)
+
+        void AddChannelButton(string name, string target)
         {
-            var target = GithubMirror.MirrorUrl(url, channel);
             var button = new Button
             {
-                Content = channel.Name,
+                Content = name,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Tag = target,
@@ -571,6 +571,14 @@ public sealed partial class DetailPage : Page
             };
             panel.Children.Add(button);
         }
+
+        foreach (var channel in GithubMirror.Channels)
+            AddChannelButton(channel.Name, GithubMirror.MirrorUrl(url, channel));
+
+        // IP 直连反代（2026-10-25）：拼法是「换掉 github.com 这个 host」而不是加前缀，
+        // 与上面几条不是一个套路，所以单独列一条。域名被按 SNI 拦掉的线路上，公益镜像全废，只剩它能用。
+        if (Core.GithubIpRelay.CanRelay(url))
+            AddChannelButton(Core.GithubIpRelay.Name, Core.GithubIpRelay.Relay(url));
 
         panel.Children.Add(new TextBlock
         {
