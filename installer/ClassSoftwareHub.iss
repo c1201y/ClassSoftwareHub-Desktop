@@ -25,7 +25,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.2.0-insider1.6"
+  #define DesktopVersion "1.2.0-insider1.7"
 #endif
 
 #define AppName "ClassSoftwareHub"
@@ -86,7 +86,10 @@ Name: "chinese"; MessagesFile: "ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+; ⛔ Flags: unchecked —— 默认**不勾**。静默升级靠 UpdateService 传 /MERGETASKS 表态（2026-10-27）；
+;    交互式安装时 InitializeWizard 会按「桌面上原本有没有图标 / 是不是首次安装」预勾选，
+;    所以这里默认不勾只影响"没人表态"的情况 —— 那正是过去图标自己冒出来的原因。
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "..\dist\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

@@ -528,7 +528,6 @@ public sealed partial class SettingsPage : Page
         UpdateStatus.Text = channel == UpdateChannels.Insider
             ? "Insider 通道：优先收 Pre-release；正式版发出来比当前还新时，也会自动跟上。"
             : "稳定通道：只收 Latest（正式发布）的版本。";
-        UpdateNotes.Visibility = Visibility.Collapsed;
     }
 
     private void AutoCheckSwitch_Toggled(object sender, RoutedEventArgs e)
@@ -544,7 +543,6 @@ public sealed partial class SettingsPage : Page
         if (_updateBusy) return;
         _updateBusy = true;
         CheckButton.IsEnabled = false;
-        UpdateNotes.Visibility = Visibility.Collapsed;
         UpdateStatus.Text = "正在检查更新…";
 
         try
@@ -559,10 +557,9 @@ public sealed partial class SettingsPage : Page
 
             if (result is { HasUpdate: true, Release: { } release })
             {
-                var notes = Snip(release.Notes, 400);
-                // ⛔ 不能直接赋 Text：那样把 `![..](..)`、`---`、`#` 原样显示成源码（2026-10-22）
-                MarkdownText.Apply(UpdateNotes, notes);
-                UpdateNotes.Visibility = notes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                // ⛔ 这里原来会把发版正文渲染进设置卡（UpdateNotes）。2026-10-26 去掉：
+                //    一屏马克down 撑满整页、还把配图链接显示成源码，用户直接说"排版该改一改"。
+                //    正文改由下面的更新对话框展示（它只挑「前言」要点，已洗干净）。
                 UpdateStatus.Text = $"发现新版本 {release.Tag}，可自行选择是否安装。";
 
                 // 先问；选「稍后」就什么都不做
@@ -842,13 +839,6 @@ public sealed partial class SettingsPage : Page
         if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
 
         await UpdateFlow.RunAsync(XamlRoot, _updater, release, "正在安装指定版本");
-    }
-
-    private static string Snip(string text, int max)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return "";
-        var t = text.Replace("\r", "").Trim();
-        return t.Length <= max ? t : t[..max] + "…";
     }
 
     // ── 安装包自动清理（updates 目录） ─────────────────────────

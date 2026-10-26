@@ -18,14 +18,20 @@ namespace ClassSoftwareHub.Desktop.Services;
 /// </summary>
 public static class SubmitEndpoint
 {
-    /// <summary>入口按顺序试：先 CDN 新域，再 CF 直连（与网页版一致）。</summary>
-    public static readonly string[] All =
-    {
-        "https://cshapi.132614.xyz",
-        "https://submit.132614.xyz",
-    };
+    /// <summary>
+    /// 入口按顺序试。
+    ///
+    /// ⛔ 清单本体在 <see cref="Core.ServiceEndpoints.All"/> —— 这里只是别名。
+    ///    早先这里自己抄了一份数组，而 <see cref="Core.ShellConfig.SubmitEndpoints"/> 也有一份：
+    ///    投稿页与 OSS 直传走这份、喊话与反馈走那份，改一处忘一处就会让它们走不同域名
+    ///    （2026-10-26 核对时两处内容相同，属侥幸未出事）。
+    /// </summary>
+    public static string[] All => Core.ServiceEndpoints.All;
 
-    /// <summary>单个入口的超时时间：连不上时尽快换下一个入口，不让用户干等（两个入口最坏 20 秒）。</summary>
+    /// <summary>
+    /// 单个入口的超时时间：连不上时尽快换下一个入口，不让用户干等。
+    /// ⚠️ 2026-10-26 加入第三条入口后，全失败的最坏等待从 20 秒变成 30 秒。
+    /// </summary>
     public const int TimeoutMs = 10000;
 
     private static string FilePath => Path.Combine(Core.AppPaths.DataDir, "submit-endpoint.txt");

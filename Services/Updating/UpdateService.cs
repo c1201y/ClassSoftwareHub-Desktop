@@ -491,7 +491,15 @@ public sealed class UpdateService
         var desktopLnk = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
             "ClassSoftwareHub.lnk");
-        var tasksArg = File.Exists(desktopLnk) ? "/TASKS=\"desktopicon\"" : "";
+
+        // ⛔⛔ 两种情况都必须**显式表态**，不能「不存在就不传参数」（2026-10-27 修）。
+        //   静默安装不带 /TASKS 时用的是**默认勾选集**，而 desktopicon 在 .iss 里默认是勾上的
+        //   ⇒ 用户把桌面图标删了，更新一次又被装回来 —— 就是「运行时自动在桌面建图标」的来源。
+        //   这里用 /MERGETASKS（合并语义）而不是 /TASKS（整体覆盖）：将来 .iss 加新任务时，
+        //   不会因为这里只写了一个任务而被顶掉；`!` 前缀表示取消勾选。
+        var tasksArg = File.Exists(desktopLnk)
+            ? "/MERGETASKS=\"desktopicon\""
+            : "/MERGETASKS=\"!desktopicon\"";
         var installerArgs =
             $"/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES {tasksArg}".Trim();
 

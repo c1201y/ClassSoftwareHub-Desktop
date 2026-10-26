@@ -47,9 +47,12 @@
                                Text="打开接收后，同网段的电脑可直接发过来（零延迟、不经过服务器），其他情况走服务器，最长一个检查间隔送达。" />
                 </StackPanel>
 
-                <!-- 分页：WinUI 原生 SelectorBar -->
+                <!-- 分页：WinUI 原生 SelectorBar
+                     ⚠️ 这里**不写** IsSelected：默认停在哪一页由「打开时默认显示」决定，
+                        写在 XAML 里会和构造期的选中互相覆盖（2026-10-27 修的就是这个：
+                        选了「发送」，打开仍然停在「接收」）。-->
                 <SelectorBar x:Name="Tabs" SelectionChanged="Tabs_SelectionChanged">
-                    <SelectorBarItem Text="接收" Tag="receive" IsSelected="True" />
+                    <SelectorBarItem Text="接收" Tag="receive" />
                     <SelectorBarItem Text="发送" Tag="send" />
                 </SelectorBar>
 
@@ -116,9 +119,15 @@
                                       Toggled="Lan_Changed" />
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard x:Name="FirewallCard" Header="放行防火墙"
-                                           Description="首次开启局域网通道后需要放行一次入站规则（会弹出 UAC）。">
-                        <Button x:Name="FirewallButton" Content="放行" Click="Firewall_Click" />
+                    <!-- 防火墙：只在检测到真的拦住了才出现（见 FirewallGateway）。
+                         ⚠️ 以前这里常驻 + 每次都要点一次「放行」再弹一次 UAC，
+                            根因是检测逻辑把中文输出按错误编码解码，永远判成「没放行」。 -->
+                    <controls:SettingsCard x:Name="FirewallCard" Header="局域网通道被 Windows 防火墙拦截">
+                        <controls:SettingsCard.Description>
+                            <TextBlock x:Name="FirewallDesc" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                       Text="修复需要一次管理员确认，完成后不会再询问。" />
+                        </controls:SettingsCard.Description>
+                        <Button x:Name="FirewallButton" Content="修复" Click="Firewall_Click" />
                     </controls:SettingsCard>
 
                     <!-- 谁保存了本机配对码（2026-10-25 Nick：防滥用，可查看与删除） -->
@@ -227,7 +236,7 @@
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="局域网里的电脑" FontSize="14" />
                                     <TextBlock x:Name="PeerHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                               Text="局域网通道未开启，开启后会在这里列出同网段的电脑。" />
+                                               Text="局域网通道未开启。请到「接收」页打开「局域网通道」，同一网段的电脑才会出现在这里。" />
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="刷新" Click="RefreshPeers_Click" VerticalAlignment="Center" />
                             </Grid>

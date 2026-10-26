@@ -633,6 +633,12 @@ public sealed partial class MainWindow : Window
         }
         catch { }
 
+        // 自启项自愈：Run 值不会自己跟着 exe 走。换安装位置、升级、跑过构建产物之后，
+        // 它就指向一条已经不存在的路径 —— 开机时"什么都没启动"，但界面上开关还是开着的。
+        // （2026-10-27 实测：值指向已被删除的 bin\Debug\...\win-x64\，安装版却在 LOCALAPPDATA\Programs\）
+        // ⚠️ 只在开着自启时校正；关着就一个字都别动。
+        if (_settings.Current.AutoStart) ApplyAutoStart();
+
         _appWindow.Closing += (_, _) =>
         {
             Core.AppLog.Info("exit", "主窗 Closing#1 SaveWindowState");
@@ -773,19 +779,30 @@ public sealed partial class MainWindow : Window
         //    换回一台更小的机器会超出屏幕 —— 按当前屏幕夹一趟。
         //    ⚠️ 用 Win32 而不是 DisplayArea：本机实测 DisplayArea.FindAll() 拿不到有效结果，
         //       拿它判"位置在不在屏上"会永远判否 ⇒ 记忆下来的位置从不生效。
+        // ⚠️ 夹的是**工作区**而不是整屏：整屏高度把任务栏也算进去，
+        //    于是「复原成上次大小」的窗口会压住任务栏（2026-10-26 用户截图里的现象之一）。
         var maxW = GetSystemMetrics(SmCxScreen);
         var maxH = GetSystemMetrics(SmCyScreen);
+        if (GetWorkArea(out var work))
+        {
+            maxW = work.Right - work.Left;
+            maxH = work.Bottom - work.Top;
+        }
         if (maxW > 0) w = Math.Min(w, maxW);
         if (maxH > 0) h = Math.Min(h, maxH);
 
-        _appWindow.Resize(new SizeInt32(w, h));
+        _pendingMaximize = s.WindowMaximized;
+
+        // ⛔ 要最大化时**不要在启动期 Resize**：对随即要最大化的窗口先 Resize 一次，
+        //    会和系统异步套回来的最大化状态打架，落成"最大化标志 + 普通矩形"的坏状态
+        //    （详见 ApplyPlacementCore 的注释）。
+        if (!_pendingMaximize) _appWindow.Resize(new SizeInt32(w, h));
 
         if (s.WindowLeft != int.MinValue && s.WindowTop != int.MinValue
             && IsVisibleOnAnyScreen(s.WindowLeft, s.WindowTop, w, h))
         {
             _pendingPosition = new PointInt32(s.WindowLeft, s.WindowTop);
         }
-        _pendingMaximize = s.WindowMaximized;
 
         // ⚠️ Move() 不能在构造期就喊：窗口那时还没真正落位，系统随后会把它摆回默认位置，
         //    我们摆的坐标被吃掉（实测只认大小、位置回到左上角）。挪到激活之后再摆。
@@ -797,6 +814,9 @@ public sealed partial class MainWindow : Window
     }
 
     private PointInt32? _pendingPosition;
+
+    /// <summary>开机最小化 / 浮窗启动时跳过了窗口摆放，等用户第一次从托盘叫出来再补。</summary>
+    private bool _placementDeferred;
     private bool _pendingMaximize;
     private bool _placementApplied;
 
@@ -849,12 +869,38 @@ public sealed partial class MainWindow : Window
         {
             if (_appWindow is null) return;
 
-            if (_pendingPosition is { } p) _appWindow.Move(p);
-            if (_pendingMaximize)
+            // ⛔⛔ 「开机最小化」/「--palette」启动时，主窗口本来就不该露脸 —— 这里**一条都不能动**。
+            //   原因：HideToTray() 只是 SW_HIDE，而 Maximize() / Move() 都会把隐藏的窗口**重新显示**出来。
+            //   2026-10-27 实测（--minimized 启动，每 30ms 采样）：
+            //       503ms 可见=False → 1191ms 可见=True → 1223ms 被最大化 → 1256ms 才又隐藏
+            //   用户看到的就是「开机自启时窗口闪一下、而且闪出来时是最大化的」。
+            //   ⇒ 先记账，等用户真从托盘叫出来时再摆（见 ShowFromTray）。
+            if (_startMinimized || _startPalette)
             {
-                if (_appWindow.Presenter is OverlappedPresenter op) op.Maximize();
+                _placementDeferred = true;
                 return;
             }
+
+            // ⛔⛔ 最大化时**只调 Maximize** —— Move 和 Resize 一条都不能碰。
+            //   对已经最大化的窗口 Move 一次，WinUI 会把"最大化尺寸"当成普通尺寸落下来，
+            //   同时保留最大化标志，得到一个「状态是最大化、矩形却跑到工作区外面」的怪窗口：
+            //     · 直边框  —— 最大化状态下 DWM 不给圆角
+            //     · 半透明  —— 多出来的那块没有内容，透的是 Mica 底
+            //     · 压住任务栏、右边超出屏幕
+            //   2026-10-26 实测：屏幕工作区 0,0 1920x1020，窗口却是 564,50 1938x1038 状态=最大化。
+            //   这个坏状态是**每次启动都会重新造出来**的 —— 因为下面 600ms 的二次校正
+            //   又对最大化窗口 Move 了一遍。
+            if (_pendingMaximize)
+            {
+                if (_appWindow.Presenter is OverlappedPresenter op
+                    && op.State != OverlappedPresenterState.Maximized)
+                {
+                    op.Maximize();
+                }
+                return;
+            }
+
+            if (_pendingPosition is { } p) _appWindow.Move(p);
 
             // 记忆里是「没最大化」⇒ 现在若被系统顶成最大化，就还原回来再摆一次
             if (_appWindow.Presenter is OverlappedPresenter p2
@@ -923,6 +969,20 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
 
+    /// <summary>取主屏工作区（不含任务栏）。取不到返回 false，调用方退回用整屏尺寸。</summary>
+    private static bool GetWorkArea(out NativeRect rect)
+    {
+        rect = default;
+        try { return SystemParametersInfo(SpiGetWorkArea, 0, ref rect, 0); }
+        catch { return false; }
+    }
+
+    private const uint SpiGetWorkArea = 0x0030;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(uint action, uint param, ref NativeRect data, uint winIni);
+
     /// <summary>
     /// 窗口大小 / 位置一变就记一笔（节流 700ms）。
     ///
@@ -942,6 +1002,10 @@ public sealed partial class MainWindow : Window
             //    于是"明明已经还原了"却仍被判成最大化、一条都不写。
             var hwnd = WindowNative.GetWindowHandle(this);
             if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rc)) return;
+
+            // ⛔ 收进托盘 / 开机最小化期间窗口是隐藏的，此时读到的是「隐藏前或系统默认」的矩形
+            //    （开机自启时就是那个 1440×740），存下去会把用户记住的尺寸覆盖掉。
+            if (!IsWindowVisible(hwnd)) return;
 
             var sizeW = rc.Right - rc.Left;
             var sizeH = rc.Bottom - rc.Top;
@@ -1391,6 +1455,13 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            // 开机最小化启动时这里没摆过位置/最大化：先摆再显示，别让它先以默认尺寸露一帧
+            if (_placementDeferred)
+            {
+                _placementDeferred = false;
+                ApplyPlacementCore();
+            }
+
             var hwnd = WindowNative.GetWindowHandle(this);
             ShowWindow(hwnd, SW_SHOW);
             if (_appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Minimized)
@@ -1497,8 +1568,26 @@ public sealed partial class MainWindow : Window
             {
                 var exe = Environment.ProcessPath;
                 if (string.IsNullOrEmpty(exe)) return;
+
+                // ⛔ 跑的是构建产物（路径含 \bin\）时，别把自启指到 bin 下 ——
+                //   那个目录随时会被清理/重建（OneDrive 配额、重新编译），指过去就是
+                //   "开机时什么都没启动"。装了正式版就让自启走正式版。
+                if (exe.Contains(@"\bin\", StringComparison.OrdinalIgnoreCase))
+                {
+                    var installed = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Programs", "ClassSoftwareHub", "ClassSoftwareHub.exe");
+                    if (File.Exists(installed)) exe = installed;
+                }
+
                 var cmd = _settings.Current.MinimizeOnStart ? $"\"{exe}\" --minimized" : $"\"{exe}\"";
-                key.SetValue(valueName, cmd);
+                var current = key.GetValue(valueName) as string;
+                if (!string.Equals(current, cmd, StringComparison.OrdinalIgnoreCase))
+                {
+                    key.SetValue(valueName, cmd);
+                    Core.AppLog.Info("startup",
+                        $"开机自启项已校正：{(string.IsNullOrEmpty(current) ? "(原本没有)" : current)} → {cmd}");
+                }
             }
             else if (key.GetValue(valueName) is not null)
             {

@@ -38,6 +38,16 @@ public static class AnnounceService
     /// <summary>单个入口的超时（与投稿一致：超时就换下一个入口，别让用户干等）。</summary>
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
+    /// <summary>
+    /// 轮询专用客户端，超时压到 6 秒（2026-10-27）。
+    /// <para>
+    /// 轮询是后台循环，不是用户点出来的操作 —— 一个入口卡 10 秒、三个入口就是 30 秒，
+    /// 期间状态行一直显示「正在连接」，看起来就是「服务器连不上」。
+    /// 6 秒还没回应基本可以判这一个入口不通，换下一个更划算。
+    /// </para>
+    /// </summary>
+    private static readonly HttpClient PollHttp = new() { Timeout = TimeSpan.FromSeconds(6) };
+
     private static readonly object Gate = new();
 
     // ── 配对码 ────────────────────────────────────────────────────────────────
@@ -186,13 +196,15 @@ public static class AnnounceService
         var query = $"deviceId={DeviceFingerprint.Value}&pairCode={MyPairCode}&name={name}";
         var gotAnswer = false;   // 只要有一个入口回了 HTTP 状态就算"网络通"
         string? firstError = null;   // 第一次失败的原因（只用于日志：光说"不可达"排不出是断网还是被拦）
+        var tried = 0;               // 这一轮实际试了几个入口（入口清单改了要能一眼看出来）
 
         foreach (var baseUrl in ShellConfig.OrderedSubmitEndpoints())
         {
             System.Net.Http.HttpResponseMessage resp;
+            tried++;
             try
             {
-                resp = await Http.GetAsync(baseUrl.TrimEnd('/') + "/api/announce/poll?" + query);
+                resp = await PollHttp.GetAsync(baseUrl.TrimEnd('/') + "/api/announce/poll?" + query);
             }
             catch (Exception ex)
             {
@@ -252,8 +264,9 @@ public static class AnnounceService
                 _failStreak++;
                 _backoffSec = Math.Min(120, 15 * (1 << Math.Min(_failStreak, 3)));   // 15/30/60/120 封顶
                 if (_failStreak == 1 || _failStreak % 5 == 0)
-                    AppLog.Warn("announce", $"所有入口均不可达（连续第 {_failStreak} 轮），退避 {_backoffSec}s"
-                        + (string.IsNullOrEmpty(firstError) ? "" : $"：{firstError}"));
+                    AppLog.Warn("announce",
+                        $"所有入口均不可达（连续第 {_failStreak} 轮，试了 {tried}/{ShellConfig.SubmitEndpoints.Length} 个入口），"
+                        + $"退避 {_backoffSec}s" + (string.IsNullOrEmpty(firstError) ? "" : $"：{firstError}"));
             }
         }
     }

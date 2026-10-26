@@ -103,6 +103,17 @@ public sealed class ChatSession
 
         if (string.IsNullOrEmpty(CurrentId) || Entries.All(e => e.Id != CurrentId))
             CurrentId = Entries.Count > 0 ? Entries[^1].Id : null;
+
+        // 修复历史孤链：一个会话只该有**一个根**。多出来的根是早期「续聊传 forkParentId=null」
+        // 留下的断点（成因见 SaveBranch 里的注释）：每次续聊都种一条新根，旧历史被割在外面。
+        // Entries 是追加顺序，所以把第 i 个根接到 Entries[i-1] 后面就能重新串成一条线。
+        // ⚠️ 这里**只改内存、不写盘** —— 等下一次正常保存时自然落盘，
+        //    避免"只是打开看了一眼历史"就去改用户数据。
+        for (var i = 1; i < Entries.Count; i++)
+        {
+            if (string.IsNullOrEmpty(Entries[i].ParentId))
+                Entries[i].ParentId = Entries[i - 1].Id;
+        }
     }
 
     /// <summary>当前分支：根 → 叶子。</summary>
@@ -253,7 +264,13 @@ public static class ChatSessionStore
 
             session.EnsureTree();
 
-            var cursor = parentId;
+            // ⛔⛔ 普通续聊必须挂到**当前叶子**（session.CurrentId），不能直接用调用方传的 null。
+            //    上游 insider 版就是这里吃 null：每次续聊都往存档里种一条新根，于是新节点与旧历史
+            //    彻底断开 —— Branch() 从 CurrentId 回溯到 null 只剩刚发的那两条，之前的上下文在界面上
+            //    直接"消失"（就是群里说的「脱离旧存档的孤链」）。
+            //    ✅ 只有真正分叉（编辑重发 / 重新生成）才用调用方给的 parentId；
+            //       新会话 sessionId 为空 ⇒ CurrentId 也是 null，正好落在根上，语义不变。
+            var cursor = parentId ?? session.CurrentId;
             var added = 0;
 
             foreach (var message in turns)

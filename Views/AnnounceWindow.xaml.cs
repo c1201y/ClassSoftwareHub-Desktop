@@ -94,7 +94,8 @@ public sealed partial class AnnounceWindow : Window
         _durationSec = Math.Clamp(msg.Duration <= 0 ? 30 : msg.Duration, 5, 180);
         _remainSec = _durationSec;
 
-        BodyText.Text = msg.Text ?? "";
+        _fullText = msg.Text ?? "";
+        BodyText.Text = _fullText;
 
         // 署名只写名字，不带「说」（2026-10-25 Nick 要求）
         if (!string.IsNullOrWhiteSpace(msg.From))
@@ -106,6 +107,9 @@ public sealed partial class AnnounceWindow : Window
         {
             FromText.Visibility = Visibility.Collapsed;
         }
+
+        // 探针必须挂在视觉树里，Measure 出来的换行高度才作数（见 _measureProbe 的注释）
+        Root.Children.Add(_measureProbe);
 
         Root.SizeChanged += (_, _) => FitText();
         Root.Loaded += (_, _) => FitText();
@@ -122,12 +126,18 @@ public sealed partial class AnnounceWindow : Window
 
     public void Start()
     {
-        Activate();
-
+        // ⛔⛔ 顺序：**先摆成全屏，再显示**。原来反着来，代价是肉眼可见的「跳」。
+        //   2026-10-26 用 GetWindowRect 每 25ms 连拍实测到的三段尺寸：
+        //       267ms  64,64   1440x740   ← Activate 之后按默认尺寸露了一帧
+        //       426ms   0,0    1920x1020  ← MoveAndResize 到工作区（比屏幕少 60px 任务栏）
+        //       533ms   0,0    1920x1080  ← SetPresenter(FullScreen) 才真全屏
+        //   270 毫秒里变两次尺寸 = 「跳」；而这几帧窗口又是透明的，所以透出来的是背后的主界面。
+        //   ✅ 两步都能省：全屏呈现器自己就把窗口铺满整块屏幕，不需要先 MoveAndResize；
+        //      把 Activate 挪到最后，用户看到的第一帧就已经是全屏。
         try
         {
-            var hwnd = WindowNative.GetWindowHandle(this);
-            _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(hwnd));
+            // 用 Window.AppWindow（不依赖 HWND 是否已经显示）
+            _appWindow = AppWindow;
             _appWindow.Title = "远程喊话";
 
             if (_appWindow.Presenter is OverlappedPresenter presenter)
@@ -136,15 +146,14 @@ public sealed partial class AnnounceWindow : Window
                 presenter.IsResizable = false;
             }
 
-            // 全屏：先把窗口铺满工作区，再切成全屏呈现器 —— 换呈现器再挪尺寸时标题栏状态更干净
-            var area = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary).WorkArea;
-            _appWindow.MoveAndResize(area);
             _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         }
         catch (Exception ex)
         {
             AppLog.Fail("announce", ex, "喊话窗全屏失败");
         }
+
+        Activate();
 
         SetupDimBackdrop();
 
@@ -157,16 +166,61 @@ public sealed partial class AnnounceWindow : Window
 
     private bool _begun;
 
+    /// <summary>完整正文。打字机过程中 BodyText.Text 只剩「已显示的那几个字」，
+    /// 而 SizeChanged 会再次触发 FitText —— 拿半截文本量高度，字号会一路变大跳版。</summary>
+    private string _fullText = "";
+
+    /// <summary>FitText 算出的正文实际高度（打字机据此预留位置，避免逐字时行数跳动）。</summary>
+    private double _fittedHeight;
+
+    /// <summary>亚克力背景是否真的挂上了（决定变暗层盖多厚）。</summary>
+    private bool _acrylicReady;
+
+
+    /// <summary>
+    /// 真实高度测量用的探针。
+    /// ⛔⛔ 2026-10-26 实测：离屏对象（没挂进视觉树）量多行换行文本的高度**不可靠** ——
+    ///    FitText 因此以为 96 号也放得下，长消息被上下裁掉（Nick 截图）。
+    ///    反过来对树内 BodyText 调 Measure() 又会拿布局缓存、改字号不重算（2026-10-25 的坑）。
+    ///    正解：**挂进视觉树** + UpdateLayout() 强制重排，读 ActualHeight。
+    /// </summary>
+    private readonly TextBlock _measureProbe = new()
+    {
+        Opacity = 0,
+        IsHitTestVisible = false,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Top,
+        TextWrapping = TextWrapping.Wrap,
+        TextAlignment = TextAlignment.Center,
+    };
+
     private void TryBegin()
     {
         if (_begun) return;
         if (Root.ActualWidth < 200 || Root.ActualHeight < 200) return;
 
+        // ⛔ 全屏是两段式的（先铺工作区、再换呈现器），中间那次 SizeChanged 的高度少一条任务栏。
+        //    在这里就开始算字号/切行，长消息会按「小一圈」的高度排版然后超出屏幕。
+        // ⛔⛔ 比较基准必须是 DIP：`XamlRoot.Size` 与 `ActualHeight` 同为 DIP。
+        //    早先用的 `DisplayArea.OuterBounds.Height` 是**物理像素**（1080），而 ActualHeight 是
+        //    DIP（125% 缩放下只有 864）—— 864 < 1080×0.95 恒成立，TryBegin 被永久挡住，
+        //    表现是「动画、顶栏、底栏、署名全都没有、屏幕也不变暗」（2026-10-26 实测）。
+        var rootSize = Root.XamlRoot?.Size;
+        if (rootSize is { Height: > 200 } rs && Root.ActualHeight < rs.Height * 0.95) return;
+
         _begun = true;
 
-        FitText();
-        BuildSlideLinesIfNeeded();
-        PlayIntro();
+        try
+        {
+            FitText();
+            BuildSlideLinesIfNeeded();
+            PlayIntro();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Fail("announce", ex, "开场失败");
+            return;
+        }
 
         // 声音：安静模式什么都不放；否则先放提示音（用户可选），再按开关朗读
         if (!_quiet)
@@ -199,32 +253,45 @@ public sealed partial class AnnounceWindow : Window
     {
         try
         {
-            if (DesktopAcrylicController.IsSupported())
-            {
-                _acrylic = new DesktopAcrylicController
-                {
-                    TintColor = Windows.UI.Color.FromArgb(255, 0, 0, 0),
-                    TintOpacity = 0.72f,
-                    LuminosityOpacity = 0.0f,
-                };
-                _acrylic.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
-                AppLog.Info("announce", "喊话窗使用亚克力背景（桌面可见、整体压暗）");
-                return;
-            }
+            // 用**系统默认参数的亚克力**（DesktopAcrylicBackdrop），而不是手调 Controller。
+            // ⛔⛔ 手调那套踩了两次，都栽在参数上：
+            //    ① LuminosityOpacity = 0 → 背景亮度层被完全切断，亚克力退化成纯 tint 色（全黑）；
+            //    ② 就算改成 0.75，这台机器上全屏时仍然渲染成黑，桌面一点透不出来。
+            //    系统默认参数的组合是微软自己调的，不受这些坑影响 —— 能看见桌面比"参数好看"重要。
+            SystemBackdrop = new DesktopAcrylicBackdrop();
+            _acrylicReady = true;
+
+            // 亚克力之上再压一层半透明黑：0.30 让整屏确实暗下来，同时桌面轮廓仍可辨认。
+            // 这一层是普通 Border，一定渲染，所以"变暗"不依赖任何系统能力。
+            Core.AppLog.Info("announce", "喊话窗使用系统默认亚克力（桌面可见）+ 30% 变暗层");
+            return;
         }
         catch (Exception ex)
         {
-            AppLog.Warn("announce", "亚克力不可用，改用不透明深底：" + ex.Message);
+            Core.AppLog.Warn("announce", "亚克力不可用，退回半透明深底：" + ex.Message);
         }
 
-        Root.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(242, 0x0B, 0x0E, 0x13));
+        // 没有亚克力就没有模糊，但**仍然是半透明** —— 桌面要透得出来，
+        // 否则还是「背景黑色一坨」。alpha 110 ≈ 43% 不透明，配 30% 变暗层，桌面可见度约 40%。
+        Root.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(110, 0x0B, 0x0E, 0x13));
     }
 
     // ════════════════════════ 入场 ════════════════════════
 
     private void PlayIntro()
     {
-        Fade(DimLayer, 0, 1, 300);
+        // 变暗层是**半透明黑**而不是全黑：全黑会把亚克力/桌面整个盖住 —— 2026-10-25 改成亚克力后
+        // 仍然是纯黑屏，根因就是这行（遮罩盖掉了背景）。
+        // 变暗层是**一定会渲染**的那一层（普通 Border），所以由它保证「桌面能透出来」：
+        // 0.30 的半透明黑 —— 桌面还看得见，但整屏确实暗下来了。
+        // ⛔ 别指望亚克力：它在某些全屏/远程桌面/旧驱动下压根不渲染，全押它就会变成黑屏。
+        Core.AppLog.Step("announce",
+            $"开场：动画={(App.Settings.Current.AnnounceAnimation ?? "(null)")}，亚克力={(_acrylicReady ? "已挂" : "未挂")}，窗口 {Root.ActualWidth:0}×{Root.ActualHeight:0}");
+
+        // 从**不透明**淡到 30%：窗口刚出现时整块是黑的（挡掉背后的主界面），
+        // 然后「化开」成压暗的桌面 —— 这才是「屏幕暗下来」的手感。
+        // ⛔ 别改回 0→0.30：那是从透明淡到半透明，开场一两帧会直接透出软件界面。
+        Fade(DimLayer, 1, 0.30, 420);
         Fade(AccentBar, 0, 1, 260);
         Fade(TopBar, 0, 1, 320, beginMs: 140);
         Fade(Footer, 0, 1, 320, beginMs: 220);
@@ -259,8 +326,10 @@ public sealed partial class AnnounceWindow : Window
         var full = BodyText.Text ?? "";
         BodyHost.Opacity = 1;
 
-        // 预留最终高度（用离屏探针量），否则文字一多就边打边长、整块往上跳
-        var height = MeasureTextHeight(full, BodyText.FontSize, Root.ActualWidth - 280);
+        // 预留最终高度（用真实排版量出来的），否则文字一多就边打边长、整块往上跳
+        var height = _fittedHeight;
+        if (height <= 0)
+            height = MeasureRealHeight(full, BodyText.FontSize, BodyText.LineHeight, Root.ActualWidth - 280);
         if (height > 0) BodyText.MinHeight = height;
 
         BodyText.Text = "";
@@ -362,61 +431,57 @@ public sealed partial class AnnounceWindow : Window
     // ════════════════════════ 排版 ════════════════════════
 
     /// <summary>
-    /// 字号自适应：96 → 30 逐档试，直到正文在可用区域放得下。
-    /// ⛔⛔ 不能对树内的 BodyText 调 Measure()（布局干净时返回缓存值，改字号不重算，
-    /// 2026-10-25 实测长消息被上下裁掉）。用离屏探针：新对象、每次真的按当前字号排一遍。
+    /// 字号自适应：先试当前字号，放不下就逐档缩。
+    /// ⛔⛔ 高度必须用**挂在视觉树里的探针**量（见 <see cref="_measureProbe"/>）：
+    ///   离屏对象量多行换行文本的高度不可靠（以为 96 号也放得下，长消息被上下裁掉，2026-10-26 实测）；
+    ///   树内 BodyText 直接 Measure() 又会拿布局缓存、改字号不重算（2026-10-25 的坑）。
+    /// ⛔ 量的对象是 <see cref="_fullText"/>（全文）而不是 BodyText.Text —— 打字机过程中后者只剩半截，
+    ///   拿来量高度会让字号一路变大跳版。
     /// </summary>
     private void FitText()
     {
         var width = Root.ActualWidth - 280;
-        var height = Root.ActualHeight - 270;
-        if (width <= 0 || height <= 0) return;
+        var maxHeight = Root.ActualHeight - 270;
+        if (width <= 0 || maxHeight <= 0) return;
 
-        var probe = new TextBlock
-        {
-            Text = BodyText.Text,
-            FontFamily = BodyText.FontFamily,
-            FontWeight = BodyText.FontWeight,
-            TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            Width = width,
-        };
+        // 规则全在 Core/TextFit 里（纯函数，可单测）：先试当前字号 → 放不下逐档缩 →
+        // 高度取 max(真实测量, 保守估算)。⛔ 别把这段判断挪回窗口里：
+        // 长文本被裁的两次线上问题（10-25、10-26）都是这里的条件写错，抽出去才测得到。
+        var fit = TextFit.PickFontSize(
+            _fullText, width, maxHeight,
+            BodyText.FontSize > 0 ? BodyText.FontSize : 88,
+            MeasureRealHeight);
 
-        for (var size = 96.0; size >= 30; size -= 3)
-        {
-            probe.FontSize = size;
-            probe.LineHeight = Math.Round(size * 1.22);
-            probe.Measure(new Windows.Foundation.Size(width, double.PositiveInfinity));
-            if (probe.DesiredSize.Height <= height)
-            {
-                BodyText.FontSize = size;
-                BodyText.LineHeight = Math.Round(size * 1.22);
-                return;
-            }
-        }
+        BodyText.FontSize = fit.FontSize;
+        BodyText.LineHeight = fit.LineHeight;
+        _fittedHeight = fit.Height;
 
-        BodyText.FontSize = 30;
-        BodyText.LineHeight = 37;
+        Core.AppLog.Step("announce",
+            $"字号适配：窗口 {Root.ActualWidth:0}×{Root.ActualHeight:0}，可用高 {maxHeight:0}，"
+            + $"字号 {fit.FontSize:0}，高度 {fit.Height:0}");
     }
 
-    /// <summary>量一段文字在给定宽度下的高度（打字机预留高度用）。</summary>
-    private double MeasureTextHeight(string text, double fontSize, double width)
+    /// <summary>
+    /// 量一段文字在给定宽度下的**真实**排版高度。
+    /// 探针挂在视觉树里，再用 UpdateLayout() 强制重排 —— 离屏对象量多行换行不可靠，
+    /// 而只改属性不强制布局又会读到旧值。
+    /// </summary>
+    private double MeasureRealHeight(string text, double fontSize, double lineHeight, double width)
     {
         if (string.IsNullOrEmpty(text) || width <= 0) return 0;
 
-        var probe = new TextBlock
-        {
-            Text = text,
-            FontFamily = BodyText.FontFamily,
-            FontWeight = BodyText.FontWeight,
-            FontSize = fontSize,
-            LineHeight = BodyText.LineHeight,
-            TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            Width = width,
-        };
-        probe.Measure(new Windows.Foundation.Size(width, double.PositiveInfinity));
-        return probe.DesiredSize.Height;
+        _measureProbe.Text = text;
+        _measureProbe.FontFamily = BodyText.FontFamily;
+        _measureProbe.FontWeight = BodyText.FontWeight;
+        _measureProbe.FontSize = fontSize;
+        _measureProbe.LineHeight = lineHeight;
+        _measureProbe.Width = width;
+
+        _measureProbe.UpdateLayout();
+
+        var h = _measureProbe.ActualHeight;
+        if (h <= 0) h = _measureProbe.DesiredSize.Height;
+        return h;
     }
 
     /// <summary>
@@ -438,6 +503,7 @@ public sealed partial class AnnounceWindow : Window
         {
             var lines = WrapLines(text, size, width);
             var total = lines.Count * Math.Round(size * 1.22);
+            Core.AppLog.Step("announce", $"切行：字号 {size:0} → {lines.Count} 行，总高 {total:0}（可用 {height:0}）");
             if (total <= height || size <= 30)
             {
                 _lineTexts.Clear();

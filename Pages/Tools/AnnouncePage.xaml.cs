@@ -63,12 +63,17 @@ public sealed partial class AnnouncePage : Page
 
         SelectTab(IsSendDefault(s.AnnounceDefaultView) ? "send" : "receive");
 
+        // ⚠️ 再在 Loaded 里选一次（2026-10-27）：SelectorBar 直到进入可视树才确定自己的 SelectedItem，
+        //    构造期设的值会被它在模板应用时按「第一个可见项」覆盖回去 —— 现象就是
+        //    「默认显示」选了「发送」，打开仍然是「接收」。
+        Loaded += (_, _) => SelectTab(IsSendDefault(App.Settings.Current.AnnounceDefaultView) ? "send" : "receive");
+
         RenderSaved();
         RenderBinders();
         SyncSoundName();
         _ = RefreshServerBindersAsync();   // 服务端登记（未实现时静默跳过）
         UpdateStatus();
-        UpdateFirewallCard();
+        _ = RefreshFirewallAsync();        // 查询要起一个 PowerShell 进程，不能卡构造
         RefreshPeerList();
 
         // 两个后台列表（发现 / 登记）都在非 UI 线程上变，必须回 UI 线程再刷
@@ -88,6 +93,7 @@ public sealed partial class AnnouncePage : Page
         _statusTimer.Start();
         UpdateStatus();
         RefreshPeerList();
+        _ = RefreshFirewallAsync(force: true);   // 从这里进来时重新查一次（用户可能刚在外面改过防火墙）
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -122,13 +128,23 @@ public sealed partial class AnnouncePage : Page
         ApplyTab();
     }
 
-    private void ApplyTab()
+    private void ApplyTab() => ApplyTabByTag(Tabs.SelectedItem?.Tag as string ?? "receive");
+
+    private void ApplyTabByTag(string tag)
     {
-        var send = Tabs.SelectedItem?.Tag as string == "send";
+        var send = tag == "send";
         ReceiveView.Visibility = send ? Visibility.Collapsed : Visibility.Visible;
         SendView.Visibility = send ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// 按 tag 切页。
+    /// <para>
+    /// ⚠️ 可见性**按传入的 tag 直接设**，不回头读 <c>Tabs.SelectedItem</c>（2026-10-27）：
+    /// SelectorBar 在进入可视化树之前可能不接受 SelectedItem 赋值，读回来还是原来的项，
+    /// 于是「默认显示发送」怎么设都停在接收。
+    /// </para>
+    /// </summary>
     private void SelectTab(string tag)
     {
         foreach (var item in Tabs.Items)
@@ -139,7 +155,8 @@ public sealed partial class AnnouncePage : Page
                 break;
             }
         }
-        ApplyTab();   // 选中同一项时 SelectionChanged 不再触发，这里补一次
+
+        ApplyTabByTag(tag);
     }
 
     private void DefaultView_Changed(object sender, SelectionChangedEventArgs e)
@@ -193,14 +210,14 @@ public sealed partial class AnnouncePage : Page
             if (!AnnounceLanService.IsRunning && AnnounceLanService.LastError is { Length: > 0 } error)
                 ShowResult(false, $"局域网通道启动失败：{error}");
 
-            await EnsureFirewallAsync(prompt: true);
+            await EnsureFirewallAsync(prompt: true);   // 内部已刷新卡片，不必再查一次
         }
         else
         {
             AnnounceLanService.Stop();
+            await RefreshFirewallAsync();
         }
 
-        UpdateFirewallCard();
         RefreshPeerList();
     }
 
@@ -274,53 +291,93 @@ public sealed partial class AnnouncePage : Page
 
     // ════════════════════════ 局域网通道 ════════════════════════
 
-    private void UpdateFirewallCard()
+    /// <summary>最近一次查到的防火墙状态（卡片文案按它显示）。</summary>
+    private FirewallState _firewall = FirewallState.Unknown;
+
+    /// <summary>
+    /// 查一次防火墙并刷新卡片。
+    /// <para>
+    /// ⚠️ 查询会起一个 PowerShell 进程（约 0.5~1.5 秒），一律异步 + 结果缓存 60 秒
+    /// （见 <see cref="FirewallGateway.CheckAsync"/>）—— 不能在构造/切换事件里同步跑。
+    /// </para>
+    /// </summary>
+    private async Task RefreshFirewallAsync(bool force = false)
     {
-        // 只在「开着局域网通道 + 规则还没放行」时才出现；关着的时候不占版面
-        var need = LanToggle.IsOn && !AnnounceLanService.FirewallRulesPresent();
+        if (!LanToggle.IsOn)
+        {
+            _firewall = FirewallState.Unknown;
+            FirewallCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _firewall = await FirewallGateway.CheckAsync(force);
+
+        var need = _firewall is FirewallState.PortRulesMissing or FirewallState.ProgramBlocked;
+        FirewallDesc.Text = FirewallGateway.Describe(_firewall);
         FirewallCard.Visibility = need ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// 打开局域网通道时顺手检查一次；确认被拦才提示修复（提示之后才提权，不偷偷弹 UAC）。
+    /// 规则完好时这里什么都不做 —— 装好一次之后，以后开机不会再有 UAC。
+    /// </summary>
     private async Task EnsureFirewallAsync(bool prompt)
     {
-        UpdateFirewallCard();
-        if (!prompt || AnnounceLanService.FirewallRulesPresent()) return;
+        await RefreshFirewallAsync(force: true);
+        if (!prompt) return;
+        if (_firewall is not (FirewallState.PortRulesMissing or FirewallState.ProgramBlocked)) return;
 
         var dialog = new ContentDialog
         {
-            Title = "放行防火墙",
-            Content = "局域网通道需要两条入站规则（TCP 47821 收件 / UDP 47820 发现），否则同网段的电脑发不进来。\n"
-                      + "下一步会弹出 UAC 确认框。",
-            PrimaryButtonText = "放行",
-            CloseButtonText = "暂不放行",
+            Title = "修复防火墙",
+            Content = FirewallGateway.Describe(_firewall) + "\n"
+                      + "修复内容：为 TCP 47821（收件）与 UDP 47820（发现）添加覆盖「任何网络」的入站规则，"
+                      + "并移除本程序的入站拦截规则。\n"
+                      + "下一步会弹出一次管理员确认，完成后不再询问。",
+            PrimaryButtonText = "修复",
+            CloseButtonText = "暂不修复",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
 
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-        {
-            var ok = await Task.Run(AnnounceLanService.RequestFirewallRules);
-            if (!ok) ShowResult(false, "没有放行成功：同网段的电脑暂时发不进来，可以稍后在「放行防火墙」里重试。");
-        }
-
-        UpdateFirewallCard();
-        RefreshPeerList();
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await ApplyFirewallRepairAsync();
     }
 
-    private async void Firewall_Click(object sender, RoutedEventArgs e)
+    /// <summary>执行修复（一次 UAC）并按结果刷新界面。</summary>
+    private async Task ApplyFirewallRepairAsync()
     {
         FirewallButton.IsEnabled = false;
         try
         {
-            var ok = await Task.Run(AnnounceLanService.RequestFirewallRules);
-            ShowResult(ok, ok ? "防火墙已放行。" : "没有放行成功（可能取消了 UAC）。");
+            var state = await Task.Run(FirewallGateway.Repair);
+            _firewall = state;
+
+            switch (state)
+            {
+                case FirewallState.Ok:
+                    ShowResult(true, "防火墙已修复：同网段的电脑现在可以发进来。");
+                    break;
+                case FirewallState.Unknown:
+                    ShowResult(false, "没有拿到防火墙状态。若刚才取消了管理员确认，重新点「修复」即可。");
+                    break;
+                default:
+                    ShowResult(false, "仍然被拦截：" + FirewallGateway.Describe(state));
+                    break;
+            }
         }
         finally
         {
             FirewallButton.IsEnabled = true;
-            UpdateFirewallCard();
+            FirewallDesc.Text = FirewallGateway.Describe(_firewall);
+            FirewallCard.Visibility = LanToggle.IsOn
+                                      && _firewall is (FirewallState.PortRulesMissing or FirewallState.ProgramBlocked)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            RefreshPeerList();
         }
     }
+
+    private async void Firewall_Click(object sender, RoutedEventArgs e) => await ApplyFirewallRepairAsync();
 
     private void RefreshPeers_Click(object sender, RoutedEventArgs e) => RefreshPeerList();
 
@@ -331,7 +388,9 @@ public sealed partial class AnnouncePage : Page
     {
         if (!App.Settings.Current.AnnounceLanEnabled)
         {
-            PeerHint.Text = "局域网通道未开启，开启后会在这里列出同网段的电脑。";
+            // 发送端也要开着局域网通道才能发现对方（发现依赖的是本机的广播与监听，不是「只发送」）。
+            // 开关在「接收」页，不在这一页 —— 所以必须指明去哪打开，否则用户会以为这一栏坏了。
+            PeerHint.Text = "局域网通道未开启。请到「接收」页打开「局域网通道」，同一网段的电脑才会出现在这里。";
             PeerList.Visibility = Visibility.Collapsed;
             PeerList.ItemsSource = null;
             return;

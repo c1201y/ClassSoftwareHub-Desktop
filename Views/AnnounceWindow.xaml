@@ -14,7 +14,10 @@
     <Grid x:Name="Root" IsTabStop="True" KeyDown="Root_KeyDown" Background="Transparent">
 
         <!-- 变暗层：入场 0→1，出场 1→0（「屏幕变暗/变回去」就是它） -->
-        <Border x:Name="DimLayer" Background="#000000" Opacity="0" />
+        <!-- ⛔ 初始 Opacity=1（不透明）：窗口刚显示的那一两帧如果透明，
+             就会直接透出背后的主界面 —— 用户看到的是「半透明一坨 + 里面是软件界面」。
+             开场时由 PlayIntro 从 1 淡到 0.30，视觉上就是「屏幕慢慢暗下来」。 -->
+        <Border x:Name="DimLayer" Background="#000000" Opacity="1" />
 
         <!-- 顶部强调色窄条 -->
         <Border x:Name="AccentBar" VerticalAlignment="Top" Height="8" Opacity="0" />

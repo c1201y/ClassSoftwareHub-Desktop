@@ -536,15 +536,13 @@
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <!--
-                              ⛔⛔ 2026-10-23：RichTextBlock **不能**套 CaptionTextBlockStyle ——
-                                  那个 Style 的 TargetType 是 TextBlock，套到 RichTextBlock 上会在**运行时**抛
-                                  「样式目标类型不匹配」。XAML 编译不报，表现为**整个设置页加载失败**，
-                                  再被 ShellPage 的兜底逻辑送去首页 ⇒ 点「设置」变成打开首页。
-                                  这里改成内联字号（12 = Caption 那一档）。
+                              ⛔ 2026-10-26 删掉了内嵌的「更新说明」RichTextBlock（原 x:Name=UpdateNotes）。
+                                 原因：它把发版正文整段渲染进设置卡，配图语法 `![…](https://github.com/…)`、
+                                 大标题、下载提示全被当正文显示，卡片被撑很高 —— 用户反馈"排版该改一改"，
+                                 自己也觉得丑。正文不是没有地方看：检查完会弹更新对话框，那里有整理好的
+                                 「本次更新内容」；要读全文去「更新日志」页。
+                              ⛔ 别再把它加回来。这一格只留：按钮 + 进度条 + 一行状态。
                             -->
-                            <RichTextBlock x:Name="UpdateNotes" TextWrapping="Wrap" Visibility="Collapsed"
-                                           FontSize="12" LineHeight="18"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
                     </controls:SettingsCard>
 

@@ -100,6 +100,12 @@ public static class AnnounceLanService
 
     private static DateTime _lastAccepted = DateTime.MinValue;
 
+    /// <summary>最近一次给对方回单播心跳的时刻（key = 对方 IP），用于节流，见 <see cref="ReplyOnce"/>。</summary>
+    private static readonly Dictionary<string, DateTime> _replyAt = new();
+
+    /// <summary>同一个 IP 最多这么长时间回一次单播心跳。</summary>
+    private const int ReplyIntervalSec = 30;
+
     /// <summary>UI 调度器（Start 在 UI 线程上调用，抓一次）：登记/解除登记要改设置，得回 UI 线程。</summary>
     private static Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
 
@@ -149,6 +155,25 @@ public static class AnnounceLanService
                 StartReceiver(_cts.Token);
                 IsRunning = true;
                 AppLog.Begin("announce-lan", $"局域网通道已启动（发现 {DiscoveryPort} / 收件 {ReceivePort}，本机标识「{LabelOrDefault}」）");
+
+                // 起来之后顺手看一眼防火墙（2026-10-27）。
+                // 被拦的时候通道「启动成功、日志正常」，可外面一个包都进不来 —— 只有一条明确记录
+                // 才能把这种「看着正常其实不通」的情况在现场区分开。⚠️ 只写日志，不弹任何窗口。
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var state = await FirewallGateway.CheckAsync();
+                        if (state is FirewallState.PortRulesMissing or FirewallState.ProgramBlocked)
+                            AppLog.Warn("announce-lan", "防火墙正在拦截局域网通道：" + FirewallGateway.Describe(state));
+                        else if (state == FirewallState.Ok)
+                            AppLog.Step("announce-lan", "防火墙检查通过（端口规则覆盖公用网络，无入站拦截）");
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Warn("announce-lan", "防火墙检查失败：" + ex.Message);
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -269,7 +294,23 @@ public static class AnnounceLanService
             var ips = old is null ? new List<string>() : new List<string>(old.Ips);
             var ip = from.Address.ToString();
             var isNewIp = !ips.Contains(ip);
-            if (isNewIp && ips.Count < 8) ips.Add(ip);
+            if (isNewIp && ips.Count < 12) ips.Add(ip);
+
+            // 2026-10-27：对方心跳里自带的本机地址列表也一并收下。
+            // 为什么需要：只靠「包的源地址」推断对方可连地址，在交换机端口隔离 / 双网卡 / 中间设备
+            // 转发的情况下会拿到一个连不通的地址 —— 现象就是「列表里看得到它，但发过去超时」。
+            if (root.TryGetProperty("ips", out var ipsEl) && ipsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in ipsEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var candidate = item.GetString();
+                    if (string.IsNullOrWhiteSpace(candidate) || candidate.Length > 45) continue;
+                    if (ips.Contains(candidate) || ips.Count >= 12) continue;
+                    ips.Add(candidate);
+                    isNewIp = true;
+                }
+            }
 
             var peer = new LanPeer(peerName, label, code, ips, port, DateTime.Now);
             var changed = old is null || old.Name != peer.Name || old.Label != peer.Label || isNewIp;
@@ -279,37 +320,47 @@ public static class AnnounceLanService
 
             if (changed) PeersChanged?.Invoke();
         }
+
+        // 收到谁的心跳就回谁一条（单播，30 秒一次）：
+        // 有些交换机/AP 只允许一侧主动发包，单向广播通的时候，对方列表里就一直看不到本机。
+        ReplyOnce(from.Address);
+    }
+
+    /// <summary>
+    /// 给对方回一条单播心跳。节流到 <see cref="ReplyIntervalSec"/> 秒一次，避免多机互回形成风暴。
+    /// 用单独的发包 socket（<see cref="_sender"/>），不进接收循环。
+    /// </summary>
+    private static void ReplyOnce(IPAddress address)
+    {
+        var key = address.ToString();
+
+        lock (Gate)
+        {
+            if (_replyAt.TryGetValue(key, out var last) && (DateTime.Now - last).TotalSeconds < ReplyIntervalSec)
+                return;
+
+            _replyAt[key] = DateTime.Now;
+
+            if (_replyAt.Count > 128)
+            {
+                var cutoff = DateTime.Now.AddMinutes(-10);
+                foreach (var stale in _replyAt.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList())
+                    _replyAt.Remove(stale);
+            }
+        }
+
+        SendRaw(BuildHeartbeat(), new IPEndPoint(address, DiscoveryPort));
     }
 
     private static async Task BroadcastLoopAsync(CancellationToken token)
     {
-        var sender = _sender;
-        if (sender is null) return;
-
         while (!token.IsCancellationRequested)
         {
             try
             {
-                var payload = JsonSerializer.SerializeToUtf8Bytes(new
-                {
-                    app = AppTag,
-                    name = Environment.MachineName,
-                    label = App.Settings.Current.AnnounceLabel ?? "",
-                    code = AnnounceService.MyPairCode,
-                    port = ReceivePort,
-                });
-
+                var payload = BuildHeartbeat();
                 foreach (var target in BroadcastTargets())
-                {
-                    try
-                    {
-                        await sender.SendAsync(payload, payload.Length, new IPEndPoint(target, DiscoveryPort));
-                    }
-                    catch
-                    {
-                        // 某块网卡不通就跳过，不影响其它网卡
-                    }
-                }
+                    SendRaw(payload, new IPEndPoint(target, DiscoveryPort));
             }
             catch (Exception ex)
             {
@@ -321,6 +372,72 @@ public static class AnnounceLanService
                 await Task.Delay(BroadcastIntervalMs, token);
             }
             catch (OperationCanceledException) { return; }
+        }
+    }
+
+    /// <summary>
+    /// 一条心跳的内容。
+    /// <para>
+    /// <c>ips</c> 是本机全部 IPv4（2026-10-27 补）：对方据此得到一组"能直接连"的地址候选，
+    /// 不再只依赖广播包的源地址 —— 多网卡、交换机端口隔离、中间设备转发的情况下，
+    /// 源地址经常不是可连地址，症状是「列表里看得到它，发过去却超时」。
+    /// </para>
+    /// </summary>
+    private static byte[] BuildHeartbeat() => JsonSerializer.SerializeToUtf8Bytes(new
+    {
+        app = AppTag,
+        name = Environment.MachineName,
+        label = App.Settings.Current.AnnounceLabel ?? "",
+        code = AnnounceService.MyPairCode,
+        port = ReceivePort,
+        ips = LocalIPv4(),
+    });
+
+    /// <summary>本机全部 IPv4（跳过回环与未启用的网卡）。</summary>
+    private static List<string> LocalIPv4()
+    {
+        var list = new List<string>();
+        try
+        {
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+
+                foreach (var ua in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (ua.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    if (IPAddress.IsLoopback(ua.Address)) continue;
+
+                    var text = ua.Address.ToString();
+                    if (!list.Contains(text) && list.Count < 12) list.Add(text);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("announce-lan", "枚举本机地址失败（心跳不带地址列表）：" + ex.Message);
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// 发一个 UDP 包（心跳用）。同步发送、失败一律吞掉 —— 某块网卡不通不能影响其它网卡。
+    /// ⚠️ 加锁：广播循环和「收到心跳后的回包」会同时用同一个 socket。
+    /// </summary>
+    private static void SendRaw(byte[] payload, IPEndPoint to)
+    {
+        var sender = _sender;
+        if (sender is null) return;
+
+        try
+        {
+            lock (Gate) sender.Send(payload, payload.Length, to);
+        }
+        catch
+        {
+            // 单个目标不可达：跳过
         }
     }
 
@@ -496,7 +613,7 @@ public static class AnnounceLanService
                 using var headCts = CancellationTokenSource.CreateLinkedTokenSource(token);
                 headCts.CancelAfter(TimeSpan.FromSeconds(5));
 
-                var (headBytes, leftover) = await ReadHeadAsync(stream, headCts.Token);
+                var (headBytes, leftover) = await Core.HttpHeadReader.ReadAsync(stream, headCts.Token);
                 if (headBytes is null)
                 {
                     AppLog.Warn("announce-lan", "请求头没读到（连接空转或超时）");
@@ -546,7 +663,7 @@ public static class AnnounceLanService
                 }
 
                 var body = new byte[length];
-                // ⚠️ 先用请求头那一包里已经带进来的字节，再继续读剩下的（见 ReadHeadAsync 的注释）
+                // ⚠️ 先用请求头那一包里已经带进来的字节，再继续读剩下的（见 Core/HttpHeadReader 的说明）
                 var read = Math.Min(leftover.Length, length);
                 if (read > 0) Array.Copy(leftover, body, read);
                 while (read < length)
@@ -576,35 +693,6 @@ public static class AnnounceLanService
     /// 现象是「连接成功、服务端永不应答」，从客户端看就是超时。局域网喊话卡了一下午就是它。
     /// </para>
     /// </summary>
-    private static async Task<(byte[]? Head, byte[] Leftover)> ReadHeadAsync(NetworkStream stream, CancellationToken token)
-    {
-        var buffer = new byte[4096];
-        var raw = new List<byte>();
-
-        while (raw.Count < 32 * 1024)
-        {
-            var n = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
-            if (n <= 0) return (null, Array.Empty<byte>());
-
-            for (var i = 0; i < n; i++) raw.Add(buffer[i]);
-
-            // 按字节找 0D 0A 0D 0A（即空行）：头部虽是 ASCII，用字节定位才能准确切出 body。
-            for (var i = 0; i + 3 < raw.Count; i++)
-            {
-                if (raw[i] != 13 || raw[i + 1] != 10 || raw[i + 2] != 13 || raw[i + 3] != 10) continue;
-
-                var headEnd = i + 4;
-                var head = raw.GetRange(0, headEnd).ToArray();
-                var leftover = raw.Count > headEnd
-                    ? raw.GetRange(headEnd, raw.Count - headEnd).ToArray()
-                    : Array.Empty<byte>();
-                return (head, leftover);
-            }
-        }
-
-        return (null, Array.Empty<byte>());
-    }
-
     private static async Task OnAnnounceAsync(string json, NetworkStream stream)
     {
         using var doc = JsonDocument.Parse(json);
@@ -943,102 +1031,13 @@ public static class AnnounceLanService
     }
 
     // ════════════════════════ 防火墙 ════════════════════════
-
-    /// <summary>两条入站规则的名字（安装包 / 手动放行都用这一份，别写两处）。</summary>
-    public static readonly string[] FirewallRuleNames = { "ClassSoftwareHub 教室喊话（收件）", "ClassSoftwareHub 教室喊话（发现）" };
-
-    /// <summary>
-    /// 检查两条入站规则是否都在、并且**覆盖公用网络**。
-    /// <para>
-    /// ⚠️ 为什么要专门查「公用」：校园网 / 机房网 / 没设过家庭网络的机器，Windows 多半判成「公用」。
-    ///    只写 <c>profile=private,domain</c> 的规则在那上面等于没加 —— 2026-10-25 实测就是这么超时的
-    ///    （包被静默丢弃，表现是 3 秒无响应而不是拒绝连接）。
-    /// </para>
-    /// </summary>
-    public static bool FirewallRulesPresent()
-    {
-        foreach (var name in FirewallRuleNames)
-        {
-            var output = RunNetsh($"advfirewall firewall show rule name=\"{name}\"");
-            if (string.IsNullOrEmpty(output)) return false;
-
-            var enabled = output.Contains("已启用", StringComparison.Ordinal)
-                          || output.Contains("Enabled", StringComparison.Ordinal);
-            var coversPublic = output.Contains("任何", StringComparison.Ordinal)
-                               || output.Contains("公用", StringComparison.Ordinal)
-                               || output.Contains("Any", StringComparison.Ordinal)
-                               || output.Contains("Public", StringComparison.Ordinal);
-
-            if (!enabled || !coversPublic) return false;
-        }
-        return true;
-    }
-
-    /// <summary>
-    /// 以管理员身份补两条入站规则（会弹 UAC）。
-    /// <para>
-    /// 先按名字删旧规则再加：早期版本加的是 <c>profile=private,domain</c>，直接叠加会留下一条
-    /// 名字相同、在公用网络上依然无效的规则，检查逻辑就会一直误判「已放行」。
-    /// </para>
-    /// </summary>
-    public static bool RequestFirewallRules()
-    {
-        try
-        {
-            var commands = new List<string>();
-            foreach (var name in FirewallRuleNames)
-                commands.Add($"netsh advfirewall firewall delete rule name=\"{name}\" >nul 2>&1");
-
-            commands.Add($"netsh advfirewall firewall add rule name=\"{FirewallRuleNames[0]}\" "
-                         + $"dir=in action=allow protocol=TCP localport={ReceivePort} profile=any");
-            commands.Add($"netsh advfirewall firewall add rule name=\"{FirewallRuleNames[1]}\" "
-                         + $"dir=in action=allow protocol=UDP localport={DiscoveryPort} profile=any");
-
-            var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + string.Join(" & ", commands))
-            {
-                Verb = "runas",            // 弹 UAC
-                UseShellExecute = true,
-                CreateNoWindow = true,
-            };
-
-            using var proc = System.Diagnostics.Process.Start(psi);
-            proc?.WaitForExit(20000);
-
-            var ok = FirewallRulesPresent();
-            AppLog.Info("announce-lan", ok ? "防火墙入站规则已放行（含公用网络）" : "防火墙入站规则添加后仍未生效");
-            return ok;
-        }
-        catch (Exception ex)
-        {
-            // 用户点了「否」也会走到这里（Win32Exception: 操作已被用户取消）
-            AppLog.Warn("announce-lan", "放行防火墙未完成：" + ex.Message);
-            return false;
-        }
-    }
-
-    /// <summary>同步跑一次 netsh 并取输出（查询用；不做任何写操作）。</summary>
-    private static string? RunNetsh(string arguments)
-    {
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo("netsh", arguments)
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-
-            using var proc = System.Diagnostics.Process.Start(psi);
-            if (proc is null) return null;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(4000);
-            return output;
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    //
+    // 2026-10-27 整体搬到 Services/FirewallGateway.cs。旧实现（就在这个位置）用 netsh 的中文输出
+    // 做关键字匹配，在 UTF-8 代码页下读到的是 GBK 乱码，判据恒为 false；而且只看「规则存在」，
+    // 没看它覆不覆盖公用网络 —— 这台机器上留下的旧规则是「域,专用」，校园网下等于没加。
+    // 两件事叠起来，用户看到的就是「局域网搜不到、每次都要再点一次放行、点了还弹 UAC」。
+    //
+    // 现在由 FirewallGateway 负责：查询走 PowerShell（-EncodedCommand，与代码页无关），
+    // 判据是「存在 + 已启用 + Profile 含 Public」，另外单独查本程序有没有入站 Block 规则
+    // （Block 永远优先于 Allow，这条不查出来，端口规则再怎么对也收不到包）。
 }
