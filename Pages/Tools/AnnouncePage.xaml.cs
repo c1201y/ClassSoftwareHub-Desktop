@@ -174,6 +174,8 @@ public sealed partial class AnnouncePage : Page
     private void EnableToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
+        // 值和设置里一样 = 是构造期回填造成的回弹，不是用户动的（见 Lan_Changed 的说明）
+        if (EnableToggle.IsOn == App.Settings.Current.AnnounceEnabled) return;
 
         App.Settings.Current.AnnounceEnabled = EnableToggle.IsOn;
         App.Settings.Save();
@@ -196,9 +198,15 @@ public sealed partial class AnnouncePage : Page
         // 广播下一拍（≤5 秒）就会带上新标识，发送端列表随之更新
     }
 
-    private async void Lan_Changed(object sender, RoutedEventArgs e)
+    private void Lan_Changed(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
+
+        // ⛔ 值和设置里一样 = 不是用户拨的开关，是我们自己在构造期回填的值又被 ToggleSwitch 回弹了一次
+        //    （2026-10-27 Nick 反馈：切走再切回来就弹一次「修复防火墙」）。
+        //    现象背后的链条：页面每次重建 → 构造里设 IsOn → 控件加载完成时再抛一次 Toggled →
+        //    这时 _loading 已经复位成 false → 被当成"用户刚打开局域网通道" → 起通道 + 弹对话框。
+        if (LanToggle.IsOn == App.Settings.Current.AnnounceLanEnabled) return;
 
         App.Settings.Current.AnnounceLanEnabled = LanToggle.IsOn;
         App.Settings.Save();
@@ -209,15 +217,15 @@ public sealed partial class AnnouncePage : Page
 
             if (!AnnounceLanService.IsRunning && AnnounceLanService.LastError is { Length: > 0 } error)
                 ShowResult(false, $"局域网通道启动失败：{error}");
-
-            await EnsureFirewallAsync(prompt: true);   // 内部已刷新卡片，不必再查一次
         }
         else
         {
             AnnounceLanService.Stop();
-            RefreshFirewall();
         }
 
+        // 只刷新卡片，**不自动弹对话框**（2026-10-27 Nick：「它又要弹这个反复弹」）。
+        // 被拦的原因写在卡片上，用户想修自己点「修复」—— 弹窗只在用户点了按钮之后出现。
+        RefreshFirewall(force: true);
         RefreshPeerList();
     }
 
@@ -319,32 +327,12 @@ public sealed partial class AnnouncePage : Page
     }
 
     /// <summary>
-    /// 打开局域网通道时顺手检查一次；确认被拦才提示修复（提示之后才提权，不偷偷弹 UAC）。
-    /// 规则完好时这里什么都不做 —— 装好一次之后，以后开机不会再有 UAC。
+    /// 执行修复（一次 UAC）并按结果刷新界面。
+    /// <para>
+    /// ⚠️ 这个动作**只能由用户点「修复」触发**（2026-10-27）。早先还有一条「打开局域网通道时自动弹
+    /// 一个确认框」的路径，结果是用户切走页面再切回来就被弹一次 —— 自动弹窗一律不要。
+    /// </para>
     /// </summary>
-    private async Task EnsureFirewallAsync(bool prompt)
-    {
-        RefreshFirewall(force: true);
-        if (!prompt) return;
-        if (_firewall is not (FirewallState.PortRulesMissing or FirewallState.ProgramBlocked)) return;
-
-        var dialog = new ContentDialog
-        {
-            Title = "修复防火墙",
-            Content = FirewallGateway.Describe(_firewall) + "\n"
-                      + "修复内容：为 TCP 47821（收件）与 UDP 47820（发现）添加覆盖「任何网络」的入站规则，"
-                      + "并移除本程序的入站拦截规则。\n"
-                      + "下一步会弹出一次管理员确认，完成后不再询问。",
-            PrimaryButtonText = "修复",
-            CloseButtonText = "暂不修复",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await ApplyFirewallRepairAsync();
-    }
-
-    /// <summary>执行修复（一次 UAC）并按结果刷新界面。</summary>
     private async Task ApplyFirewallRepairAsync()
     {
         FirewallButton.IsEnabled = false;

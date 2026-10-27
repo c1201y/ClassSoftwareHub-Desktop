@@ -126,8 +126,11 @@ public static class FirewallGateway
                     + $"dir=in action=allow protocol=UDP localport={AnnounceLanService.DiscoveryPort} profile=any",
 
                 // 3) 删掉本程序的入站拦截规则（Windows 第一次弹「允许访问」时点取消留下的）。
-                //    规则名就是程序文件名，只有本程序会用它；不带 program= 是为了避开中文路径的编码问题。
-                $"netsh advfirewall firewall delete rule name=\"{ProgramRuleName}\" dir=in action=block >nul 2>&1",
+                //    ⚠️ netsh 的 delete **没有 action= 参数**（2026-10-27 用 `netsh advfirewall firewall
+                //       delete rule ?` 确认过）。所以只能按「名字 + 方向」删，会连带删掉同名的
+                //       Allow 规则 —— 无害：端口规则已经覆盖 47820/47821，不依赖程序级规则。
+                //    ⚠️ 也不带 program=：路径可能含中文用户名，命令行编码会出问题；规则名只有本程序用。
+                $"netsh advfirewall firewall delete rule name=\"{ProgramRuleName}\" dir=in >nul 2>&1",
             };
 
             var psi = new ProcessStartInfo("cmd.exe", "/c " + string.Join(" & ", commands))
