@@ -150,8 +150,6 @@ public static class FirewallGateway
 
             using var proc = Process.Start(psi);
             proc?.WaitForExit(30_000);
-
-            AppLog.Info("announce-lan", "已通过 netsh 重写防火墙入站规则（覆盖任何网络）");
         }
         catch (Exception ex)
         {
@@ -160,7 +158,15 @@ public static class FirewallGateway
         }
 
         Invalidate();
-        return QueryCore();
+        var state = QueryCore();
+
+        // 记录**实际结果**而不是"命令跑过了"（2026-10-28：早先那行日志无条件写成功，
+        // 结果规则其实没建/建了但判不出来，用户连点四次，日志里四条"已完成"却毫无线索）。
+        AppLog.Info("announce-lan", state == FirewallState.Ok
+            ? "防火墙入站规则已就绪（覆盖任何网络，无程序级拦截）"
+            : "防火墙修复后仍未达标：" + Describe(state));
+
+        return state;
     }
 
     // ════════════════════════ 注册表解析 ════════════════════════

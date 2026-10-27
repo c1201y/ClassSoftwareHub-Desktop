@@ -80,7 +80,11 @@ public sealed class FirewallRule
     /// <summary>这些值里有没有「任何网络」的表示法。Windows 在不同版本里写法不一，全都认。</summary>
     private static bool ProfileCoversPublic(Dictionary<string, List<string>> map)
     {
-        if (!map.TryGetValue("Profile", out var profiles)) return false;
+        // ⚠️ **没有 Profile 字段 = 所有网络**（2026-10-28 实测）。
+        //    `netsh advfirewall firewall add rule … profile=any` 建出来的规则串里**根本没有 Profile=**
+        //    —— any 是默认值，序列化时被省略；而 `Get-NetFirewallRule` 查出来报的是 `Profile : Any`。
+        //    以前这里「没有就返回 false」，结果修复明明成功、界面却一直说没放行，用户点了四次。
+        if (!map.TryGetValue("Profile", out var profiles) || profiles.Count == 0) return true;
 
         foreach (var profile in profiles)
         {
