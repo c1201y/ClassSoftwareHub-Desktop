@@ -73,7 +73,7 @@ public sealed partial class AnnouncePage : Page
         SyncSoundName();
         _ = RefreshServerBindersAsync();   // 服务端登记（未实现时静默跳过）
         UpdateStatus();
-        _ = RefreshFirewallAsync();        // 查询要起一个 PowerShell 进程，不能卡构造
+        RefreshFirewall();                 // 进程内读注册表，微秒级，构造期直接调
         RefreshPeerList();
 
         // 两个后台列表（发现 / 登记）都在非 UI 线程上变，必须回 UI 线程再刷
@@ -93,7 +93,7 @@ public sealed partial class AnnouncePage : Page
         _statusTimer.Start();
         UpdateStatus();
         RefreshPeerList();
-        _ = RefreshFirewallAsync(force: true);   // 从这里进来时重新查一次（用户可能刚在外面改过防火墙）
+        RefreshFirewall(force: true);      // 从这里进来时重新查一次（用户可能刚在外面改过防火墙）
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -215,7 +215,7 @@ public sealed partial class AnnouncePage : Page
         else
         {
             AnnounceLanService.Stop();
-            await RefreshFirewallAsync();
+            RefreshFirewall();
         }
 
         RefreshPeerList();
@@ -297,11 +297,12 @@ public sealed partial class AnnouncePage : Page
     /// <summary>
     /// 查一次防火墙并刷新卡片。
     /// <para>
-    /// ⚠️ 查询会起一个 PowerShell 进程（约 0.5~1.5 秒），一律异步 + 结果缓存 60 秒
-    /// （见 <see cref="FirewallGateway.CheckAsync"/>）—— 不能在构造/切换事件里同步跑。
+    /// ⚠️ 同步调用即可：查询是进程内读注册表（微秒级），不再起 PowerShell 进程（2026-10-27）。
+    /// 上一次重写时这里要 await，是因为查询靠 `Get-NetFirewallRule`，每次都会拉起一个
+    /// powershell.exe，被安全软件按启发式规则拦截弹窗。
     /// </para>
     /// </summary>
-    private async Task RefreshFirewallAsync(bool force = false)
+    private void RefreshFirewall(bool force = false)
     {
         if (!LanToggle.IsOn)
         {
@@ -310,7 +311,7 @@ public sealed partial class AnnouncePage : Page
             return;
         }
 
-        _firewall = await FirewallGateway.CheckAsync(force);
+        _firewall = FirewallGateway.Check(force);
 
         var need = _firewall is FirewallState.PortRulesMissing or FirewallState.ProgramBlocked;
         FirewallDesc.Text = FirewallGateway.Describe(_firewall);
@@ -323,7 +324,7 @@ public sealed partial class AnnouncePage : Page
     /// </summary>
     private async Task EnsureFirewallAsync(bool prompt)
     {
-        await RefreshFirewallAsync(force: true);
+        RefreshFirewall(force: true);
         if (!prompt) return;
         if (_firewall is not (FirewallState.PortRulesMissing or FirewallState.ProgramBlocked)) return;
 

@@ -156,24 +156,11 @@ public static class AnnounceLanService
                 IsRunning = true;
                 AppLog.Begin("announce-lan", $"局域网通道已启动（发现 {DiscoveryPort} / 收件 {ReceivePort}，本机标识「{LabelOrDefault}」）");
 
-                // 起来之后顺手看一眼防火墙（2026-10-27）。
-                // 被拦的时候通道「启动成功、日志正常」，可外面一个包都进不来 —— 只有一条明确记录
-                // 才能把这种「看着正常其实不通」的情况在现场区分开。⚠️ 只写日志，不弹任何窗口。
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var state = await FirewallGateway.CheckAsync();
-                        if (state is FirewallState.PortRulesMissing or FirewallState.ProgramBlocked)
-                            AppLog.Warn("announce-lan", "防火墙正在拦截局域网通道：" + FirewallGateway.Describe(state));
-                        else if (state == FirewallState.Ok)
-                            AppLog.Step("announce-lan", "防火墙检查通过（端口规则覆盖公用网络，无入站拦截）");
-                    }
-                    catch (Exception ex)
-                    {
-                        AppLog.Warn("announce-lan", "防火墙检查失败：" + ex.Message);
-                    }
-                });
+                // ⛔ 这里**不再**顺手检查防火墙（2026-10-27 Nick 反馈后移除）。
+                //    上一版在这一步查一次，办法是起一个 powershell.exe 跑 Get-NetFirewallRule ——
+                //    等于每次开机都让应用悄悄拉起 PowerShell，安全软件按启发式规则直接弹窗，
+                //    而用户根本还没打开教室喊话页。现在查询改成进程内读注册表（见 FirewallGateway），
+                //    且只在用户真的打开那一页时才查。
             }
             catch (Exception ex)
             {
@@ -1037,7 +1024,10 @@ public static class AnnounceLanService
     // 没看它覆不覆盖公用网络 —— 这台机器上留下的旧规则是「域,专用」，校园网下等于没加。
     // 两件事叠起来，用户看到的就是「局域网搜不到、每次都要再点一次放行、点了还弹 UAC」。
     //
-    // 现在由 FirewallGateway 负责：查询走 PowerShell（-EncodedCommand，与代码页无关），
-    // 判据是「存在 + 已启用 + Profile 含 Public」，另外单独查本程序有没有入站 Block 规则
-    // （Block 永远优先于 Allow，这条不查出来，端口规则再怎么对也收不到包）。
+    // 现在由 FirewallGateway 负责：**进程内读注册表**（不起任何子进程，普通权限即可，
+    // 规则库对 BUILTIN\Users 授予了 ReadKey），判据是「存在 + 已启用 + Profile 含 Public」，
+    // 另外单独查本程序有没有入站 Block 规则（Block 永远优先于 Allow，不查这条，
+    // 端口规则再怎么对也收不到包）。
+    // ⚠️ 2026-10-27 当天先做过一版「PowerShell 查询」，被用户和安全软件一起否掉：
+    //    每次启动都会拉起 powershell.exe，安全软件直接弹窗拦截。别改回去。
 }
