@@ -113,6 +113,10 @@ public static class FirewallGateway
     {
         try
         {
+            // 只有真的被程序级规则拦着才去删 —— 那条命令是按名字删「所有同名入站规则」，
+            // 会把 Windows 自动生成的 Allow 条目一并带走。没被拦就不必付这个代价。
+            var needsUnblock = Check(force: true) == FirewallState.ProgramBlocked;
+
             var commands = new List<string>
             {
                 // 1) 清掉同名的旧端口规则（早期版本建的可能只覆盖域/专用，叠加会留下一条无效规则）
@@ -124,14 +128,17 @@ public static class FirewallGateway
                     + $"dir=in action=allow protocol=TCP localport={AnnounceLanService.ReceivePort} profile=any",
                 $"netsh advfirewall firewall add rule name=\"{RuleUdpName}\" "
                     + $"dir=in action=allow protocol=UDP localport={AnnounceLanService.DiscoveryPort} profile=any",
+            };
 
+            if (needsUnblock)
+            {
                 // 3) 删掉本程序的入站拦截规则（Windows 第一次弹「允许访问」时点取消留下的）。
                 //    ⚠️ netsh 的 delete **没有 action= 参数**（2026-10-27 用 `netsh advfirewall firewall
                 //       delete rule ?` 确认过）。所以只能按「名字 + 方向」删，会连带删掉同名的
                 //       Allow 规则 —— 无害：端口规则已经覆盖 47820/47821，不依赖程序级规则。
                 //    ⚠️ 也不带 program=：路径可能含中文用户名，命令行编码会出问题；规则名只有本程序用。
-                $"netsh advfirewall firewall delete rule name=\"{ProgramRuleName}\" dir=in >nul 2>&1",
-            };
+                commands.Add($"netsh advfirewall firewall delete rule name=\"{ProgramRuleName}\" dir=in >nul 2>&1");
+            }
 
             var psi = new ProcessStartInfo("cmd.exe", "/c " + string.Join(" & ", commands))
             {
