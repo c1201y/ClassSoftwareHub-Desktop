@@ -21,16 +21,17 @@ public static class ServiceEndpoints
     /// 入口按顺序试。
     ///
     /// <para>
-    /// 2026-10-27 重排（Nick 反馈「有用户说服务器连不上」后实测）：
-    /// <c>cshapi.132614.xyz</c> 走的是第三方中转（DNS 里 CNAME 到 <c>*.world.speedonline.xyz</c>），
-    /// 那家中转的订单已到期，整条域名现在返回 **512「订单到期暂停」** —— 与地区无关，所有人的第一条
-    /// 入口都在白等。而 <c>submit.132614.xyz</c> 是直接解析到 Cloudflare 的，仍是活的。
-    /// 所以把活的提到第一，挂了的降到最后两条里靠前的位置（它返回得快，代价小）。
+    /// 2026-10-27 23:00 再排一次（Nick 反馈「手机发给电脑收不到」后复测）：
+    /// <c>api.classsoftwarehub.cn</c> 当天刚配好解析（CNAME 到 <c>pages.dnsoe9.com</c>，
+    /// A 记录 43.174.246.55 / 43.174.247.55），实测 <c>/api/announce/poll</c> 返回 204、
+    /// 接口完全正常 —— 这是三条里**唯一能通的**，必须排第一。
     /// </para>
     ///
     /// <para>
-    /// 第三条 <c>api.classsoftwarehub.cn</c> 是 2026-10-26 补的直连域名，但至今**没有任何 A 记录**
-    /// （实测 DoH 查询为空），放第一会每次白等一次 DNS 超时，所以固定排在最后。
+    /// 另两条的现状（同日实测）：
+    /// <c>submit.132614.xyz</c> 直连 Cloudflare，福建这边 TLS 直接被重置（exit 35）；
+    /// <c>cshapi.132614.xyz</c> 走第三方中转，中转订单到期，整条域名返回 512「订单到期暂停」。
+    /// 两条都是**快速失败**（0.2~0.4 秒），排在后面代价很小，换地区时它们仍是主力。
     /// </para>
     ///
     /// <para>
@@ -40,8 +41,8 @@ public static class ServiceEndpoints
     /// </summary>
     public static readonly string[] All =
     {
+        "https://api.classsoftwarehub.cn",
         "https://submit.132614.xyz",
         "https://cshapi.132614.xyz",
-        "https://api.classsoftwarehub.cn",
     };
 }

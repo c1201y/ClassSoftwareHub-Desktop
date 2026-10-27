@@ -190,25 +190,68 @@ public static class AnnounceService
         return Math.Max(5, (int)Math.Round(baseSec + (Random.Shared.NextDouble() * 2 - 1) * jitter));
     }
 
+    // ── 入口调用：连接类失败立刻重试一次 ──────────────────────────────────────
+
+    /// <summary>
+    /// 调一个入口，**连接类失败就当场重试一次**（2026-10-27）。
+    /// <para>
+    /// 为什么要重试：新主入口 <c>api.classsoftwarehub.cn</c> 走的是国内 CDN，实测同一秒内连打 5 次
+    /// 只成 1 次，失败全是 <c>schannel: failed to receive handshake</c> —— TLS 握手被丢包，
+    /// 属**概率性**失败。旧逻辑一次失败就换下一个入口，而三个入口只有它能通，
+    /// 于是整轮直接判定"服务器不可达"，用户侧就是「手机发过来收不到」。
+    /// 连试两次能把 1/5 提到 ~1/3 以上，代价只有 150 毫秒。
+    /// </para>
+    /// <para>
+    /// ⚠️ **超时不重试**：那是真的慢，重试只会把等待翻倍（单次已经 6 秒）。
+    /// 只有连接被拒 / TLS 握手失败这类"根本没建立起来"的才重试。
+    /// </para>
+    /// </summary>
+    private static async Task<(HttpResponseMessage? Response, string? Error)> RequestWithRetryAsync(
+        Func<Task<HttpResponseMessage>> send)
+    {
+        string? last = null;
+
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                return (await send(), null);
+            }
+            catch (Exception ex)
+            {
+                last = ex.Message;
+                if (attempt == 2 || IsTimeout(ex)) break;
+                await Task.Delay(150);
+            }
+        }
+
+        return (null, last);
+    }
+
+    /// <summary>是不是"等到超时"（而不是握手失败）。HttpClient 的超时以 TaskCanceledException 抛出。</summary>
+    private static bool IsTimeout(Exception ex) =>
+        ex is TimeoutException
+        || ex.InnerException is TimeoutException
+        || ex is TaskCanceledException { InnerException: not null };
+
     private static async Task PollOnceAsync()
     {
         var name = Uri.EscapeDataString((Environment.MachineName ?? "").Trim());
         var query = $"deviceId={DeviceFingerprint.Value}&pairCode={MyPairCode}&name={name}";
         var gotAnswer = false;   // 只要有一个入口回了 HTTP 状态就算"网络通"
-        string? firstError = null;   // 第一次失败的原因（只用于日志：光说"不可达"排不出是断网还是被拦）
         var tried = 0;               // 这一轮实际试了几个入口（入口清单改了要能一眼看出来）
+        var failures = new List<string>();   // 每个入口各自怎么失败的（2026-10-27：现场排障要能一眼看出是哪条）
 
         foreach (var baseUrl in ShellConfig.OrderedSubmitEndpoints())
         {
-            System.Net.Http.HttpResponseMessage resp;
             tried++;
-            try
+
+            var (resp, error) = await RequestWithRetryAsync(
+                () => PollHttp.GetAsync(baseUrl.TrimEnd('/') + "/api/announce/poll?" + query));
+
+            if (resp is null)
             {
-                resp = await PollHttp.GetAsync(baseUrl.TrimEnd('/') + "/api/announce/poll?" + query);
-            }
-            catch (Exception ex)
-            {
-                firstError ??= ex.Message;
+                failures.Add($"{new Uri(baseUrl).Host} {Shorten(error)}");
                 continue;   // 这个入口不通，换下一个
             }
 
@@ -266,9 +309,22 @@ public static class AnnounceService
                 if (_failStreak == 1 || _failStreak % 5 == 0)
                     AppLog.Warn("announce",
                         $"所有入口均不可达（连续第 {_failStreak} 轮，试了 {tried}/{ShellConfig.SubmitEndpoints.Length} 个入口），"
-                        + $"退避 {_backoffSec}s" + (string.IsNullOrEmpty(firstError) ? "" : $"：{firstError}"));
+                        + $"退避 {_backoffSec}s"
+                        + (failures.Count > 0 ? "。逐条：" + string.Join("；", failures) : ""));
             }
         }
+    }
+
+    /// <summary>
+    /// 把异常信息压成一行短句 —— 完整堆栈对"到底哪条域名不通"毫无帮助，只会把日志撑爆。
+    /// 保留 Win32 / 套接字错误的原文（那才是排障要看的东西）。
+    /// </summary>
+    private static string Shorten(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return "未知原因";
+
+        var text = message.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return text.Length <= 90 ? text : text[..90] + "…";
     }
 
     private static void MarkOk(string baseUrl)
@@ -386,16 +442,21 @@ public static class AnnounceService
 
         foreach (var baseUrl in ShellConfig.OrderedSubmitEndpoints())
         {
-            System.Net.Http.HttpResponseMessage resp;
-            try
+            var (resp, _) = await RequestWithRetryAsync(async () =>
             {
-                using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-                resp = await Http.PostAsync(baseUrl.TrimEnd('/') + "/api/announce/send", content);
-            }
-            catch
-            {
-                continue;
-            }
+                // ⚠️ 每次尝试都要新建 content：StringContent 用完即弃，重试时拿旧的那个会抛 ObjectDisposed
+                var content = new StringContent(payload, Encoding.UTF8, "application/json");
+                try
+                {
+                    return await Http.PostAsync(baseUrl.TrimEnd('/') + "/api/announce/send", content);
+                }
+                finally
+                {
+                    content.Dispose();
+                }
+            });
+
+            if (resp is null) continue;   // 这个入口连不上，换下一个
 
             using (resp)
             {
