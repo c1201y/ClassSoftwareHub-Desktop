@@ -41,7 +41,7 @@
                 <TextBlock Text="总开关" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <controls:SettingsCard Header="启用 Hub AI"
-                                           Description="关闭后，软件下载页的入口与导航中的 Hub AI 一并隐藏。已经填过的配置会保留。">
+                                           Description="关闭后，软件下载页里的 Hub AI 入口不再显示，对话页会切回启用引导。导航栏的 Hub AI 始终保留，方便随时看到这项功能。已经填过的配置会保留。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8F2;" />
                         </controls:SettingsCard.HeaderIcon>

@@ -1331,6 +1331,7 @@ public sealed partial class MainWindow : Window
             _tray.MenuItems.Add(new TrayMenuItem { Text = "工具侧边栏", Command = "sidebar" });
             _tray.MenuItems.Add(new TrayMenuItem { Separator = true });
             _tray.MenuItems.Add(new TrayMenuItem { Text = "检查更新", Command = "update" });
+            _tray.MenuItems.Add(new TrayMenuItem { Text = "重启应用", Command = "restart" });
             _tray.MenuItems.Add(new TrayMenuItem { Separator = true });
             _tray.MenuItems.Add(new TrayMenuItem { Text = "退出", Command = "exit" });
 
@@ -1398,6 +1399,9 @@ public sealed partial class MainWindow : Window
             case "update":
                 ShowFromTray();
                 _ = CheckUpdateManualAsync();
+                break;
+            case "restart":
+                RestartApp();
                 break;
             case "exit":
                 ExitApp();
@@ -2129,6 +2133,51 @@ public sealed partial class MainWindow : Window
     ///    <c>Application.Current.Exit()</c> 造成的：应用没退 → 安装程序查到 AppMutex 占用 →
     ///    静默模式自动取消 → 安装悄悄失败。
     /// </summary>
+    /// <summary>
+    /// 重启应用（2026-10-28 加，托盘菜单与 Hub AI 的「立即重启」都走这里）。
+    /// <para>
+    /// ⚠️ **不能**先 <c>Process.Start</c> 再退出：本进程持有单实例互斥体，新进程一起来就发现
+    /// 「已经有一个实例在跑」，按 <c>App</c> 的启动逻辑去"敲门"叫醒旧实例、然后自己 <c>Exit(0)</c> ——
+    /// 结果就是旧的一退、新的也没了，用户看到的是"点了重启软件直接消失"。
+    /// 所以先安排一个**延迟 2 秒**的启动命令，让旧进程有时间退干净、把互斥体放开，再走正常退出流程。
+    /// </para>
+    /// <para>
+    /// 用 <c>ping -n 3</c> 而不是 <c>timeout</c> 做延时：timeout.exe 在没有交互式控制台时会直接报错
+    /// 「输入重定向不支持」，等于没延时。
+    /// </para>
+    /// </summary>
+    public void RestartApp()
+    {
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exe))
+        {
+            Core.AppLog.Warn("exit", "重启应用失败：取不到自身可执行文件路径");
+            return;
+        }
+
+        try
+        {
+            // -n 4 = 约 3 秒。给足时间：ExitApp 里有 1.5 秒硬退兜底，余下 1.5 秒留给互斥体释放。
+            var psi = new ProcessStartInfo("cmd.exe", $"/c ping 127.0.0.1 -n 4 >nul & start \"\" \"{exe}\"")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            };
+
+            Process.Start(psi);
+            Core.AppLog.Info("exit", "已安排重启：约 2 秒后拉起新实例");
+        }
+        catch (Exception ex)
+        {
+            // 安排不成就别退出 —— 否则用户既没重启成，手上的窗口也没了
+            Core.AppLog.Fail("exit", ex, "安排重启失败，本次不退出");
+            return;
+        }
+
+        ExitApp();
+    }
+
     public void ExitApp()
     {
         Core.AppLog.Info("exit", "ExitApp() 被调用");

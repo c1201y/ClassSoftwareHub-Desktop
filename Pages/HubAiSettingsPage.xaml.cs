@@ -69,13 +69,37 @@ public sealed partial class HubAiSettingsPage : Page
     //  总闸
     // ══════════════════════════════════════════════════════
 
-    private void EnableToggle_Toggled(object sender, RoutedEventArgs e)
+    private async void EnableToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
 
-        App.Settings.Current.HubAiEnabled = EnableToggle.IsOn;
+        var enabled = EnableToggle.IsOn;
+
+        App.Settings.Current.HubAiEnabled = enabled;
         App.Settings.Save();
-        AppLog.Step("hubai", EnableToggle.IsOn ? "总闸打开" : "总闸关闭");
+        AppLog.Step("hubai", enabled ? "总闸打开" : "总闸关闭");
+
+        // 打开与关闭都给一个「立即重启」的出口（2026-10-28 Nick：关掉之后前台功能还能用）。
+        // ⚠️ 说清楚哪些是即时生效的、哪些要重新进入页面才刷新 —— 别一句"请重启"糊过去：
+        //    软件下载页的入口卡片、对话页的状态都是"进入页面时重算"，
+        //    加上 HubAiPage 是 NavigationCacheMode=Enabled，停在原地确实看不到变化。
+        // ⛔ 导航栏的 Hub AI 项**不受总闸影响**，永远在那儿（Nick 要留作宣传位），文案里别把它算进去。
+        var dialog = new ContentDialog
+        {
+            Title = enabled ? "Hub AI 已启用" : "Hub AI 已停用",
+            Content = enabled
+                ? "设置已保存。软件下载页的入口会在下次进入时出现，导航栏的 Hub AI 随时可用；"
+                  + "如果对话页仍然停在引导界面，重新进入一次即可，或立即重启应用。"
+                : "设置已保存。软件下载页的入口会收起，对话页会在下次进入时切回启用引导；"
+                  + "导航栏的 Hub AI 保留，方便随时重新开启。如需立刻清掉残留，可以重启应用。",
+            PrimaryButtonText = "立即重启",
+            CloseButtonText = "稍后",
+            DefaultButton = ContentDialogButton.Close,   // 默认不是重启：多数情况重进一次页面就够
+            XamlRoot = XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            App.MainWindow?.RestartApp();
     }
 
     // ══════════════════════════════════════════════════════

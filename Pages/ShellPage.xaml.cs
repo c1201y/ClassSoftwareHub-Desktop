@@ -65,6 +65,10 @@ public sealed partial class ShellPage : UserControl
     {
         foreach (var def in ToolCatalog.All)
         {
+            // 已经单独占了导航栏顶层项的工具（2026-10-28，见 ToolDef.Standalone）——
+            // 这里跳过，否则导航里会出现两个入口。
+            if (def.Standalone) continue;
+
             // …… 按分组送到对应父项下（2026-10-22）
             var parent = def.Group == ToolGroup.System ? SystemToolsNav : ClassroomToolsNav;
 

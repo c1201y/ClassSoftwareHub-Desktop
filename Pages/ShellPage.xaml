@@ -156,8 +156,15 @@
                   ⚠️ 与「软件下载」页右下的浮层是同一个内核的两种外壳，浮层里「↗」会跳到这一页。
                   ⚠️ 名字里必须带 AI（Nick 明确要求）—— 叫 Agent 会让人以为它能改电脑，
                      实际全程只读，改个名字比加一句免责声明有效。
+
+                  ⛔⛔ **这一项永远常驻，不受「启用 Hub AI」总闸控制**（2026-10-28 Nick 定）。
+                     原话：「导航里的 Hub AI 不需要消失……我要常驻这个，因为我要让你宣传这个功能。
+                     如果我不开这个功能，他们根本不知道，那么我根本就没有办法进行宣传。」
+                     ⇒ 总闸关着时点进来是「去启用」引导页（见 HubAiPage.ApplyEnabledState），
+                       那是**故意**留给用户的展示位，不是 bug。
+                     ⇒ 软件下载页那张入口卡片受总闸控制、会隐藏，这两处的规则不一样，别一起改。
                 -->
-                <NavigationViewItem Content="Hub AI" Tag="hubai">
+                <NavigationViewItem x:Name="HubAiNav" Content="Hub AI" Tag="hubai">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8F2;" />
                     </NavigationViewItem.Icon>
@@ -192,6 +199,26 @@
                 <NavigationViewItem Content="教室喊话" Tag="announce">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE720;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <!--
+                  函数图像（2026-10-28 Nick：从「课堂工具」里提出来，单独成一个功能项）。
+                  位置：紧贴「课堂工具」之上 —— 它本来就属于课堂工具，提出去之后放在组的最前面，
+                       读起来就是「常用的那几个 + 剩下的都在下面」。
+
+                  ⚠️ 与「教室喊话」的处理方式**不同**，别照抄那一条：
+                     喊话是从 ToolCatalog 里整条删掉的，因为它不是"可替换的网页小工具"；
+                     函数图像有 WebToolId（网页版载体），而且命令行直达（tool=function-plot）、学科工具窗、
+                     侧边栏模块、导航按 Id 反查页面类型，全都依赖 ToolCatalog 这张表。
+                     所以它在表里保留，只标 Standalone：工具分组子项与索引页卡片跳过它，其余照旧。
+
+                  ⚠️ 因此 NavigateTagCore **不需要**给它写 case：按 Id 反查 ToolCatalog 那一支就会命中，
+                     并且自动走 ToolCarrier 的载体选择（有 Web 版且本机跑得起来 → 宿主页，否则原生页）。
+                     给它单写 case 反而会绕过载体选择，退回 2026-10-25 修过的那个坑。
+                -->
+                <NavigationViewItem Content="函数图像" Tag="function-plot">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem x:Name="ClassroomToolsNav" Content="课堂工具" Tag="tools-classroom">

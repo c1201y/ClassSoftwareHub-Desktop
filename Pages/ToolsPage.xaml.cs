@@ -38,7 +38,8 @@ public sealed partial class ToolsPage : Page
             ? ToolGroup.System
             : ToolGroup.Classroom;
 
-        var items = ToolCatalog.All.Where(t => t.Group == group).ToList();
+        // ⚠️ Standalone 的工具已经单独占了导航栏顶层项，索引页里不再重复出卡片（2026-10-28 Nick 定）。
+        var items = ToolCatalog.All.Where(t => t.Group == group && !t.Standalone).ToList();
 
         // 两列板式（见 .xaml：照搬首页「快速开始」）：偶数序号进左列、奇数进右列。
         CardColumnLeft.ItemsSource = items.Where((_, i) => i % 2 == 0).ToList();

@@ -37,6 +37,20 @@ public sealed class ToolDef
     /// </summary>
     public string? WebToolId { get; init; }
 
+    /// <summary>
+    /// 这个工具已经**单独占了一个导航栏顶层项**（2026-10-28 加）。
+    /// <para>
+    /// 置 true 之后，「课堂工具 / 系统工具」的动态子项和工具索引页的卡片都不再出现它 ——
+    /// 否则导航栏里会同时有顶层项和分组子项两个入口，看着像重复。
+    /// </para>
+    /// <para>
+    /// ⚠️ 但它**仍然留在 <see cref="ToolCatalog.All"/> 里**，这一点与「教室喊话」不同（那个是整条移出）。
+    /// 因为 <c>--tool=&lt;id&gt;</c>、学科工具窗、侧边栏模块、以及导航按 Id 反查页面类型，
+    /// 全都依赖这张表；移出去会把那几条路一起打断。
+    /// </para>
+    /// </summary>
+    public bool Standalone { get; init; }
+
     /// <summary>无障碍 / 调试用：列表项名字就是工具名。</summary>
     public override string ToString() => Name;
 }
@@ -100,7 +114,9 @@ public static class ToolCatalog
             Desc = "输入含 x 的表达式即可绘制函数曲线，可同时绘制多条以便比较；支持滚轮缩放与拖动查看。",
             Glyph = "\uE9D2", Page = typeof(ClassSoftwareHub.Desktop.Pages.FunctionPlotPage),
             // 网页版工具包 id：有它且本机跑得起来就走 Web，否则静默走上面那个原生页。
-            WebToolId = "function-plot"
+            WebToolId = "function-plot",
+            // 2026-10-28 Nick：提到导航栏单独成项，工具分组与索引页里不再重复出现（见 Standalone 的说明）。
+            Standalone = true
         },
         new ToolDef
         {
