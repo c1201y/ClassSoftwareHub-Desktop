@@ -780,10 +780,12 @@ public sealed partial class AppDataPage : Page
         UpdateActionBar();                       // 让三颗按钮一起变灰
 
         var okCount = 0;
+        var partialCount = 0;   // 删掉了一部分、但有文件被占用跳过（2026-10-29 拆出来，见下面判定）
         var failCount = 0;
         var skipped = 0;
         var freed = 0L;
         var notes = new List<string>();
+        var partialNotes = new List<string>();   // 「清掉一部分」的目录名，单独一张单子（别混进失败清单）
 
         // 登记一条清理任务，进度与结局都回报给「任务进行」（2026-10-29 加）。
         // 为什么：清一个几百 MB 的缓存目录要几十秒，用户一旦切走页面，这边就只剩一个空壳，
@@ -839,6 +841,17 @@ public sealed partial class AppDataPage : Page
                     freed += before - bytes;
                     row.Status = outcome.Skipped > 0 ? $"已清空（跳过 {outcome.Skipped} 项）" : "已清空";
                 }
+                else if (outcome.Cleaned > 0)
+                {
+                    // 「删掉了一部分，剩下几个正被占用」——这不是失败（2026-10-29 修）。
+                    // ⚠️ 以前一律算 failCount，于是一个清掉了 99% 的目录会把整条任务标成「未完成」，
+                    //    用户看到的就是「部分目录没清理成功」，再点重试又走进下载分支报 url 为空。
+                    partialCount++;
+                    skipped += outcome.Skipped;
+                    freed += before - bytes;
+                    row.Status = $"部分清理（跳过 {outcome.Skipped} 项）";
+                    partialNotes.Add($"「{row.Name}」：{outcome.Message}");
+                }
                 else
                 {
                     failCount++;
@@ -863,8 +876,9 @@ public sealed partial class AppDataPage : Page
         RescanButton.IsEnabled = true;
         CategoryBox.IsEnabled = true;
 
-        // 任务收尾：成功给「已清理 · 释放 X」，有失败项就标未完成（详情仍在下面的结果框里）
-        if (failCount == 0 && okCount > 0)
+        // 任务收尾：清干净或「部分清掉」都算完成（剩下那几个被占用的文件，页面结果框里会说清），
+        // 只有整个目录一个文件都没删掉才算未完成。
+        if (failCount == 0 && (okCount > 0 || partialCount > 0))
             Services.DownloadManager.Current.CompleteCleanup(task, freed);
         else
             Services.DownloadManager.Current.FailExternal(task,
@@ -876,8 +890,8 @@ public sealed partial class AppDataPage : Page
         ShowCategory();
         RefreshCounts();
 
-        await InfoAsync(failCount == 0 ? "清理完成" : "部分完成",
-            BuildResultBody(okCount, failCount, freed, skipped, notes));
+        await InfoAsync(failCount == 0 && partialCount == 0 ? "清理完成" : "部分完成",
+            BuildResultBody(okCount, partialCount, failCount, freed, skipped, notes, partialNotes));
     }
 
     private static UIElement BuildConfirmBody(
@@ -954,15 +968,28 @@ public sealed partial class AppDataPage : Page
     /// ⚠️ 讲的必须是**实际结果**，不是"我们打算做的事" —— 跳过几项、失败几项都要如实报。
     /// </summary>
     private static string BuildResultBody(
-        int okCount, int failCount, long freed, int skipped, IReadOnlyList<string> notes)
+        int okCount, int partialCount, int failCount, long freed, int skipped,
+        IReadOnlyList<string> notes, IReadOnlyList<string> partialNotes)
     {
         var sb = new StringBuilder();
 
-        sb.Append(okCount == 1
-            ? $"已清理 1 个目录，释放约 {AppLog.Size(freed)}。"
-            : $"已清理 {okCount} 个目录，合计释放约 {AppLog.Size(freed)}。");
+        var cleared = okCount + partialCount;
+        if (cleared == 0)
+            sb.Append("没有目录被清空。");
+        else
+            sb.Append(cleared == 1
+                ? $"已清理 1 个目录，释放约 {AppLog.Size(freed)}。"
+                : $"已清理 {cleared} 个目录，合计释放约 {AppLog.Size(freed)}。");
 
-        if (skipped > 0)
+        // 被占用的文件单独说：这不是出错，是程序正在用它们，关掉之后还能再清一次。
+        if (partialCount > 0)
+        {
+            sb.Append($"\n其中 {partialCount} 个目录有文件正被程序占用，只清掉了能删的部分"
+                      + $"（共跳过 {skipped} 项）—— 关掉相关程序后可以再清一次：");
+            foreach (var note in partialNotes.Take(5)) sb.Append("\n· " + note);
+            if (partialNotes.Count > 5) sb.Append($"\n· …… 还有 {partialNotes.Count - 5} 条");
+        }
+        else if (skipped > 0)
             sb.Append($"\n有 {skipped} 项正被程序占用，已跳过 —— 关掉相关程序后可以再清一次。");
 
         if (failCount > 0)

@@ -410,10 +410,20 @@ public sealed class DownloadTask : INotifyPropertyChanged
     public Visibility RemoveVisibility => IsFinished ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// 「重试」只给普通下载。更新包的重来是「多候选线路 + 校验 + 待装标记」那整套，
-    /// 拿一条链接再下一遍没有意义 —— 那种情况请回设置页重新检查更新。
+    /// 「重试」只给普通下载。
+    /// <para>
+    /// 更新包的重来是「多候选线路 + 校验 + 待装标记」那整套，拿一条链接再下一遍没有意义 ——
+    /// 那种情况请回设置页重新检查更新。
+    /// </para>
+    /// <para>
+    /// ⚠️ 清理任务**也不给**（2026-10-29 修）：它的 <c>Url</c> 是空串，点下去会走进下载的分支，
+    /// 当场抛 <c>Parameter 'url'</c>，界面上就变成「下载失败 · 下载地址为空」——
+    /// 用户只是想把没清干净的目录再清一遍，结果看到一条失败的下载任务。
+    /// 重来的正确入口是回 AppData 管理页重新勾选（那边才知道该删哪些目录、总量多少）。
+    /// </para>
     /// </summary>
-    public Visibility RetryVisibility => IsFinished && !IsUpdate ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RetryVisibility =>
+        IsFinished && !IsUpdate && !IsCleanup ? Visibility.Visible : Visibility.Collapsed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -507,6 +517,9 @@ public sealed class DownloadManager
         // 更新包没有「重试」这一说（按钮也不给）：它的重来要带多候选线路与校验，
         // 拿一条链接再下一遍纯属白费 —— 要重来请回设置页重新检查更新。
         if (task.IsUpdate) return;
+        // 清理任务同理（按钮也不给，这里是第二道闸）：Url 是空串，硬走 Start 会抛
+        // 「Parameter 'url'」并把失败文案覆盖成「下载失败」。重来请回 AppData 管理页重新勾选。
+        if (task.IsCleanup) return;
         Remove(id);
         Start(task.Url, task.SuggestedName, task.Title);
     }
