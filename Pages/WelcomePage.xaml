@@ -291,6 +291,61 @@
             </Grid>
 
             <!--
+              教室喊话 / 函数图像（2026-10-29 补）：
+              这两项在导航栏里是**一级功能项**（喊话是从工具里提出来的，函数图像是 Standalone），
+              首页一直没给卡片，用户从首页根本看不到它们。放在第二排 —— 只排在「下载首页」之后，
+              其余卡片依次下移。
+              ⚠️ 标签就是导航用的那个 tag（announce / function-plot），别另起名字：
+                 function-plot 交给 NavigateTagCore 按 Id 反查工具表，才能走载体选择（Web 优先、原生兜底）。
+            -->
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Tag="announce" CornerRadius="8" Padding="14,18"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE720;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="教室喊话" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="全屏提醒，同网段与远程都能收到" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Column="1" Tag="function-plot" CornerRadius="8" Padding="14,18"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                        Tapped="Card_Tapped">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE9D2;" Style="{StaticResource CardIcon}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="函数图像" Style="{StaticResource CardTitle}" />
+                            <TextBlock Text="函数曲线、圆锥曲线与几何作图" Style="{StaticResource CardSubtitle}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Style="{StaticResource CardChevron}" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!--
               ⚠️ 2026-10-23：导航把「内置工具」拆成课堂 / 系统两组之后，首页还挂着一张「内置工具」指向总索引
                   —— 点进去看到的是一个混在一起的列表，跟左侧导航对不上。这里跟着拆开，并补一张 Hub AI 卡。
             -->

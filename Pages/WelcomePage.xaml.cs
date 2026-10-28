@@ -1005,6 +1005,16 @@ public sealed partial class WelcomePage : Page
             case "sidebar":
                 App.MainWindow?.Shell.NavigateTo("sidebar");
                 break;
+            case "announce":
+                // 教室喊话是一级功能项（tag 由 NavigateTagCore 单独处理）
+                App.MainWindow?.Shell.NavigateTo("announce");
+                break;
+            case "function-plot":
+                // ⛔ 别在这里直接 Navigate(typeof(FunctionPlotPage))：那样会绕过 ToolCarrier，
+                //    有 WebView2 运行时 + 本地工具包的机器上本该进网页版，硬跳原生页等于把新版本关在门外。
+                //    交给 NavigateTo：它先在 ToolCatalog 里按 Id 反查到这条工具，再走载体选择。
+                App.MainWindow?.Shell.NavigateTo("function-plot");
+                break;
             case "experimental":
                 // 走专用入口：除了切到总览页，还要把导航里的分组展开（从外面跳进来时看不出里面有子项）
                 App.MainWindow?.Shell.NavigateToExperimental();
