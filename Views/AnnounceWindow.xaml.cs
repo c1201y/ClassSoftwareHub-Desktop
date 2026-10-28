@@ -155,6 +155,22 @@ public sealed partial class AnnounceWindow : Window
 
         Activate();
 
+        // 去掉 Win11 给窗口画的那一圈细边框 + 圆角（2026-10-29）。
+        // ⚠️ 全屏时钟 / 秒表 / 计时器三个窗口早就调了 WindowChrome.RemoveBorder，**只有喊话窗漏了**，
+        //    所以它一直贴着屏幕边缘有一道很薄的浅色线、四角还能看到底下的桌面。
+        //    不是"Win11 特有 bug"，是这套无边框处理没接上。
+        // ⚠️ 位置有讲究：必须放在 Activate 之后（此前 HWND 还没真正建出来，拿不到有效句柄），
+        //    且放在 SetupDimBackdrop 之前 —— 亚克力一铺上来就是第一帧可见画面，
+        //    那帧里边框还压在边上，等于白改。
+        try
+        {
+            WindowChrome.RemoveBorder(WindowNative.GetWindowHandle(this), rounded: false, dark: true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("announce", "去掉窗口边框失败：" + ex.Message);
+        }
+
         SetupDimBackdrop();
 
         // ⚠️⛔ 必须等布局拿到真实尺寸再开场：FitText、按行切分、打字机预留高度全靠它，

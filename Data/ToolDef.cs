@@ -111,7 +111,11 @@ public static class ToolCatalog
         new ToolDef
         {
             Id = "function-plot", Name = "函数图像",
-            Desc = "输入含 x 的表达式即可绘制函数曲线，可同时绘制多条以便比较；支持滚轮缩放与拖动查看。",
+            // 2026-10-29 跟着网页版（V1.26.1029）重写：它早已不只是「画函数曲线」，
+            // 隐函数 / 不等式 / 极坐标 / 参数方程，以及点线圆与圆锥曲线都在同一块画板上。
+            // 这段文字是搜索索引与工具说明的唯一来源，别只写单条曲线的能力。
+            Desc = "绘制函数与几何图形：支持显函数、隐函数、不等式、极坐标与参数方程，"
+                   + "可作点、线段、圆、椭圆、双曲线与多边形，并能绘制平行线、垂线与切线。",
             Glyph = "\uE9D2", Page = typeof(ClassSoftwareHub.Desktop.Pages.FunctionPlotPage),
             // 网页版工具包 id：有它且本机跑得起来就走 Web，否则静默走上面那个原生页。
             WebToolId = "function-plot",
