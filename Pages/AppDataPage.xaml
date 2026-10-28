@@ -77,7 +77,8 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- ── 标题行：左＝标题+实验性标记+计数，右＝分类 / 重新扫描 / 说明（全部并排） ── -->
+            <!-- ── 标题行：左＝标题+计数，右＝分类 / 重新扫描 / 说明（全部并排）
+                 （2026-10-29 转正进「系统工具」，标题旁那枚「实验性功能」标记已摘掉） ── -->
             <Grid ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -89,16 +90,6 @@
                 <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="AppData 管理" FontSize="28" FontWeight="Bold" />
-                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                                BorderThickness="1"
-                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                <TextBlock Text="实验性功能" FontSize="12"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            </StackPanel>
-                        </Border>
                     </StackPanel>
 
                     <!-- 标题下面这一行原本是一段解释话（已移进「说明」弹窗），现在放**计数**。

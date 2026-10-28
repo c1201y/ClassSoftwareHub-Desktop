@@ -23,20 +23,10 @@
 
             <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
-                <!-- 标题 + 实验性标记 -->
+                <!-- 标题（2026-10-29 转正进「系统工具」，顶部的「实验性功能」标记已摘掉） -->
                 <StackPanel Spacing="6" Margin="0,0,0,20">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="白板专杀" FontSize="28" FontWeight="Bold" />
-                        <Border CornerRadius="4" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                                BorderThickness="1"
-                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                <TextBlock Text="实验性功能" FontSize="12"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            </StackPanel>
-                        </Border>
                     </StackPanel>
                     <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
                                Text="希沃白板5 在退出后，进程可能仍驻留于任务管理器的后台进程中，导致应用无法再次启动。到达设定时间点后自动结束此类后台滞留进程；存在可见窗口（即正在使用）的进程不处理。" />

@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace ClassSoftwareHub.Desktop.Pages;
 
 /// <summary>
-/// 「白板专杀」页（实验性功能，tag = <c>easiguard</c>）。
+/// 「白板专杀」页（2026-10-29 从实验性功能转正，现属「系统工具」；tag = <c>easiguard</c>）。
 ///
 /// 逻辑全在 <see cref="EasiNoteGuard"/>（扫进程 / 判窗口 / 杀 / 定时），
 /// 这里只管界面，外加一个 <see cref="_ready"/> 闸门挡住构造期的假事件。
