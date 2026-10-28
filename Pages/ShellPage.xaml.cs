@@ -352,9 +352,6 @@ public sealed partial class ShellPage : UserControl
             case "machinecheck":
                 ContentFrame.Navigate(typeof(MachineCheckPage));
                 return;
-            case "easiguard":
-                ContentFrame.Navigate(typeof(EasiNoteGuardPage));
-                return;
             case "procguard":
                 ContentFrame.Navigate(typeof(ProcessGuardPage));
                 return;
@@ -362,20 +359,15 @@ public sealed partial class ShellPage : UserControl
                 // 应用卸载（2026-10-12 加，实验性功能分组下）
                 ContentFrame.Navigate(typeof(UninstallPage));
                 return;
-            case "appdata":
-                // AppData 管理（2026-10-13 加，实验性功能分组下）
-                ContentFrame.Navigate(typeof(AppDataPage));
-                return;
             case "startup":
                 // 开机启动项（2026-10-16 加，实验性功能分组下）
                 ContentFrame.Navigate(typeof(StartupPage));
                 return;
-            case "repair":
-                // 系统修复（2026-10-16 加，实验性功能分组下）
-                ContentFrame.Navigate(typeof(SystemRepairPage));
-                return;
             // ⚠️ 自动关机（autoshutdown）2026-10-12 转正搬进「内置工具」，走上面 ToolCatalog 那条路，
             //    这里不再单写 case（写了也到不了：工具路径在前面就 return 了）。
+            // ⚠️ 白板专杀 / AppData 管理 / 系统修复 同理 —— 2026-10-29 从「实验性功能」转正搬进
+            //    ToolCatalog 的 System 组，三个 case 已删。它们的 Id 必须与原来的 tag 一字不差，
+            //    否则 page= 启动参数与首页快捷方式会掉到 default（回首页）。
             case "logs":
                 ContentFrame.Navigate(typeof(LogViewerPage));
                 return;

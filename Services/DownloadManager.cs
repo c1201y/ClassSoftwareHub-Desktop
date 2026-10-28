@@ -27,6 +27,19 @@ public enum DownloadKind
     /// </list>
     /// </summary>
     Update,
+
+    /// <summary>
+    /// 本地清理任务（2026-10-29 加，AppData 管理在用）。
+    /// <para>
+    /// 没有链接、没有落盘文件，只有一个"删了多少 / 总共多少"的进度 —— 借这张表进「任务进行」页，
+    /// 让用户切走页面之后还能看到清理跑没跑完（Nick：「不然的话就孤零零的在那里」）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 完成态的 Path 为空，所以「打开 / 打开文件夹 / 安装」三颗按钮全都不会出现
+    /// （它们都要求 <c>CanOpen</c>，而 <c>CanOpen</c> 要求文件真的存在）。
+    /// </para>
+    /// </summary>
+    Cleanup,
 }
 
 /// <summary>下载任务的状态。</summary>
@@ -276,12 +289,20 @@ public sealed class DownloadTask : INotifyPropertyChanged
     /// <summary>是不是应用自身的更新包（卡片上摆「安装」而不是「打开」）。</summary>
     public bool IsUpdate => Kind == DownloadKind.Update;
 
+    /// <summary>是不是本地清理任务（AppData 缓存）。</summary>
+    public bool IsCleanup => Kind == DownloadKind.Cleanup;
+
     /// <summary>文件还在不在（用户可能已经把它挪走了，别让「打开」点了报错）。</summary>
     public bool CanOpen =>
         State == DownloadState.Completed && !string.IsNullOrEmpty(Path) && File.Exists(Path);
 
-    /// <summary>卡片的图标：普通下载＝下载箭头；更新包＝同步箭头，一眼分得开。</summary>
-    public string HeaderGlyph => IsUpdate ? "\uE895" : "\uE896";
+    /// <summary>卡片的图标：普通下载＝下载箭头；更新包＝同步箭头；清理＝垃圾桶。一眼分得开。</summary>
+    public string HeaderGlyph => Kind switch
+    {
+        DownloadKind.Update => "\uE895",
+        DownloadKind.Cleanup => "\uE74D",
+        _ => "\uE896",
+    };
 
     public double Percent => Progress?.Percent ?? 0;
 
@@ -298,20 +319,28 @@ public sealed class DownloadTask : INotifyPropertyChanged
     public string StatusText => State switch
     {
         // 更新包的完成态要说清「下一步干什么」，否则用户看到「已完成」还是会去找安装包在哪
-        DownloadState.Completed => IsUpdate
-            ? $"下载完成并已通过校验  ·  {DownloadProgress.Size(Bytes)}  ·  可立即安装"
-            : "已完成  ·  " + DownloadProgress.Size(Bytes),
+        DownloadState.Completed => IsCleanup
+            ? "已清理  ·  释放 " + DownloadProgress.Size(Bytes)
+            : IsUpdate
+                ? $"下载完成并已通过校验  ·  {DownloadProgress.Size(Bytes)}  ·  可立即安装"
+                : "已完成  ·  " + DownloadProgress.Size(Bytes),
 
-        DownloadState.Running => Progress is { Indeterminate: false, Received: > 0 } p
-            ? $"{p.Percent:0}%   {p.SizeText}" + (p.SpeedText.Length > 0 ? "  ·  " + p.SpeedText : "")
-            : Progress is { Received: > 0 } u
-                ? "已接收 " + u.SizeText + (u.SpeedText.Length > 0 ? "  ·  " + u.SpeedText : "")
-                : "正在连接",
+        DownloadState.Running => IsCleanup
+            ? Progress is { Indeterminate: false, Received: > 0 } c
+                ? $"清理中  {c.Percent:0}%   {c.SizeText}"
+                : "正在清理"
+            : Progress is { Indeterminate: false, Received: > 0 } p
+                ? $"{p.Percent:0}%   {p.SizeText}" + (p.SpeedText.Length > 0 ? "  ·  " + p.SpeedText : "")
+                : Progress is { Received: > 0 } u
+                    ? "已接收 " + u.SizeText + (u.SpeedText.Length > 0 ? "  ·  " + u.SpeedText : "")
+                    : "正在连接",
 
-        DownloadState.Failed => (IsUpdate ? "更新包下载失败" : "下载失败")
-            + (string.IsNullOrWhiteSpace(Error) ? "" : "  ·  " + Error),
+        DownloadState.Failed => IsCleanup
+            ? "清理未完成" + (string.IsNullOrWhiteSpace(Error) ? "" : "  ·  " + Error)
+            : (IsUpdate ? "更新包下载失败" : "下载失败")
+              + (string.IsNullOrWhiteSpace(Error) ? "" : "  ·  " + Error),
 
-        _ => IsUpdate ? "已取消更新下载" : "已取消",
+        _ => IsCleanup ? "已取消清理" : IsUpdate ? "已取消更新下载" : "已取消",
     };
 
     // 卡片上的按钮/进度条按状态显隐（x:Bind 不会自动把 bool 转成 Visibility，所以在这儿转好）
@@ -322,7 +351,13 @@ public sealed class DownloadTask : INotifyPropertyChanged
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-    public Visibility RunningVisibility => IsRunning ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>
+    /// 「取消」按钮：正在跑才给。
+    /// ⚠️ 清理任务**不给**（2026-10-29）：它的删除动作走的是 <c>CancellationToken.None</c>，
+    ///    取消了也不会真的停下来 —— 与其留一颗点了没反应的按钮，不如先收起来。
+    /// </summary>
+    public Visibility RunningVisibility =>
+        IsRunning && !IsCleanup ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>说明行（只有更新包有，普通下载不占位）。</summary>
     public Visibility NoteVisibility => Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -514,6 +549,43 @@ public sealed class DownloadManager
     {
         task.Error = error;
         task.State = DownloadState.Failed;
+        Finished?.Invoke(task);
+        Changed?.Invoke();
+    }
+
+    // ── 本地清理任务（AppData 缓存，2026-10-29）──────────────────────
+    //
+    // 和更新包一样是"外部托管"：删除动作跑在 AppDataPage 里，这里只负责台账。
+    // 为什么要走这张表而不是各自在页面里画一条进度条：清理一个几百 MB 的缓存目录可能要几十秒，
+    // 用户切到别的页面就再也看不到它跑到哪了 —— Nick 原话「孤零零的在那里，不知道有没有完成」。
+
+    /// <summary>
+    /// 登记一条清理任务并显示到「任务进行」页。⚠️ 必须在 UI 线程调用。
+    /// <paramref name="totalBytes"/> 是预计要删的总量（界面早就量过了，直接拿来当分母）。
+    /// </summary>
+    public DownloadTask TrackCleanup(string title, long totalBytes)
+    {
+        var task = new DownloadTask("", null, title, DownloadKind.Cleanup, "")
+        {
+            // 先把总量摆上：进度条一出现就有百分比，不会先闪一段不确定动画
+            Progress = new DownloadProgress(0, Math.Max(1, totalBytes), 0),
+        };
+
+        Tasks.Insert(0, task);
+        Changed?.Invoke();
+        return task;
+    }
+
+    /// <summary>回报清理进度（UI 线程调用；由调用方自己节流，别每删一个文件就来一次）。</summary>
+    public void ReportCleanupProgress(DownloadTask task, long deletedBytes, long totalBytes) =>
+        task.Progress = new DownloadProgress(Math.Max(0, deletedBytes), Math.Max(1, totalBytes), 0);
+
+    /// <summary>清理收尾。<paramref name="freedBytes"/> 是实际释放的量（可能小于预计值，比如有文件被占用跳过）。</summary>
+    public void CompleteCleanup(DownloadTask task, long freedBytes)
+    {
+        task.Bytes = Math.Max(0, freedBytes);
+        task.Progress = new DownloadProgress(task.Bytes, Math.Max(1, task.Bytes), 0);
+        task.State = DownloadState.Completed;   // 状态放最后：界面看到"完成"时数据已经齐了
         Finished?.Invoke(task);
         Changed?.Invoke();
     }

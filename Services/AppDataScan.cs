@@ -371,7 +371,7 @@ public static class AppDataScan
     ///
     /// 被程序占用的文件删不掉 —— **跳过并计数**，把数量如实回报给界面，而不是假报成功。
     /// </summary>
-    public static CleanOutcome Clean(AppDataEntry entry, CancellationToken ct)
+    public static CleanOutcome Clean(AppDataEntry entry, CancellationToken ct, Action<long>? onBytesDeleted = null)
     {
         // ① 最后一道闸。**别把这段当冗余**：界面状态可能过期（目录被换成联接点、规则后来改了）。
         if (!IsCleanable(entry.FullPath))
@@ -386,7 +386,7 @@ public static class AppDataScan
         // ② 深度优先删掉里面的东西（根目录自己不动）
         var deleted = 0;
         var skipped = 0;
-        PurgeInto(entry.FullPath, ref deleted, ref skipped, ct);
+        PurgeInto(entry.FullPath, ref deleted, ref skipped, ct, onBytesDeleted);
 
         if (deleted == 0 && skipped == 0)
             return new CleanOutcome(false, 0, 0, "这个目录本来就是空的。");
@@ -416,13 +416,14 @@ public static class AppDataScan
     /// "目录非空"而删不掉。删不掉的（占用、无权限）**跳过并计数**，绝不抛出去。
     /// ⛔ 联接点一律不碰：删它等于动了目录外面的东西。
     /// </summary>
-    private static void PurgeInto(string dir, ref int deleted, ref int skipped, CancellationToken ct)
+    private static void PurgeInto(string dir, ref int deleted, ref int skipped, CancellationToken ct,
+                              Action<long>? onBytesDeleted)
     {
         foreach (var sub in SafeChildren(dir, dirs: true))
         {
             if (ct.IsCancellationRequested) return;
 
-            PurgeInto(sub, ref deleted, ref skipped, ct);
+            PurgeInto(sub, ref deleted, ref skipped, ct, onBytesDeleted);
 
             try
             {
@@ -440,10 +441,17 @@ public static class AppDataScan
         {
             if (ct.IsCancellationRequested) return;
 
+            // 先取体积再删：删掉之后就没法问它多大了。
+            // ⚠️ 取不到就按 0 算 —— 进度条少走一点，比因为一个权限错误把整个清理停掉强。
+            long size = 0;
+            try { size = new FileInfo(file).Length; }
+            catch { }
+
             try
             {
                 File.Delete(file);
                 deleted++;
+                if (size > 0) onBytesDeleted?.Invoke(size);
             }
             catch (Exception ex)
             {

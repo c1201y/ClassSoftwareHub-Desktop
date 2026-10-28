@@ -785,6 +785,36 @@ public sealed partial class AppDataPage : Page
         var freed = 0L;
         var notes = new List<string>();
 
+        // 登记一条清理任务，进度与结局都回报给「任务进行」（2026-10-29 加）。
+        // 为什么：清一个几百 MB 的缓存目录要几十秒，用户一旦切走页面，这边就只剩一个空壳，
+        // 既看不到跑到哪、也不知道有没有完成（Nick：「孤零零的在那里」）。
+        var totalBytes = Math.Max(1, work.Sum(r => Math.Max(0, r.Bytes)));
+        var task = Services.DownloadManager.Current.TrackCleanup(
+            work.Count == 1 ? $"清理「{work[0].Name}」" : $"清理 {work.Count} 个缓存目录", totalBytes);
+
+        // 只有清理线程在写这两个量，所以不需要 Interlocked；节流到 120ms 一次，
+        // 否则一个几万文件的小目录会把绑定刷爆。
+        long deletedBytes = 0;
+        long lastReportTick = 0;
+
+        // ⚠️ 用主窗口的调度器而不是页面自己的：清理跑起来之后用户很可能切去别的页面，
+        //    这一页一旦不在可视化树里，它自己的 DispatcherQueue 就不可靠了 —— 进度会停在半路，
+        //    而清理其实还在后台跑。主窗口活着的整个会话里都在。
+        var uiQueue = App.MainWindow?.DispatcherQueue ?? DispatcherQueue;
+
+        void OnBytesDeleted(long n)
+        {
+            deletedBytes += n;
+
+            var tick = Environment.TickCount64;
+            if (tick - lastReportTick < 120) return;
+            lastReportTick = tick;
+
+            var snapshot = deletedBytes;
+            uiQueue.TryEnqueue(() =>
+                Services.DownloadManager.Current.ReportCleanupProgress(task, snapshot, totalBytes));
+        }
+
         foreach (var row in work)
         {
             row.Busy = true;
@@ -795,7 +825,7 @@ public sealed partial class AppDataPage : Page
                 // ⚠️ **串行**跑：这是秒级动作，几条并行没有意义，
                 //    而串行能保证同一父目录下的两条规则不会互相把对方刚重建的目录当成残留。
                 var entry = row.Entry!;
-                var outcome = await Task.Run(() => AppDataScan.Clean(entry, CancellationToken.None));
+                var outcome = await Task.Run(() => AppDataScan.Clean(entry, CancellationToken.None, OnBytesDeleted));
 
                 // 清完重新量一次，把新体积如实显示出来（而不是假报 0 或者留着旧数）
                 var (bytes, files) = await Task.Run(() => AppDataScan.Measure(row.MeasuredPath, CancellationToken.None));
@@ -832,6 +862,13 @@ public sealed partial class AppDataPage : Page
         _busy = false;
         RescanButton.IsEnabled = true;
         CategoryBox.IsEnabled = true;
+
+        // 任务收尾：成功给「已清理 · 释放 X」，有失败项就标未完成（详情仍在下面的结果框里）
+        if (failCount == 0 && okCount > 0)
+            Services.DownloadManager.Current.CompleteCleanup(task, freed);
+        else
+            Services.DownloadManager.Current.FailExternal(task,
+                failCount > 0 ? $"{failCount} 个目录未能完成" : "没有可清理的内容");
 
         // ⛔ 走 ShowCategory 而不是就地改：清完体积变小，计数行、下拉里的数字、动作条都要跟着重算。
         //    顺带把勾选清空 —— 已经清过的项留在勾选区里只会让人以为还能再清一次。

@@ -143,5 +143,33 @@ public static class ToolCatalog
         // ⚠️「教室喊话」曾于 2026-10-25 上午作为工具加在这里，当天下午 Nick 要求「提出来单独做」——
         //    已改为导航栏一级功能项（ShellPage.xaml 的 Tag=announce + NavigateTagCore 的 case），
         //    不要再往工具清单里加回来（否则导航里会出现两个入口）。
+
+        // ── 2026-10-29 从「实验性功能」转正搬来（Nick：这三个已经挺成熟了） ──
+        // ⚠️ 搬过来的方式与「教室喊话」相反：这次是**移进** ToolCatalog ——
+        //    导航子项与索引页卡片都由这里动态生成，ShellPage.xaml 里那三条手写的
+        //    NavigationViewItem 已删除，NavigateTagCore 的三个 case 也一并删掉（按 Id 反查能命中）。
+        // ⚠️ Id 必须与原 tag 一字不差（easiguard / appdata / repair）：
+        //    page= 启动参数、首页快捷方式、崩溃日志里的 CurrentTag 全都按它认。
+        new ToolDef
+        {
+            Id = "easiguard", Name = "白板专杀",
+            Group = ToolGroup.System,
+            Desc = "到点结束希沃白板5 后台滞留的残留进程。只认白板家族（EasiNote*），不碰集控端与更新组件。",
+            Glyph = "\uEA99", Page = typeof(ClassSoftwareHub.Desktop.Pages.EasiNoteGuardPage)
+        },
+        new ToolDef
+        {
+            Id = "appdata", Name = "AppData 管理",
+            Group = ToolGroup.System,
+            Desc = "列出 AppData 下可安全清理的缓存目录，按占用排序，逐个确认后删除；禁碰区一律不列。",
+            Glyph = "\uE8B7", Page = typeof(ClassSoftwareHub.Desktop.Pages.AppDataPage)
+        },
+        new ToolDef
+        {
+            Id = "repair", Name = "系统修复",
+            Group = ToolGroup.System,
+            Desc = "系统文件、组件存储、网络栈、系统服务的修复命令，按预设卡片执行，执行前原样列出命令。",
+            Glyph = "\uE7EF", Page = typeof(ClassSoftwareHub.Desktop.Pages.SystemRepairPage)
+        },
     };
 }
