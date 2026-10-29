@@ -33,15 +33,27 @@ public static class BackdropHost
     /// 给窗口上背景。返回实际生效的 kind（mica / acrylic / solid）。
     /// <paramref name="prefer"/> 传了就用它（"mica"/"acrylic"/"solid"），不传读设置。
     /// </summary>
-    public static string Apply(Window win, Panel? root = null, string? prefer = null)
+    public static string Apply(Window win, Panel? root = null, string? prefer = null, bool external = false)
     {
         // ⚠️ 必须排在前面：材质取的是「窗口此刻的深浅色」，主题还没设就等于拿系统的颜色烤死。
-        if (root is not null) ThemeHost.Apply(root);
+        // external 决定跟哪一套主题：桌面悬浮窗 = true，文档窗（条款 / 日志）= false，见 ThemeHost。
+        if (root is not null) ThemeHost.Apply(root, external);
 
         var kind = string.IsNullOrWhiteSpace(prefer) ? SettingBackdrop() : prefer!;
         kind = string.IsNullOrWhiteSpace(kind) ? "acrylic" : kind.Trim().ToLowerInvariant();
 
-        var applied = SetMaterial(win, root, kind, ThemeHost.CurrentTheme);
+        var applied = SetMaterial(win, root, kind, ThemeHost.ThemeFor(external));
+
+        // 现场排障用：窗口到底上了哪种材质、按深还是浅画的。
+        // ⚠️ 之前这一块完全没有日志，"背景全黑"只能靠猜（2026-10-29 加）。
+        try
+        {
+            Core.AppLog.Info("backdrop",
+                $"{(string.IsNullOrEmpty(win.Title) ? "（无标题窗口）" : win.Title)} → {applied}"
+                + $"（请求 {kind}，主题 {ThemeHost.ThemeFor(external)}，external={external}，"
+                + $"按深色画={IsDark(ThemeHost.ThemeFor(external))}）");
+        }
+        catch { }
 
         // 运行中切深浅色（ThemeHost.Notify 只改 RequestedTheme，材质不会跟着变）→ 重建一次。
         if (root is not null) HookThemeChange(win, root, applied);

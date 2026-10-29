@@ -78,7 +78,7 @@ public sealed partial class QqFeedbackFlyoutWindow : Window
     {
         try
         {
-            ThemeHost.Apply(Root);                 // 跟「设置」里的深浅色走
+            ThemeHost.Apply(Root, external: true); // 反馈飞窗也是桌面悬浮窗
 
             // ⚠️ 故意**不**订阅 Activated —— 见类注释第 1 条：失焦不能自己收。
             Root.KeyDown += (_, e) =>

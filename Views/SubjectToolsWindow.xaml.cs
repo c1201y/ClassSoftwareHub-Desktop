@@ -194,8 +194,8 @@ public sealed partial class SubjectToolsWindow : Window
             // 自绘标题栏（2026-10-19）：不再用系统那根标题条，改成内容延伸样式
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
-            BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
-            ThemeHost.Apply(Root);
+            BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop, external: true);
+            ThemeHost.Apply(Root, external: true);   // 学科工具窗属于桌面悬浮窗
 
             ApplySize();
             CenterOnScreen();

@@ -178,7 +178,7 @@ public sealed partial class VolumeWindow : Window
     {
         try
         {
-            ThemeHost.Apply(Root);
+            ThemeHost.Apply(Root, external: true);   // 音量浮窗属于桌面悬浮窗
             VolumeFlyoutGroup.MainHwnd = _chrome.Hwnd;
 
             // ⚠️ handledEventsToo: true —— Slider 内部会把 PointerPressed 标成 handled，

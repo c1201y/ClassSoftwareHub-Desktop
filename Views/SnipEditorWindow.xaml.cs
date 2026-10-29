@@ -190,8 +190,8 @@ public sealed partial class SnipEditorWindow : Window
 
         // 系统背景（云母 / 亚克力，跟着「设置」里主窗口那个选择走）：根底置空让背景透出来，
         // 工具条那行透明、图片区是 in-app 亚克力——不支持就退纯色（BackdropHost 管）。
-        BackdropHost.Apply(this, RootGrid);
-        ThemeHost.Apply(RootGrid);                       // 深浅色跟「设置」走（不只是跟系统走）
+        BackdropHost.Apply(this, RootGrid, external: true);
+        ThemeHost.Apply(RootGrid, external: true);       // 截图编辑窗属于外部组件（见设置页那句说明）
 
         _scale = DpiScale();
         _dipW = _pxW / _scale;

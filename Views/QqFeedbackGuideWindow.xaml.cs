@@ -100,6 +100,7 @@ public sealed partial class QqFeedbackGuideWindow : Window
             }
 
             ConfigureTitleBar();
+            // ⛔ 引导窗是文档式的整窗（不可拉伸、带系统标题栏），跟应用主题走，别传 external
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 

@@ -719,7 +719,7 @@ public sealed partial class ToolSidebarWindow : Window
             catch (Exception ex2) { Log("亚克力不可用: " + ex2.Message); }
 
             ApplyPanelBrush();
-            ThemeHost.Apply(Root);                         // 跟「设置」里的深浅色走（不只是跟系统走）
+            ThemeHost.Apply(Root, external: true);         // 侧边栏跟「桌面悬浮窗单独设置外观」
             BuildToolButtons();                            // 按「侧边布局」的模块清单生成工具按钮
             Root.PointerMoved += (_, _) => Touch();
             Root.PointerPressed += (_, _) => Touch();

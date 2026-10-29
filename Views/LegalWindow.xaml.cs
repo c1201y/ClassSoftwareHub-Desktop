@@ -205,6 +205,8 @@ public sealed partial class LegalWindow : Window
             // 自绘标题栏（2026-10-19）：没有独立标题条，系统按钮浮在右上角
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
+            // ⛔ 这是**文档窗口**，跟应用主题走，⛔ 不要传 external: true
+            //    （「桌面悬浮窗单独设置外观」只管侧边栏与浮动工具窗，2026-10-29 Nick 定）。
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 

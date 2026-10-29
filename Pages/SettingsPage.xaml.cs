@@ -246,8 +246,10 @@ public sealed partial class SettingsPage : Page
     private void UpdateExtThemeAvailability()
     {
         ExtThemeCombo.IsEnabled = SplitThemeSwitch.IsOn;
+        // ⚠️ 文案要与 ThemeHost 里的分类一致（2026-10-29）：只有桌面浮动组件吃这一套，
+        //    文档窗口（条款与声明、日志详细视图、反馈引导窗）永远跟主界面的主题。
         ExtThemeHint.Text = SplitThemeSwitch.IsOn
-            ? "侧边栏 / 常用工具浮窗 / 截图编辑窗都跟着这个走"
+            ? "侧边栏 / 常用工具浮窗 / 学科工具窗 / 音量浮窗 / 截图窗跟着这个走；条款、日志等文档窗口仍跟主界面"
             : "现在是关的：外部组件跟主界面的颜色模式保持一致";
     }
 

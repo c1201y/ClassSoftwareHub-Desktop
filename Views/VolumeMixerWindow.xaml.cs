@@ -101,7 +101,7 @@ public sealed partial class VolumeMixerWindow : Window
     {
         try
         {
-            ThemeHost.Apply(Root);
+            ThemeHost.Apply(Root, external: true);   // 音量合成器浮窗属于桌面悬浮窗
             VolumeFlyoutGroup.MixerHwnd = _chrome.Hwnd;
 
             Activated += (_, args) =>

@@ -139,6 +139,7 @@ public sealed partial class LogDetailWindow : Window
             }
 
             ConfigureTitleBar();
+            // ⛔ 文档窗口：跟应用主题走，⛔ 别传 external: true（见 ThemeHost 的两套主题说明）
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 
