@@ -100,7 +100,7 @@
                     </controls:SettingsCard>
 
                     <controls:SettingsCard Header="桌面悬浮窗单独设置外观"
-                                           Description="只作用于桌面上的浮动组件：侧边栏、常用工具浮窗、学科工具窗、音量浮窗与截图窗。主界面与条款、日志等文档窗口不受影响。">
+                                           Description="只作用于「常用工具」浮窗（随机抽号、课堂计时、秒表计时、全屏时钟）。主界面、侧边栏与其它所有窗口都跟「主题」一致。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE772;" />
                         </controls:SettingsCard.HeaderIcon>

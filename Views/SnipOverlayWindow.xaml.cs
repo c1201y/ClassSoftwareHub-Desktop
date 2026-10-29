@@ -79,7 +79,7 @@ public sealed partial class SnipOverlayWindow : Window
         }
 
         StickerWindow.KillSystemBorder(hwnd);           // 无边框窗那一圈系统边也去掉（跟贴图一致）
-        ThemeHost.Apply(Root, external: true);          // 截图遮罩属于外部组件
+        ThemeHost.Apply(Root);                          // 跟应用主题（分体只管常用工具浮窗）
 
         Root.PointerPressed += Root_PointerPressed;
         Root.PointerMoved += Root_PointerMoved;
