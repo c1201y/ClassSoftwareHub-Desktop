@@ -26,6 +26,16 @@ public static class ThemeHost
         _ => ElementTheme.Default
     };
 
+    /// <summary>
+    /// 当前该用哪套深浅色（含「分体主题」那层判断），<c>Default</c> = 跟随系统。
+    /// <para>
+    /// ⚠️ 给 <c>BackdropHost</c> 这类**不能等布局周期**的调用方用的（2026-10-29）：
+    /// 刚设完 <c>RequestedTheme</c> 时根的 <c>ActualTheme</c> 还没刷新，拿它算深浅色会算成旧值，
+    /// 背景材质就按旧值烤死了。这里直接读设置，结果与布局时机无关。
+    /// </para>
+    /// </summary>
+    public static ElementTheme CurrentTheme => Map(CurrentSetting());
+
     /// <summary>把当前设置的主题应用到某个窗口的根元素，并登记（之后改设置会一起变）。</summary>
     public static void Apply(FrameworkElement root)
     {
