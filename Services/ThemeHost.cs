@@ -51,9 +51,6 @@ public static class ThemeHost
     /// </summary>
     public static ElementTheme ThemeFor(bool external) => external ? ExternalTheme : AppTheme;
 
-    /// <summary>主界面 / 文档窗口用的主题。</summary>
-    public static ElementTheme CurrentTheme => AppTheme;
-
     private static ElementTheme AppTheme
     {
         get
