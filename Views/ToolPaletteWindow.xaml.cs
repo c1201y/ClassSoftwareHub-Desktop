@@ -146,10 +146,8 @@ public sealed partial class ToolPaletteWindow : Window
 
             // 系统背景：浮窗**优先亚克力**（小浮窗用云母会把字糊在壁纸上，读不清），用户选"纯色"就纯色
             var want = App.Settings.Current.Backdrop;
-            // external: true = 桌面悬浮窗，跟「桌面悬浮窗单独设置外观」那一套（见 ThemeHost）
             BackdropHost.Apply(this, Root,
-                string.Equals(want, "mica", StringComparison.OrdinalIgnoreCase) ? "acrylic" : want,
-                external: true);
+                string.Equals(want, "mica", StringComparison.OrdinalIgnoreCase) ? "acrylic" : want);
 
             Root.ActualThemeChanged += (_, _) => { UpdateCaptionButtonColors(); };   // 换主题时系统按钮颜色跟着变
             ThemeHost.Apply(Root, external: true);          // 悬浮窗看「桌面悬浮窗单独设置外观」
