@@ -42,7 +42,8 @@ public static class BackdropHost
         var kind = string.IsNullOrWhiteSpace(prefer) ? SettingBackdrop() : prefer!;
         kind = string.IsNullOrWhiteSpace(kind) ? "acrylic" : kind.Trim().ToLowerInvariant();
 
-        var applied = SetMaterial(win, root, kind, ThemeHost.ThemeFor(external));
+        var theme = ThemeHost.ThemeFor(external);
+        var applied = SetMaterial(win, root, kind, theme);
 
         // 现场排障用：窗口到底上了哪种材质、按深还是浅画的。
         // ⚠️ 之前这一块完全没有日志，"背景全黑"只能靠猜（2026-10-29 加）。
@@ -56,7 +57,7 @@ public static class BackdropHost
         catch { }
 
         // 运行中切深浅色（ThemeHost.Notify 只改 RequestedTheme，材质不会跟着变）→ 重建一次。
-        if (root is not null) HookThemeChange(win, root, applied);
+        if (root is not null) HookThemeChange(win, root, applied, theme);
 
         return applied;
     }
@@ -134,7 +135,20 @@ public static class BackdropHost
     // 已经挂过 ActualThemeChanged 的根（弱引用）。同一个根被 Apply 两次不必重复挂。
     private static readonly List<WeakReference<FrameworkElement>> Hooked = new();
 
-    private static void HookThemeChange(Window win, Panel root, string kind)
+    // 每个根上一次真正上过的深浅色 —— 用它去重，避免"主题没变也重建材质"。
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, object> Applied =
+        new();
+
+    /// <summary>
+    /// 深浅色变了就重建材质。
+    ///
+    /// ⛔⛔ 2026-10-29 踩过的坑（当天崩了三次，事件日志里是
+    ///    <c>Microsoft.UI.Xaml.dll 0xc0000005，偏移 0x65f458</c>）：
+    ///    `ActualThemeChanged` 会在**窗口首次布局/渲染过程当中**回调，在这里同步替换
+    ///    `Window.SystemBackdrop` 属于重入原生层 —— 必崩，而且崩得没有任何托管异常可抓。
+    ///    ⇒ 两条规矩：① 只在深浅色**确实变了**时才动；② 一律推到下一拍（DispatcherQueue）再做。
+    /// </summary>
+    private static void HookThemeChange(Window win, Panel root, string kind, ElementTheme appliedTheme)
     {
         lock (Hooked)
         {
@@ -145,14 +159,40 @@ public static class BackdropHost
             Hooked.Add(new WeakReference<FrameworkElement>(root));
         }
 
+        Applied.AddOrUpdate(root, appliedTheme);   // 记下这次真正上过的深浅色
+
+        // 窗口已经关掉就别再碰它：迟到一拍的回调如果还去写已销毁窗口的 SystemBackdrop，
+        // 同样是原生层的访问违例（2026-10-29 一并防住）。
+        var closed = false;
+        try { win.Closed += (_, _) => closed = true; } catch { }
+
         var weakRoot = new WeakReference<Panel>(root);
         root.ActualThemeChanged += (_, _) =>
         {
             try
             {
+                if (closed) return;
                 if (!weakRoot.TryGetTarget(out var live) || live is null) return;
-                // 这时候 ActualTheme 已经是新的了，直接用它重算一次。
-                SetMaterial(win, live, kind, live.ActualTheme);
+
+                var theme = live.ActualTheme;
+                if (theme == ElementTheme.Default) return;          // 还没定下来，别动
+                if (Applied.TryGetValue(live, out var prev) && prev is ElementTheme p && p == theme) return;
+
+                Applied.AddOrUpdate(live, theme);
+
+                // ⚠️ 必须异步：这个回调就在布局/渲染里，同步换材质会让 XAML 原生层崩。
+                var queue = win.DispatcherQueue;
+                if (queue is null) return;
+                queue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        if (closed) return;
+                        if (!weakRoot.TryGetTarget(out var r) || r is null) return;
+                        SetMaterial(win, r, kind, theme);
+                    }
+                    catch { }
+                });
             }
             catch { }
         };
