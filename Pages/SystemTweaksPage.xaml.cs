@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data.Tweaks;
 using ClassSoftwareHub.Desktop.Services;
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -39,7 +40,11 @@ public sealed partial class SystemTweaksPage : Page
     public SystemTweaksPage()
     {
         InitializeComponent();
-        LoadStates();
+
+        // ⚠️ 必须等 Loaded 之后再读：`SettingsCard` 的内容要等模板套用才进视觉树，
+        //    构造函数里找开关一个都找不到 —— 而 `ToggleSwitch` 默认就是关，
+        //    于是"系统本来是深色模式"却显示成关（2026-10-31 Nick 指出的就是这个）。
+        Loaded += (_, _) => LoadStates();
     }
 
     /// <summary>按开关上的 <c>Tag</c>（项的 Id）反查定义。</summary>
@@ -52,12 +57,23 @@ public sealed partial class SystemTweaksPage : Page
         _loading = true;
         try
         {
-            foreach (var toggle in FindToggles(this))
+            var count = 0;
+            var on = new List<string>();
+
+            foreach (var toggle in Toggles())
             {
                 var def = DefOf(toggle.Tag);
                 if (def is null) continue;
+
                 toggle.IsOn = TweakStore.IsOn(def);
+                count++;
+
+                if (toggle.IsOn) on.Add(def.Id);
             }
+
+            // 逐项打出来：截图工具在会抽掉右侧开关，靠日志核对"系统本来是深色"这类初始态最可靠
+            AppLog.Step("tweaks",
+                $"按当前系统设置回填 {count} 项开关；打开的：{(on.Count == 0 ? "无" : string.Join("、", on))}");
         }
         finally
         {
@@ -65,8 +81,36 @@ public sealed partial class SystemTweaksPage : Page
         }
     }
 
-    /// <summary>递归找页面里所有带 Tag 的 ToggleSwitch（只找我们自己那批）。</summary>
-    private static List<ToggleSwitch> FindToggles(DependencyObject root)
+    /// <summary>
+    /// 页面里那批开关。
+    /// <para>
+    /// 先走 <c>RowsPanel.Children</c> 里每张 <c>SettingsCard</c> 的 <c>Content</c> —— 内容在 XAML 解析后
+    /// 就挂在属性上，不依赖模板是否已经套用；视觉树那段留作兜底（将来卡片嵌进别的容器时仍找得到）。
+    /// </para>
+    /// </summary>
+    private IEnumerable<ToggleSwitch> Toggles()
+    {
+        var seen = new HashSet<ToggleSwitch>();
+
+        foreach (var child in RowsPanel.Children)
+        {
+            if (child is SettingsCard { Content: ToggleSwitch toggle }
+                && toggle.Tag is string
+                && seen.Add(toggle))
+            {
+                yield return toggle;
+            }
+        }
+
+        foreach (var toggle in VisualToggles(this))
+        {
+            if (toggle.Tag is string && seen.Add(toggle))
+                yield return toggle;
+        }
+    }
+
+    /// <summary>递归找视觉树里的开关（兜底用）。</summary>
+    private static List<ToggleSwitch> VisualToggles(DependencyObject root)
     {
         var found = new List<ToggleSwitch>();
         var queue = new Queue<DependencyObject>();

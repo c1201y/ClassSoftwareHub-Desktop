@@ -29,7 +29,7 @@
                 <ColumnDefinition Width="24" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
+            <StackPanel x:Name="RowsPanel" Grid.Column="1" MaxWidth="960" Spacing="4">
 
                 <StackPanel Spacing="6" Margin="0,0,0,16">
                     <TextBlock Text="系统优化" FontSize="28" FontWeight="Bold" />

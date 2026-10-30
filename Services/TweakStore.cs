@@ -49,8 +49,24 @@ public static class TweakStore
             using var key = root.OpenSubKey(def.KeyPath, writable: false);
             var raw = key?.GetValue(def.ValueName);
 
-            // 值缺失 = 系统尚未写过这一项，按"关"处理（OffValue 就是关态）
-            if (raw is not int value) return false;
+            // 值缺失 = 系统还没写过这一项，按关态（OffValue）理解
+            if (raw is null) return false;
+
+            // ⚠️ 类型宽松一点：DWORD 正常是 int，但导入的 .reg 或旧软件可能留成 long / string，
+            //    这时按 off 处理会让"系统明明是深色"的开关显示成关。
+            int? value = raw switch
+            {
+                int i => i,
+                long l => (int)l,
+                string s when int.TryParse(s, out var parsed) => parsed,
+                _ => null,
+            };
+
+            if (value is null)
+            {
+                AppLog.Warn("tweaks", $"{def.FullPath} 的值类型不认识（{raw.GetType().Name}），按关处理");
+                return false;
+            }
 
             return value == def.OnValue;
         }
