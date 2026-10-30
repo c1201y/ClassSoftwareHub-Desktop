@@ -29,8 +29,11 @@
             <TextBlock Text="编码 / 哈希校验" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" Padding="20,4,20,20" VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="ContentPanel" Spacing="12">
+        <ScrollViewer x:Name="ContentScroll" Grid.Row="1" Padding="20,4,20,20" VerticalScrollBarVisibility="Auto">
+            <!-- ⚠️ VerticalAlignment="Top" 是给窗口定高用的：不写的话 ScrollViewer 会把内容
+                 纵向拉伸到视口高度，量出来的 ActualHeight 是"视口高"而不是"内容高"，
+                 窗口就永远缩不下去（2026-10-30 第一次改高度时栽在这里）。 -->
+            <StackPanel x:Name="ContentPanel" Spacing="12" VerticalAlignment="Top">
 
                 <!-- ① 拖放区：整条都能拖、能点 -->
                 <Border x:Name="DropZone" Padding="16,16" CornerRadius="4" BorderThickness="0"

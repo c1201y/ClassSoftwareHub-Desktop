@@ -46,7 +46,7 @@ public sealed partial class HashCheckWindow : Window
     /// 首帧用的高度。**随后会按内容重算一次**（见 <see cref="ResizeToContent"/>）——
     /// 原来写死 640，内容只有 450 左右，下面空出一大块（2026-10-30 Nick 报）。
     /// </summary>
-    private const int DefaultHeightDip = 520;
+    private const int DefaultHeightDip = 480;
 
     private const string IdleTitle = "把文件拖到这里，或单击选择";
 
@@ -187,15 +187,29 @@ public sealed partial class HashCheckWindow : Window
 
         try
         {
-            var contentHeight = ContentPanel.ActualHeight;
+            // ⚠️ 用 ExtentHeight（内容真实范围），不用 ActualHeight：
+            //    ScrollViewer 会把内容纵向拉伸到视口高，ActualHeight 量到的是"视口有多高"，
+            //    于是 h 永远等于当前窗口高，窗口一次都缩不下去（2026-10-30 第一次改的教训）。
+            var contentHeight = Math.Max(ContentScroll.ExtentHeight, ContentPanel.ActualHeight);
             if (contentHeight <= 0) return;   // 还没排好，等下一次机会
+
+            // 内容没占满窗口时 ExtentHeight 也等于视口高，这时用子元素累加兜底
+            if (contentHeight >= ContentScroll.ActualHeight - 1 && ContentPanel.Children.Count > 0)
+            {
+                var sum = 0.0;
+                foreach (var child in ContentPanel.Children)
+                    if (child is FrameworkElement fe) sum += fe.ActualHeight;
+                sum += ContentPanel.Spacing * Math.Max(0, ContentPanel.Children.Count - 1);
+                if (sum > 0) contentHeight = sum;
+            }
 
             _autoSized = true;
 
             var scale = Scale();
             var maxH = DisplayArea.Primary.WorkArea.Height / scale - 60;
 
-            var h = 32 + 24 + contentHeight + 56;
+            // 32 = 自绘标题栏那一行；4 / 20 = ScrollViewer 上下 Padding；16 = 底部留一点呼吸
+            var h = 32 + 4 + contentHeight + 20 + 16;
             h = Math.Clamp(h, 460, Math.Max(460, maxH));
 
             _appWindow.ResizeClient(new SizeInt32(
