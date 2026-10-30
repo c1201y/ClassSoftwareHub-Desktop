@@ -14,7 +14,11 @@ namespace ClassSoftwareHub.Desktop.Services.HubAi;
 ///
 /// <para>
 /// 循环就是「Agent」和「聊天」的全部差别：模型说要调工具 → 宿主执行 → 结果塞回 messages → 再问一次。
-/// 这里最多跑 <see cref="MaxRounds"/> 轮，防止模型陷入"一直调工具不回答"的死循环。
+/// </para>
+/// <para>
+/// ⛔ 2026-10-30 起**不再限制轮次**，改成限时长（<see cref="AnswerBudget"/>，8 分钟）。
+/// 原来的「最多 5 次工具往返」把正常的深链路截断了 —— Nick：「工具调用它经常被截断……
+/// 干脆取消这个限制，换成时长限制」。现在只要没到 8 分钟，模型想调几次就调几次。
 /// </para>
 /// <para>
 /// ⛔ 本类不碰任何 UI，也不碰网络细节。UI 只通过三个回调观察：增量文本、状态提示、换气泡。
@@ -22,8 +26,27 @@ namespace ClassSoftwareHub.Desktop.Services.HubAi;
 /// </summary>
 public sealed class AiChatService
 {
-    /// <summary>一轮提问里最多几次工具往返。5 次足够覆盖"先查概况 → 再查磁盘 → 再检索软件"这种链路。</summary>
-    private const int MaxRounds = 5;
+    /// <summary>
+    /// 一轮问答（含全部工具往返）的时长上限：8 分钟（Nick 2026-10-30 定「刚刚好这样」）。
+    ///
+    /// <para>
+    /// 为什么按时长而不按轮次：轮次和真实耗时不成比例 —— 查一遍 AppData 体积要几十秒，
+    /// 检索软件库只要几百毫秒，同样是"第 5 轮"，一个还在关键路径上、一个早该结束。
+    /// 用户能感知的是"等了多久"，所以就按这个卡。
+    /// </para>
+    /// <para>
+    /// ⚠️ 它有**两个作用**：① 每轮开始前检查，到点就带着已查到的部分收尾；
+    /// ② 挂在 <see cref="CancellationTokenSource"/> 上，单次请求卡死时也能掐掉 ——
+    /// 否则第一条流就能把界面上挂半小时，等不到下一轮检查。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan AnswerBudget = TimeSpan.FromMinutes(8);
+
+    /// <summary>
+    /// 轮次兜底（不是体验上限）：只防"工具立刻失败→模型立刻重试"这种秒级死循环 ——
+    /// 那种情况 8 分钟能跑上千轮，纯属烧 token。正常链路离这个数很远。
+    /// </summary>
+    private const int RoundGuard = 240;
 
     /// <summary>历史消息上限（含 system）。超了就丢最早的对话，保住 system prompt。</summary>
     private const int MaxHistoryMessages = 20;
@@ -177,66 +200,96 @@ public sealed class AiChatService
 
         var total = AiUsage.Empty;
 
-        for (var round = 0; round < MaxRounds; round++)
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var ranOutOfTime = false;
+
+        // 预算到点要能掐断正在跑的那条流，所以挂一个带截止的令牌；
+        // 用户点「停止」走的是 ct，两者在这里合并 —— 下面的 catch 靠 ct 区分是谁按的停。
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try { deadline.CancelAfter(AnswerBudget); } catch (ObjectDisposedException) { }
+
+        try
         {
-            var turn = await AiClient.StreamTurnAsync(cfg, _messages, tools, onDelta, onReasoning, ct);
-            total = total.Plus(turn.Usage);
-
-            if (!turn.WantsTools)
+            for (var round = 0; ; round++)
             {
-                if (turn.Content.Length > 0)
+                if (watch.Elapsed >= AnswerBudget || round >= RoundGuard)
                 {
-                    _messages.Add(new AiMessage("assistant", turn.Content) { Reasoning = turn.Reasoning });
+                    ranOutOfTime = true;
+                    break;
                 }
-                return total;
-            }
 
-            // 把模型的"我要调工具"记进历史，否则下一轮的上下文对不上。
-            // ⚠️ Reasoning 必须一起带上：DeepSeek / Kimi / GLM 在带 tools 时会校验它。
-            _messages.Add(new AiMessage("assistant", turn.Content)
-            {
-                ToolCalls = turn.ToolCalls,
-                Reasoning = turn.Reasoning,
-            });
+                var turn = await AiClient.StreamTurnAsync(cfg, _messages, tools, onDelta, onReasoning, deadline.Token);
+                total = total.Plus(turn.Usage);
 
-            foreach (var call in turn.ToolCalls)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                // ⛔ 会改动系统的工具必须先问人（2026-10-23 加）。当前全部只读，不会走到这儿。
-                if (ToolRunner.RequiresApproval(call.Name) && approveTool is not null)
+                if (!turn.WantsTools)
                 {
-                    onStatus?.Invoke($"等待确认：{call.Name}");
-                    AppLog.Step("hubai", $"请求授权：{call.Name}");
-
-                    var approved = await approveTool(call.Name, call.Arguments);
-
-                    if (!approved)
+                    if (turn.Content.Length > 0)
                     {
-                        AppLog.Step("hubai", $"用户拒绝了 {call.Name}");
-                        _messages.Add(AiMessage.Tool(call.Id,
-                            "用户拒绝了这次操作。不要重试同一动作，如实说明，并给出不需要改动系统的替代方案。"));
-                        onToolDone?.Invoke("已拒绝这次操作");
-                        continue;
+                        _messages.Add(new AiMessage("assistant", turn.Content) { Reasoning = turn.Reasoning });
                     }
+                    return total;
                 }
 
-                onStatus?.Invoke(DescribeTool(call.Name));
-                AppLog.Step("hubai", $"工具调用：{call.Name}");
+                // 把模型的"我要调工具"记进历史，否则下一轮的上下文对不上。
+                // ⚠️ Reasoning 必须一起带上：DeepSeek / Kimi / GLM 在带 tools 时会校验它。
+                _messages.Add(new AiMessage("assistant", turn.Content)
+                {
+                    ToolCalls = turn.ToolCalls,
+                    Reasoning = turn.Reasoning,
+                });
 
-                var result = await ToolRunner.ExecuteAsync(call.Name, call.Arguments, Session, ct);
-                _messages.Add(AiMessage.Tool(call.Id, result));
+                foreach (var call in turn.ToolCalls)
+                {
+                    deadline.Token.ThrowIfCancellationRequested();
 
-                // 界面上留一条"已读取 xxx"的痕迹 —— 否则工具调用前后两段回答之间完全是空的，
-                // 看起来像对话断掉了（Nick 2026-10-18 指出）。
-                onToolDone?.Invoke(DescribeToolDone(call.Name));
+                    // ⛔ 会改动系统的工具必须先问人（2026-10-23 加）。当前全部只读，不会走到这儿。
+                    if (ToolRunner.RequiresApproval(call.Name) && approveTool is not null)
+                    {
+                        onStatus?.Invoke($"等待确认：{call.Name}");
+                        AppLog.Step("hubai", $"请求授权：{call.Name}");
+
+                        var approved = await approveTool(call.Name, call.Arguments);
+
+                        if (!approved)
+                        {
+                            AppLog.Step("hubai", $"用户拒绝了 {call.Name}");
+                            _messages.Add(AiMessage.Tool(call.Id,
+                                "用户拒绝了这次操作。不要重试同一动作，如实说明，并给出不需要改动系统的替代方案。"));
+                            onToolDone?.Invoke("已拒绝这次操作");
+                            continue;
+                        }
+                    }
+
+                    onStatus?.Invoke(DescribeTool(call.Name));
+                    AppLog.Step("hubai", $"工具调用：{call.Name}（第 {round + 1} 轮，已用 {watch.Elapsed.TotalSeconds:0} 秒）");
+
+                    var result = await ToolRunner.ExecuteAsync(call.Name, call.Arguments, Session, deadline.Token);
+                    _messages.Add(AiMessage.Tool(call.Id, result));
+
+                    // 界面上留一条"已读取 xxx"的痕迹 —— 否则工具调用前后两段回答之间完全是空的，
+                    // 看起来像对话断掉了（Nick 2026-10-18 指出）。
+                    onToolDone?.Invoke(DescribeToolDone(call.Name));
+                }
+
+                onNewBubble?.Invoke();
             }
-
-            onNewBubble?.Invoke();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // ⚠️ 用户没按停止 ⇒ 是预算到点掐的。这种情况**必须**告诉用户为什么停了，
+            //    否则界面上就是"话说一半没了"，比轮次上限更让人困惑。
+            ranOutOfTime = true;
         }
 
-        // 跑满上限还没给答案：如实说明，别假装成功
-        onDelta?.Invoke("（本轮工具调用次数已达上限，如果还有未完成的部分，请再追问一次。）");
+        if (!ranOutOfTime) return total;
+
+        AppLog.Warn("hubai",
+            $"本轮问答用满 {AnswerBudget.TotalMinutes:0} 分钟预算，已停手（上下文 {_messages.Count} 条，累计 {total.TotalTokens} token）");
+
+        onDelta?.Invoke(
+            $"\n\n（这一轮已经跑到 {AnswerBudget.TotalMinutes:0} 分钟上限，先停在这里。" +
+            "上面是已经查到的部分；还没查完的话，再追问一次就能接着做。）");
+
         return total;
     }
 
