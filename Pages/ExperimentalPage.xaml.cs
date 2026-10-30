@@ -61,6 +61,18 @@ public sealed partial class ExperimentalPage : Page
             Desc = "用 Windows 自带命令修复系统文件、组件存储与网络",
             Glyph = "\uE7EF", Tag = "repair"
         },
+        new ExperimentalFeature
+        {
+            Id = "systemtweaks", Name = "系统优化",
+            Desc = "任务栏、资源管理器、外观这些整机设置，选中后一次授权统一应用",
+            Glyph = "\uE713", Tag = "systemtweaks"
+        },
+        new ExperimentalFeature
+        {
+            Id = "sysfeatures", Name = "系统功能",
+            Desc = "查看并开关休眠与快速启动，体检分页文件（虚拟内存）当前配置",
+            Glyph = "\uE7E8", Tag = "sysfeatures"
+        },
         // ⚠️ 原来是四项，第三项是「虚拟键盘」—— 该功能 2026-10-09 整体下线，卡片一并删除
         //    （导航分组里的子项、NavigateTagCore 的 case 也同步删了）。
         // ⚠️「自动关机」2026-10-12 转正搬去「内置工具」（Nick 定）——

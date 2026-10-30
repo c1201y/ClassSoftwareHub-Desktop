@@ -387,6 +387,12 @@ public sealed partial class ShellPage : UserControl
             case "logs":
                 ContentFrame.Navigate(typeof(LogViewerPage));
                 return;
+            case "systemtweaks":
+                ContentFrame.Navigate(typeof(SystemTweaksPage));
+                return;
+            case "sysfeatures":
+                ContentFrame.Navigate(typeof(SystemFeaturesPage));
+                return;
             case "experimental":
                 // 「实验性功能」分组的父项**自己就是总览入口**：点它 = 展开/收起分组 + 进这一页。
                 ContentFrame.Navigate(typeof(ExperimentalPage));

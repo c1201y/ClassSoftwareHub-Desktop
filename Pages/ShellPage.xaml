@@ -306,7 +306,28 @@
                           （Pages/SettingsPage.xaml）。NavigateTagCore 的 "logs" case 保留，
                           供设置页跳转（含 page=logs 启动参数）用。
                         -->
-                    </NavigationViewItem.MenuItems>
+                    
+                        <!--
+                          系统优化（2026-10-31，需求清单第 20 条）：对齐 Dism++「系统优化」里能安全落地的部分。
+                          ⚠️ 为什么先放实验性（Nick 明确要求）：它改的是**整机系统设置**，
+                             猜错一个键就变成"某功能突然不按预期"，先跑一段再说转正。
+                          ⚠️ 口径：只做系统级（HKLM）、不抄安全/服务/更新策略那几类。
+                        -->
+                        <NavigationViewItem Content="系统优化" Tag="systemtweaks">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE713;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                        <!--
+                          系统功能（2026-10-31）：休眠、快速启动、分页文件体检。
+                          ⚠️ 也先放实验性：休眠与快速启动是 UAC 写入，分页文件目前只读。
+                        -->
+                        <NavigationViewItem Content="系统功能" Tag="sysfeatures">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE7E8;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+</NavigationViewItem.MenuItems>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
