@@ -61,6 +61,15 @@ public sealed partial class HubAiPage : Page
                 ? Visibility.Collapsed : Visibility.Visible;
         }
 
+        // 浮层里刚问过（2026-10-30）：切到那条会话，让完整记录（含思考过程）能直接看到。
+        // ⚠️ 必须排到下一拍：这里第一次导航时 SessionList 的 ItemsSource 刚设好，
+        //    立刻设 SelectedItem 会被随后的布局重置掉（同 SelectionChanged 那段注释里踩过的坑）。
+        if (PendingReloadId is { Length: > 0 } reloadId)
+        {
+            PendingReloadId = null;
+            DispatcherQueue.TryEnqueue(() => SelectSessionById(reloadId));
+        }
+
         // 布局实测（排查"内容偏右"这类问题只能靠量，靠推断会翻车）
         // ⚠️ 必须在 LayoutUpdated 里量 —— OnNavigatedTo 阶段所有 ActualWidth 都还是 0。
         void DumpLayout(object? s, object? args)
@@ -92,6 +101,16 @@ public sealed partial class HubAiPage : Page
 
     private List<ChatSession> _sessions = new();
 
+    /// <summary>
+    /// 浮层（<c>Controls/HubAiFlyout</c>）刚问完一轮时记下的会话 id。
+    /// <para>
+    /// 2026-10-30 加：Nick 要求「浮层里问的东西要能溯源」。浮层与页面共用同一个会话运行时，
+    /// 但本页只**首次**导航时初始化（见 OnNavigatedTo 那段），切回来不会重载 ——
+    /// 于是留个标记，进来时主动切到那条会话，思考过程与工具轨迹就都在了。
+    /// </para>
+    /// </summary>
+    public static string? PendingReloadId;
+
     /// <summary>当前对话的存档 id。新建时为空，第一次回答后生成。</summary>
     private string? _currentSessionId;
 
@@ -100,6 +119,36 @@ public sealed partial class HubAiPage : Page
 
     /// <summary>页面是否已初始化。⚠️ 与 NavigationCacheMode=Required 配套，见 OnNavigatedTo 的注释。</summary>
     private bool _uiReady;
+
+    /// <summary>
+    /// 按 id 切到某条会话（浮层问完之后跳回来用）。
+    /// <para>
+    /// ⚠️ 走 <c>SessionList.SelectedItem</c> 而不是自己 Restore + 重画：
+    /// 会话切换的全部善后（绑定运行时、编辑态复位、支线选择）都在
+    /// <c>SessionList_SelectionChanged</c> 里，重写一遍必然漏。
+    /// </para>
+    /// </summary>
+    private void SelectSessionById(string id)
+    {
+        try
+        {
+            _sessions = ChatSessionStore.LoadAll();
+            SessionList.ItemsSource = _sessions;
+
+            var match = _sessions.FirstOrDefault(x => x.Id == id);
+            if (match is null)
+            {
+                Core.AppLog.Info("hubai", $"要切换的会话 {id} 不在列表里（可能已被删除）");
+                return;
+            }
+
+            SessionList.SelectedItem = match;
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Warn("hubai", "切到指定会话失败：" + ex.Message);
+        }
+    }
 
     private void LoadSessions()
     {
