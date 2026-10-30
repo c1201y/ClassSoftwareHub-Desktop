@@ -25,11 +25,22 @@ namespace ClassSoftwareHub.Desktop.Controls;
 /// ⛔⛔ 这里**不是**另一套对话（Nick 2026-10-30 定：「本质上就是在 HubAI 界面跑，
 /// 只不过把输出结果搬到这个窗口」）：
 /// <list type="number">
-///   <item>用的是**同一个会话运行时** <see cref="HubAiRuntime"/>（按 HubAiLastSessionId 取），
-///         所以上下文与 Hub AI 页完全共用，不会出现"浮层聊一套、页面聊一套"；</item>
-///   <item>问答**写进同一个会话存档**（<see cref="ChatSessionStore.SaveBranch"/>），
+///   <item>跑的是真正的 <see cref="HubAiRuntime"/>，与 Hub AI 页同一套上下文、
+///         同一套工具、同一套存档格式，不是"另说一套"；</item>
+///   <item>问答**写进会话存档**（<see cref="ChatSessionStore.SaveBranch"/>），
 ///         跳到 Hub AI 页能翻到，思考过程、工具轨迹都在那儿；</item>
 ///   <item>浮层只显示**最终正文**，思考过程与工具轨迹留在完整页（这里窄，塞不下也没必要）。</item>
+/// </list>
+/// </para>
+///
+/// <para>
+/// ⭐ 2026-10-30 二改：**每次展开都另起一段对话**（Nick：「新开一个窗口，相当于新开一个对话，
+/// 不是在旧的对话上面接下去」）。所以：
+/// <list type="bullet">
+///   <item>展开时拿一份新的草稿运行时（<see cref="HubAiRuntime.NewDraft"/>），
+///         不带上一次的消息，也不去改 Hub AI 页正在看的那条会话；</item>
+///   <item>这一次展开里的追问仍在同一条上接（<c>_sessionId</c> 收尾时记下来），收起再打开就是新的；</item>
+///   <item>每一段都单独存档，历史列表里一条条列得出来 —— 这就是"可溯源"的部分。</item>
 /// </list>
 /// </para>
 ///
@@ -40,6 +51,12 @@ namespace ClassSoftwareHub.Desktop.Controls;
 public sealed partial class HubAiFlyout : UserControl
 {
     private HubAiRuntime? _runtime;
+
+    /// <summary>
+    /// 本次展开这段对话的会话 id（null = 还没存档）。
+    /// ⚠️ 每次展开重置 —— 收起再打开就是新的一条，不再挂在上一条后面。
+    /// </summary>
+    private string? _sessionId;
 
     /// <summary>正在追加的那条助手气泡的容器（Markdown 要往 StackPanel 里渲染）。</summary>
     private StackPanel? _answerPanel;
@@ -80,13 +97,13 @@ public sealed partial class HubAiFlyout : UserControl
     /// <summary>展开，并把焦点给输入框 —— 用户点进来的目的就是打字。</summary>
     public void Show()
     {
-        EnsureRuntime();
-
         if (IsOpen)
         {
             Input.Focus(FocusState.Programmatic);
             return;
         }
+
+        BeginConversation();
 
         Card.Visibility = Visibility.Visible;
 
@@ -160,20 +177,33 @@ public sealed partial class HubAiFlyout : UserControl
     // ── 运行时 ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 绑到「当前会话」的运行时。⚠️ 与 Hub AI 页是**同一个实例**（For 按 id 缓存），
-    /// 所以在浮层里问的东西，页面那边也能看到同一份上下文。
+    /// 开一段新对话：新的草稿运行时 + 清空气泡与上下文标记。
+    /// <para>
+    /// ⚠️ 上一段还在生成就先停掉 —— 取消也会走收尾存档（<see cref="Finish"/>），
+    /// 已经写出来的部分不会白跑，只是不在这个窗口里显示了。
+    /// </para>
     /// </summary>
-    private void EnsureRuntime()
+    private void BeginConversation()
     {
-        var id = App.Settings.Current.HubAiLastSessionId;
-        var runtime = HubAiRuntime.For(id);
+        if (_runtime is not null)
+        {
+            if (_runtime.IsRunning) _runtime.Stop();
+            _runtime.Changed -= OnRuntimeChanged;
+        }
 
-        if (ReferenceEquals(_runtime, runtime)) return;
-
-        if (_runtime is not null) _runtime.Changed -= OnRuntimeChanged;
-
-        _runtime = runtime;
+        _runtime = HubAiRuntime.NewDraft();
         _runtime.Changed += OnRuntimeChanged;
+
+        _sessionId = null;
+        _contextAttached = false;
+        _answerPanel = null;
+        _answerRendered = "";
+
+        Messages.Children.Clear();
+        Intro.Visibility = Visibility.Visible;
+
+        _busy = false;
+        SetBusyUi(false);
     }
 
     /// <summary>运行时内容变了（增量正文）→ 刷新当前气泡。</summary>
@@ -223,19 +253,22 @@ public sealed partial class HubAiFlyout : UserControl
             return;
         }
 
-        EnsureRuntime();
-        var runtime = _runtime;
-        if (runtime is null) return;
+        // 理论上 Show() 里已经建好了；万一宿主直接调 Ask（比如将来加了快捷键），补一份
+        if (_runtime is null)
+        {
+            _runtime = HubAiRuntime.NewDraft();
+            _runtime.Changed += OnRuntimeChanged;
+        }
 
+        var runtime = _runtime;
         if (runtime.IsRunning)
         {
             AddBubble("上一条还在回答，等它说完再问。", mine: false);
             return;
         }
 
-        // 会话 id：存档里那条（null = 还没有存档，运行时用 draft 键）
-        var sessionId = string.IsNullOrEmpty(App.Settings.Current.HubAiLastSessionId) ? null
-                        : App.Settings.Current.HubAiLastSessionId;
+        // 会话 id：这一段对话自己的（null = 第一次提问，收尾时才会生成存档 id）
+        var sessionId = _sessionId;
 
         // 这一轮新增的消息从哪个下标开始 —— 收尾存档要用
         var before = runtime.Chat.Snapshot().Count;
@@ -289,13 +322,20 @@ public sealed partial class HubAiFlyout : UserControl
     /// </summary>
     private void Finish(HubAiRuntime runtime, string? sessionId, int before, AiUsage usage, Exception? error)
     {
-        _busy = false;
-        SetBusyUi(false);
+        // ⚠️ 这段可能在浮层已经收起、甚至已经另起一段对话之后才回来（取消上一段就是要走这条路）。
+        //    界面状态只归"当前这一段"管，存档照旧 —— 否则旧回合会把新对话的气泡/忙碌态搅乱。
+        var current = ReferenceEquals(runtime, _runtime);
+
+        if (current)
+        {
+            _busy = false;
+            SetBusyUi(false);
+        }
 
         if (error is not null)
         {
             AppLog.Warn("hubai", "浮层对话失败：" + error.Message);
-            AddBubble("出错了：" + error.Message, mine: false);
+            if (current) AddBubble("出错了：" + error.Message, mine: false);
             return;
         }
 
@@ -307,7 +347,7 @@ public sealed partial class HubAiFlyout : UserControl
             if (!turns.Any(m => m.Role == "assistant" && !string.IsNullOrWhiteSpace(m.Content)))
             {
                 // 一句正文都没回来（只出了思考 / 工具调用）：给个提示，别留空气泡
-                if (_answerPanel is { Children.Count: 0 })
+                if (current && _answerPanel is { Children.Count: 0 })
                     AddBubble("这一轮没有文字回答，可以换个问法。", mine: false);
                 return;
             }
@@ -322,12 +362,16 @@ public sealed partial class HubAiFlyout : UserControl
                 App.Settings.Current.HubAiModel,
                 usage.TotalTokens);
 
-            // 新对话第一次存档才拿到 id —— 运行时要从 draft 键改挂到真实 id 上
+            // 新对话第一次存档才拿到 id —— 运行时要从草稿键改挂到真实 id 上，
+            // 这样跟到 Hub AI 页时是同一条（上下文接着聊，不是重新 Restore 一份）
             if (string.IsNullOrEmpty(sessionId) && !string.IsNullOrEmpty(savedId))
-                HubAiRuntime.AdoptDraft(savedId);
+                HubAiRuntime.Adopt(runtime.SessionId, savedId);
 
             if (savedId is { Length: > 0 })
             {
+                // 这一段往后就挂在保存下来的 id 上继续追加
+                if (current) _sessionId = savedId;
+
                 App.Settings.Current.HubAiLastSessionId = savedId;
                 App.Settings.Save();
 

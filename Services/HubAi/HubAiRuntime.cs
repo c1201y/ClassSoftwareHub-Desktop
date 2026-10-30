@@ -32,6 +32,15 @@ public sealed class HubAiRuntime
     /// <summary>新对话（尚未存档、还没有 id）用的临时键。</summary>
     public const string DraftKey = "\u0001draft";
 
+    /// <summary>
+    /// 浮层专用草稿键的前缀（2026-10-30 加）。
+    /// ⚠️ 浮层每次展开都是**另一段对话**，不能和页面那份 draft 共用同一个键，
+    /// 否则两边的上下文会串在一起（页面上"新建对话"的空白草稿被浮层的问答填满）。
+    /// </summary>
+    private const string FlyoutDraftPrefix = DraftKey + "#";
+
+    private static int _flyoutSeq;
+
     /// <summary>同时留多少条会话的运行时。超了就淘汰"不在跑"的那些。</summary>
     private const int KeepMax = 12;
 
@@ -67,6 +76,37 @@ public sealed class HubAiRuntime
         foreach (var key in idle) _map.Remove(key);
     }
 
+    /// <summary>
+    /// 给 AI 浮层开一段**独立的空白对话**（2026-10-30）。
+    ///
+    /// <para>
+    /// 语义是「新开一个窗口 = 新开一个对话」：每次展开浮层都拿一份新的运行时，
+    /// 不带上一次的上下文，存档也另起一条（在 Hub AI 历史里能分别翻到）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 不能直接复用 <see cref="DraftKey"/>：那份是 Hub AI 页「新建对话」的草稿，
+    /// 浮层拿去用会把页面的空白草稿填成浮层的问答。
+    /// </para>
+    /// </summary>
+    public static HubAiRuntime NewDraft()
+    {
+        lock (_gate)
+        {
+            // 顺手清掉以前那些空闲的浮层草稿 —— 它们要么已 Adopt 到真实 id，要么已经被放弃
+            foreach (var key in _map.Where(kv => kv.Key.StartsWith(FlyoutDraftPrefix, StringComparison.Ordinal)
+                                                 && !kv.Value.IsRunning)
+                                    .Select(kv => kv.Key)
+                                    .ToList())
+            {
+                _map.Remove(key);
+            }
+
+            var runtime = new HubAiRuntime(FlyoutDraftPrefix + (++_flyoutSeq));
+            _map[runtime.SessionId] = runtime;
+            return runtime;
+        }
+    }
+
     /// <summary>会话被删除时清掉它的运行时（否则上下文会一直挂在内存里）。</summary>
     public static void Drop(string? sessionId)
     {
@@ -86,13 +126,22 @@ public sealed class HubAiRuntime
     /// 会话存档后 id 会变（新对话第一次保存才生成 id）—— 把 draft 运行时挂到真实 id 上，
     /// 免得刚聊完的那一段在切换时被当成另一条。
     /// </summary>
-    public static void AdoptDraft(string newSessionId)
+    public static void AdoptDraft(string newSessionId) => Adopt(DraftKey, newSessionId);
+
+    /// <summary>
+    /// 把 <paramref name="runtimeKey"/> 这份运行时改挂到真实会话 id 上（2026-10-30 抽出）。
+    /// 浮层的草稿键不是 <see cref="DraftKey"/>，所以要多一个入口。
+    /// </summary>
+    public static void Adopt(string runtimeKey, string newSessionId)
     {
+        if (string.IsNullOrEmpty(runtimeKey) || string.IsNullOrEmpty(newSessionId)) return;
+        if (string.Equals(runtimeKey, newSessionId, StringComparison.Ordinal)) return;
+
         lock (_gate)
         {
-            if (_map.TryGetValue(DraftKey, out var draft))
+            if (_map.TryGetValue(runtimeKey, out var draft))
             {
-                _map.Remove(DraftKey);
+                _map.Remove(runtimeKey);
                 _map[newSessionId] = draft;
                 draft.SessionId = newSessionId;
             }
