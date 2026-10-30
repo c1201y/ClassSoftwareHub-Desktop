@@ -88,7 +88,7 @@
                 <TextBlock Text="外观" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
-                    <controls:SettingsCard Header="颜色模式" Description="跟随系统时，随 Windows 的深浅色设置自动切换。">
+                    <controls:SettingsCard x:Name="ThemeCard" Header="颜色模式" Description="跟随系统时，随 Windows 的深浅色设置自动切换。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE790;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -151,7 +151,7 @@
                                       Toggled="TopMostSwitch_Toggled" />
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard Header="开机自动启动"
+                    <controls:SettingsCard x:Name="StartupCard" Header="开机自动启动"
                                            Description="登录 Windows 后自动运行本程序。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE7E8;" />
@@ -190,7 +190,7 @@
                 <TextBlock Text="Hub AI" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
-                    <controls:SettingsCard Header="Hub AI"
+                    <controls:SettingsCard x:Name="HubAiCard" Header="Hub AI"
                                            Description="电脑顾问的总开关与模型配置。模型服务由你自己提供，本软件不代收费用、不托管密钥。"
                                            IsClickEnabled="True" Click="OpenHubAiSettings_Click">
                         <controls:SettingsCard.HeaderIcon>
@@ -349,7 +349,7 @@
                 <TextBlock Text="软件内容" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
-                    <controls:SettingsCard Header="软件内容">
+                    <controls:SettingsCard x:Name="ContentCard" Header="软件内容">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8B7;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -484,7 +484,7 @@
                 </StackPanel>
 
                 <!-- ================= 更新 ================= -->
-                <TextBlock Text="更新" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <TextBlock x:Name="UpdateSectionHeader" Text="更新" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
                     <controls:SettingsCard Header="当前版本">

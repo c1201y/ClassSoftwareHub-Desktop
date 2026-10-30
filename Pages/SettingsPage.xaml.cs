@@ -66,6 +66,83 @@ public sealed partial class SettingsPage : Page
                 link.IconSource = QuickLinkIconLoader.GetIcon(link.IconSvg, color);
     }
 
+    /// <summary>
+    /// 滚到指定分组（需求 1:18：<c>csh://settings/&lt;section&gt;</c>）。
+    ///
+    /// <para>
+    /// 认得的 section：<c>appearance</c>（外观）/ <c>startup</c>（开机启动）/ <c>hubai</c> /
+    /// <c>cache</c>（本地缓存）/ <c>logs</c>（本地日志）/ <c>content</c>（软件内容）/
+    /// <c>update</c>（更新）/ <c>about</c>（关于，页面顶部）。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 认不出就停回顶部且只留一条日志，**不弹提示**：文章里的链接可能比应用新
+    /// （用户装的是旧版），为这个打断阅读不值得。
+    /// </para>
+    /// </summary>
+    public void ActivateSection(string? section)
+    {
+        var key = (section ?? "").Trim().ToLowerInvariant();
+
+        FrameworkElement? target = key switch
+        {
+            "appearance" or "theme" => ThemeCard,
+            "startup" => StartupCard,
+            "hubai" or "ai" => HubAiCard,
+            "cache" => CacheExpander,
+            "logs" or "log" => LogExpander,
+            "content" => ContentCard,
+            "update" or "updates" or "version" => UpdateSectionHeader,
+            "about" => AboutVersion,
+            _ => null,
+        };
+
+        if (target is null)
+        {
+            try { RootScroll.ChangeView(null, 0, null, disableAnimation: true); } catch { }
+            Core.AppLog.Info("settings", $"链接指向的分组认不出「{section}」，已停在页面顶部");
+            return;
+        }
+
+        Bring(target);
+    }
+
+    /// <summary>
+    /// 把某个控件滚进视野。
+    /// <para>
+    /// ⚠️ 刚 Navigate 过来时目标可能还没布局完，此时 <c>StartBringIntoView</c> 会**静默无效**
+    ///    （不抛异常，也没滚）。所以没加载就先等 <c>Loaded</c>。
+    /// </para>
+    /// </summary>
+    private static void Bring(FrameworkElement target)
+    {
+        void ScrollNow()
+        {
+            try
+            {
+                target.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true });
+            }
+            catch (Exception ex)
+            {
+                Core.AppLog.Warn("settings", "滚动到指定分组失败：" + ex.Message);
+            }
+        }
+
+        if (target.IsLoaded)
+        {
+            ScrollNow();
+            return;
+        }
+
+        void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            target.Loaded -= OnLoaded;
+            ScrollNow();
+        }
+
+        target.Loaded += OnLoaded;
+    }
+
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);

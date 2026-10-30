@@ -673,6 +673,21 @@ public partial class App : Application
         // ═══════════════════════════════════════════════════════════════════════
         mutex.Dispose();
 
+        // 这次启动如果是**被链接唤起的**（浏览器 / 文档里点了 csh://…，需求 1:18），
+        // 先把链接留给正在跑的那个实例 —— ⚠️ 必须在敲事件**之前**写，否则对方醒来时信箱还是空的。
+        try
+        {
+            if (Services.AppLinks.ExtractFromCommandLine() is { Length: > 0 } incoming)
+            {
+                Services.AppLinks.Queue(incoming);
+                Core.AppLog.Info("links", "已把链接转交给正在运行的实例：" + incoming);
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Info("links", "转交链接失败: " + ex.Message);
+        }
+
         if (WakeUpExistingInstance())
         {
             Environment.Exit(0);
@@ -688,6 +703,24 @@ public partial class App : Application
 
     /// <summary>第一个实例监听用的"叫醒"事件。</summary>
     private static EventWaitHandle? _activateSignal;
+
+    /// <summary>
+    /// 本次启动带进来的应用链接（<c>csh://…</c>，需求 1:18）。
+    /// <para>
+    /// 由 <see cref="AppLinks.ExtractFromCommandLine"/> 在 OnLaunched 里填好，
+    /// 等主窗口画出第一帧（<c>MainWindow.OnFirstActivated</c>）才取走执行 ——
+    /// 早了 Shell 里的 Frame 还没就绪，<c>NavigateTo</c> 会落到首页。
+    /// </para>
+    /// </summary>
+    private static string? _startupLink;
+
+    /// <summary>取走本次启动带的链接（取一次即清空，免得重启窗口时重复跳转）。</summary>
+    public static string? TakeStartupLink()
+    {
+        var link = _startupLink;
+        _startupLink = null;
+        return link;
+    }
 
     /// <summary>建"叫醒"事件。建不出来（极罕见）只是丢掉这条兜底路径，不影响启动。</summary>
     private static void TryCreateActivateSignal()
@@ -814,6 +847,21 @@ public partial class App : Application
         catch (Exception ex)
         {
             Core.AppLog.Info("startup", "主窗口 Activate 失败: " + ex);
+        }
+
+        // 应用链接（csh://，需求 1:18）：
+        //  ① 把协议指向当前 exe（已指对就只读一下，不写注册表）；
+        //  ② 记住本次启动带的链接，等首帧之后由 MainWindow 执行。
+        // ⚠️ 放在主窗口之后：注册要取 exe 路径，很快，但不该占首帧的时间。
+        try
+        {
+            Services.AppLinks.RegisterProtocol();
+            _startupLink = Services.AppLinks.ExtractFromCommandLine();
+            if (_startupLink is { Length: > 0 }) Core.AppLog.Info("links", "启动参数里带着链接：" + _startupLink);
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Info("links", "启动时准备应用链接失败: " + ex.Message);
         }
 
         // 文本框右键菜单：三条钩子挂在内容根上，handledEventsToo=true。
@@ -976,6 +1024,23 @@ public partial class App : Application
                     catch (Exception ex)
                     {
                         Core.AppLog.Info("single", "叫醒主窗口失败: " + ex.Message);
+                    }
+
+                    // 这次唤醒可能**带着链接**：用户在浏览器 / 文档里点了 csh:// 链接，
+                    // 第二个进程把链接写进邮箱（Services.AppLinks）再敲这个事件（需求 1:18）。
+                    // 取到就执行；取不到说明只是一次普通的"再点一下图标"，上面的 ShowFromTray 已经够了。
+                    try
+                    {
+                        var link = Services.AppLinks.TryTakeQueued();
+                        if (link is { Length: > 0 })
+                        {
+                            Core.AppLog.Step("single", "唤醒请求带着链接：" + link);
+                            _ = win.HandleAppUriAsync(link);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Core.AppLog.Warn("links", "处理唤醒带来的链接失败：" + ex.Message);
                     }
                 });
             }

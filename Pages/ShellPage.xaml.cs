@@ -204,6 +204,19 @@ public sealed partial class ShellPage : UserControl
     }
 
     /// <summary>
+    /// 进「设置」并滚到某个分组（需求 1:18 的 <c>csh://settings/&lt;section&gt;</c>）。
+    /// <para>
+    /// 认不出的分组不报错，停在页面顶部 —— 文章里的链接可能比应用更新，不该因此弹错误。
+    /// 映射见 <c>SettingsPage.ActivateSection</c>。
+    /// </para>
+    /// </summary>
+    public void NavigateToSettings(string? section)
+    {
+        NavigateTo("settings");
+        if (ContentFrame.Content is SettingsPage page) page.ActivateSection(section);
+    }
+
+    /// <summary>
     /// 从外部（首页卡片等）进「实验性功能」：切到总览页，并把分组展开。
     /// 展开这一步是给"从外面跳进来"补的 —— 不然看不出这一组里还有子项。
     /// ⚠️ 在导航栏里点父项那条路**不走它**：那种情况 NavigationView 自己会 toggle 展开/收起。

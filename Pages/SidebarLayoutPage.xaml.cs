@@ -292,6 +292,7 @@ public sealed partial class SidebarLayoutPage : Page
         {
             if (PaletteTopSwitch is not null) PaletteTopSwitch.IsOn = s.PaletteOnTop;
             if (SidebarSwitch is not null) SidebarSwitch.IsOn = s.SidebarEnabled;
+            if (LongLabelSwitch is not null) LongLabelSwitch.IsOn = s.SidebarLongLabels;
             if (SidebarModeCombo is not null)
             {
                 var index = s.SidebarMode == "free" ? 1 : 0;
@@ -2203,6 +2204,22 @@ public sealed partial class SidebarLayoutPage : Page
     {
         if (_toolSync) return;
         App.MainWindow?.SetPaletteOnTop(PaletteTopSwitch.IsOn);
+    }
+
+    /// <summary>
+    /// 侧边栏按钮用长名还是短名（2026-10-30 Nick 要）。
+    /// <para>
+    /// 改完立刻重建按钮（<c>ApplyModules</c>），不用重启 —— 用户就是"看着别扭才改"，
+    /// 还得重开应用才生效等于没改。
+    /// </para>
+    /// </summary>
+    private void LongLabelSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_toolSync) return;
+
+        App.Settings.Current.SidebarLongLabels = LongLabelSwitch.IsOn;
+        App.Settings.Save();
+        ToolSidebarWindow.ApplyModules();
     }
 
     private void SidebarSwitch_Toggled(object sender, RoutedEventArgs e)

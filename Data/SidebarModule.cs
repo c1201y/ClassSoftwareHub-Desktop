@@ -18,6 +18,14 @@ public static class SidebarModuleKinds
     /// 每个工具在侧边栏里是**各自独立的一项**（Nick 10-18 定：不要合并成一个「学科」入口）。
     /// </summary>
     public const string Window = "window";
+    /// <summary>
+    /// 独立窗口，**里面装主界面里的某一页**（2026-10-30 加，用于「编码 / 哈希转换」）。
+    /// <para>
+    /// 跟 <see cref="Page"/> 的区别只有一个：不拉主界面，单开一扇窗装那一页。
+    /// 页面本身不用改 —— 只要它不依赖 <c>ShellPage</c> 的导航状态就能这么用。
+    /// </para>
+    /// </summary>
+    public const string WindowPage = "windowpage";
     /// <summary>讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。</summary>
     public const string Action = "action";
     /// <summary>
@@ -47,6 +55,18 @@ public sealed class SidebarModule
 
     /// <summary>侧边栏按钮上的短名（那条很窄，只放得下两三个字）。</summary>
     public string ShortName { get; init; } = "";
+
+    /// <summary>
+    /// 侧边栏按钮上的长名，**最多 4 个字**（2026-10-30 Nick 加：两三个字常常说不清这个按钮干什么）。
+    /// <para>
+    /// 由「侧边布局 → 用长名显示」开关决定用哪个（<c>AppSettings.SidebarLongLabels</c>）。
+    /// 空 = 没有更清楚的说法，两种情况都用 <see cref="ShortName"/>。
+    /// </para>
+    /// <para>
+    /// ⚠️ 超过 4 个字会被侧边栏截断（面板厚度只有 92 dip），所以写的时候自己数一下。
+    /// </para>
+    /// </summary>
+    public string LongName { get; init; } = "";
 
     /// <summary>Segoe Fluent Icons 字形。</summary>
     public string Glyph { get; init; } = "";
@@ -92,35 +112,30 @@ public static class SidebarModules
 {
     public static readonly IReadOnlyList<SidebarModule> All = new List<SidebarModule>
     {
-        new() { Id = "pick-number", Name = "随机抽号", ShortName = "抽号", Glyph = "\uE716", Kind = SidebarModuleKinds.Palette },
-        new() { Id = "timer", Name = "课堂计时", ShortName = "计时", Glyph = "\uE81C", Kind = SidebarModuleKinds.Palette },
-        new() { Id = "stopwatch", Name = "秒表计时", ShortName = "秒表", Glyph = "\uE916", Kind = SidebarModuleKinds.Palette },
-        new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
-        new() { Id = "image-color", Name = "图片取色", ShortName = "取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
-        new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", Glyph = "\uE943", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.EncodingToolPage) },
-        // 「哈希校验」独立窗口（2026-10-30，需求 1:16）：核对安装包用 —— 拖进文件就出四种哈希，
-        // 粘贴官网给的校验值自动比对。跟上面那条「编码 / 哈希转换」分工不同：那条是整页编辑器，
-        // 这条是"用完就关"的核对工具，所以走独立窗口、不拉主界面。
-        // ⚠️ 字形用 E73E（对勾）：这条就是"校验对不对"，比再借一个哈希图标更好认。
-        new() { Id = "hash-check", Name = "哈希校验", ShortName = "哈希", Glyph = "\uE73E", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.HashCheckWindow), Note = "在独立窗口中打开哈希校验：拖入文件即可算出 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴校验值后自动比对" },
+        new() { Id = "pick-number", Name = "随机抽号", ShortName = "抽号", LongName = "随机抽号", Glyph = "\uE716", Kind = SidebarModuleKinds.Palette },
+        new() { Id = "timer", Name = "课堂计时", ShortName = "计时", LongName = "课堂计时", Glyph = "\uE81C", Kind = SidebarModuleKinds.Palette },
+        new() { Id = "stopwatch", Name = "秒表计时", ShortName = "秒表", LongName = "秒表计时", Glyph = "\uE916", Kind = SidebarModuleKinds.Palette },
+        new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", LongName = "全屏时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
+        new() { Id = "image-color", Name = "图片取色", ShortName = "取色", LongName = "图片取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
+        new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", LongName = "编码校验", Glyph = "\uE943", Kind = SidebarModuleKinds.WindowPage, Page = typeof(Pages.Tools.EncodingToolPage), Note = "在独立窗口中打开编码与哈希工具：校验文件、Base64 / URL 编解码，不拉出主界面" },
         // 学科工具（2026-10-18 Nick 要）：函数图像 / 方程求解 / 化学配平**各占一项**，
         // 点哪项就直接开那件工具，单开一扇窗、**不拉主界面** —— 这是重点。
         // 以前点这类工具会把整个主窗口叫出来（Kind = Page），只想算一道题时太重。
         // ⚠️ Nick 10-18 明确否过"合并成一个「学科」入口"：三个工具要有三个按钮。
         // 字形与 Data/ToolDef.cs 里同一件工具保持一致，别一边一个样。
-        new() { Id = "subject-function", Name = "函数图像", ShortName = "函数", Glyph = "\uE9D2", Kind = SidebarModuleKinds.Window, WindowTool = "function-plot", Note = "在独立窗口中打开函数图像，不必打开主界面" },
-        new() { Id = "subject-equation", Name = "方程求解", ShortName = "方程", Glyph = "\uE8EF", Kind = SidebarModuleKinds.Window, WindowTool = "equation", Note = "在独立窗口中打开方程求解，不必打开主界面" },
-        new() { Id = "subject-chemistry", Name = "化学方程式配平", ShortName = "化学", Glyph = "\uE80A", Kind = SidebarModuleKinds.Window, WindowTool = "chemistry", Note = "在独立窗口中打开化学方程式配平，不必打开主界面" },
+        new() { Id = "subject-function", Name = "函数图像", ShortName = "函数", LongName = "函数图像", Glyph = "\uE9D2", Kind = SidebarModuleKinds.Window, WindowTool = "function-plot", Note = "在独立窗口中打开函数图像，不必打开主界面" },
+        new() { Id = "subject-equation", Name = "方程求解", ShortName = "方程", LongName = "方程求解", Glyph = "\uE8EF", Kind = SidebarModuleKinds.Window, WindowTool = "equation", Note = "在独立窗口中打开方程求解，不必打开主界面" },
+        new() { Id = "subject-chemistry", Name = "化学方程式配平", ShortName = "化学", LongName = "化学配平", Glyph = "\uE80A", Kind = SidebarModuleKinds.Window, WindowTool = "chemistry", Note = "在独立窗口中打开化学方程式配平，不必打开主界面" },
         // ⚠️ 原来这里还有一项「系统镜像下载（mirror-download）」：2026-10-09 该功能整体下线，一并删除。
         //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
 
         // ── 挨着边条弹浮窗的单滑块面板 ──
         // 音量：点一下在边条内侧弹一栏（边条不收起）—— 竖向排「数值 + 垂直滑块 + 静音 + 展开」，
         // 「展开」再弹一个横向的音量合成器浮窗，可以给每个正在发声的应用单独调音量。
-        new() { Id = "volume", Name = "音量调节", ShortName = "音量", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节系统主音量（带刻度的垂直滑块）。面板中的「展开」可显示音量合成器，为各发声应用单独调节音量" },
+        new() { Id = "volume", Name = "音量调节", ShortName = "音量", LongName = "音量调节", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节系统主音量（带刻度的垂直滑块）。面板中的「展开」可显示音量合成器，为各发声应用单独调节音量" },
         // 屏幕亮度：跟音量同一套（同一个浮窗控件，点哪个就换成哪一栏）。下面那颗键是「自动亮度」，
         // **没有二级浮窗**；机器没有环境光传感器时那颗键是灰的（系统自带的自动亮度同样用不了）。
-        new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节屏幕亮度（笔记本内屏可用，外接显示器通常不可用）。面板中的「自动亮度」按钮需设备具备环境光传感器才能使用" },
+        new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", LongName = "屏幕亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节屏幕亮度（笔记本内屏可用，外接显示器通常不可用）。面板中的「自动亮度」按钮需设备具备环境光传感器才能使用" },
 
         // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
 
@@ -128,21 +143,21 @@ public static class SidebarModules
         // 都插在动作组最前面（跟 rev1 递音量同一个位置约定），紧挨着工具组下沿，好找。
         // ⚠️ 图标用 E9D9（框内折线图，跟 Windows 自家任务管理器那个图标一个意思）。
         //    ⛔ 原来用的是 E9F3 —— 那字形是"虚线圈 + 箭头"（同步/刷新），放这儿让人莫名其妙（Nick 2026-10-12 报）。
-        new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", Glyph = "\uE9D9", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
+        new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", LongName = "任务管理", Glyph = "\uE9D9", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
         // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起
         //    （否则钓鱼程序可以伪造一个一模一样的界面骗密码）。这里给的是它上面的那几个操作本身。
         // ⚠️ 短名用「安全项」不用「安全」（2026-10-12 Nick：只写「安全」两个字别人看不懂是干什么的）。
-        new() { Id = "security", Name = "安全选项", ShortName = "安全项", Glyph = "\uEA18", Kind = SidebarModuleKinds.Action, Note = "等同 Ctrl+Alt+Del 那个界面上能做的事：锁定电脑 / 切换用户 / 注销（该界面的本体属系统安全桌面，普通程序无法直接调起，这里给的是其中的各个操作）" },
-        new() { Id = "clipboard", Name = "剪贴板历史", ShortName = "剪贴板", Glyph = "\uE8C8", Kind = SidebarModuleKinds.Action, Note = "等同 Win+V：打开剪贴板历史，挑一条粘到刚才那个窗口里（需先在系统「设置 → 系统 → 剪贴板」里打开剪贴板历史）" },
+        new() { Id = "security", Name = "安全选项", ShortName = "安全项", LongName = "安全选项", Glyph = "\uEA18", Kind = SidebarModuleKinds.Action, Note = "等同 Ctrl+Alt+Del 那个界面上能做的事：锁定电脑 / 切换用户 / 注销（该界面的本体属系统安全桌面，普通程序无法直接调起，这里给的是其中的各个操作）" },
+        new() { Id = "clipboard", Name = "剪贴板历史", ShortName = "剪贴板", LongName = "剪贴板", Glyph = "\uE8C8", Kind = SidebarModuleKinds.Action, Note = "等同 Win+V：打开剪贴板历史，挑一条粘到刚才那个窗口里（需先在系统「设置 → 系统 → 剪贴板」里打开剪贴板历史）" },
 
-        new() { Id = "mag", Name = "放大镜", ShortName = "放大", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },
+        new() { Id = "mag", Name = "放大镜", ShortName = "放大", LongName = "放大镜", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },
         // ⚠️ 原来这里还有一项「打开键盘（keyboard）」：2026-10-09 虚拟键盘整体下线，一并删除。
         //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
-        new() { Id = "screenshot", Name = "截屏贴图", ShortName = "截屏", Glyph = "\uE722", Kind = SidebarModuleKinds.Action, Note = "框选区域后在编辑窗中标注：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克，并支持撤销与重做；随后可复制到剪贴板 / 保存到本地 / 钉图（钉图按 1:1 显示，拖动边框可缩放，双击或右键关闭）" },
-        new() { Id = "taskview", Name = "任务视图", ShortName = "任务", Glyph = "\uE7C4", Kind = SidebarModuleKinds.Action, Note = "等同 Win+Tab" },
-        new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次单击即可还原（不关闭任何程序）" },
-        new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同单击标题栏 ×，会提示是否保存，不强制结束）" },
-        new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中的所有窗口（含最小化窗口）。防误触：首次单击仅计数，再次单击才会执行；均为正常关闭，不强制结束" },
+        new() { Id = "screenshot", Name = "截屏贴图", ShortName = "截屏", LongName = "截屏贴图", Glyph = "\uE722", Kind = SidebarModuleKinds.Action, Note = "框选区域后在编辑窗中标注：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克，并支持撤销与重做；随后可复制到剪贴板 / 保存到本地 / 钉图（钉图按 1:1 显示，拖动边框可缩放，双击或右键关闭）" },
+        new() { Id = "taskview", Name = "任务视图", ShortName = "任务", LongName = "任务视图", Glyph = "\uE7C4", Kind = SidebarModuleKinds.Action, Note = "等同 Win+Tab" },
+        new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", LongName = "回到桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次单击即可还原（不关闭任何程序）" },
+        new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", LongName = "关闭前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同单击标题栏 ×，会提示是否保存，不强制结束）" },
+        new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", LongName = "关闭全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中的所有窗口（含最小化窗口）。防误触：首次单击仅计数，再次单击才会执行；均为正常关闭，不强制结束" },
         // 「关机」（2026-10-18 Nick 要）：侧边栏一颗「关机」按钮，按设置里的「关机方式」执行。
         // · 默认＝手动关机：调系统的 SlideToShutDown.exe（下滑滑块才真关，本身即确认步骤，不滑就一直停着）；
         // · 直接关机：立刻 shutdown /s /f /t 0。
@@ -155,14 +170,14 @@ public static class SidebarModules
         // ⚠️ 取消关机：只在用户**自己把它加到侧边栏**之后才出现。刻意**不**走 SidebarModulesRevision 补入 ——
         //    「自动关机」是实验性功能且默认关闭，往所有人侧边栏上塞一颗多数人用不上的按钮不合理。
         //    添加入口在「自动关机」页上（一个按钮追加到末尾），也可以在「侧边布局」页里手动勾。
-        new() { Id = "cancelshutdown", Name = "取消关机", ShortName = "撤关机", Glyph = "\uE7E8", Kind = SidebarModuleKinds.Action, Note = "撤回还没执行的自动关机（等同系统的取消关机命令）。当前没有待执行的关机时，只会提示一句" },
+        new() { Id = "cancelshutdown", Name = "取消关机", ShortName = "撤关机", LongName = "取消关机", Glyph = "\uE7E8", Kind = SidebarModuleKinds.Action, Note = "撤回还没执行的自动关机（等同系统的取消关机命令）。当前没有待执行的关机时，只会提示一句" },
 
         // 「结束希沃白板」（2026-10-12 Nick 要）：白板5 残留进程**立刻**清一次，不带时间点。
         // 到点自动清那一套在「实验性功能 → 白板专杀」页里；这颗是"现在就清"，
         // 就是那页上「立即结束」那颗按钮的侧边栏版（同一个 EasiNoteGuard.RunOnce）。
         // ⚠️ 图标 EA99（扫帚）跟实验性页那条「白板专杀」同源 —— 换图标记得两边一起换，别一边一个样。
         // ⚠️ 安全闸在 EasiNoteGuard 里：**有可见窗口的一律放过**（老师正开着白板讲课就不动它）。
-        new() { Id = "killseewo", Name = "结束希沃白板", ShortName = "杀希沃", Glyph = "\uEA99", Kind = SidebarModuleKinds.Action, Note = "立刻结束希沃白板5 后台滞留的残留进程（等同「白板专杀」页上的「立即结束」）。有可见窗口的一律放过，不会打断正在讲课的白板。按时间点自动清理那套在「实验性功能 → 白板专杀」里设置" },
+        new() { Id = "killseewo", Name = "结束希沃白板", ShortName = "杀希沃", LongName = "结束希沃", Glyph = "\uEA99", Kind = SidebarModuleKinds.Action, Note = "立刻结束希沃白板5 后台滞留的残留进程（等同「白板专杀」页上的「立即结束」）。有可见窗口的一律放过，不会打断正在讲课的白板。按时间点自动清理那套在「实验性功能 → 白板专杀」里设置" },
 
         // 「最小化全部窗口」已删（2026-09-25）：「回到桌面」在 Windows 上做的事跟它一模一样（都是把窗口全收起来、再按一次还原），
         // 两个按钮一个效果，留着只会让人问「有区别吗」。要恢复就把这行抄回去。

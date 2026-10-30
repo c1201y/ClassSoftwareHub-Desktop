@@ -136,6 +136,18 @@ public sealed class AppSettings
     public string[] SidebarModuleIds { get; set; } = { "pick-number", "timer", "stopwatch", "clock" };
 
     /// <summary>
+    /// 侧边栏按钮上写长名还是短名（2026-10-30 Nick 加）。
+    /// <para>
+    /// 短名两三个字（「抽号」「计时」），长名最多四个字（「随机抽号」「课堂计时」）——
+    /// 有些按钮光看两个字根本猜不出是干什么的。在「侧边布局」页里切换。
+    /// </para>
+    /// <para>
+    /// 默认关：侧边栏本来就窄，老用户已经认惯了短名，不主动改他们的界面。
+    /// </para>
+    /// </summary>
+    public bool SidebarLongLabels { get; set; }
+
+    /// <summary>
     /// 学科工具窗上次停在哪个工具（<c>function-plot</c> / <c>equation</c> / <c>chemistry</c>）。
     /// 侧边栏那颗「学科」只传 null，窗口就按这个值恢复 —— 上次算化学，下次点开还是化学。
     /// 认不出的值由 <c>SubjectToolsWindow.Normalize</c> 兜回第一件，不用在这里校验。
@@ -851,43 +863,41 @@ public sealed class SettingsStore
 
         if (Current.SidebarModulesRevision < 10)
         {
-            // revision 10（2026-10-30）：侧边栏新增「哈希校验」独立窗口（需求 1:16）。
-            // 插在「编码 / 哈希转换」**后面** —— 两者同族，摆在一起好找；
-            // 没勾过它的话就按工具组末尾补入（跟 rev7 / rev8 的位置规则一致）。
+            // revision 10（2026-10-30）：**空操作**，只把版本号推上去。
+            // 原打算在这里往侧边栏补一个「哈希校验」模块，做完发现它跟「编码 / 哈希转换」
+            // 本来就是同一件事（编码页里已经有文件校验 + 校验值比对），两个按钮纯属重复 ——
+            // 改成「编码」直接开独立窗口装那一页（Kind = WindowPage），不再新增模块。
+            // ⚠️ 版本号仍然要推：否则老存档停在 9，下面 rev11 的清理逻辑不会执行。
+            Current.SidebarModulesRevision = 10;
+            changed = true;
+        }
+
+        if (Current.SidebarModulesRevision < 11)
+        {
+            // revision 11（2026-10-30）：**通用清理** —— 把存档里已经不存在的模块 id 剔掉。
+            //
+            // 来由：rev10 一度补过 hash-check，那个模块当天就删掉了（与「编码」重复）。
+            // 以前每删一个模块都得再写一条 revision 去剔除（rev4 删过两个），越攒越长。
+            // 这里改成一次性、幂等的清理：存档里的 id 只要在 SidebarModules.All 里找不到就丢掉，
+            // 以后删模块**不用再补 revision**。
+            // ⚠️ 只删"当前版本不认识"的 id，不动顺序、不动其他项。
             try
             {
                 var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+                var kept = list.Where(id => Data.SidebarModules.Find(id) is not null).ToList();
 
-                if (!list.Contains("hash-check"))
+                if (kept.Count != list.Count)
                 {
-                    var at = list.IndexOf("encoding");
-                    if (at >= 0)
-                    {
-                        list.Insert(at + 1, "hash-check");
-                    }
-                    else
-                    {
-                        var tail = list.FindIndex(id =>
-                        {
-                            var kind = Data.SidebarModules.Find(id)?.Kind;
-                            return kind is not (Data.SidebarModuleKinds.Palette
-                                or Data.SidebarModuleKinds.Page
-                                or Data.SidebarModuleKinds.Window);
-                        });
-
-                        if (tail < 0) list.Add("hash-check");
-                        else list.Insert(tail, "hash-check");
-                    }
-
-                    Current.SidebarModuleIds = list.ToArray();
+                    Log($"清理侧边栏存档里已删除的模块：{string.Join(", ", list.Except(kept))}");
+                    Current.SidebarModuleIds = kept.ToArray();
                 }
             }
             catch (Exception ex)
             {
-                Log($"补侧边栏新模块失败: {ex.Message}");
+                Log($"清理侧边栏模块失败: {ex.Message}");
             }
 
-            Current.SidebarModulesRevision = 10;
+            Current.SidebarModulesRevision = 11;
             changed = true;
         }
 

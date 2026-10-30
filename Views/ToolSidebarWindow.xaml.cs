@@ -1224,9 +1224,12 @@ public sealed partial class ToolSidebarWindow : Window
             });
             content.Children.Add(new TextBlock
             {
-                Text = m.ShortName,
+                Text = LabelOf(m),
                 FontSize = ToolLabel,
-                HorizontalAlignment = HorizontalAlignment.Center
+                HorizontalAlignment = HorizontalAlignment.Center,
+                // 长名最多 4 个字，理论上放得下（面板厚 92、11 号字）；真超了宁可截断也别撑出按钮
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 84
             });
 
             var btn = new Button
@@ -1285,6 +1288,19 @@ public sealed partial class ToolSidebarWindow : Window
             Grid.SetColumn(tip, 0);
             ToolStack.Children.Add(tip);
         }
+    }
+
+    /// <summary>
+    /// 按钮上显示哪个名字（2026-10-30）：开了「用长名显示」且这个模块有长名，就用长名。
+    /// <para>
+    /// 来由（Nick）：两三个字常常说不清这个按钮干什么。长名统一 4 个字以内
+    /// （见 <see cref="SidebarModule.LongName"/>），面板厚度只有 92，再多就挤了。
+    /// </para>
+    /// </summary>
+    private static string LabelOf(SidebarModule m)
+    {
+        if (!App.Settings.Current.SidebarLongLabels) return m.ShortName;
+        return m.LongName.Length > 0 ? m.LongName : m.ShortName;
     }
 
     private void Tool_Click(object sender, RoutedEventArgs e)
@@ -1363,6 +1379,8 @@ public sealed partial class ToolSidebarWindow : Window
             Collapse();                                        // 先把边条收起来，别挡着工具窗口
             if (m.Kind == SidebarModuleKinds.Page && m.Page is not null)
                 App.MainWindow?.OpenToolSettings(m.Page);      // 拉出主窗口并跳到那一页
+            else if (m.Kind == SidebarModuleKinds.WindowPage && m.Page is not null)
+                ToolPageWindow.Show(m.Page, m.Name);           // 单开一扇窗装那一页，不拉主界面（编码 / 哈希）
             else if (m.Kind == SidebarModuleKinds.Window)
                 OpenModuleWindow(m);                           // 单开一扇轻量窗，不碰主界面
             else

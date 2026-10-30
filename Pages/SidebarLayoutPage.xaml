@@ -113,6 +113,17 @@
                                           Toggled="SidebarSwitch_Toggled" />
                         </controls:SettingsCard>
 
+                        <!-- 按钮文字：短名（两三个字）还是长名（最多四个字，2026-10-30 Nick 要）。
+                             ⚠️ 只影响**侧边栏按钮上那行字**，悬停提示和「侧边布局」这里的名字一直用全名。 -->
+                        <controls:SettingsCard Header="按钮使用长名"
+                                               Description="两三个字常常看不出用途，改用最多四个字的名称（例如「抽号」改为「随机抽号」）。">
+                            <controls:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE8D2;" />
+                            </controls:SettingsCard.HeaderIcon>
+                            <ToggleSwitch x:Name="LongLabelSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                                          Toggled="LongLabelSwitch_Toggled" />
+                        </controls:SettingsCard>
+
                         <!-- 两项都用 ComboBox：与「颜色模式」「窗口背景效果」同一套交互，不做成一排单选按钮 -->
                         <controls:SettingsCard Header="侧边栏放置模式">
                             <controls:SettingsCard.HeaderIcon>

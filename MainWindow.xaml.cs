@@ -120,6 +120,11 @@ public sealed partial class MainWindow : Window
 
         // 启动时查一次更新：**不强制**，有新版就问用户（主窗口没露脸时发系统通知）
         _ = CheckUpdateOnStartupAsync();
+
+        // 本次启动带着链接（csh://…，需求 1:18）：等到这里才处理 —— 首帧之前 Shell 的 Frame
+        // 还没就绪，跳转会落到首页。放在更新检查之后：更新提示是"顺带问一句"，跳转是用户刚点的。
+        var startupLink = App.TakeStartupLink();
+        if (startupLink is { Length: > 0 }) _ = HandleAppUriAsync(startupLink);
     }
 
     /// <summary>
@@ -2178,6 +2183,73 @@ public sealed partial class MainWindow : Window
         ExitApp();
     }
 
+    /// <summary>
+    /// 处理一条应用链接（<c>csh://…</c> 或 <c>ms-settings:…</c>），需求 1:18。
+    ///
+    /// <para>
+    /// 来源有三处：① 命令行（Windows 唤起协议时把链接当参数传进来）；② 第二个实例通过
+    /// <c>AppLinks</c> 的信箱递过来再敲叫醒事件；③ 将来文档库文章里的超链接。
+    /// 三处都汇到这里，避免"点文章里的链接"和"点浏览器里的链接"走两套逻辑。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 先 <see cref="ShowFromTray"/>：链接要跳到某个页面，窗口隐在托盘里就等于"点了没反应"。
+    /// </para>
+    /// </summary>
+    public async System.Threading.Tasks.Task HandleAppUriAsync(string uri)
+    {
+        try
+        {
+            var target = Core.AppUri.Parse(uri);
+            if (target is null)
+            {
+                // 本应用不认识的链接：交给系统（ms-settings: 这类），其余只留痕不弹窗 ——
+                // 一条坏链接不该打断用户手上的事。
+                if (uri.StartsWith(Core.AppUri.SystemSchemePrefix, StringComparison.OrdinalIgnoreCase)
+                    && Uri.TryCreate(uri, UriKind.Absolute, out var systemUri))
+                {
+                    await Windows.System.Launcher.LaunchUriAsync(systemUri);
+                }
+                else
+                {
+                    Core.AppLog.Warn("links", "无法识别的链接：" + uri);
+                }
+                return;
+            }
+
+            ShowFromTray();
+            Core.AppLog.Step("links", $"处理链接 {target.Kind}/{target.Target}");
+
+            switch (target.Kind)
+            {
+                case Core.AppUriKind.Settings:
+                    Shell?.NavigateToSettings(target.Target);
+                    break;
+
+                case Core.AppUriKind.Page:
+                case Core.AppUriKind.Tool:
+                    // 两者走同一条路：工具子项的 tag 就是 ToolCatalog 的 Id，NavigateTagCore
+                    // 会先按 Id 反查工具表（连带载体选择），认不出才当普通页面 tag 处理。
+                    Shell?.NavigateTo(target.Target);
+                    break;
+
+                case Core.AppUriKind.Article:
+                    // 文档库还没做（需求 1:15 在后续批次）。先如实记日志，别假装跳过去了。
+                    Core.AppLog.Info("links", $"文章链接暂未支持（文档库尚未实现）：{target.Target}");
+                    break;
+
+                case Core.AppUriKind.System:
+                    if (Uri.TryCreate(target.Raw, UriKind.Absolute, out var sys))
+                        await Windows.System.Launcher.LaunchUriAsync(sys);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("links", ex, "处理应用链接");
+        }
+    }
+
     public void ExitApp()
     {
         Core.AppLog.Info("exit", "ExitApp() 被调用");
@@ -2224,7 +2296,7 @@ public sealed partial class MainWindow : Window
         try { Views.LogDetailWindow.CloseForExit(); } catch { }
         try { Views.LegalWindow.CloseForExit(); } catch { }
         try { Views.SubjectToolsWindow.CloseForExit(); } catch { }
-        try { Views.HashCheckWindow.CloseForExit(); } catch { }
+        try { Views.ToolPageWindow.CloseForExit(); } catch { }
         try { Close(); } catch { }
         Core.AppLog.Info("exit", "窗口已全部请求关闭");
 
