@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
@@ -61,12 +62,37 @@ public sealed partial class SystemFeaturesPage : Page
             var bytes = SystemFeatures.HibernateFileBytes();
             HibernateFileText.Text = bytes > 0 ? AppLog.Size(bytes) : "不存在（休眠已关闭）";
 
-            PageFileList.ItemsSource = SystemFeatures.PageFiles();
+            FillPageFileCard();
         }
         finally
         {
             _loading = false;
         }
+    }
+
+    /// <summary>
+    /// 把分页文件信息填进那一行 SettingsCard。
+    /// <para>
+    /// ⚠️ 不用列表控件：分页文件通常只有一条，多条时把配置拼在 Description 里照样读得懂 ——
+    ///    第一版用 SettingsExpander + ItemsRepeater，一进页面进程就被杀（2026-10-30 实测），不值当。
+    /// </para>
+    /// </summary>
+    private void FillPageFileCard()
+    {
+        var entries = SystemFeatures.PageFiles();
+
+        if (entries.Count == 0)
+        {
+            PageFileDescText.Text = "未配置分页文件。";
+            PageFileSizeText.Text = "—";
+            return;
+        }
+
+        PageFileDescText.Text = string.Join("；", entries.Select(e => e.ConfigText));
+        PageFileSizeText.Text = entries[0].SizeText;
+
+        if (entries.Count > 1)
+            PageFileSizeText.Text = $"{entries[0].SizeText} 等 {entries.Count} 个";
     }
 
     // ── 开关 ─────────────────────────────────────────────────────────────
