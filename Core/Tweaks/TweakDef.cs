@@ -15,11 +15,21 @@ public enum TweakApply
 /// <summary>这条改动写在哪一格注册表单元（决定要不要提权）。</summary>
 public enum TweakScope
 {
-    /// <summary><c>HKLM</c>：整机生效，所有账户都受影响。**要提权**（2026-10-31 Nick 定的口径：做系统级）。</summary>
-    System,
-
-    /// <summary><c>HKCU</c>：只影响当前账户。不需要提权，留作少数确实按账户走的项。</summary>
+    /// <summary>
+    /// <c>HKCU</c>：写当前用户。**绝大多数界面类设置的真实落点就在这儿，不需要管理员**。
+    /// <para>
+    /// ⚠️ 2026-10-31 修正：一开始我把"做系统"理解成"全写 HKLM"，把任务栏靠左这种也塞进提权批次。
+    /// Nick 当场反问「任务栏图标靠左为什么需要 UAC？这个系统设置一下就行了吗」——
+    /// 他说得对：Dism++ 的「系统」列是给**新用户预设默认值**用的，不是唯一正确落点；
+    /// 已登录用户的 HKCU 优先级更高，写 HKLM 反而可能看不到变化。
+    /// </para>
+    /// </summary>
     User,
+
+    /// <summary>
+    /// <c>HKLM</c>：真正的机器级设置（休眠、快速启动、分页文件这类），只有它们才需要提权。
+    /// </summary>
+    System,
 }
 
 /// <summary>风险级别。<see cref="Caution"/> 的项在切换前要弹二次确认。</summary>
@@ -33,10 +43,9 @@ public enum TweakRisk
 /// 一条系统优化项（2026-10-31，对应需求清单第 20 条，按 Dism++「系统优化」的能力对齐）。
 ///
 /// <para>
-/// ⭐ 2026-10-31 二改：**做系统级（<c>HKLM</c>）**，与 Dism++ 的「系统」那一列对齐 ——
-/// Nick 原话「不是当前用户，是什么，是系统！」。学校机器不做「新用户」那一列，但改动要整机生效。
-/// ⇒ 写 <c>HKLM</c> 必须提权，所以界面**不逐项弹 UAC**：切开关只排队，
-/// 「应用更改」时把整批改动写成一份 <c>.reg</c>，**一次** <c>reg import</c> 提权提交（同 Dism++ 的交互）。
+/// ⭐ 2026-10-31：**界面类项一律写当前用户（<c>HKCU</c>），不弹 UAC**。
+/// 只有真正机器级的项（<c>Scope = System</c>：休眠、快速启动、分页文件）才走一次提权。
+/// 界面依旧整批提交：HKCU 部分直接写、System 部分合成一份 <c>.reg</c> 提权一次。
 /// </para>
 /// <para>
 /// 表述约定：<see cref="Header"/> 描述"这个开关打开后会发生什么"，
@@ -62,8 +71,8 @@ public sealed record TweakDef
 
     public string Description { get; init; } = "";
 
-    /// <summary>注册表根（决定写 HKLM 还是 HKCU、要不要提权）。</summary>
-    public TweakScope Scope { get; init; } = TweakScope.System;
+    /// <summary>注册表根（决定写 HKLM 还是 HKCU、要不要提权）。默认当前用户。</summary>
+    public TweakScope Scope { get; init; } = TweakScope.User;
 
     /// <summary>相对根的键路径（不含 <c>HKEY_LOCAL_MACHINE\</c>）。</summary>
     public required string KeyPath { get; init; }

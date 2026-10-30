@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
@@ -8,56 +7,27 @@ using ClassSoftwareHub.Desktop.Data.Tweaks;
 using ClassSoftwareHub.Desktop.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Pages;
-
-/// <summary>列表里的一行（界面绑定用）。</summary>
-public sealed class TweakRow : INotifyPropertyChanged
-{
-    private bool _isOn;
-
-    public TweakRow(TweakDef def)
-    {
-        Def = def;
-        IsOn = TweakStore.IsOn(def);
-    }
-
-    public TweakDef Def { get; }
-
-    public string Header => Def.ScopeNote.Length > 0 ? $"{Def.Header}（{Def.ScopeNote}）" : Def.Header;
-
-    public string Description => Def.Description;
-
-    public bool IsOn
-    {
-        get => _isOn;
-        set
-        {
-            if (_isOn == value) return;
-            _isOn = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOn)));
-        }
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-}
 
 /// <summary>
 /// 系统优化（需求清单第 20 条，2026-10-31）。对齐 Dism++「系统优化」里能安全落地的部分。
 ///
 /// <para>
-/// ⭐ 交互按 Nick 的要求：**切换只排队，点「应用更改」时整批一次提权**（写 HKLM 必须管理员，
-/// 但一屏十几项只弹一次 UAC）；需要重启资源管理器才看得到的项，条上直接给按钮。
+/// ⭐ 界面**逐行照抄 `AutoShutdownPage` 的写法**：一行一个 `<c>controls:SettingsCard</c>` 直接写在
+/// XAML 里，开关就是卡片内容区里的 `<c>ToggleSwitch</c>`。
+/// ⛔ 不要改成 `ItemsControl` + `DataTemplate` 包 SettingsCard —— 2026-10-31 试过，
+/// SettingsCard 在模板里排不出内容区，右侧开关整个不渲染（Nick：「能抄就抄，别猜」）。
 /// </para>
 /// <para>
-/// ⚠️ 切换高危项（<see cref="TweakRisk.Caution"/>）先弹二次确认，取消要把开关拨回去 ——
-/// 拨回时同样要压 <c>_loading</c>，否则会再触发一次 Toggled 把确认框弹两遍。
+/// ⚠️ 这些项都在当前用户（<c>HKCU</c>），改完即时生效，**不弹 UAC**：
+/// 切换只排队，点「应用更改」时统一写入；需要重启资源管理器才看得到的项，条上给按钮。
+/// （机器级项在「系统功能」页，那里才提权。）
 /// </para>
 /// </summary>
 public sealed partial class SystemTweaksPage : Page
 {
-    private readonly List<TweakRow> _rows = new();
-
     /// <summary>待应用的改动（按 Id 去重：来回切换只留最后一次）。</summary>
     private readonly Dictionary<string, bool> _pending = new(StringComparer.Ordinal);
 
@@ -69,34 +39,71 @@ public sealed partial class SystemTweaksPage : Page
     public SystemTweaksPage()
     {
         InitializeComponent();
-
-        foreach (var def in TweakCatalog.All) _rows.Add(new TweakRow(def));
-
-        TaskbarRows.ItemsSource = RowsOf(TweakCatalog.GroupTaskbar);
-        ExplorerRows.ItemsSource = RowsOf(TweakCatalog.GroupExplorer);
-        VisualRows.ItemsSource = RowsOf(TweakCatalog.GroupVisual);
-        InputRows.ItemsSource = RowsOf(TweakCatalog.GroupInput);
-
-        UpdatePendingBar();
+        LoadStates();
     }
 
-    private List<TweakRow> RowsOf(string group) =>
-        _rows.Where(r => string.Equals(r.Def.Group, group, StringComparison.Ordinal)).ToList();
+    /// <summary>按开关上的 <c>Tag</c>（项的 Id）反查定义。</summary>
+    private static TweakDef? DefOf(object? tag) =>
+        tag is string id ? TweakCatalog.All.FirstOrDefault(t => t.Id == id) : null;
+
+    /// <summary>把界面上所有带 Tag 的开关按注册表当前值摆一遍。</summary>
+    private void LoadStates()
+    {
+        _loading = true;
+        try
+        {
+            foreach (var toggle in FindToggles(this))
+            {
+                var def = DefOf(toggle.Tag);
+                if (def is null) continue;
+                toggle.IsOn = TweakStore.IsOn(def);
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>递归找页面里所有带 Tag 的 ToggleSwitch（只找我们自己那批）。</summary>
+    private static List<ToggleSwitch> FindToggles(DependencyObject root)
+    {
+        var found = new List<ToggleSwitch>();
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
+        {
+            var node = queue.Dequeue();
+            var count = VisualTreeHelper.GetChildrenCount(node);
+            for (var i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(node, i);
+                if (child is ToggleSwitch toggle && toggle.Tag is string) found.Add(toggle);
+                queue.Enqueue(child);
+            }
+        }
+
+        return found;
+    }
 
     // ── 切换 ─────────────────────────────────────────────────────────────
 
     private async void Row_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading || _busy) return;
-        if (sender is not ToggleSwitch toggle || toggle.DataContext is not TweakRow row) return;
+        if (sender is not ToggleSwitch toggle) return;
+
+        var def = DefOf(toggle.Tag);
+        if (def is null) return;
 
         var want = toggle.IsOn;
 
-        // 高危项：先问一句。取消就把开关拨回去（同 AppData 卡的"值没变就忽略"思路）
-        if (row.Def.Risk == TweakRisk.Caution)
+        // 高危项：先问一句。取消就把开关拨回去（拨回时同样要压 _loading，否则会再弹一次）
+        if (def.Risk == TweakRisk.Caution)
         {
-            var ok = await ConfirmAsync(row.Def.Header,
-                $"将要修改系统设置：{row.Def.Description}\n\n应用后如需还原，把这一项再关回去并重新应用。");
+            var ok = await ConfirmAsync(def.Header,
+                $"将要修改系统设置：{def.Description}\n\n应用后若要还原，把这一项再关回去并重新应用。");
 
             if (!ok)
             {
@@ -107,10 +114,8 @@ public sealed partial class SystemTweaksPage : Page
             }
         }
 
-        row.IsOn = want;
-        _pending[row.Def.Id] = want;
-
-        AppLog.Step("tweaks", $"排队：{row.Def.Id} = {want}");
+        _pending[def.Id] = want;
+        AppLog.Step("tweaks", $"排队：{def.Id} = {want}");
 
         UpdatePendingBar();
     }
@@ -125,12 +130,12 @@ public sealed partial class SystemTweaksPage : Page
         }
 
         PendingBar.Visibility = Visibility.Visible;
+        RestartButton.Visibility = Visibility.Collapsed;   // 应用完之后才提示重启
 
         var restart = _pending.Keys.Any(id =>
-            TweakCatalog.All.First(t => t.Id == id).Apply == TweakApply.RestartExplorer);
+            TweakCatalog.All.FirstOrDefault(t => t.Id == id)?.Apply == TweakApply.RestartExplorer);
 
         PendingText.Text = $"有 {_pending.Count} 项待应用" + (restart ? "，其中包含需要重启资源管理器的项" : "");
-        RestartButton.Visibility = Visibility.Collapsed;   // 应用完之后才提示重启
     }
 
     // ── 应用 ─────────────────────────────────────────────────────────────
@@ -144,7 +149,7 @@ public sealed partial class SystemTweaksPage : Page
             .ToList();
 
         _busy = true;
-        PendingText.Text = "正在请求管理员授权…";
+        PendingText.Text = "正在应用…";
 
         try
         {
@@ -152,18 +157,17 @@ public sealed partial class SystemTweaksPage : Page
 
             if (!result.Ok)
             {
-                ShowNotice("未完成：授权被取消或导入失败。" + result.Error, InfoBarSeverity.Warning);
+                ShowNotice("有项没有写进去：" + result.Error, InfoBarSeverity.Warning);
                 return;
             }
 
             _pending.Clear();
-            ReloadRows();
+            LoadStates();
 
             if (result.Matched == result.Requested)
             {
                 ShowNotice($"已应用 {result.Requested} 项。", InfoBarSeverity.Success);
 
-                // 只有确实改了需要重启资源管理器的项，才把按钮露出来
                 if (changes.Any(c => c.Def.Apply == TweakApply.RestartExplorer))
                 {
                     PendingBar.Visibility = Visibility.Visible;
@@ -182,19 +186,6 @@ public sealed partial class SystemTweaksPage : Page
         {
             _busy = false;
             if (_pending.Count == 0) UpdatePendingBar();
-        }
-    }
-
-    private void ReloadRows()
-    {
-        _loading = true;
-        try
-        {
-            foreach (var row in _rows) row.IsOn = TweakStore.IsOn(row.Def);
-        }
-        finally
-        {
-            _loading = false;
         }
     }
 

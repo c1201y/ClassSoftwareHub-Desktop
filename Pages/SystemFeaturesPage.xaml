@@ -24,7 +24,7 @@
                 <ColumnDefinition Width="24" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="1" MaxWidth="900" HorizontalAlignment="Left" Spacing="4">
+            <StackPanel Grid.Column="1" Spacing="4">
 
                 <StackPanel Spacing="6" Margin="0,0,0,20">
                     <TextBlock Text="系统功能" FontSize="28" FontWeight="Bold" />

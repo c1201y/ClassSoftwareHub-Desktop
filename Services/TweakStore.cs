@@ -69,38 +69,63 @@ public static class TweakStore
     {
         if (changes.Count == 0) return new TweakApplyResult(0, 0, null);
 
-        var path = Path.Combine(AppPaths.DataDir, $"tweaks-{DateTime.Now:HHmmss}.reg");
+        // 界面类设置全在 HKCU，直接写、不弹 UAC；只有真正机器级的项才需要提权。
+        var userChanges = changes.Where(c => c.Def.Scope == TweakScope.User).ToList();
+        var systemChanges = changes.Where(c => c.Def.Scope == TweakScope.System).ToList();
 
-        try
+        string? error = null;
+
+        // ── ① 当前用户：直接写 ──
+        foreach (var (def, on) in userChanges)
         {
-            Directory.CreateDirectory(AppPaths.DataDir);
-            File.WriteAllText(path, BuildRegFile(changes), new UnicodeEncoding(false, true));
-
-            AppLog.Info("tweaks", $"应用 {changes.Count} 项：{string.Join("、", changes.Select(c => c.Def.Id))}");
-
-            var psi = new ProcessStartInfo("reg.exe", $"import \"{path}\"")
+            try
             {
-                Verb = "runas",              // 唯一一次提权
-                UseShellExecute = true,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc is not null) await proc.WaitForExitAsync();
-        }
-        catch (Exception ex)
-        {
-            // 用户点了「否」也走这里（Win32Exception：操作已被用户取消）
-            AppLog.Warn("tweaks", "应用失败或未授权：" + ex.Message);
-            return new TweakApplyResult(changes.Count, 0, ex.Message);
-        }
-        finally
-        {
-            try { if (File.Exists(path)) File.Delete(path); } catch { }
+                WriteUser(def, on);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("tweaks", $"写入 {def.Id}（{def.FullPath}）失败：{ex.Message}");
+                error ??= ex.Message;
+            }
         }
 
-        // 按实际读到的值判定，不看命令返回值
+        AppLog.Info("tweaks",
+            $"应用 {changes.Count} 项：当前用户 {userChanges.Count} 项、机器级 {systemChanges.Count}（{string.Join("、", changes.Select(c => c.Def.Id))}）");
+
+        // ── ② 机器级：整批一次提权 ──
+        if (systemChanges.Count > 0)
+        {
+            var path = Path.Combine(AppPaths.DataDir, $"tweaks-{DateTime.Now:HHmmss}.reg");
+
+            try
+            {
+                Directory.CreateDirectory(AppPaths.DataDir);
+                File.WriteAllText(path, BuildRegFile(systemChanges), new UnicodeEncoding(false, true));
+
+                var psi = new ProcessStartInfo("reg.exe", $"import \"{path}\"")
+                {
+                    Verb = "runas",              // 只有这一路会弹 UAC
+                    UseShellExecute = true,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                };
+
+                using var proc = Process.Start(psi);
+                if (proc is not null) await proc.WaitForExitAsync();
+            }
+            catch (Exception ex)
+            {
+                // 用户点了「否」也走这里（Win32Exception：操作已被用户取消）
+                AppLog.Warn("tweaks", "机器级改动未应用：" + ex.Message);
+                error ??= ex.Message;
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        // 成败一律按改完之后**重新读到的值**判定，不看命令返回值
         var matched = changes.Count(c => IsOn(c.Def) == c.On);
 
         AppLog.Info("tweaks",
@@ -108,7 +133,17 @@ public static class TweakStore
                 ? $"全部生效（{matched}/{changes.Count}）"
                 : $"有 {changes.Count - matched} 项未生效（{matched}/{changes.Count}）");
 
-        return new TweakApplyResult(changes.Count, matched, null);
+        return new TweakApplyResult(changes.Count, matched, error);
+    }
+
+    /// <summary>写当前用户的一个 DWORD。界面类设置都走这里，不需要管理员。</summary>
+    private static void WriteUser(TweakDef def, bool on)
+    {
+        using var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default);
+        using var key = root.CreateSubKey(def.KeyPath, writable: true)
+                        ?? throw new InvalidOperationException($"打不开注册表键：{def.KeyPath}");
+
+        key.SetValue(def.ValueName, on ? def.OnValue : def.OffValue, RegistryValueKind.DWord);
     }
 
     /// <summary>

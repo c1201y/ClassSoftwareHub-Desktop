@@ -4,30 +4,23 @@
     NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
-    xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
     <!--
       系统优化（需求清单第 20 条，2026-10-31；对齐 Dism++「系统优化」的能力）。
-      口径：只做系统级（HKLM）、不做「新用户」那一列、不抄安全 / 服务 / 更新策略那几类。
+      口径：这些项的真实落点就在当前用户（HKCU），改完即时生效、**不需要管理员**；
+      「新用户」那一列不做（学校不常建账户）；安全 / 服务 / 更新策略那几类不抄。
 
-      ⛔ 不逐项弹 UAC：切换只排队，点「应用更改」时整批写成一份 .reg 一次提权导入。
+      ⛔ 只有真正机器级的项（休眠、快速启动、分页文件）才需要提权，走另一个页面（系统功能）。
 
       ⛔ 骨架照 Pages/AutoShutdownPage.xaml；每行是 controls:SettingsCard（行模板声明在 Resources 里）；
          列表用 ItemsControl 而不是 ListView —— 外面已经有 ScrollViewer，嵌套两个滚动区会抢滚轮。
     -->
-    <Page.Resources>
-        <DataTemplate x:Key="TweakRowTemplate" x:DataType="local:TweakRow">
-            <controls:SettingsCard Header="{x:Bind Header}" Description="{x:Bind Description}"
-                                   HorizontalAlignment="Stretch">
-                <ToggleSwitch MinWidth="0" OnContent="开" OffContent="关"
-                              IsOn="{x:Bind IsOn, Mode=OneWay}"
-                              Toggled="Row_Toggled"
-                              Tag="{x:Bind Def.Id}" />
-            </controls:SettingsCard>
-        </DataTemplate>
-    </Page.Resources>
-
+    <!--
+      骨架**逐字照抄** Pages/AutoShutdownPage.xaml：ScrollViewer > Grid Margin 24,36,24,44 > 三列 > StackPanel MaxWidth 960。
+      每一行也逐字照抄它那张「自动执行」卡的写法（SettingsCard + 说明用 TextBlock + ToggleSwitch MinWidth=0）。
+      ⛔ 不改骨架、不换容器、不套模板 —— Nick 2026-10-31：「能抄就抄，能看就看，别猜」。
+    -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -36,12 +29,12 @@
                 <ColumnDefinition Width="24" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="1" MaxWidth="900" HorizontalAlignment="Left" Spacing="4">
+            <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
                 <StackPanel Spacing="6" Margin="0,0,0,16">
                     <TextBlock Text="系统优化" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="修改的是整台机器的系统设置，所有账户都会受影响。切换开关只是选中，点「应用更改」时统一请求一次管理员授权；标注需重启资源管理器的项，改完点右侧按钮即可看到效果。" />
+                               Text="这些是本机的界面与使用习惯设置，改完立即生效，不需要管理员权限。切换开关只是选中，点「应用更改」时统一写入；标注需重启资源管理器的项，改完点右侧按钮即可看到效果。" />
                 </StackPanel>
 
                 <InfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True"
@@ -67,17 +60,146 @@
                     </Grid>
                 </Border>
 
-                <TextBlock Text="任务栏与开始菜单" FontSize="14" Margin="0,8,0,2" />
-                <ItemsControl x:Name="TaskbarRows" ItemTemplate="{StaticResource TweakRowTemplate}" />
+                <TextBlock Text="任务栏与开始菜单" FontSize="14" Margin="0,18,0,2" />
+                <controls:SettingsCard Header="任务栏图标靠左对齐">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="Windows 11 默认把任务栏图标放中间；打开后恢复成左侧对齐（Win10 的位置）。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_taskbar_align_left" Tag="taskbar-align-left" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="隐藏任务栏搜索框">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="打开后任务栏上不再显示搜索框，腾出位置给已固定的程序。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_taskbar_hide_search" Tag="taskbar-hide-search" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="隐藏任务视图按钮">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="任务栏上的「任务视图」按钮（多桌面入口）。这个功能仍可用 Win+Tab 调出。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_taskbar_hide_taskview" Tag="taskbar-hide-taskview" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="隐藏小组件按钮">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="Windows 11 任务栏左下角的小组件入口；关闭后不再推送天气与资讯。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_taskbar_hide_widgets" Tag="taskbar-hide-widgets" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="任务栏按钮从不合并">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="同一程序的多个窗口各自占一个按钮并显示标题。窗口多时会显得拥挤。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_taskbar_merge_never" Tag="taskbar-merge-never" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="任务栏时钟显示秒">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="任务栏右下角的时间精确到秒。会略微增加刷新开销。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_taskbar_clock_seconds" Tag="taskbar-clock-seconds" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="关闭开始菜单的推荐内容">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="关闭「建议」「为你推荐」这类推广位与应用推广通知（企业策略项，整机生效）。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_start_no_consumer_features" Tag="start-no-consumer-features" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="关闭通知中心">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="整机关闭右下角通知中心与横幅。开启后所有程序的通知都不会再弹出。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_start_no_notification_center" Tag="start-no-notification-center" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
 
                 <TextBlock Text="资源管理器" FontSize="14" Margin="0,18,0,2" />
-                <ItemsControl x:Name="ExplorerRows" ItemTemplate="{StaticResource TweakRowTemplate}" />
+                <controls:SettingsCard Header="显示文件扩展名">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="让 .exe / .docx / .jpg 这类扩展名可见，也更容易识别改过扩展名的伪装文件。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_show_ext" Tag="explorer-show-ext" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="显示隐藏文件">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="显示被标记为隐藏的文件与文件夹（半透明显示）。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_show_hidden" Tag="explorer-show-hidden" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="显示受保护的系统文件">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="连系统属性文件一起显示。这些文件误删会影响系统，仅在排查问题时打开。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_show_superhidden" Tag="explorer-show-superhidden" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="打开时定位到「此电脑」">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="资源管理器启动后直接显示磁盘列表，而不是「快速访问」的最近文件。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_launch_thispc" Tag="explorer-launch-thispc" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="导航窗格展开到当前文件夹">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="打开某个深层目录时，左侧导航树自动展开到它所在的位置，便于定位。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_nav_expand" Tag="explorer-nav-expand" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="不使用缩略图缓存">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="每次重新生成缩略图，不再读写 thumbcache 文件。磁盘占用更小，但图片多的目录打开会变慢。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_no_thumb_cache" Tag="explorer-no-thumb-cache" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="标题栏显示完整路径">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="资源管理器窗口标题直接显示完整路径，而不是当前文件夹名。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_explorer_full_path" Tag="explorer-full-path" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
 
                 <TextBlock Text="外观与动画" FontSize="14" Margin="0,18,0,2" />
-                <ItemsControl x:Name="VisualRows" ItemTemplate="{StaticResource TweakRowTemplate}" />
+                <controls:SettingsCard Header="应用使用深色模式">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="应用窗口与控件走深色配色。系统级的默认值，用户自己选过颜色时会以用户选择为准。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_visual_apps_dark" Tag="visual-apps-dark" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="系统界面使用深色模式">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="任务栏、开始菜单、操作中心等系统外壳走深色。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_visual_system_dark" Tag="visual-system-dark" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="关闭透明效果">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="关闭开始菜单、任务栏的毛玻璃透明。老旧机器上能减少一点合成开销。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_visual_transparency" Tag="visual-transparency" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
 
-                <TextBlock Text="输入法" FontSize="14" Margin="0,18,0,2" />
-                <ItemsControl x:Name="InputRows" ItemTemplate="{StaticResource TweakRowTemplate}" />
+                <TextBlock Text="输入法与记事本" FontSize="14" Margin="0,18,0,2" />
+                <controls:SettingsCard Header="关闭拼音输入法的云候选">
+                    <controls:SettingsCard.Description>
+                        <TextBlock Text="候选词只来自本地词库，不再向微软发送输入内容、也不再联网取候选词。" TextWrapping="Wrap" />
+                    </controls:SettingsCard.Description>
+                    <ToggleSwitch x:Name="Sw_ime_no_cloud" Tag="ime-no-cloud" MinWidth="0"
+                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
+                </controls:SettingsCard>
 
                 <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap" Margin="0,18,0,0"
                            Text="未收录的项：安全相关（UAC、SmartScreen、Defender）、系统服务（搜索索引、打印后台等）、Windows 更新策略。这些一旦改错，用户只会看到「打印机打不了」「找不到文件」，很难联想到是优化工具改的，因此不提供。" />
