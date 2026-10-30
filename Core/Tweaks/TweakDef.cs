@@ -59,8 +59,6 @@ public enum TweakRisk
 /// </summary>
 public sealed record TweakDef
 {
-    private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
-
     public required string Id { get; init; }
 
     /// <summary>界面上的分组（本产品的分组，不是 Dism++ 的）。</summary>
@@ -89,16 +87,9 @@ public sealed record TweakDef
 
     public TweakRisk Risk { get; init; } = TweakRisk.Normal;
 
-    /// <summary>只在某个系统版本上有意义时写一句，界面会跟在标题后面。</summary>
-    public string ScopeNote { get; init; } = "";
-
     /// <summary>完整路径（日志、.reg 生成、排查都用它）。</summary>
     public string FullPath => $@"{RootName}\{KeyPath}\{ValueName}";
 
     /// <summary><c>HKEY_LOCAL_MACHINE</c> / <c>HKEY_CURRENT_USER</c>（.reg 文件里要写全名）。</summary>
     public string RootName => Scope == TweakScope.System ? "HKEY_LOCAL_MACHINE" : "HKEY_CURRENT_USER";
-
-    // ── 常用键路径的简写（只给确实常用的那条，别在这里铺一长串常量表）──
-    public static string Advanced(string? sub = null) =>
-        sub is null ? ExplorerAdvanced : ExplorerAdvanced + "\\" + sub;
 }

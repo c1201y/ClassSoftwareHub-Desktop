@@ -10,13 +10,8 @@
       系统优化（需求清单第 20 条，2026-10-31；对齐 Dism++「系统优化」的能力）。
       口径：这些项的真实落点就在当前用户（HKCU），改完即时生效、**不需要管理员**；
       「新用户」那一列不做（学校不常建账户）；安全 / 服务 / 更新策略那几类不抄。
-
       ⛔ 只有真正机器级的项（休眠、快速启动、分页文件）才需要提权，走另一个页面（系统功能）。
 
-      ⛔ 骨架照 Pages/AutoShutdownPage.xaml；每行是 controls:SettingsCard（行模板声明在 Resources 里）；
-         列表用 ItemsControl 而不是 ListView —— 外面已经有 ScrollViewer，嵌套两个滚动区会抢滚轮。
-    -->
-    <!--
       骨架**逐字照抄** Pages/AutoShutdownPage.xaml：ScrollViewer > Grid Margin 24,36,24,44 > 三列 > StackPanel MaxWidth 960。
       每一行也逐字照抄它那张「自动执行」卡的写法（SettingsCard + 说明用 TextBlock + ToggleSwitch MinWidth=0）。
       ⛔ 不改骨架、不换容器、不套模板 —— Nick 2026-10-31：「能抄就抄，能看就看，别猜」。
@@ -103,16 +98,9 @@
                     <ToggleSwitch x:Name="Sw_taskbar_clock_seconds" Tag="taskbar-clock-seconds" MinWidth="0"
                                   OnContent="开" OffContent="关" Toggled="Row_Toggled" />
                 </controls:SettingsCard>
-                <controls:SettingsCard Header="关闭开始菜单的推荐内容">
-                    <controls:SettingsCard.Description>
-                        <TextBlock Text="关闭「建议」「为你推荐」这类推广位与应用推广通知（企业策略项，整机生效）。" TextWrapping="Wrap" />
-                    </controls:SettingsCard.Description>
-                    <ToggleSwitch x:Name="Sw_start_no_consumer_features" Tag="start-no-consumer-features" MinWidth="0"
-                                  OnContent="开" OffContent="关" Toggled="Row_Toggled" />
-                </controls:SettingsCard>
                 <controls:SettingsCard Header="关闭通知中心">
                     <controls:SettingsCard.Description>
-                        <TextBlock Text="整机关闭右下角通知中心与横幅。开启后所有程序的通知都不会再弹出。" TextWrapping="Wrap" />
+                        <TextBlock Text="关闭当前账户右下角的通知中心与横幅。开启后所有程序的通知都不会再弹出。" TextWrapping="Wrap" />
                     </controls:SettingsCard.Description>
                     <ToggleSwitch x:Name="Sw_start_no_notification_center" Tag="start-no-notification-center" MinWidth="0"
                                   OnContent="开" OffContent="关" Toggled="Row_Toggled" />

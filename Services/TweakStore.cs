@@ -21,9 +21,9 @@ public sealed record TweakApplyResult(int Requested, int Matched, string? Error)
 /// 系统优化项的读写（2026-10-31）。
 ///
 /// <para>
-/// ⭐ 核心策略：**整批一次提权**。写 <c>HKLM</c> 必须管理员，但我们不做"切一个开关弹一次 UAC" ——
-/// 界面上切换只改内存状态，点「应用更改」时把整批改动写成一份 <c>.reg</c>，
-/// 用 <c>reg.exe import</c> 提权执行**一次**（与 Dism++ 的交互一致）。
+/// ⭐ 核心策略：**当前用户直写、机器级才提权**。界面类项都在 <c>HKCU</c>，切换只是排队，
+/// 点「应用更改」时逐项直接写入，**不弹 UAC**；只有 <c>Scope = System</c> 的机器级项才合成一份
+/// <c>.reg</c> 用 <c>reg.exe import</c> 提权执行**一次**（本页目前没有这类项，它们在「系统功能」页）。
 /// </para>
 /// <para>
 /// ⚠️ 成败判定看**改完之后重新读到的值**，不看 <c>reg.exe</c> 的返回值 ——

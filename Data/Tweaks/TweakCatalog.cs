@@ -7,20 +7,20 @@ namespace ClassSoftwareHub.Desktop.Data.Tweaks;
 /// 系统优化项清单（2026-10-31，需求清单第 20 条，对齐 Dism++「系统优化」的能力）。
 ///
 /// <para>
-/// ⭐ 口径（Nick 2026-10-31）：**做系统级**，与 Dism++ 的「系统」那一列对应 ——
-/// 写 <c>HKLM</c>，整机所有账户生效；不做「新用户」那一列（学校不常建账户）。
-/// 少数项在 <c>HKLM</c> 没有真实落点（窗口动画、开机声音这类本来就是每账户一份），
-/// 如实标成 <see cref="TweakScope.User"/> 并在说明里写清"仅当前账户"。
+/// ⭐ 口径（Nick 2026-10-31 最终定）：这些项都是**当前用户的界面与使用习惯设置**，落在
+/// <c>HKCU</c>、改完即时生效、**不弹 UAC**；只有「系统功能」页里的休眠 / 快速启动 / 分页文件
+/// 才是机器级（<c>HKLM</c>、要提权）。「新用户」那一列不做（学校不常建账户）。
 /// </para>
-///
 /// <para>
-/// ⛔ 收录标准：<b>键路径能确认</b>。Dism++ 里那些拿不准落点的（"锁定任务栏""快速访问显示最近文件"
-/// 等）一律不抄 —— 写错键等于给用户一个什么都不做的开关，比没有更糟。
+/// ⛔ 收录标准：<b>键路径能确认、且当前用户下真实生效</b>。Dism++ 里拿不准落点的
+/// （"锁定任务栏""快速访问显示最近文件"）一律不抄；只对 <c>HKLM</c> 有效的机器策略
+/// （如 <c>DisableWindowsConsumerFeatures</c>）也不收 —— 写进 HKCU 是无效开关，写进 HKLM 又要 UAC，
+/// 两头都不符合本页"不弹 UAC 的界面设置"定位。
 /// </para>
 /// <para>
 /// ⛔ 明确不抄的整类：安全相关（UAC / SmartScreen / Defender）、服务优化（SysMain / 搜索索引 /
-/// 打印后台…）、Windows Update 策略。理由写在 <c>docs/</c> 与记忆里：班级机器上这些一旦生效，
-/// 用户只会看到"打印机打不了""找不到文件"，而想不到是这里改的。
+/// 打印后台…）、Windows Update 策略。班级机器上这些一旦生效，用户只会看到"打印机打不了"
+/// "找不到文件"，而想不到是这里改的。
 /// </para>
 /// </summary>
 public static class TweakCatalog
@@ -30,17 +30,10 @@ public static class TweakCatalog
     public const string GroupVisual = "外观与动画";
     public const string GroupInput = "输入法与记事本";
 
-    /// <summary>各组在界面上的先后顺序。</summary>
-    public static readonly string[] GroupOrder =
-    {
-        GroupTaskbar, GroupExplorer, GroupVisual, GroupInput,
-    };
-
     private const string ExplorerAdvanced = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
     private const string ExplorerSearch = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Search";
     private const string ExplorerCabinet = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState";
     private const string PolicyExplorer = @"SOFTWARE\Policies\Microsoft\Windows\Explorer";
-    private const string PolicyCloud = @"SOFTWARE\Policies\Microsoft\Windows\CloudContent";
     private const string Personalize = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
     public static readonly List<TweakDef> All = new()
@@ -50,10 +43,9 @@ public static class TweakCatalog
         {
             Id = "taskbar-align-left", Group = GroupTaskbar,
             Header = "任务栏图标靠左对齐",
-            Description = "Windows 11 默认把任务栏图标放中间；打开后恢复成左侧对齐（Win10 的位置）。",
+            Description = "Windows 11 默认把任务栏图标放中间；打开后恢复成左侧对齐（Win10 的位置）。仅 Windows 11 生效。",
             KeyPath = ExplorerAdvanced, ValueName = "TaskbarAl",
             OnValue = 0, OffValue = 1, Apply = TweakApply.RestartExplorer,
-            ScopeNote = "仅 Windows 11",
         },
         new TweakDef
         {
@@ -75,20 +67,18 @@ public static class TweakCatalog
         {
             Id = "taskbar-hide-widgets", Group = GroupTaskbar,
             Header = "隐藏小组件按钮",
-            Description = "Windows 11 任务栏左下角的小组件入口；关闭后不再推送天气与资讯。",
+            Description = "Windows 11 任务栏左下角的小组件入口；关闭后不再推送天气与资讯。仅 Windows 11 生效。",
             KeyPath = ExplorerAdvanced, ValueName = "TaskbarDa",
             OnValue = 0, OffValue = 1, Apply = TweakApply.RestartExplorer,
-            ScopeNote = "仅 Windows 11",
         },
         new TweakDef
         {
             Id = "taskbar-merge-never", Group = GroupTaskbar,
             Header = "任务栏按钮从不合并",
-            Description = "同一程序的多个窗口各自占一个按钮并显示标题。窗口多时会显得拥挤。",
+            Description = "同一程序的多个窗口各自占一个按钮并显示标题。窗口多时会显得拥挤。Windows 11 的 22H2 起只在部分版本可用。",
             KeyPath = ExplorerAdvanced, ValueName = "TaskbarGlomLevel",
             OnValue = 2, OffValue = 0, Apply = TweakApply.RestartExplorer,
             Risk = TweakRisk.Caution,
-            ScopeNote = "Windows 11 的 22H2 起只在部分版本可用",
         },
         new TweakDef
         {
@@ -100,18 +90,9 @@ public static class TweakCatalog
         },
         new TweakDef
         {
-            Id = "start-no-consumer-features", Group = GroupTaskbar,
-            Header = "关闭开始菜单的推荐内容",
-            Description = "关闭「建议」「为你推荐」这类推广位与应用推广通知（企业策略项，整机生效）。",
-            KeyPath = PolicyCloud, ValueName = "DisableWindowsConsumerFeatures",
-            OnValue = 1, OffValue = 0, Apply = TweakApply.RestartExplorer,
-            Risk = TweakRisk.Caution,
-        },
-        new TweakDef
-        {
             Id = "start-no-notification-center", Group = GroupTaskbar,
             Header = "关闭通知中心",
-            Description = "整机关闭右下角通知中心与横幅。开启后所有程序的通知都不会再弹出。",
+            Description = "关闭当前账户右下角的通知中心与横幅。开启后所有程序的通知都不会再弹出。",
             KeyPath = PolicyExplorer, ValueName = "DisableNotificationCenter",
             OnValue = 1, OffValue = 0, Apply = TweakApply.RestartExplorer,
             Risk = TweakRisk.Caution,
@@ -214,8 +195,4 @@ public static class TweakCatalog
             Risk = TweakRisk.Caution,
         },
     };
-
-    /// <summary>按分组取（界面左侧一块一块摆，顺序同 <see cref="GroupOrder"/>）。</summary>
-    public static List<TweakDef> InGroup(string group) =>
-        All.FindAll(t => string.Equals(t.Group, group, System.StringComparison.Ordinal));
 }
