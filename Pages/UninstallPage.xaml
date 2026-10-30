@@ -4,6 +4,7 @@
     NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:ClassSoftwareHub.Desktop.Controls"
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
     <!--
@@ -84,6 +85,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Spacing="4">
@@ -155,6 +157,17 @@
                 <Button x:Name="BackButton" Grid.Column="6" Content="返回列表" Click="Back_Click"
                         Visibility="Collapsed"
                         VerticalAlignment="Top" Margin="0,4,0,0" />
+
+                <!-- Hub AI 入口（2026-10-30，需求 1:23）：这个软件能不能卸、卸完大概会留下什么，
+                     问一句比翻说明快。浮层只是提问入口，问题会带去 Hub AI 页继续。 -->
+                <Button x:Name="HubAiEntry" Grid.Column="7" Padding="12,6" Click="HubAiEntry_Click"
+                        VerticalAlignment="Top" Margin="0,4,0,0"
+                        ToolTipService.ToolTip="打开 Hub AI 顾问">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE8F2;" FontSize="13" />
+                        <TextBlock Text="AI" FontSize="12.5" />
+                    </StackPanel>
+                </Button>
             </Grid>
 
             <!-- ── 风险提示条（2026-10-15 加）──
@@ -364,5 +377,6 @@
                 </Grid>
             </Grid>
         </Grid>
+        <ui:HubAiFlyout x:Name="AiFlyout" Grid.Column="1" />
     </Grid>
 </Page>

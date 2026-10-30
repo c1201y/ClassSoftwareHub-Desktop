@@ -215,12 +215,24 @@ public sealed partial class AppDataPage : Page
         // 两侧留白 / 标题行上的滚轮也转给列表（Core/WheelRelay.cs）
         WheelRelay.Attach(this, EntryList);
 
+        // AI 入口跟着「设置 → 启用 Hub AI」总闸走（与「软件下载」页一致）。
+        // ⚠️ 本页每次进来都是新实例（没有开导航缓存），所以构造时判一次就够。
+        HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
         // 构造期控件还没进可视化树，扫描放 Loaded（与其它页一致）
         Loaded += (_, _) =>
         {
             if (!_ready && _cts is null) _ = ScanAsync();
         };
     }
+
+    /// <summary>
+    /// Hub AI 入口（2026-10-30，需求 1:23）：弹出提问浮层。
+    /// 浮层是公共控件（Controls/HubAiFlyout），与「软件下载」页同一份 —— 别在页面里再写一套。
+    /// </summary>
+    private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
 
     /// <summary>离开页面就掐掉后台统计 —— 上百个目录逐个递归，别让它跟着跑到别的页去。</summary>
     protected override void OnNavigatedFrom(NavigationEventArgs e)

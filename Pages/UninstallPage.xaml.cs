@@ -234,7 +234,18 @@ public sealed partial class UninstallPage : Page
         // 两侧留白 / 标题行上的滚轮也转给列表（见 Core/WheelRelay.cs）。
         // ⚠️ 两个列表都传进去：同一页里互斥的两个状态各有一个滚动区，指针压在哪个就转给哪个。
         Core.WheelRelay.Attach(this, AppList, LeftoverList);
+
+        // AI 入口跟着「设置 → 启用 Hub AI」总闸走（与「软件下载」「AppData 管理」一致）。
+        HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
+
+    /// <summary>
+    /// Hub AI 入口（2026-10-30，需求 1:23）：弹出提问浮层。
+    /// 浮层是公共控件（Controls/HubAiFlyout），别在这一页再写一套动画与发送逻辑。
+    /// </summary>
+    private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
