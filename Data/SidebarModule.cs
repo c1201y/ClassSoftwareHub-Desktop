@@ -18,14 +18,6 @@ public static class SidebarModuleKinds
     /// 每个工具在侧边栏里是**各自独立的一项**（Nick 10-18 定：不要合并成一个「学科」入口）。
     /// </summary>
     public const string Window = "window";
-    /// <summary>
-    /// 独立窗口，**里面装主界面里的某一页**（2026-10-30 加，用于「编码 / 哈希转换」）。
-    /// <para>
-    /// 跟 <see cref="Page"/> 的区别只有一个：不拉主界面，单开一扇窗装那一页。
-    /// 页面本身不用改 —— 只要它不依赖 <c>ShellPage</c> 的导航状态就能这么用。
-    /// </para>
-    /// </summary>
-    public const string WindowPage = "windowpage";
     /// <summary>讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。</summary>
     public const string Action = "action";
     /// <summary>
@@ -117,7 +109,9 @@ public static class SidebarModules
         new() { Id = "stopwatch", Name = "秒表计时", ShortName = "秒表", LongName = "秒表计时", Glyph = "\uE916", Kind = SidebarModuleKinds.Palette },
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", LongName = "全屏时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
         new() { Id = "image-color", Name = "图片取色", ShortName = "取色", LongName = "图片取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
-        new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", LongName = "编码校验", Glyph = "\uE943", Kind = SidebarModuleKinds.WindowPage, Page = typeof(Pages.Tools.EncodingToolPage), Note = "在独立窗口中打开编码与哈希工具：校验文件、Base64 / URL 编解码，不拉出主界面" },
+        // 2026-10-30 定稿：这里开的是**小浮窗**（HashCheckWindow），不是把应用里那整页搬进窗口。
+        // 整页（编码 + 文本编解码）仍在「系统工具 → 编码 / 哈希工具」里，那才是给它留的位置。
+        new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", LongName = "编码校验", Glyph = "\uE943", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.HashCheckWindow), Note = "弹出小浮窗做哈希校验：拖入文件即出 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴官方校验值自动比对" },
         // 学科工具（2026-10-18 Nick 要）：函数图像 / 方程求解 / 化学配平**各占一项**，
         // 点哪项就直接开那件工具，单开一扇窗、**不拉主界面** —— 这是重点。
         // 以前点这类工具会把整个主窗口叫出来（Kind = Page），只想算一道题时太重。

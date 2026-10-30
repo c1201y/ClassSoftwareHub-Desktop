@@ -2296,7 +2296,7 @@ public sealed partial class MainWindow : Window
         try { Views.LogDetailWindow.CloseForExit(); } catch { }
         try { Views.LegalWindow.CloseForExit(); } catch { }
         try { Views.SubjectToolsWindow.CloseForExit(); } catch { }
-        try { Views.ToolPageWindow.CloseForExit(); } catch { }
+        try { Views.HashCheckWindow.CloseForExit(); } catch { }
         try { Close(); } catch { }
         Core.AppLog.Info("exit", "窗口已全部请求关闭");
 

@@ -1379,8 +1379,6 @@ public sealed partial class ToolSidebarWindow : Window
             Collapse();                                        // 先把边条收起来，别挡着工具窗口
             if (m.Kind == SidebarModuleKinds.Page && m.Page is not null)
                 App.MainWindow?.OpenToolSettings(m.Page);      // 拉出主窗口并跳到那一页
-            else if (m.Kind == SidebarModuleKinds.WindowPage && m.Page is not null)
-                ToolPageWindow.Show(m.Page, m.Name);           // 单开一扇窗装那一页，不拉主界面（编码 / 哈希）
             else if (m.Kind == SidebarModuleKinds.Window)
                 OpenModuleWindow(m);                           // 单开一扇轻量窗，不碰主界面
             else

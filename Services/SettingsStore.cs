@@ -866,7 +866,7 @@ public sealed class SettingsStore
             // revision 10（2026-10-30）：**空操作**，只把版本号推上去。
             // 原打算在这里往侧边栏补一个「哈希校验」模块，做完发现它跟「编码 / 哈希转换」
             // 本来就是同一件事（编码页里已经有文件校验 + 校验值比对），两个按钮纯属重复 ——
-            // 改成「编码」直接开独立窗口装那一页（Kind = WindowPage），不再新增模块。
+            // 改成侧边栏「编码」直接弹一扇小浮窗（HashCheckWindow）做校验，不再新增模块。
             // ⚠️ 版本号仍然要推：否则老存档停在 9，下面 rev11 的清理逻辑不会执行。
             Current.SidebarModulesRevision = 10;
             changed = true;

@@ -192,9 +192,8 @@ public sealed partial class EncodingToolPage : Page
         {
             var picker = new FileOpenPicker { ViewMode = PickerViewMode.List, SuggestedStartLocation = PickerLocationId.Downloads };
             picker.FileTypeFilter.Add("*");
-            // ⚠️ 用**本页所在窗口**的句柄，不用主窗口：这一页现在也会被装进独立窗口
-            //    （侧边栏「编码」→ ToolPageWindow），主窗口可能收在托盘里，
-            //    拿它的句柄初始化会让文件对话框挂在一个看不见的窗口上（2026-10-30）。
+            // ⚠️ 用**本页所在窗口**的句柄，别写死主窗口：这一页将来若被装进独立浮窗 / 工具窗，
+            //    主窗口可能收在托盘里，拿它的句柄初始化会让文件对话框挂在一个看不见的窗口上。
             Core.WindowHandle.BindPicker(picker, this);
             var file = await picker.PickSingleFileAsync();
             if (file is null) return;
