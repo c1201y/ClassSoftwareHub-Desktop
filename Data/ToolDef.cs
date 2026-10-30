@@ -175,5 +175,15 @@ public static class ToolCatalog
             Desc = "系统文件、组件存储、网络栈、系统服务的修复命令，按预设卡片执行，执行前原样列出命令。",
             Glyph = "\uE7EF", Page = typeof(ClassSoftwareHub.Desktop.Pages.SystemRepairPage)
         },
+        new ToolDef
+        {
+            // 2026-10-30 加（需求清单第 20 条第一版，第 19 条先只读）。
+            // ⚠️ Id 起名 sysfeatures 而不是 system：以后若加"系统信息/系统设置"类页面，别撞名。
+            Id = "sysfeatures", Name = "系统功能",
+            Group = ToolGroup.System,
+            Desc = "查看并开关休眠、快速启动，查看分页文件（虚拟内存）当前配置；改动系统设置时请求一次管理员授权。",
+            // E7E8 = 电源按钮
+            Glyph = "\uE7E8", Page = typeof(ClassSoftwareHub.Desktop.Pages.SystemFeaturesPage)
+        },
     };
 }
