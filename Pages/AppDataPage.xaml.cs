@@ -367,6 +367,13 @@ public sealed partial class AppDataPage : Page
         _foldersRoaming = _foldersRoaming.OrderByDescending(r => r.Bytes).ToList();
         _clean = _clean.OrderByDescending(r => r.Bytes).ToList();
 
+        // 这一页的 AI 直接拿扫描结果说话（2026-10-30）：占用最大的几项就在手边，
+        // 用户问"哪个能清"时不必再让模型去扫一遍磁盘。
+        AiFlyout.PageContext = $"「AppData 管理」页，可清理 {_clean.Count} 项，" +
+            $"合计 {Core.AppLog.Size(_clean.Sum(r => r.Bytes))}。" +
+            (_clean.Count == 0 ? "" :
+             $"占用最大的几项：{string.Join("、", _clean.Take(6).Select(r => $"{r.Name}（{Core.AppLog.Size(r.Bytes)}）"))}");
+
         var biggest = _foldersLocal.FirstOrDefault();
         if (biggest is not null && biggest.Bytes > 0)
             AppLog.Info("appdata",

@@ -49,9 +49,29 @@ public sealed partial class HubAiFlyout : UserControl
 
     private bool _busy;
 
+    /// <summary>
+    /// 当前页面的上下文（一句话），由宿主页面在数据就绪后设置。
+    /// <para>
+    /// 2026-10-30 Nick 要的「每个页面有对应的角色」：在软件下载页问，它应该知道页上有什么清单，
+    /// 而不是再去全盘扫一遍。这里只放**摘要**（页名 + 关键几条），别塞整份数据 ——
+    /// 那会把上下文顶爆，也会让每轮回复都变慢。
+    /// </para>
+    /// <para>
+    /// 只在本次展开后的**第一条**提问里带一次：后续追问已经在同一段对话里，重复带是噪音。
+    /// </para>
+    /// </summary>
+    public string? PageContext { get; set; }
+
+    /// <summary>本次展开是否已经把页面上下文发出去过。</summary>
+    private bool _contextAttached;
+
     public HubAiFlyout()
     {
         InitializeComponent();
+
+        // 深色下换成原生底色 + 主题色描边（浅色那套 Nick 说好看，别动）
+        ApplySurface();
+        ActualThemeChanged += (_, _) => ApplySurface();
     }
 
     /// <summary>浮层当前是否展开（页面想在切走时收起，可以问它）。</summary>
@@ -72,10 +92,13 @@ public sealed partial class HubAiFlyout : UserControl
 
         // ⚠️ 必须先摆到起点：DoubleAnimation 只给 To 时会从**当前值**动画过去，
         //    不设起点就是 0→0，只剩淡入、看不出滑动。
-        CardTransform.Y = 24;
+        // 起点：略小一点、略低一点。动画收回到原位 —— 比原来"整块往上飘 24px"克制得多
+        CardTransform.ScaleX = 0.96;
+        CardTransform.ScaleY = 0.96;
+        CardTransform.TranslateY = 8;
         Card.Opacity = 0;
 
-        Animate(toY: 0, toOpacity: 1, durationMs: 240);
+        PlayAppear(show: true);
         Input.Focus(FocusState.Programmatic);
     }
 
@@ -84,8 +107,7 @@ public sealed partial class HubAiFlyout : UserControl
     {
         if (!IsOpen) return;
 
-        Animate(toY: 24, toOpacity: 0, durationMs: 170,
-            onDone: () => Card.Visibility = Visibility.Collapsed);
+        PlayAppear(show: false, onDone: () => Card.Visibility = Visibility.Collapsed);
     }
 
     /// <summary>展开 / 收起切换（按钮点一下用这个）。</summary>
@@ -218,6 +240,14 @@ public sealed partial class HubAiFlyout : UserControl
         // 这一轮新增的消息从哪个下标开始 —— 收尾存档要用
         var before = runtime.Chat.Snapshot().Count;
 
+        // 第一条提问带上"我在哪个页面" —— 各页的浮层就是那一页的专用助手（2026-10-30）
+        var payload = text;
+        if (!_contextAttached && !string.IsNullOrWhiteSpace(PageContext))
+        {
+            payload = $"（我现在在{PageContext}）\n\n{text}";
+            _contextAttached = true;
+        }
+
         Input.Text = string.Empty;
         Intro.Visibility = Visibility.Collapsed;
 
@@ -237,7 +267,7 @@ public sealed partial class HubAiFlyout : UserControl
                 cfg,
                 snapshot,
                 ActiveTools.Load(),
-                text,
+                payload,
                 onCompleted: usage => Dispatch(() => Finish(runtime, sessionId, before, usage, error: null)),
                 onFailed: ex => Dispatch(() => Finish(runtime, sessionId, before, AiUsage.Empty, error: ex)));
         }
@@ -366,37 +396,69 @@ public sealed partial class HubAiFlyout : UserControl
 
     // ── 动画 ─────────────────────────────────────────────────────────────
 
-    /// <summary>滑入滑出。⚠️ 位移与透明度都是**非合成动画**，必须开 <c>EnableDependentAnimation</c> 才会动。</summary>
-    private void Animate(double toY, double toOpacity, int durationMs, Action? onDone = null)
+    /// <summary>
+    /// 出场 / 收起。
+    /// <para>
+    /// 2026-10-30 换掉：原来是从下往上飘 24px + 淡入，Nick 说"淡入上浮有点太丑"。
+    /// 现在是**轻微放大（0.96→1）+ 8px 归位 + 淡入**，200ms、EaseOut —— 系统 Flyout 就是这种收放感。
+    /// 收起 130ms、EaseIn，快一点，不拖泥带水。
+    /// </para>
+    /// ⚠️ 位移/缩放/透明度全是**非合成动画**，必须开 <c>EnableDependentAnimation</c> 才会动。
+    /// </summary>
+    private void PlayAppear(bool show, Action? onDone = null)
     {
-        var slide = new DoubleAnimation
-        {
-            To = toY,
-            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
-            EasingFunction = new CubicEase
-            {
-                EasingMode = toOpacity > 0.5 ? EasingMode.EaseOut : EasingMode.EaseIn,
-            },
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(slide, CardTransform);
-        Storyboard.SetTargetProperty(slide, "Y");
-
-        var fade = new DoubleAnimation
-        {
-            To = toOpacity,
-            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(fade, Card);
-        Storyboard.SetTargetProperty(fade, "Opacity");
+        var duration = new Duration(TimeSpan.FromMilliseconds(show ? 200 : 130));
+        var ease = new CubicEase { EasingMode = show ? EasingMode.EaseOut : EasingMode.EaseIn };
 
         var storyboard = new Storyboard();
-        storyboard.Children.Add(slide);
-        storyboard.Children.Add(fade);
+
+        void Add(DependencyObject target, string property, double to)
+        {
+            var animation = new DoubleAnimation
+            {
+                To = to,
+                Duration = duration,
+                EasingFunction = ease,
+                EnableDependentAnimation = true,
+            };
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, property);
+            storyboard.Children.Add(animation);
+        }
+
+        Add(Card, "Opacity", show ? 1 : 0);
+        Add(CardTransform, "ScaleX", show ? 1 : 0.98);
+        Add(CardTransform, "ScaleY", show ? 1 : 0.98);
+        Add(CardTransform, "TranslateY", show ? 0 : 6);
 
         if (onDone is not null) storyboard.Completed += (_, _) => onDone();
-
         storyboard.Begin();
+    }
+
+    /// <summary>
+    /// 深色下的表面处理（2026-10-30 Nick）：
+    /// 背景用 WinUI 原生窗口底色，外面描一圈**主题色**边框。
+    /// ⚠️ 浅色**不动** —— 他那句原话是"浅色模式的那个界面很好看"，别顺手也改了。
+    /// </summary>
+    private void ApplySurface()
+    {
+        try
+        {
+            if (ActualTheme == ElementTheme.Dark)
+            {
+                Card.Background = ThemeBrush.Get(this, "SolidBackgroundFillColorBaseBrush");
+                Card.BorderBrush = ThemeBrush.Get(this, "AccentFillColorDefaultBrush");
+            }
+            else
+            {
+                // 交回 XAML 里那套 ThemeResource（浅色 / 高对比各自有值）
+                Card.ClearValue(Border.BackgroundProperty);
+                Card.ClearValue(Border.BorderBrushProperty);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("hubai", "浮层配色设置失败：" + ex.Message);
+        }
     }
 }

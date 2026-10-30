@@ -369,6 +369,12 @@ public sealed partial class UninstallPage : Page
 
         AppList.ItemsSource = shown;
 
+        // 这一页的 AI 知道装了什么（2026-10-30）：直接给前几项，别让它再查一遍
+        AiFlyout.PageContext = _all.Count == 0
+            ? "「应用卸载」页，还没有扫描到已安装的软件"
+            : $"「应用卸载」页，已安装 {_all.Count} 个，当前显示 {shown.Count} 个。" +
+              $"其中几个：{string.Join("、", shown.Take(8).Select(r => r.Name))}";
+
         if (_all.Count == 0)
         {
             CountLine.Text = "未扫描到已安装的软件";

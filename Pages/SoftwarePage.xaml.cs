@@ -308,6 +308,13 @@ public sealed partial class SoftwarePage : Page
 
         WarmPalette(list);
 
+        // 这一页的 AI 就该知道页上有什么（2026-10-30）：给前几款让模型直接说，
+        // ⛔ 别让它再去全盘扫一遍 —— 清单就在手边。
+        AiFlyout.PageContext = list.Count == 0
+            ? "「软件下载」页，当前筛选下没有结果"
+            : $"「软件下载」页，当前筛选：{(_category.Length == 0 ? "全部" : _category)}，共 {list.Count} 款。" +
+              $"页上可见的有：{string.Join("、", list.Take(8).Select(a => a.Name))}";
+
         var baseTitle = _category.Length == 0
             ? (_keyword.Length == 0 ? "软件下载" : $"搜索：{_keyword}")
             : App.Content.CategoryName(_category);

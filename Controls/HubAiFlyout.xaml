@@ -24,7 +24,8 @@
             Background="{ThemeResource HubAiPanelBackground}"
             BorderBrush="{ThemeResource HubAiPanelBorder}">
         <Border.RenderTransform>
-            <TranslateTransform x:Name="CardTransform" />
+            <!-- 2026-10-30：上浮那套换成「轻微放大 + 淡入」，更像系统 Flyout 的出场。 -->
+            <CompositeTransform x:Name="CardTransform" />
         </Border.RenderTransform>
 
         <Grid>

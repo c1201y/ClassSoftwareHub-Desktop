@@ -333,8 +333,10 @@
                     <SolidColorBrush x:Key="HubAiIconForeground" Color="#EDE6DC" />
                     <SolidColorBrush x:Key="HubAiTitleForeground" Color="#E8EDF0" />
                     <SolidColorBrush x:Key="HubAiSubForeground" Color="#93A0A6" />
-                    <SolidColorBrush x:Key="HubAiPanelBackground" Color="#24282C" />
-                    <SolidColorBrush x:Key="HubAiPanelBorder" Color="#3C4247" />
+                    <!-- 2026-10-30：深色下换成 WinUI 原生窗口底色（原来那对偏灰蓝）。
+                         边框不在这里定 —— 浮层在深色时用主题色描边（见 HubAiFlyout.ApplySurface）。 -->
+                    <SolidColorBrush x:Key="HubAiPanelBackground" Color="#FF202020" />
+                    <SolidColorBrush x:Key="HubAiPanelBorder" Color="#FF3A3A3A" />
                     <SolidColorBrush x:Key="HubAiBubbleBackground" Color="#2E3338" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
