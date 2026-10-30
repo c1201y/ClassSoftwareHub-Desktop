@@ -38,8 +38,11 @@
                 <ItemsControl x:Name="TaskList" Grid.Row="1" Padding="0,2,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="svc:DownloadTask">
-                            <Border Style="{StaticResource CshCardStyle}" Padding="20,16" Margin="0,0,0,12">
-                                <Grid ColumnSpacing="16" RowSpacing="10">
+                            <!-- 2026-10-30 重排：圆角、图标落位、间距三处对齐到其他页面。
+                                 ⚠️ 间距只留两档：卡片内 8（行与行）、8（卡片之间）；原来是 2/6/10/12 四种混着用。 -->
+                            <Border Style="{StaticResource CshCardStyle}" Padding="16,14" Margin="0,0,0,8"
+                                    CornerRadius="8">
+                                <Grid ColumnSpacing="14" RowSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -51,8 +54,10 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <FontIcon Grid.Row="0" Grid.Column="0" Glyph="{x:Bind HeaderGlyph}" FontSize="20"
-                                              VerticalAlignment="Center" />
+                                    <!-- 图标与标题第一行对齐（Top + 2px 视觉修正）；24 宽固定，换字形也不左右跳 -->
+                                    <FontIcon Grid.Row="0" Grid.Column="0" Glyph="{x:Bind HeaderGlyph}" FontSize="18"
+                                              Width="24" HorizontalAlignment="Center"
+                                              VerticalAlignment="Top" Margin="0,2,0,0" />
 
                                     <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                         <TextBlock Text="{x:Bind Title}"
@@ -66,36 +71,36 @@
 
                                     <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8"
                                                 VerticalAlignment="Center">
-                                        <Button Content="取消" Tag="{x:Bind}" Click="Cancel_Click"
+                                        <Button Content="取消" Padding="12,5" Tag="{x:Bind}" Click="Cancel_Click"
                                                 Visibility="{x:Bind RunningVisibility, Mode=OneWay}" />
                                         <!-- 普通下载下完后的那一步：安装包写「安装」、压缩包写「解压」（文案由类型决定）。
                                              和更新包的「安装」互斥出现，所以同屏不会有两颗强调按钮。 -->
-                                        <Button Content="{x:Bind ActionText, Mode=OneWay}" Tag="{x:Bind}"
+                                        <Button Content="{x:Bind ActionText, Mode=OneWay}" Padding="12,5" Tag="{x:Bind}"
                                                 Click="PackageAction_Click"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{x:Bind ActionVisibility, Mode=OneWay}" />
                                         <!-- 解压过之后顶替「解压」的那颗：产物已经在硬盘上了，下一步就是去拿。
                                              和「打开文件夹」不同 —— 那颗定位的是压缩包本身，解压后就不需要了。 -->
-                                        <Button Content="打开解压后的文件夹" Tag="{x:Bind}"
+                                        <Button Content="打开解压后的文件夹" Padding="12,5" Tag="{x:Bind}"
                                                 Click="OpenExtracted_Click"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{x:Bind ExtractFolderVisibility, Mode=OneWay}" />
                                         <!-- 更新包下完 → 唯一正解是走这条「安装」：应用先退、安装程序后起。
                                              ⛔ 不给「打开」（双击安装包会被单实例 Mutex 拦成静默失败）。 -->
-                                        <Button Content="安装" Tag="{x:Bind}" Click="Install_Click"
+                                        <Button Content="安装" Padding="12,5" Tag="{x:Bind}" Click="Install_Click"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{x:Bind InstallVisibility, Mode=OneWay}" />
-                                        <Button Content="重试" Tag="{x:Bind}" Click="Retry_Click"
+                                        <Button Content="重试" Padding="12,5" Tag="{x:Bind}" Click="Retry_Click"
                                                 Visibility="{x:Bind RetryVisibility, Mode=OneWay}" />
-                                        <Button Content="打开" Tag="{x:Bind}" Click="Open_Click"
+                                        <Button Content="打开" Padding="12,5" Tag="{x:Bind}" Click="Open_Click"
                                                 Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
-                                        <Button Content="打开文件夹" Tag="{x:Bind}" Click="Reveal_Click"
+                                        <Button Content="打开文件夹" Padding="12,5" Tag="{x:Bind}" Click="Reveal_Click"
                                                 Visibility="{x:Bind RevealVisibility, Mode=OneWay}" />
                                         <!-- 行尾「⋯」：从列表移除 / 删除文件。
                                              ⚠️ 2026-10-16 起改成菜单 —— 以前这里只有"从列表移除"，
                                                 文件留在硬盘上，用户想删得自己摸到下载文件夹里找
                                                 （Nick：「删除已下载安装程序（即使未安装）」）。 -->
-                                        <Button Tag="{x:Bind}" Click="More_Click" Padding="9,5"
+                                        <Button Tag="{x:Bind}" Click="More_Click" Padding="8,4"
                                                 AutomationProperties.Name="更多操作"
                                                 ToolTipService.ToolTip="更多操作"
                                                 Visibility="{x:Bind RemoveVisibility, Mode=OneWay}">
@@ -108,7 +113,7 @@
                                                      Value="{x:Bind BarValue, Mode=OneWay}"
                                                      IsIndeterminate="{x:Bind BarIndeterminate, Mode=OneWay}"
                                                      Visibility="{x:Bind BarVisibility, Mode=OneWay}" />
-                                        <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" FontSize="12" Opacity="0.7"
+                                        <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" FontSize="12" Opacity="0.65"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
 
@@ -119,7 +124,7 @@
                                                 Visibility="{x:Bind WorkTextVisibility, Mode=OneWay}">
                                         <ProgressBar Minimum="0" Maximum="100" IsIndeterminate="True"
                                                      Visibility="{x:Bind WorkingVisibility, Mode=OneWay}" />
-                                        <TextBlock Text="{x:Bind WorkText, Mode=OneWay}" FontSize="12" Opacity="0.7"
+                                        <TextBlock Text="{x:Bind WorkText, Mode=OneWay}" FontSize="12" Opacity="0.65"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
