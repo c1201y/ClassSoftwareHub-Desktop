@@ -318,11 +318,12 @@
                         <FontIcon Glyph="&#xE896;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="提交软件" Tag="submit">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE898;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
+                <!--
+                  「提交软件」2026-10-30 从导航栏移除（Nick：软件生态已足够丰富，不必再挤占导航）。
+                  入口改到「软件下载」页顶部工具条的提交按钮，首页那张卡片保留为第二入口。
+                  ⚠️ NavigateTagCore 里的 case "submit" **保留** —— 那是路由，不是导航项；
+                     删了首页卡片和命令行的 page=submit 参数都会掉进 default 直接回首页。
+                -->
                 <!--
                   反馈中心：和「提交软件」是一对（都是"往维护者那边送东西"），所以紧挨着放。
                   E939 是「人 + 对话泡」，微软反馈中心用的就是这个字形（已用字形渲染法确认存在）。

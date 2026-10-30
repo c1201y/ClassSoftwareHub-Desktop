@@ -89,6 +89,18 @@
                         <ComboBoxItem Content="网格视图" Tag="grid" />
                     </ComboBox>
 
+                    <!--
+                      提交软件（2026-10-30）：导航栏那个入口挪到这里 ——
+                      软件生态已够丰富，不必再占一个一级导航位；这里离「想要什么软件」最近。
+                    -->
+                    <Button x:Name="SubmitEntry" Padding="12,6" Click="SubmitEntry_Click"
+                            ToolTipService.ToolTip="把自己手上的软件推荐给更多同学">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE898;" FontSize="13" />
+                            <TextBlock Text="提交软件" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+
                     <Button x:Name="HubAiEntry" Padding="12,6" Click="HubAiEntry_Click"
                             ToolTipService.ToolTip="打开 Hub AI 顾问">
                         <StackPanel Orientation="Horizontal" Spacing="6">

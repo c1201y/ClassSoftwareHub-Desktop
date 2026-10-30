@@ -453,6 +453,13 @@ public sealed partial class SoftwarePage : Page
 
     private void HubAiEntry_Click(object sender, RoutedEventArgs e) => ShowHubAiPanel(true);
 
+    /// <summary>
+    /// 「提交软件」入口（2026-10-30 从导航栏挪来）。
+    /// 走 <c>Shell.NavigateTo</c> 让导航栏的选中态跟着走，别用 ContentFrame.Navigate。
+    /// </summary>
+    private void SubmitEntry_Click(object sender, RoutedEventArgs e)
+        => App.MainWindow?.Shell.NavigateTo("submit");
+
     private void HubAiClose_Click(object sender, RoutedEventArgs e) => ShowHubAiPanel(false);
 
     /// <summary>

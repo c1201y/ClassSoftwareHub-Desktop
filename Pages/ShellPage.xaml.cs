@@ -335,6 +335,9 @@ public sealed partial class ShellPage : UserControl
                 ContentFrame.Navigate(typeof(Tools.AnnouncePage));
                 return;
             case "submit":
+                // 2026-10-30：导航项已移除，但这个 case 必须留着 —— 入口还有三处：
+                // 软件下载页顶部按钮、首页「提交软件」卡片、命令行 --page=submit。
+                // 删了它们会一起掉进 default 直接回首页，而且不报错。
                 ContentFrame.Navigate(typeof(SubmitPage));
                 return;
             case "feedback":
