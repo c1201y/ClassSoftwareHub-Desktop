@@ -189,7 +189,8 @@ public sealed class HubAiRuntime
         Action<AiUsage>? onCompleted,
         Action<Exception>? onFailed,
         bool appendUserMessage = true,
-        Func<string, string, Task<bool>>? approveTool = null)
+        Func<string, string, Task<bool>>? approveTool = null,
+        string? pageContext = null)
     {
         if (IsRunning) return;
 
@@ -252,7 +253,8 @@ public sealed class HubAiRuntime
                         Changed?.Invoke();
                     },
                     appendUserMessage: appendUserMessage,
-                    approveTool: approveTool);
+                    approveTool: approveTool,
+                    pageContext: pageContext);
             }
             catch (OperationCanceledException) { /* 用户停止：保留已生成的部分 */ }
             catch (Exception ex) { failure = ex; }

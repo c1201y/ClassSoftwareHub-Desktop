@@ -67,20 +67,22 @@ public sealed partial class HubAiFlyout : UserControl
     private bool _busy;
 
     /// <summary>
-    /// 当前页面的上下文（一句话），由宿主页面在数据就绪后设置。
+    /// 当前页面的现场数据生成器，由宿主页面在构造时挂上（2026-10-30 二版）。
     /// <para>
-    /// 2026-10-30 Nick 要的「每个页面有对应的角色」：在软件下载页问，它应该知道页上有什么清单，
-    /// 而不是再去全盘扫一遍。这里只放**摘要**（页名 + 关键几条），别塞整份数据 ——
-    /// 那会把上下文顶爆，也会让每轮回复都变慢。
+    /// Nick 的原话：「相关信息太少了……生成一份详细的 JSON 文件给 AI 读，这点信息够谁看」。
+    /// 所以这里不再是一句摘要，而是每次发消息时**现采**一份结构化快照
+    /// （<see cref="PageContextDoc"/>：页面名、角色、统计、清单、可执行操作）。
     /// </para>
     /// <para>
-    /// 只在本次展开后的**第一条**提问里带一次：后续追问已经在同一段对话里，重复带是噪音。
+    /// ⛔ 必须是**发消息那一刻**调用，不能像原来那样在数据就绪时算一次存着 ——
+    /// 筛选、勾选、扫描进度随时在变，缓存的很快就是错的。
+    /// </para>
+    /// <para>
+    /// ⚠️ 走 system 通道（<see cref="HubAiRuntime.Start"/> 的 <c>pageContext</c>），
+    /// 不进用户消息 —— 否则用户气泡和历史标题里全是机器文本。
     /// </para>
     /// </summary>
-    public string? PageContext { get; set; }
-
-    /// <summary>本次展开是否已经把页面上下文发出去过。</summary>
-    private bool _contextAttached;
+    public Func<PageContextDoc?>? ContextProvider { get; set; }
 
     public HubAiFlyout()
     {
@@ -195,7 +197,6 @@ public sealed partial class HubAiFlyout : UserControl
         _runtime.Changed += OnRuntimeChanged;
 
         _sessionId = null;
-        _contextAttached = false;
         _answerPanel = null;
         _answerRendered = "";
 
@@ -273,13 +274,8 @@ public sealed partial class HubAiFlyout : UserControl
         // 这一轮新增的消息从哪个下标开始 —— 收尾存档要用
         var before = runtime.Chat.Snapshot().Count;
 
-        // 第一条提问带上"我在哪个页面" —— 各页的浮层就是那一页的专用助手（2026-10-30）
-        var payload = text;
-        if (!_contextAttached && !string.IsNullOrWhiteSpace(PageContext))
-        {
-            payload = $"（我现在在{PageContext}）\n\n{text}";
-            _contextAttached = true;
-        }
+        // 现场数据现采一份（页面此刻的样子）。失败就当没有，别挡住提问。
+        var contextJson = BuildContextJson();
 
         Input.Text = string.Empty;
         Intro.Visibility = Visibility.Collapsed;
@@ -300,9 +296,10 @@ public sealed partial class HubAiFlyout : UserControl
                 cfg,
                 snapshot,
                 ActiveTools.Load(),
-                payload,
+                text,
                 onCompleted: usage => Dispatch(() => Finish(runtime, sessionId, before, usage, error: null)),
-                onFailed: ex => Dispatch(() => Finish(runtime, sessionId, before, AiUsage.Empty, error: ex)));
+                onFailed: ex => Dispatch(() => Finish(runtime, sessionId, before, AiUsage.Empty, error: ex)),
+                pageContext: contextJson);
         }
         catch (Exception ex)
         {
@@ -386,6 +383,33 @@ public sealed partial class HubAiFlyout : UserControl
     }
 
     // ── 界面 ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 现采这一页的现场数据，转成 JSON。
+    /// <para>
+    /// 任何异常都吞掉返回 null：数据没生成出来只是"AI 少知道点情况"，
+    /// 不该害得用户问了半天没人回答。
+    /// </para>
+    /// </summary>
+    private string? BuildContextJson()
+    {
+        if (ContextProvider is null) return null;
+
+        try
+        {
+            var doc = ContextProvider();
+            if (doc is null) return null;
+
+            var json = doc.ToJson();
+            AppLog.Step("hubai", $"页面现场数据 {doc.Page}：{json.Length} 字符");
+            return json;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("hubai", "页面现场数据生成失败：" + ex.Message);
+            return null;
+        }
+    }
 
     /// <summary>加一条气泡。<paramref name="mine"/> = 用户自己说的（右对齐）。</summary>
     private StackPanel AddBubble(string text, bool mine)

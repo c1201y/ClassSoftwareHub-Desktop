@@ -50,6 +50,19 @@ public sealed class AiChatService
 
     private const string SummaryHeader = "【早前对话摘要】";
 
+    /// <summary>
+    /// 页面现场数据在 system 提示里的包裹标记（2026-10-30）。
+    /// <para>
+    /// 每轮都换一份新的，所以要靠标记把**上一轮那块**精确摘掉再贴新的 ——
+    /// 否则会一层层叠上去，几轮之后 system 里堆满过期的清单。
+    /// </para>
+    /// </summary>
+    private const string ContextOpen =
+        "\n\n===== 当前页面的现场数据（程序按界面现状生成，回答涉及这些数字与清单时以此为准；" +
+        "不要整段复述给用户，也不要再让用户自己去翻）=====\n";
+
+    private const string ContextClose = "\n===== 现场数据结束 =====";
+
     private const string SummaryPrompt =
         """
         你是对话压缩器。把下面这段更早的对话压成不超过 200 字的要点，供后续继续对话使用。
@@ -127,6 +140,14 @@ public sealed class AiChatService
     /// 需要人工确认的工具（会改动系统的那些）执行前的闸门：返回 false 表示用户拒绝。
     /// 当前工具全部只读，所以这个回调暂时不会被调用 —— 但通道留着，加写类工具时不用再改这里。
     /// </param>
+    /// <param name="pageContext">
+    /// 用户此刻所在页面的现场数据（JSON，见 <see cref="Core.PageContextDoc"/>）。2026-10-30 加。
+    /// <para>
+    /// ⚠️ 走 system 通道，**不进用户消息**：塞进 <paramref name="userText"/> 的话，
+    /// 用户气泡和历史列表里全是机器文本（Nick 截图里那条"（我现在在…）"就是这个）。
+    /// 传 null = 摘掉上一轮那块，别让旧页面的清单留在上下文里。
+    /// </para>
+    /// </param>
     public async Task<AiUsage> RunAsync(
         AiConfig cfg,
         MachineSnapshot snapshot,
@@ -139,7 +160,8 @@ public sealed class AiChatService
         Action<string>? onReasoning = null,
         Action<string>? onToolDone = null,
         bool appendUserMessage = true,
-        Func<string, string, Task<bool>>? approveTool = null)
+        Func<string, string, Task<bool>>? approveTool = null,
+        string? pageContext = null)
     {
         Session.Reset();
         // ⚠️ 必须把 tools 传下去：没有工具时提示词里**绝不能**提"可以调用工具" ——
@@ -149,6 +171,9 @@ public sealed class AiChatService
         if (appendUserMessage) _messages.Add(AiMessage.User(userText));
         TrimHistory(cfg.ContextLimit);
         await SummarizeIfNeededAsync(cfg, ct);
+
+        // ⚠️ 必须排在压缩之后：压缩会拿 `_baseSystemPrompt` 重拼整条 system，先贴的会被冲掉
+        ApplyPageContext(pageContext);
 
         var total = AiUsage.Empty;
 
@@ -306,6 +331,41 @@ public sealed class AiChatService
 
         var basePrompt = _baseSystemPrompt ?? _messages[0].Content;
         _messages[0] = new AiMessage("system", $"{basePrompt}\n\n{SummaryHeader}\n{summary}");
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  页面现场数据（2026-10-30）
+    // ══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 把这一页的现场数据贴到 system 提示末尾（旧的那块先摘掉）。
+    /// <para>
+    /// 语义：模型回答"哪个目录占地方""装了哪些软件"这类问题时，直接引用这里的数字，
+    /// 不必再让用户自己去看界面，也不必再调工具扫一遍。
+    /// </para>
+    /// </summary>
+    private void ApplyPageContext(string? json)
+    {
+        if (_messages.Count == 0 || _messages[0].Role != "system") return;
+
+        var content = StripPageContext(_messages[0].Content);
+        if (!string.IsNullOrWhiteSpace(json))
+            content = content + ContextOpen + json + ContextClose;
+
+        if (!string.Equals(content, _messages[0].Content, StringComparison.Ordinal))
+            _messages[0] = new AiMessage("system", content);
+    }
+
+    /// <summary>摘掉上一次贴进去的现场数据（没有就原样返回）。</summary>
+    private static string StripPageContext(string content)
+    {
+        var start = content.IndexOf(ContextOpen, StringComparison.Ordinal);
+        if (start < 0) return content;
+
+        var close = content.IndexOf(ContextClose, StringComparison.Ordinal);
+        return close < 0
+            ? content[..start]
+            : content[..start] + content[(close + ContextClose.Length)..];
     }
 
     // ══════════════════════════════════════════════════════

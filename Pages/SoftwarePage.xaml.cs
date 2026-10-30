@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -41,6 +42,13 @@ public sealed partial class SoftwarePage : Page
     /// </summary>
     private string _appliedKey = "";
 
+    /// <summary>
+    /// 当前筛选后真正显示在页上的那些软件（2026-10-30 加）。
+    /// 给 Hub AI 浮层当现场数据用 —— 用户问"这页里有什么""哪几款支持 XP"时，
+    /// 直接照这份清单回答，不用模型再去猜或调工具。
+    /// </summary>
+    private List<SoftwareApp> _shown = new();
+
     public SoftwarePage()
     {
         InitializeComponent();
@@ -53,6 +61,9 @@ public sealed partial class SoftwarePage : Page
 
         // 两侧留白 / 标题行上的滚轮也转给卡片列表（见 Core/WheelRelay.cs）
         Core.WheelRelay.Attach(this, TileGrid, CompactGrid);
+
+        // 浮层每次提问都来取一份现场数据（见 BuildAiContext）
+        AiFlyout.ContextProvider = BuildAiContext;
     }
 
     /// <summary>卡片之间的水平间距 = 模板里 Border 的 Margin 右边距。</summary>
@@ -295,9 +306,76 @@ public sealed partial class SoftwarePage : Page
         Apply();
     }
 
-    private void Apply()
+    /// <summary>
+    /// 给浮层准备这一页的现场数据（2026-10-30 二版）。
+    /// <para>
+    /// 关键词：**用户眼前这一页有什么**。当前分类/平台/关键词筛出来的是哪些、各自多大、支持哪些系统，
+    /// 都是模型答"有没有 XX""哪个适合老电脑"必须看得见的东西 —— 让它去全盘搜反而更容易答错。
+    /// </para>
+    /// </summary>
+    private PageContextDoc BuildAiContext()
     {
-        var list = App.Content.Apps
+        var doc = new PageContextDoc(
+            "软件下载",
+            "这一页是站内软件库的下载墙，只能用库里有的软件回答推荐类问题。" +
+            "用户问「有没有 XX」「哪个能装 Win7」时，先看下面的清单与分类，库里没有就直说没有。");
+
+        var all = App.Content.Apps;
+
+        doc.Add("筛选状态", new
+        {
+            分类 = _category.Length == 0 ? "全部" : App.Content.CategoryName(_category),
+            分类key = _category,
+            平台 = _platform.Length == 0 ? "全部系统" : App.Content.PlatformName(_platform),
+            平台key = _platform,
+            关键词 = _keyword,
+            排序 = "按软件库原始顺序",
+            视图 = _view == "tile" ? "卡片" : "紧凑",
+            当前显示 = _shown.Count,
+            库内总数 = all.Count,
+        });
+
+        doc.Add("分类与数量", App.Content.Categories.Select(c => new
+        {
+            key = c.Key,
+            名称 = c.Name,
+            数量 = all.Count(a => a.Category == c.Key),
+        }).ToList());
+
+        doc.Add("可筛选的平台", App.Content.Platforms.Select(p => new { key = p.Key, 名称 = p.Name }).ToList());
+
+        // 清单给 25 款：一页差不多就这么多，再多模型也读不动；总体数量上面已经给了
+        doc.Add("当前页上的软件（前 25 款）", _shown.Take(25).Select(a => new
+        {
+            a.Name,
+            分类 = a.CategoryDisplay.Length > 0 ? a.CategoryDisplay : App.Content.CategoryName(a.Category),
+            版本 = a.Version,
+            体积 = a.Size,
+            支持系统 = string.Join("/", a.Platforms),
+            系统要求 = a.System,
+            一句话 = a.Tagline,
+            下载方式 = string.Join("/", a.Downloads.Select(d => d.ActionText).Distinct()),
+        }).ToList());
+
+        if (_shown.Count > 25)
+            doc.Add("其余软件", new
+            {
+                条数 = _shown.Count - 25,
+                名称 = _shown.Skip(25).Select(a => a.Name).ToList(),
+            });
+
+        doc.Action("按分类筛选", "点分类栏切换，AI 无法代点");
+        doc.Action("按系统筛选", "平台下拉框，可筛 Windows/macOS/Linux 等");
+        doc.Action("打开软件详情", "卡片点进去能看到下载条目、校验值与官网链接");
+
+        if (_shown.Count == 0)
+            doc.Say("当前筛选下没有任何结果；用户若在找某款软件，可以建议他清掉筛选条件再看");
+
+        return doc;
+    }
+
+    private void Apply()
+    {        var list = App.Content.Apps
             .Where(a => _category.Length == 0 || a.Category == _category)
             .Where(a => a.SupportsPlatform(_platform))
             .Where(a => a.Matches(_keyword))
@@ -308,12 +386,8 @@ public sealed partial class SoftwarePage : Page
 
         WarmPalette(list);
 
-        // 这一页的 AI 就该知道页上有什么（2026-10-30）：给前几款让模型直接说，
-        // ⛔ 别让它再去全盘扫一遍 —— 清单就在手边。
-        AiFlyout.PageContext = list.Count == 0
-            ? "「软件下载」页，当前筛选下没有结果"
-            : $"「软件下载」页，当前筛选：{(_category.Length == 0 ? "全部" : _category)}，共 {list.Count} 款。" +
-              $"页上可见的有：{string.Join("、", list.Take(8).Select(a => a.Name))}";
+        // 这一页的 AI 就该知道页上有什么：清单存下来，提问时现采成 JSON（见 BuildAiContext）
+        _shown = list;
 
         var baseTitle = _category.Length == 0
             ? (_keyword.Length == 0 ? "软件下载" : $"搜索：{_keyword}")

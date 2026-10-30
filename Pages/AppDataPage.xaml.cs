@@ -221,6 +221,9 @@ public sealed partial class AppDataPage : Page
             ? Visibility.Visible
             : Visibility.Collapsed;
 
+        // 浮层每次提问都来取一份现场数据（见 BuildAiContext）
+        AiFlyout.ContextProvider = BuildAiContext;
+
         // 构造期控件还没进可视化树，扫描放 Loaded（与其它页一致）
         Loaded += (_, _) =>
         {
@@ -233,6 +236,93 @@ public sealed partial class AppDataPage : Page
     /// 浮层是公共控件（Controls/HubAiFlyout），与「软件下载」页同一份 —— 别在页面里再写一套。
     /// </summary>
     private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
+
+    /// <summary>
+    /// 给浮层准备这一页的现场数据（2026-10-30 二版，Nick：一句话摘要「这点信息够谁看」）。
+    ///
+    /// <para>
+    /// 每次发消息时现采：清单里的体积是后台一个个填进来的、勾选会变、分类会切，
+    /// 提前算好存着的必然是旧数。这里只做内存里的投影，不碰磁盘，开销可以忽略。
+    /// </para>
+    /// </summary>
+    private PageContextDoc BuildAiContext()
+    {
+        var doc = new PageContextDoc(
+            "AppData 管理",
+            "这一页统计 AppData 下各项的体积，并允许清理命中白名单的缓存目录。" +
+            "用户问「哪个占地方」「这个能不能删」「删了有什么影响」时，直接引用下面清单里的数字与说明回答；" +
+            "界面上的体积单位是程序算好的，不要自己换算。");
+
+        var cleanBytes = _clean.Sum(r => Math.Max(r.Bytes, 0));
+        var localBytes = _foldersLocal.Sum(r => Math.Max(r.Bytes, 0));
+        var roamingBytes = _foldersRoaming.Sum(r => Math.Max(r.Bytes, 0));
+
+        doc.Add("状态", new
+        {
+            目录结构已读取 = _ready,
+            体积统计中 = _measuring,
+            正在清理 = _busy,
+            当前分类 = _category?.Label ?? "",
+        });
+
+        doc.Add("统计", new
+        {
+            本地一级目录数 = _foldersLocal.Count,
+            本地一级目录合计 = new { bytes = localBytes, text = AppLog.Size(localBytes) },
+            漫游一级目录数 = _foldersRoaming.Count,
+            漫游一级目录合计 = new { bytes = roamingBytes, text = AppLog.Size(roamingBytes) },
+            可清理项数 = _clean.Count,
+            可清理合计 = new { bytes = cleanBytes, text = AppLog.Size(cleanBytes) },
+            已勾选可清理项 = _clean.Count(r => r.IsChecked && r.CanClean),
+            已勾选合计 = new
+            {
+                bytes = _clean.Where(r => r.IsChecked && r.CanClean).Sum(r => Math.Max(r.Bytes, 0)),
+                text = AppLog.Size(_clean.Where(r => r.IsChecked && r.CanClean).Sum(r => Math.Max(r.Bytes, 0))),
+            },
+        });
+
+        // 清单给 40 条：本机实测可清理 245 项，全塞把上下文顶爆；40 条已覆盖九成体积
+        const int take = 40;
+        doc.Add("可清理项（按体积降序）", _clean.Take(take).Select(r => new
+        {
+            名称 = r.Name,
+            卷 = r.Entry is null ? "" : (r.Entry.Zone == AppDataZone.Local ? "本地" : "漫游"),
+            类别 = AppDataLook.LabelOf(r.Kind),
+            bytes = Math.Max(r.Bytes, 0),
+            大小 = r.SizeText,
+            文件数 = r.Files,
+            路径 = r.Entry?.FullPath ?? "",
+            说明 = r.Sub,
+            已勾选 = r.IsChecked,
+        }).ToList());
+
+        if (_clean.Count > take)
+        {
+            var rest = _clean.Skip(take).ToList();
+            doc.Add("未尽的可清理项", new
+            {
+                条数 = rest.Count,
+                合计 = new { bytes = rest.Sum(r => Math.Max(r.Bytes, 0)), text = AppLog.Size(rest.Sum(r => Math.Max(r.Bytes, 0))) },
+                说明 = "下面这些没有逐条列出；用户问到具体某一项时，可以让他先在界面上按名称找一下",
+                名称 = rest.Take(30).Select(r => r.Name).ToList(),
+            });
+        }
+
+        doc.Add("本地一级目录（体积前 12，只读体检项，不提供清理）",
+            _foldersLocal.Take(12).Select(r => new { 名称 = r.Name, 大小 = r.SizeText, 文件数 = r.Files }).ToList());
+
+        doc.Add("漫游一级目录（体积前 12，只读体检项，不提供清理）",
+            _foldersRoaming.Take(12).Select(r => new { 名称 = r.Name, 大小 = r.SizeText, 文件数 = r.Files }).ToList());
+
+        doc.Action("清理勾选的项", "只清理命中白名单的缓存目录，逐项报告成功/跳过");
+        doc.Action("全选", "把当前分类下可清理的项全部勾上");
+        doc.Action("重新扫描", "重读目录结构并重新统计体积");
+
+        if (_measuring)
+            doc.Say("体积还在后台逐个统计，界面上有「统计中…」的行就是还没算完的，这些项的数字不可引用");
+
+        return doc;
+    }
 
     /// <summary>离开页面就掐掉后台统计 —— 上百个目录逐个递归，别让它跟着跑到别的页去。</summary>
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -367,12 +457,9 @@ public sealed partial class AppDataPage : Page
         _foldersRoaming = _foldersRoaming.OrderByDescending(r => r.Bytes).ToList();
         _clean = _clean.OrderByDescending(r => r.Bytes).ToList();
 
-        // 这一页的 AI 直接拿扫描结果说话（2026-10-30）：占用最大的几项就在手边，
+        // 这一页的 AI 直接拿扫描结果说话：占用最大的几项就在手边，
         // 用户问"哪个能清"时不必再让模型去扫一遍磁盘。
-        AiFlyout.PageContext = $"「AppData 管理」页，可清理 {_clean.Count} 项，" +
-            $"合计 {Core.AppLog.Size(_clean.Sum(r => r.Bytes))}。" +
-            (_clean.Count == 0 ? "" :
-             $"占用最大的几项：{string.Join("、", _clean.Take(6).Select(r => $"{r.Name}（{Core.AppLog.Size(r.Bytes)}）"))}");
+        // ⚠️ 2026-10-30 二版：不再在这里拼一句话摘要 —— 改成提问时由 BuildAiContext 现采结构化数据。
 
         var biggest = _foldersLocal.FirstOrDefault();
         if (biggest is not null && biggest.Bytes > 0)
