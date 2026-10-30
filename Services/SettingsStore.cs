@@ -849,6 +849,48 @@ public sealed class SettingsStore
             changed = true;
         }
 
+        if (Current.SidebarModulesRevision < 10)
+        {
+            // revision 10（2026-10-30）：侧边栏新增「哈希校验」独立窗口（需求 1:16）。
+            // 插在「编码 / 哈希转换」**后面** —— 两者同族，摆在一起好找；
+            // 没勾过它的话就按工具组末尾补入（跟 rev7 / rev8 的位置规则一致）。
+            try
+            {
+                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+
+                if (!list.Contains("hash-check"))
+                {
+                    var at = list.IndexOf("encoding");
+                    if (at >= 0)
+                    {
+                        list.Insert(at + 1, "hash-check");
+                    }
+                    else
+                    {
+                        var tail = list.FindIndex(id =>
+                        {
+                            var kind = Data.SidebarModules.Find(id)?.Kind;
+                            return kind is not (Data.SidebarModuleKinds.Palette
+                                or Data.SidebarModuleKinds.Page
+                                or Data.SidebarModuleKinds.Window);
+                        });
+
+                        if (tail < 0) list.Add("hash-check");
+                        else list.Insert(tail, "hash-check");
+                    }
+
+                    Current.SidebarModuleIds = list.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"补侧边栏新模块失败: {ex.Message}");
+            }
+
+            Current.SidebarModulesRevision = 10;
+            changed = true;
+        }
+
         // 标记必须落盘，否则下次启动又会"补"一遍，用户删了也白删
         if (changed) Save();
     }

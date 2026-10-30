@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.HashCheckWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:ClassSoftwareHub.Desktop.Views">
+
+    <!--
+      哈希校验悬浮窗（2026-10-30，需求 1:16）。
+
+      来由：核对安装包时最常做的事是「官网给了个 SHA-256，我算一遍看对不对」。
+      原来只能先进主界面 → 系统工具 → 编码·哈希工具，为了核对一个文件把整个应用拉出来太重。
+      这扇窗单开、可一直摆在旁边，拖进去就出结果。
+
+      · 拖放区沿用编码页那条扁平横条（ControlFillColorDefaultBrush + 圆角 4、不描边），
+        不另画卡片 —— 同一件事在应用里应该长得一样。
+      · 校验值输入框和四种哈希放在同一块，粘贴后立刻显示比对结果（不用再点「比对」）。
+      · 窗口是**系统标题栏 + 自绘 32px 条**，跟学科工具窗同一套（ModernWindow.ApplyTitleBar）。
+    -->
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <!-- 自绘标题栏：内容延伸进去，系统按钮浮在右上角 -->
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBarHost" Grid.Row="0" Padding="16,0,140,0" Background="Transparent">
+            <TextBlock Text="哈希校验" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Padding="20,4,20,20" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12">
+
+                <!-- ① 拖放区：整条都能拖、能点 -->
+                <Border x:Name="DropZone" Padding="16,16" CornerRadius="4" BorderThickness="0"
+                        Background="{ThemeResource ControlFillColorDefaultBrush}"
+                        AllowDrop="True" Tapped="DropZone_Tapped"
+                        DragOver="DropZone_DragOver" DragLeave="DropZone_DragLeave" Drop="DropZone_Drop">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon Glyph="&#xE8E5;" FontSize="24" Opacity="0.65" VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock x:Name="DropTitle" Text="把文件拖到这里，或单击选择"
+                                       FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock x:Name="DropSub" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                       Text="支持任意文件类型；大文件按 1 MB 分块流式计算，不占内存" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <ProgressBar x:Name="HashProgress" IsIndeterminate="True" Visibility="Collapsed" />
+
+                <!-- 文件信息（名称 · 大小 · 完整路径），没选文件时不占版面 -->
+                <TextBlock x:Name="FileInfo" Visibility="Collapsed" FontSize="12" Opacity="0.65"
+                           TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+
+                <!-- ② 校验值：粘贴后自动比对，不需要再点按钮 -->
+                <TextBox x:Name="ExpectedBox" Header="校验值"
+                         PlaceholderText="粘贴官方提供的校验值，粘贴后自动比对"
+                         TextChanged="Expected_TextChanged" />
+
+                <TextBlock x:Name="MatchText" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" />
+
+                <!-- ③ 四种哈希：算法名定宽 + 值（可选中）+ 复制 -->
+                <ListView x:Name="HashList" SelectionMode="None" IsItemClickEnabled="False"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="4,0" />
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:HashLine">
+                            <Grid ColumnSpacing="8" Padding="0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="58" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="{x:Bind Name}" FontSize="12" Opacity="0.65"
+                                           VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Column="1" Text="{x:Bind Value, Mode=OneWay}"
+                                           FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True" VerticalAlignment="Center" />
+
+                                <Button Grid.Column="2" Content="复制" Tag="{x:Bind}" Padding="10,4"
+                                        FontSize="12" VerticalAlignment="Center"
+                                        Click="CopyLine_Click" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <TextBlock FontSize="12" Opacity="0.55" TextWrapping="Wrap"
+                           Text="校验值只在本机比对，不会上传到任何位置。哈希一致说明文件与发布方给出的那份完全相同。" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

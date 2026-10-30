@@ -64,7 +64,9 @@ public sealed class HashRow : INotifyPropertyChanged
 /// </summary>
 public sealed partial class EncodingToolPage : Page
 {
-    private static readonly string[] Algorithms = { "MD5", "SHA-1", "SHA-256", "SHA-512" };
+    // 算法清单只留一处定义（Core/FileHash.cs）—— 新的「哈希校验」悬浮窗也算同一套值，
+    // 两处各写一份必然分叉（2026-10-30 抽取）。
+    private static readonly string[] Algorithms = Core.FileHash.Algorithms;
     private const string EmptyMark = "—";
 
     /// <summary>「文件校验」页签里的四行哈希（算法名 · 值 · 复制）。</summary>
@@ -263,7 +265,7 @@ public sealed partial class EncodingToolPage : Page
         try
         {
             var info = new FileInfo(path);
-            var hashes = await Task.Run(() => HashFile(path, cts.Token), cts.Token);
+            var hashes = await Task.Run(() => Core.FileHash.Compute(path, cts.Token), cts.Token);
             if (cts.IsCancellationRequested) return;
 
             _fileHashes = hashes;
@@ -285,38 +287,6 @@ public sealed partial class EncodingToolPage : Page
             }
         }
         RefreshMatch();
-    }
-
-    /// <summary>流式算四种哈希：1MB 一块，多大的文件都不吃内存。</summary>
-    private static Dictionary<string, string> HashFile(string path, CancellationToken token)
-    {
-        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
-        using var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
-        using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var sha512 = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
-
-        var buffer = new byte[1 << 20];
-        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, buffer.Length, FileOptions.SequentialScan))
-        {
-            int read;
-            while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                token.ThrowIfCancellationRequested();
-                var span = buffer.AsSpan(0, read);
-                md5.AppendData(span);
-                sha1.AppendData(span);
-                sha256.AppendData(span);
-                sha512.AppendData(span);
-            }
-        }
-
-        return new Dictionary<string, string>
-        {
-            ["MD5"] = Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant(),
-            ["SHA-1"] = Convert.ToHexString(sha1.GetHashAndReset()).ToLowerInvariant(),
-            ["SHA-256"] = Convert.ToHexString(sha256.GetHashAndReset()).ToLowerInvariant(),
-            ["SHA-512"] = Convert.ToHexString(sha512.GetHashAndReset()).ToLowerInvariant(),
-        };
     }
 
     private static string SizeText(long bytes)

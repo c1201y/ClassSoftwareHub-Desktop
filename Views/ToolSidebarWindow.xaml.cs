@@ -1364,7 +1364,7 @@ public sealed partial class ToolSidebarWindow : Window
             if (m.Kind == SidebarModuleKinds.Page && m.Page is not null)
                 App.MainWindow?.OpenToolSettings(m.Page);      // 拉出主窗口并跳到那一页
             else if (m.Kind == SidebarModuleKinds.Window)
-                SubjectToolsWindow.ShowTool(m.WindowTool);     // 单开一扇轻量窗，不碰主界面
+                OpenModuleWindow(m);                           // 单开一扇轻量窗，不碰主界面
             else
                 ToolPaletteWindow.ShowTool(m.Id);              // 小浮窗
         }
@@ -1374,6 +1374,50 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
+
+    /// <summary>
+    /// 打开「独立窗口」类模块（kind = window）。
+    /// <para>
+    /// 两种：
+    /// <list type="number">
+    ///   <item>模块自带一扇专用窗口（<see cref="SidebarModule.WindowType"/>，目前是「哈希校验」）——
+    ///         那扇窗口按约定提供 <c>public static void Show()</c>，这里按名字反射调用。
+    ///         ⚠️ 用反射而不是 if/switch 判断类型：加一扇新窗口只改 <c>SidebarModule</c> 一行，
+    ///            不用回来改这里（正是代码审计里"别写 case"那条）。</item>
+    ///   <item>其余走学科工具窗（<see cref="SubjectToolsWindow"/>），工具 id 由
+    ///         <see cref="SidebarModule.WindowTool"/> 指定。</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    private static void OpenModuleWindow(SidebarModule m)
+    {
+        if (m.WindowType is { } type)
+        {
+            try
+            {
+                var show = type.GetMethod(
+                    "Show",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                    binder: null, types: Type.EmptyTypes, modifiers: null);
+
+                if (show is not null)
+                {
+                    show.Invoke(null, null);
+                    return;
+                }
+
+                // 约定没遵守：说明代码改坏了，但别让用户点了没反应 —— 退回学科工具窗并留痕
+                Log($"模块 {m.Id} 的窗口没有 public static Show()，已退回学科工具窗");
+            }
+            catch (Exception ex)
+            {
+                Log($"打开模块 {m.Id} 的窗口失败: {ex.Message}");
+                return;
+            }
+        }
+
+        SubjectToolsWindow.ShowTool(m.WindowTool);
+    }
 
     // ── 贴边面板（音量 / 屏幕亮度）──────────────────────────────────────────
 

@@ -63,6 +63,16 @@ public sealed class SidebarModule
     /// </summary>
     public string? WindowTool { get; init; }
 
+    /// <summary>
+    /// kind = window 且**自己就是一扇专用窗口**时填它（2026-10-30 加，用于「哈希校验」）。
+    /// <para>
+    /// ⚠️ 那扇窗口必须提供 <c>public static void Show()</c>（单例 + 置前），
+    ///    <c>ToolSidebarWindow</c> 按名字反射调用 —— 这不是"写 case"，加新窗口不用改侧边栏。
+    /// 空 = 走 <c>SubjectToolsWindow</c> 那扇学科工具窗（<see cref="WindowTool"/> 指定工具）。
+    /// </para>
+    /// </summary>
+    public Type? WindowType { get; init; }
+
     /// <summary>想给某个模块写更贴切的说明就填它（不填就用 Kind 的通用说法）。</summary>
     public string? Note { get; init; }
 
@@ -88,6 +98,11 @@ public static class SidebarModules
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
         new() { Id = "image-color", Name = "图片取色", ShortName = "取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
         new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", Glyph = "\uE943", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.EncodingToolPage) },
+        // 「哈希校验」独立窗口（2026-10-30，需求 1:16）：核对安装包用 —— 拖进文件就出四种哈希，
+        // 粘贴官网给的校验值自动比对。跟上面那条「编码 / 哈希转换」分工不同：那条是整页编辑器，
+        // 这条是"用完就关"的核对工具，所以走独立窗口、不拉主界面。
+        // ⚠️ 字形用 E73E（对勾）：这条就是"校验对不对"，比再借一个哈希图标更好认。
+        new() { Id = "hash-check", Name = "哈希校验", ShortName = "哈希", Glyph = "\uE73E", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.HashCheckWindow), Note = "在独立窗口中打开哈希校验：拖入文件即可算出 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴校验值后自动比对" },
         // 学科工具（2026-10-18 Nick 要）：函数图像 / 方程求解 / 化学配平**各占一项**，
         // 点哪项就直接开那件工具，单开一扇窗、**不拉主界面** —— 这是重点。
         // 以前点这类工具会把整个主窗口叫出来（Kind = Page），只想算一道题时太重。
