@@ -39,14 +39,32 @@ public sealed class AiChatService
     /// ② 挂在 <see cref="CancellationTokenSource"/> 上，单次请求卡死时也能掐掉 ——
     /// 否则第一条流就能把界面上挂半小时，等不到下一轮检查。
     /// </para>
+    /// <para>
+    /// 判定逻辑本身在 <see cref="AiTimeBudget"/>（纯函数，E 盘测试里跑得到）。
+    /// </para>
+    /// <para>
+    /// 🅳 调试用：设环境变量 <c>CSH_AI_BUDGET_SECONDS=25</c> 启动，就把预算临时改成 25 秒 ——
+    /// 否则"到点会怎样"只能真等 8 分钟才知道，没人愿意这么验（Nick 2026-10-30 的原话：
+    /// 「我肯定不能给等他测个 8 分钟」）。只在 Debug 版生效，正式版恒为 8 分钟。
+    /// </para>
     /// </summary>
-    private static readonly TimeSpan AnswerBudget = TimeSpan.FromMinutes(8);
+#if DEBUG
+    private static readonly TimeSpan AnswerBudget = ResolveBudget();
 
-    /// <summary>
-    /// 轮次兜底（不是体验上限）：只防"工具立刻失败→模型立刻重试"这种秒级死循环 ——
-    /// 那种情况 8 分钟能跑上千轮，纯属烧 token。正常链路离这个数很远。
-    /// </summary>
-    private const int RoundGuard = 240;
+    private static TimeSpan ResolveBudget()
+    {
+        var raw = Environment.GetEnvironmentVariable("CSH_AI_BUDGET_SECONDS");
+        if (int.TryParse(raw, out var seconds) && seconds > 0)
+        {
+            AppLog.Warn("hubai", $"调试覆盖：本轮预算改为 {seconds} 秒（来自 CSH_AI_BUDGET_SECONDS）");
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        return AiTimeBudget.Default;
+    }
+#else
+    private static readonly TimeSpan AnswerBudget = AiTimeBudget.Default;
+#endif
 
     /// <summary>历史消息上限（含 system）。超了就丢最早的对话，保住 system prompt。</summary>
     private const int MaxHistoryMessages = 20;
@@ -201,22 +219,19 @@ public sealed class AiChatService
         var total = AiUsage.Empty;
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var ranOutOfTime = false;
+        var stopReason = AiStopReason.None;
 
         // 预算到点要能掐断正在跑的那条流，所以挂一个带截止的令牌；
         // 用户点「停止」走的是 ct，两者在这里合并 —— 下面的 catch 靠 ct 区分是谁按的停。
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        try { deadline.CancelAfter(AnswerBudget); } catch (ObjectDisposedException) { }
+        deadline.CancelAfter(AnswerBudget);
 
         try
         {
             for (var round = 0; ; round++)
             {
-                if (watch.Elapsed >= AnswerBudget || round >= RoundGuard)
-                {
-                    ranOutOfTime = true;
-                    break;
-                }
+                stopReason = AiTimeBudget.CheckBeforeRound(watch.Elapsed, round, AnswerBudget, AiTimeBudget.RoundGuard);
+                if (stopReason != AiStopReason.None) break;
 
                 var turn = await AiClient.StreamTurnAsync(cfg, _messages, tools, onDelta, onReasoning, deadline.Token);
                 total = total.Plus(turn.Usage);
@@ -240,6 +255,7 @@ public sealed class AiChatService
 
                 foreach (var call in turn.ToolCalls)
                 {
+                    // 工具也吃预算的令牌：预算到点立刻收手，不要让一个 90 秒的工具再把时间拖出去
                     deadline.Token.ThrowIfCancellationRequested();
 
                     // ⛔ 会改动系统的工具必须先问人（2026-10-23 加）。当前全部只读，不会走到这儿。
@@ -263,6 +279,8 @@ public sealed class AiChatService
                     onStatus?.Invoke(DescribeTool(call.Name));
                     AppLog.Step("hubai", $"工具调用：{call.Name}（第 {round + 1} 轮，已用 {watch.Elapsed.TotalSeconds:0} 秒）");
 
+                    // ⚠️ 传的是 deadline.Token，不是 ct：预算到点时 ToolRunner 会原样往外抛
+                    //    （它只把"自己的 90 秒超时"翻成结果字符串），正好落到下面的 catch 里
                     var result = await ToolRunner.ExecuteAsync(call.Name, call.Arguments, Session, deadline.Token);
                     _messages.Add(AiMessage.Tool(call.Id, result));
 
@@ -274,21 +292,36 @@ public sealed class AiChatService
                 onNewBubble?.Invoke();
             }
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            // ⚠️ 用户没按停止 ⇒ 是预算到点掐的。这种情况**必须**告诉用户为什么停了，
-            //    否则界面上就是"话说一半没了"，比轮次上限更让人困惑。
-            ranOutOfTime = true;
+            // ⚠️ 这里**不能**只写 "catch when (!ct.IsCancellationRequested)"：
+            //    单次请求的 HTTP 超时（120 秒）抛的是 TaskCanceledException，用户令牌并没有被取消，
+            //    那样会把它当成"8 分钟预算用尽"—— 明明只跑了 2 分钟，却告诉用户跑到上限（第一次就这么写错了）。
+            //    所以一律接住，再靠 AiTimeBudget 按"用户有没有按停止 + 已耗时"分类。
+            stopReason = AiTimeBudget.ClassifyCancel(ct.IsCancellationRequested, watch.Elapsed, AnswerBudget, AiTimeBudget.Slack);
+
+            // ⛔ 无论谁按的停，都要收拾**半截的工具配对**：模型这一轮可能一次点了两个工具，
+            //    第一个跑完、第二个没跑就中断了 —— 少一条 tool 应答，下一次请求会被服务端 400 打回
+            //    （这个坑本来就有，用户点停止后再提问就撞，只是以前没人把它和"停止"联系起来）。
+            var repaired = HistoryRepair.Close(_messages);
+            if (repaired > 0)
+                AppLog.Warn("hubai", $"中止后补齐 {repaired} 条未回应的工具结果（否则下次请求会被服务端拒绝）");
+
+            // 用户自己按的停止：保持原样往上抛，让上层静默保留已生成的部分（既有行为，别改）
+            if (stopReason == AiStopReason.None) throw;
         }
 
-        if (!ranOutOfTime) return total;
+        if (stopReason == AiStopReason.None) return total;
 
+        var used = watch.Elapsed;
         AppLog.Warn("hubai",
-            $"本轮问答用满 {AnswerBudget.TotalMinutes:0} 分钟预算，已停手（上下文 {_messages.Count} 条，累计 {total.TotalTokens} token）");
+            $"本轮问答中止（{stopReason}）：已用 {used.TotalSeconds:0} 秒 / 预算 {AnswerBudget.TotalSeconds:0} 秒，" +
+            $"上下文 {_messages.Count} 条，累计 {total.TotalTokens} token");
 
-        onDelta?.Invoke(
-            $"\n\n（这一轮已经跑到 {AnswerBudget.TotalMinutes:0} 分钟上限，先停在这里。" +
-            "上面是已经查到的部分；还没查完的话，再追问一次就能接着做。）");
+        // 说明也要进上下文：不然用户追问"刚才怎么停了"时，模型不知道自己被打断过，会把已经做过的事重做一遍
+        var notice = AiTimeBudget.Describe(stopReason, AnswerBudget).TrimStart('\r', '\n');
+        onDelta?.Invoke(AiTimeBudget.Describe(stopReason, AnswerBudget));
+        _messages.Add(new AiMessage("assistant", notice));
 
         return total;
     }

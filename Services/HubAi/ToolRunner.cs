@@ -55,7 +55,9 @@ public static class ToolRunner
 
     /// <summary>
     /// 工具本身最多跑多久（兜底）。正常路径靠 <see cref="DiskBudget"/> 提前收工，
-    /// 这里只防"某个工具彻底卡死"。⚠️ 它 != 整个对话的最长等待：一轮最多 5 次工具往返。
+    /// 这里只防"某个工具彻底卡死"。
+    /// ⚠️ 2026-10-30 起一轮对话不再限 5 次往返，改由 <see cref="Core.AiTimeBudget"/> 限 8 分钟总时长，
+    /// 所以真正决定"最多等多久"的是那个预算；本超时只管单个工具别把预算全吃掉。
     /// </summary>
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(90);
 
