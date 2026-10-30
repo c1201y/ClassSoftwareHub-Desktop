@@ -256,6 +256,8 @@
                 </Grid>
             </Grid>
         </Grid>
-        <ui:HubAiFlyout x:Name="AiFlyout" Grid.Row="1" />
+        <!-- ⛔ 不要写 Grid.Row：根 Grid 只有列定义、没有行定义，
+             写 Grid.Row="1" 会被放到一个不存在的第 2 行 → 浮层永远画不出来（2026-10-30 踩过）。 -->
+        <ui:HubAiFlyout x:Name="AiFlyout" Grid.Column="1" />
     </Grid>
 </Page>

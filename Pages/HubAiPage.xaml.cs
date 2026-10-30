@@ -1618,22 +1618,11 @@ public sealed partial class HubAiPage : Page
     }
 
     /// <summary>启用的工具。总闸关着、或工具包没装，都返回空 —— 模型于是只能看着体检单回答。</summary>
-    private static IReadOnlyList<ToolDefinition> LoadTools()
-    {
-        // 联网工具与「工具总闸」**互相独立**：
-        // 总闸关着只要用户把「联网」拨上就能用（Nick 要求跟「思考」一样就能开）。
-        var tools = new List<ToolDefinition>();
-
-        if (App.Settings.Current.HubAiToolsEnabled)
-        {
-            var pack = ToolPackStore.Load();
-            if (pack?.Tools is { Count: > 0 } packTools) tools.AddRange(packTools);
-        }
-
-        if (App.Settings.Current.HubAiWebEnabled) tools.AddRange(BuiltinTools.Web);
-
-        return tools;
-    }
+    /// <summary>
+    /// 这次对话能用哪些工具 —— 判定只有一处（<see cref="ActiveTools.Load"/>）。
+    /// ⚠️ 2026-10-30：浮层入口多了三个，两边各写一份会「页面有工具、浮层没有」。
+    /// </summary>
+    private static IReadOnlyList<ToolDefinition> LoadTools() => ActiveTools.Load();
 
     /// <summary>当前是否已经有一个授权框在等（同一时刻只允许一个）。</summary>
     private bool _approvalOpen;

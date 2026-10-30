@@ -1,7 +1,15 @@
 using System;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Services;
+using ClassSoftwareHub.Desktop.Services.Diagnostics;
+using ClassSoftwareHub.Desktop.Services.HubAi;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 
 namespace ClassSoftwareHub.Desktop.Controls;
@@ -11,16 +19,33 @@ namespace ClassSoftwareHub.Desktop.Controls;
 ///
 /// <para>
 /// 用法：页面根 Grid 里放一行 <c>&lt;ui:HubAiFlyout x:Name="AiFlyout" /&gt;</c>，
-/// 页头放一个按钮，点击调 <see cref="Show"/>。控件自己负责位置（右下角）、动画和发送。
+/// 页头放一个按钮，点击调 <see cref="Toggle"/>。控件自己负责位置（右下角）、动画和对话。
 /// </para>
 ///
 /// <para>
-/// ⚠️ 浮层**不做对话**（2026-10-18 定）：它只是"把问题带去完整页"的入口。
-/// 完整页有历史、工具调用、推荐卡片、用量统计，在这里重做一套必然两边行为不一致。
+/// ⚠️⚠️ 2026-10-30 改了用途（Nick 提）：「每次都要跳到 Hub AI 页，能不能直接在这里回」。
+/// 原来的浮层只收集问题再跳页面（2026-10-18 的决定）；现在**在浮层里直接回答**，
+/// 对话跑的是同一套 <see cref="AiChatService"/>（服务层一份逻辑，界面两套壳）。
+/// 关闭浮层不会丢对话，再打开可以接着问；「↗」仍然提供去完整页的出口。
 /// </para>
 /// </summary>
 public sealed partial class HubAiFlyout : UserControl
 {
+    /// <summary>浮层自己的一份对话上下文（不落盘、不进会话存档）。</summary>
+    private readonly AiChatService _chat = new();
+
+    private CancellationTokenSource? _cts;
+
+    private bool _busy;
+
+    /// <summary>正在追加文本的那个助手气泡（工具调用换气泡时指向新的）。</summary>
+    private TextBlock? _answer;
+
+    /// <summary>增量文本的缓冲：模型逐字返回，直接往 UI 塞会把排版线程打满。</summary>
+    private readonly StringBuilder _pending = new();
+    private readonly object _pendingGate = new();
+    private bool _flushQueued;
+
     public HubAiFlyout()
     {
         InitializeComponent();
@@ -69,39 +94,222 @@ public sealed partial class HubAiFlyout : UserControl
 
     private void Close_Click(object sender, RoutedEventArgs e) => Hide();
 
-    /// <summary>
-    /// 升到完整页。走 <c>Shell.NavigateTo</c> 而不是 <c>Frame.Navigate</c> ——
-    /// 后者只换内容区，导航栏的选中态还停在原处，看着像点错了。
-    /// </summary>
+    /// <summary>升到完整页（那一页有历史、工具轨迹、推荐卡与用量统计）。</summary>
     private void Expand_Click(object sender, RoutedEventArgs e)
     {
         Hide();
         App.MainWindow?.Shell.NavigateTo("hubai");
     }
 
-    private void Send_Click(object sender, RoutedEventArgs e) => Send();
+    private void Send_Click(object sender, RoutedEventArgs e)
+    {
+        // 生成中这颗按钮就是「停止」
+        if (_busy)
+        {
+            Stop();
+            return;
+        }
+
+        _ = AskAsync();
+    }
 
     private void Input_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key != Windows.System.VirtualKey.Enter) return;
         e.Handled = true;
-        Send();
+
+        if (_busy) return;
+        _ = AskAsync();
     }
 
-    /// <summary>
-    /// 发送 = 把问题交给完整页，不在浮层里做对话（2026-10-18）。
-    /// 完整页从 <c>HubAiPage.PendingQuestion</c> 取走之后会自动发出去。
-    /// </summary>
-    private void Send()
+    private void Stop()
     {
+        try { _cts?.Cancel(); } catch { }
+        SetStatus("已停止");
+    }
+
+    // ── 一轮问答 ─────────────────────────────────────────────────────────
+
+    private async Task AskAsync()
+    {
+        if (_busy) return;
+
         var text = Input.Text?.Trim();
         if (string.IsNullOrEmpty(text)) return;
 
-        Input.Text = string.Empty;
-        Hide();
+        // 配置先查：没模型 / 配置不全时给一条明路，别让用户盯着转圈
+        var model = AiModelStore.Active;
+        if (model is null)
+        {
+            AddBubble("还没有添加模型。请到「设置 → Hub AI → 模型服务」添加一个。", mine: false);
+            return;
+        }
 
-        Pages.HubAiPage.PendingQuestion = text;
-        App.MainWindow?.Shell.NavigateTo("hubai");
+        var cfg = model.ToConfig(SecretStore.Load(model.EffectiveSecretId));
+        if (!cfg.IsUsable)
+        {
+            AddBubble("当前模型的配置不完整。请到「设置 → Hub AI → 模型服务」填写服务地址与模型名称。", mine: false);
+            return;
+        }
+
+        Input.Text = string.Empty;
+        Intro.Visibility = Visibility.Collapsed;
+
+        AddBubble(text, mine: true);
+        _answer = AddBubble(string.Empty, mine: false);
+
+        _busy = true;
+        SetBusyUi(true);
+        SetStatus("正在读取本机情况…");
+
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        try
+        {
+            // 每次提问现采一次：缓存下来的机器状态隔一会就不准了，
+            // 而这一步只有几百毫秒（页面里也是这么做的）
+            var snapshot = await MachineProbe.CollectAsync();
+            token.ThrowIfCancellationRequested();
+
+            SetStatus("正在思考…");
+
+            await _chat.RunAsync(
+                cfg,
+                snapshot,
+                ActiveTools.Load(),
+                text,
+                onDelta: AppendDelta,
+                onStatus: status => Dispatch(() => SetStatus(status)),
+                onNewBubble: () => Dispatch(() => _answer = AddBubble(string.Empty, mine: false)),
+                ct: token);
+
+            FlushDelta();
+            SetStatus(string.Empty);
+
+            // 工具调用之后可能一句话都没有 —— 留个空气泡比留一片空白好懂
+            if (_answer is { Text.Length: 0 })
+                _answer.Text = "（这一轮没有文字回答，可以换个问法或到完整页看工具轨迹。）";
+        }
+        catch (OperationCanceledException)
+        {
+            FlushDelta();
+            SetStatus("已停止");
+        }
+        catch (Exception ex)
+        {
+            FlushDelta();
+            AppLog.Warn("hubai", "浮层对话失败：" + ex.Message);
+            AddBubble("出错了：" + ex.Message, mine: false);
+            SetStatus(string.Empty);
+        }
+        finally
+        {
+            _busy = false;
+            SetBusyUi(false);
+            _answer = null;
+
+            try { _cts?.Dispose(); } catch { }
+            _cts = null;
+        }
+    }
+
+    // ── 增量文本 ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 模型每吐几个字就回调一次。这里只往缓冲区里塞，
+    /// 由一次延迟的 UI 刷新统一写进去 —— 逐字改 TextBlock 会把排版线程打满。
+    /// </summary>
+    private void AppendDelta(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        lock (_pendingGate) _pending.Append(text);
+
+        if (_flushQueued) return;
+        _flushQueued = true;
+
+        Dispatch(FlushDelta);
+    }
+
+    /// <summary>把缓冲区里的字写进当前气泡并滚到底。</summary>
+    private void FlushDelta()
+    {
+        string chunk;
+        lock (_pendingGate)
+        {
+            if (_pending.Length == 0) return;
+            chunk = _pending.ToString();
+            _pending.Clear();
+        }
+        _flushQueued = false;
+
+        if (_answer is null) return;
+
+        _answer.Text += chunk;
+        ScrollToEnd();
+    }
+
+    // ── 界面小工具 ───────────────────────────────────────────────────────
+
+    /// <summary>加一条气泡。<paramref name="mine"/> = 用户自己说的（右对齐）。</summary>
+    private TextBlock AddBubble(string text, bool mine)
+    {
+        var line = new TextBlock
+        {
+            Text = text,
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+            Foreground = mine
+                ? ThemeBrush.Get(this, "TextOnAccentFillColorPrimaryBrush")
+                : ThemeBrush.Get(this, "TextFillColorPrimaryBrush"),
+        };
+
+        var bubble = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(12, 9, 12, 9),
+            MaxWidth = 310,
+            HorizontalAlignment = mine ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            Background = mine
+                ? ThemeBrush.Get(this, "AccentFillColorDefaultBrush")
+                : ThemeBrush.Get(this, "SubtleFillColorSecondaryBrush"),
+            Child = line,
+        };
+
+        Messages.Children.Add(bubble);
+        ScrollToEnd();
+        return line;
+    }
+
+    private void ScrollToEnd()
+    {
+        try { MessagesScroll.ChangeView(null, MessagesScroll.ScrollableHeight, null, disableAnimation: true); }
+        catch { }
+    }
+
+    private void SetStatus(string text)
+    {
+        StatusLine.Text = text ?? string.Empty;
+        StatusLine.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>生成中：发送键变「停止」，输入框仍可打字（方便先想下一句）。</summary>
+    private void SetBusyUi(bool busy)
+    {
+        SendGlyph.Glyph = busy ? "\uE71A" : "\uE724";       // ■ 停止 / ➤ 发送
+        ToolTipService.SetToolTip(SendButton, busy ? "停止生成" : "发送");
+    }
+
+    /// <summary>切回 UI 线程执行（增量回调来自后台线程）。</summary>
+    private void Dispatch(Action action)
+    {
+        var queue = DispatcherQueue;
+        if (queue is null) return;
+
+        if (queue.HasThreadAccess) action();
+        else queue.TryEnqueue(() => action());
     }
 
     // ── 动画 ─────────────────────────────────────────────────────────────

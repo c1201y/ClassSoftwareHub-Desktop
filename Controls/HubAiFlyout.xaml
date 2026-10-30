@@ -32,6 +32,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Grid Padding="16,12,8,10" ColumnSpacing="10">
@@ -66,21 +67,26 @@
                 </StackPanel>
             </Grid>
 
-            <ScrollViewer Grid.Row="1" Padding="16,0,16,6" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="MessagesScroll" Grid.Row="1" Padding="16,0,16,6" VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="Messages" Spacing="10">
-                    <Border Background="{ThemeResource HubAiBubbleBackground}" CornerRadius="10"
+                    <!-- 开场提示：第一次提问之后就撤掉，别一直占着本来就窄的地方 -->
+                    <Border x:Name="Intro" Background="{ThemeResource HubAiBubbleBackground}" CornerRadius="10"
                             Padding="14,11">
                         <StackPanel Spacing="6">
                             <TextBlock FontSize="12.5" TextWrapping="Wrap" LineHeight="20"
-                                       Text="描述你的需求，按回车后会在 Hub AI 页面继续。" />
+                                       Text="直接把问题写在这里，回答也在这里出。" />
                             <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                                       Text="那里会读取本机硬件与存储概况，再给出建议。全程只读。" />
+                                       Text="会读取本机硬件与存储概况再回答，全程只读。" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </ScrollViewer>
 
-            <Grid Grid.Row="2" Padding="12,6,12,12" ColumnSpacing="8">
+            <!-- 生成过程中的状态（"正在读取本机情况""正在检索工具"）—— 没有它用户不知道是不是卡住了 -->
+            <TextBlock x:Name="StatusLine" Grid.Row="2" Margin="16,0,16,6" FontSize="11.5"
+                       Opacity="0.6" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+
+            <Grid Grid.Row="3" Padding="12,6,12,12" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -88,10 +94,12 @@
 
                 <TextBox x:Name="Input" PlaceholderText="描述你的需求" KeyDown="Input_KeyDown" />
 
-                <Button Grid.Column="1" Padding="11,6"
+                <!-- 一颗按钮两种用途（2026-10-30）：空闲时发消息，生成中变成「停止」。
+                     380 宽的浮层里再塞一颗独立按钮，输入框就没法用了。 -->
+                <Button x:Name="SendButton" Grid.Column="1" Padding="11,6"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="Send_Click" ToolTipService.ToolTip="发送">
-                    <FontIcon Glyph="&#xE724;" FontSize="13" />
+                    <FontIcon x:Name="SendGlyph" Glyph="&#xE724;" FontSize="13" />
                 </Button>
             </Grid>
         </Grid>
