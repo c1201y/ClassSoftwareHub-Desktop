@@ -119,8 +119,12 @@ public sealed partial class HashCheckWindow : Window
             {
                 p.IsResizable = true;
                 p.IsMaximizable = false;
-                p.IsMinimizable = true;
+                p.IsMinimizable = false;
             }
+
+            // 标题栏只留「关闭」（2026-10-30 Nick 要）：小浮窗最小化没有意义、
+            // 最大化已被 presenter 关掉，两颗留在那里只是碍眼。
+            WindowChrome.HideMinimizeMaximizeButtons(hwnd);
 
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
@@ -210,7 +214,9 @@ public sealed partial class HashCheckWindow : Window
 
             // 32 = 自绘标题栏那一行；4 / 20 = ScrollViewer 上下 Padding；16 = 底部留一点呼吸
             var h = 32 + 4 + contentHeight + 20 + 16;
-            h = Math.Clamp(h, 460, Math.Max(460, maxH));
+            // 下限只用来防止极端值 —— 原来写 460，内容只有 348 时被抬到 460，
+            // 底部因此多出四十来像素空白（2026-10-30 Nick 第二次报）。
+            h = Math.Clamp(h, 360, Math.Max(360, maxH));
 
             _appWindow.ResizeClient(new SizeInt32(
                 (int)Math.Round(DefaultWidthDip * scale), (int)Math.Round(h * scale)));

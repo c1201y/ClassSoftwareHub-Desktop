@@ -172,6 +172,47 @@ public static class WindowChrome
     }
 
     /// <summary>
+    /// 去掉标题栏上的「最小化」与「最大化 / 还原」两颗按钮，只留关闭（2026-10-30 Nick 要）。
+    ///
+    /// <para>
+    /// WinUI 的 <c>AppWindowTitleBar</c> 没有"逐颗隐藏"的 API（只有整体 ExtendsContentIntoTitleBar），
+    /// 所以只能改窗口样式位：系统看到 <c>WS_MINIMIZEBOX</c> / <c>WS_MAXIMIZEBOX</c> 不在，
+    /// 就不画那两颗按钮了。⚠️ 只适用于**小浮窗**——缩放/最大化对它们没有意义；
+    /// 主窗口、工具窗那种要能最大化的窗口别调。
+    /// </para>
+    /// </summary>
+    /// <returns>样式改成功与否（改不动只是按钮还在，不影响用）。</returns>
+    public static bool HideMinimizeMaximizeButtons(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+
+        try
+        {
+            var remove = WsMinimizeBox | WsMaximizeBox;
+
+            if (IntPtr.Size == 8)
+            {
+                var style = GetWindowLongPtr64(hwnd, GwlStyle).ToInt64();
+                _ = SetWindowLongPtr64(hwnd, GwlStyle, new IntPtr(style & ~(long)remove));
+            }
+            else
+            {
+                var style = GetWindowLong32(hwnd, GwlStyle);
+                _ = SetWindowLong32(hwnd, GwlStyle, style & ~remove);
+            }
+
+            // 通知系统重画非客户区，否则按钮要等下一次尺寸变化才消失
+            _ = SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 去掉窗口那圈边框；<paramref name="rounded"/> 决定四角是圆角还是直角，
     /// <paramref name="dark"/> 告诉系统"这个窗口是深色的" —— 不告诉它的话，
     /// 深色界面的无边框窗口外边会被画一圈**浅色/白色**的框（就是用 SystemBackdrop 那套材质时最明显）。
