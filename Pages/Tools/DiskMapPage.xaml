@@ -35,7 +35,7 @@
                 <StackPanel Spacing="2">
                     <TextBlock Text="磁盘空间" FontSize="28" FontWeight="Bold" />
                     <TextBlock x:Name="SubtitleText" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="按占用面积画出目录结构，单击方块进入下一层，单击上方路径返回。" />
+                               Text="单击方块进入下一层，单击路径返回。" />
                 </StackPanel>
 
                 <ProgressRing x:Name="BusyRing" Grid.Column="1" Width="22" Height="22"

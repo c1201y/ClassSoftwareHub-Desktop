@@ -36,7 +36,7 @@
                 <StackPanel Spacing="2">
                     <TextBlock Text="化学方程式配平" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="左边放反应物、右边放生成物，化学式从元素周期表点选。系数按元素守恒自动计算。" />
+                               Text="左边反应物、右边生成物，系数自动配平。" />
                 </StackPanel>
 
                 <Button x:Name="ExampleButton" Grid.Column="1" Content="载入示例"
@@ -117,7 +117,7 @@
             </ScrollViewer>
 
             <TextBlock Grid.Row="3" FontSize="11.5" Opacity="0.45" TextWrapping="Wrap"
-                       Text="配平依据元素守恒（只算元素种类与原子个数，不含电荷）。反应条件只影响书写样式，不参与计算。" />
+                       Text="只按元素守恒配平，不含电荷。" />
         </Grid>
         </Grid>
 

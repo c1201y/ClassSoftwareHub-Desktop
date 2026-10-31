@@ -11,83 +11,23 @@ namespace ClassSoftwareHub.Desktop.Pages;
 /// 实验性功能总览页：把「还不成熟、先放着试」的功能列一遍。
 /// 版式跟内置工具页一致（内容列 960、两列卡片、页脚说明卡），Nick 2026-09-26 要求。
 ///
-/// ⚠️ 往这儿加功能要动三处：① 下面 <see cref="All"/> 加一条；② <c>ShellPage.xaml</c> 的
-///    「实验性功能」分组里加一个子项（带同一个 tag）；③ <c>ShellPage.NavigateTagCore</c> 加一个 case。
-///    少一处就会出现「卡片点不动」或「点进去没高亮」。
+/// <para>
+/// 卡片与左侧导航子项**共用 <see cref="ExperimentalFeatureCatalog.All"/> 一份清单**
+/// （2026-11-01 收编）。加一项只改那张表 + <c>NavigateTagCore</c> 的 case。
+/// ⛔ 别在本页再写一份列表：以前两边各写一份，转正的功能从导航删了、这里还留着三张旧卡。
+/// </para>
 /// </summary>
 public sealed partial class ExperimentalPage : Page
 {
-    private static readonly List<ExperimentalFeature> All = new()
-    {
-        new ExperimentalFeature
-        {
-            Id = "machinecheck", Name = "本机核实",
-            Desc = "对照 Windows 的已安装程序记录，看清单里的软件本机装没装",
-            Glyph = "\uE7F4", Tag = "machinecheck"
-        },
-        new ExperimentalFeature
-        {
-            Id = "easiguard", Name = "白板专杀",
-            Desc = "到达设定时间点后，结束希沃白板5 后台滞留的残留进程",
-            Glyph = "\uEA99", Tag = "easiguard"
-        },
-        new ExperimentalFeature
-        {
-            Id = "procguard", Name = "程序专杀",
-            Desc = "为指定程序单独设定结束时间点，到点结束其后驻留进程",
-            Glyph = "\uE7E8", Tag = "procguard"
-        },
-        new ExperimentalFeature
-        {
-            Id = "uninstaller", Name = "应用卸载",
-            Desc = "扫描本机已安装的软件，可直接卸载其中的任意一款",
-            Glyph = "\uE74D", Tag = "uninstaller"
-        },
-        new ExperimentalFeature
-        {
-            Id = "appdata", Name = "AppData 管理",
-            Desc = "先看清是哪些文件夹在占地方，再把能安全清理的缓存挑出来",
-            Glyph = "\uE8B7", Tag = "appdata"
-        },
-        new ExperimentalFeature
-        {
-            Id = "startup", Name = "开机启动项",
-            Desc = "查看开机时会自动启动的程序，并逐个关掉",
-            Glyph = "\uE945", Tag = "startup"
-        },
-        new ExperimentalFeature
-        {
-            Id = "repair", Name = "系统修复",
-            Desc = "用 Windows 自带命令修复系统文件、组件存储与网络",
-            Glyph = "\uE7EF", Tag = "repair"
-        },
-        new ExperimentalFeature
-        {
-            Id = "systemtweaks", Name = "系统优化",
-            Desc = "任务栏、资源管理器、外观这些整机设置，选中后一次授权统一应用",
-            Glyph = "\uE713", Tag = "systemtweaks"
-        },
-        new ExperimentalFeature
-        {
-            Id = "sysfeatures", Name = "系统功能",
-            Desc = "查看并开关休眠与快速启动，体检分页文件（虚拟内存）当前配置",
-            Glyph = "\uE7E8", Tag = "sysfeatures"
-        },
-        // ⚠️ 原来是四项，第三项是「虚拟键盘」—— 该功能 2026-10-09 整体下线，卡片一并删除
-        //    （导航分组里的子项、NavigateTagCore 的 case 也同步删了）。
-        // ⚠️「自动关机」2026-10-12 转正搬去「内置工具」（Nick 定）——
-        //    入口改由 Data/ToolDef.cs 的 ToolCatalog 提供，这里连同导航子项、case 一起删掉。
-        // 日志查看已不算实验功能（Nick 2026-10-02）：入口挪到 设置 → 诊断。
-    };
-
     public ExperimentalPage()
     {
         InitializeComponent();
 
         // 两列板式（见 .xaml：照搬首页「快速开始」）：偶数序号进左列、奇数进右列。
         // ⚠️ 顺序仍是「从上往下读」，跟一个 GridView 两列排是一样的效果。
-        CardColumnLeft.ItemsSource = All.Where((_, i) => i % 2 == 0).ToList();
-        CardColumnRight.ItemsSource = All.Where((_, i) => i % 2 == 1).ToList();
+        var all = ExperimentalFeatureCatalog.All;
+        CardColumnLeft.ItemsSource = all.Where((_, i) => i % 2 == 0).ToList();
+        CardColumnRight.ItemsSource = all.Where((_, i) => i % 2 == 1).ToList();
     }
 
     // 卡片整张可点（首页同款：容器 chrome 关掉、反馈由卡片自己给，见 App.xaml 的 CshNavCardStyle）

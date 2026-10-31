@@ -34,17 +34,15 @@
                         <TextBlock Text="教室喊话" FontSize="28" FontWeight="Bold" VerticalAlignment="Center" />
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="打开时默认显示" FontSize="12" Opacity="0.65" VerticalAlignment="Center" />
+                            <TextBlock Text="默认显示" FontSize="12" Opacity="0.65" VerticalAlignment="Center" />
                             <ComboBox x:Name="DefaultViewCombo" MinWidth="110" SelectionChanged="DefaultView_Changed"
-                                      ToolTipService.ToolTip="下次从导航栏点进这一页时先停在哪一页">
+                                      ToolTipService.ToolTip="再次进入本页时默认显示的分页">
                                 <ComboBoxItem Content="接收" Tag="receive" />
                                 <ComboBoxItem Content="发送" Tag="send" />
                             </ComboBox>
                         </StackPanel>
                     </Grid>
 
-                    <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="打开接收后，同网段的电脑可直接发过来（零延迟、不经过服务器），其他情况走服务器，最长一个检查间隔送达。" />
                 </StackPanel>
 
                 <!-- 分页：WinUI 原生 SelectorBar
@@ -62,14 +60,14 @@
                     <controls:SettingsCard Header="接收喊话">
                         <controls:SettingsCard.Description>
                             <TextBlock x:Name="StatusText" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                       Text="未开启，打开后开始接收消息。" />
+                                       Text="未开启。" />
                         </controls:SettingsCard.Description>
                         <ToggleSwitch x:Name="EnableToggle" MinWidth="0" OnContent="开" OffContent="关"
                                       Toggled="EnableToggle_Toggled" />
                     </controls:SettingsCard>
 
                     <controls:SettingsCard Header="本机标识"
-                                           Description="例如「高28班」「三楼办公室」。同网段的电脑会在列表里看到它。">
+                                           Description="例如「高28班」。同网段会看到这个名字。">
                         <TextBox x:Name="LabelBox" MinWidth="220" MaxLength="24" PlaceholderText="例如：高28班"
                                  TextChanged="Label_Changed" />
                     </controls:SettingsCard>
@@ -85,7 +83,7 @@
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="本机配对码" FontSize="14" />
                                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                               Text="把这个码告诉要发消息的人；每台电脑固定一个，换机器才会变。" />
+                                               Text="发给要发消息的人，每台固定一个。" />
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
@@ -114,7 +112,7 @@
                     </Border>
 
                     <controls:SettingsCard Header="局域网通道"
-                                           Description="同网段的电脑互相发现、直接送达，不经过服务器；需要放行防火墙。">
+                                           Description="同网段直连，需要放行防火墙。">
                         <ToggleSwitch x:Name="LanToggle" MinWidth="0" OnContent="开" OffContent="关"
                                       Toggled="Lan_Changed" />
                     </controls:SettingsCard>
@@ -125,7 +123,7 @@
                     <controls:SettingsCard x:Name="FirewallCard" Header="局域网通道被 Windows 防火墙拦截">
                         <controls:SettingsCard.Description>
                             <TextBlock x:Name="FirewallDesc" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                       Text="修复需要一次管理员确认，完成后不会再询问。" />
+                                       Text="需要一次管理员确认。" />
                         </controls:SettingsCard.Description>
                         <Button x:Name="FirewallButton" Content="修复" Click="Firewall_Click" />
                     </controls:SettingsCard>
@@ -139,9 +137,9 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="谁保存了本机配对码" FontSize="14" />
+                                    <TextBlock Text="配对码使用记录" FontSize="14" />
                                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                               Text="同一局域网内的电脑在保存本机配对码时会登记到这里。删除只是把这条记录移除，对方手里仍可能留着这个码；发现异常请联系对方或更换本机标识。" />
+                                               Text="删除只移除本地记录，对方可能仍留有该码。" />
                                 </StackPanel>
                                 <Button x:Name="ClearBindersButton" Grid.Column="1" Content="全部清空"
                                         Click="ClearBinders_Click" VerticalAlignment="Top" />
@@ -178,7 +176,7 @@
                         </StackPanel>
                     </Border>
 
-                    <controls:SettingsCard Header="多久检查一次消息" Description="只影响服务器通道；局域网直达不受它影响。">
+                    <controls:SettingsCard Header="消息检查间隔" Description="只影响服务器通道。">
                         <ComboBox x:Name="IntervalCombo" MinWidth="126" SelectionChanged="Interval_Changed">
                             <ComboBoxItem Content="15 秒" Tag="15" />
                             <ComboBoxItem Content="30 秒" Tag="30" />
@@ -186,19 +184,19 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard Header="不响提示音" Description="安静模式：只弹窗，不出声。">
+                    <controls:SettingsCard Header="静音提示" Description="只弹窗，不出声。">
                         <ToggleSwitch x:Name="QuietToggle" MinWidth="0" OnContent="开" OffContent="关"
                                       Toggled="Quiet_Changed" />
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard Header="把内容念出来"
-                                           Description="用系统中文语音朗读；系统没有中文语音时自动跳过。">
+                    <controls:SettingsCard Header="朗读内容"
+                                           Description="系统无中文语音时自动跳过。">
                         <ToggleSwitch x:Name="SpeakToggle" MinWidth="0" OnContent="开" OffContent="关"
                                       Toggled="Speak_Changed" />
                     </controls:SettingsCard>
 
-                    <controls:SettingsCard Header="出现方式"
-                                           Description="文字怎么出现、怎么退场；「不带动画」用于不喜欢动画的场合。">
+                    <controls:SettingsCard Header="显示方式"
+                                           Description="不带动画适合不喜欢动画的场合。">
                         <ComboBox x:Name="AnimationCombo" MinWidth="132" SelectionChanged="Animation_Changed">
                             <ComboBoxItem Content="打字机" Tag="typewriter" />
                             <ComboBoxItem Content="按行交错划入" Tag="slide" />
@@ -236,7 +234,7 @@
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="局域网里的电脑" FontSize="14" />
                                     <TextBlock x:Name="PeerHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                               Text="局域网通道未开启。请到「接收」页打开「局域网通道」，同一网段的电脑才会出现在这里。" />
+                                               Text="局域网通道未开启。" />
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="刷新" Click="RefreshPeers_Click" VerticalAlignment="Center" />
                             </Grid>
@@ -277,7 +275,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="TargetCodeBox" Header="或者直接填对方的配对码" MaxLength="6"
+                                <TextBox x:Name="TargetCodeBox" Header="直接填配对码" MaxLength="6"
                                          PlaceholderText="6 位数字" />
                                 <Button x:Name="SavePeerButton" Grid.Column="1" Content="保存" Click="SavePeer_Click"
                                         VerticalAlignment="Bottom" Padding="14,5"
@@ -322,7 +320,7 @@
                             <Grid>
                                 <TextBox x:Name="ContentBox" Header="内容" AcceptsReturn="True" MinHeight="88"
                                          MaxLength="100" TextWrapping="Wrap" TextChanged="Content_Changed"
-                                         PlaceholderText="要展示的文字，例如：请李明同学到办公室拿东西" />
+                                         PlaceholderText="例如：请李明同学到办公室" />
                                 <TextBlock x:Name="CountText" Text="0 / 100" FontSize="11.5" Opacity="0.6"
                                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,6" />
                             </Grid>

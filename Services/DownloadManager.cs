@@ -69,12 +69,13 @@ public enum DownloadState
 public sealed class DownloadTask : INotifyPropertyChanged
 {
     public DownloadTask(string url, string? suggestedName, string? title,
-        DownloadKind kind = DownloadKind.File, string note = "")
+        DownloadKind kind = DownloadKind.File, string note = "", string? directory = null)
     {
         Url = url;
         SuggestedName = suggestedName;
         Kind = kind;
         Note = note;
+        Dir = directory;              // 空 = 走 DownloadService.SaveDir（用户设的默认目录 / 系统下载）
         Title = string.IsNullOrWhiteSpace(title)
             ? DownloadService.ResolveFileName(url, suggestedName)
             : title!.Trim();
@@ -93,6 +94,13 @@ public sealed class DownloadTask : INotifyPropertyChanged
 
     /// <summary>普通文件 / 更新包（见 <see cref="DownloadKind"/>）。</summary>
     public DownloadKind Kind { get; }
+
+    /// <summary>
+    /// 这一条任务存到哪个文件夹（<c>null</c> = 按默认：用户设的下载文件夹，没设就是系统「下载」）。
+    /// 详情页「下载到其他文件夹…」会显式给一个 —— 那是一次性的选择，不改默认。
+    /// 重试要沿用同一个目录，否则用户会以为「重试跑丢了之前选的路径」。
+    /// </summary>
+    public string? Dir { get; }
 
     /// <summary>卡片标题下面那行固定说明（更新包用；普通下载为空则整行不占位）。</summary>
     public string Note { get; }
@@ -491,9 +499,9 @@ public sealed class DownloadManager
     /// ⚠️ **必须在 UI 线程调用**：内部用 <see cref="Progress{T}"/> 捕获当前的同步上下文，
     /// 好在 UI 线程上更新 <see cref="Tasks"/>（ObservableCollection 不能跨线程改）。
     /// </summary>
-    public DownloadTask Start(string url, string? suggestedName = null, string? title = null)
+    public DownloadTask Start(string url, string? suggestedName = null, string? title = null, string? directory = null)
     {
-        var task = new DownloadTask(url, suggestedName, title);
+        var task = new DownloadTask(url, suggestedName, title, directory: directory);
         Tasks.Insert(0, task);        // 新任务排最前，用户一眼看到刚点的那个
         Changed?.Invoke();
         _ = RunAsync(task);
@@ -521,7 +529,7 @@ public sealed class DownloadManager
         // 「Parameter 'url'」并把失败文案覆盖成「下载失败」。重来请回 AppData 管理页重新勾选。
         if (task.IsCleanup) return;
         Remove(id);
-        Start(task.Url, task.SuggestedName, task.Title);
+        Start(task.Url, task.SuggestedName, task.Title, task.Dir);
     }
 
     // ── 外部托管任务（更新包）────────────────────────────────────────
@@ -637,7 +645,7 @@ public sealed class DownloadManager
         try
         {
             var file = await DownloadService.DownloadAsync(
-                task.Url, task.SuggestedName, null, progress, task.Cancellation.Token);
+                task.Url, task.SuggestedName, task.Dir, progress, task.Cancellation.Token);
 
             task.FileName = file.FileName;
             task.Path = file.Path;

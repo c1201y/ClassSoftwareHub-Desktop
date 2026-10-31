@@ -88,6 +88,17 @@ public sealed class DownloadItem
         Kind == DownloadKind.File && Core.GithubMirror.IsMirrorableUrl(Url)
             ? Microsoft.UI.Xaml.Visibility.Visible
             : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    /// <summary>
+    /// 能直链下载的用可拆分的按钮（右边那半是「下载到其他文件夹…」）；网盘 / 官网只能跳转，
+    /// 给一颗普通按钮 —— 跳转项底下挂一个"存到哪儿"的菜单是没有意义的（2026-11-01）。
+    /// </summary>
+    public Microsoft.UI.Xaml.Visibility FileActionVisibility =>
+        Kind == DownloadKind.File ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    /// <summary>上一条的反面：跳转类走这颗普通按钮。</summary>
+    public Microsoft.UI.Xaml.Visibility JumpActionVisibility =>
+        Kind == DownloadKind.File ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 }
 
 /// <summary>一个软件（字段与站点 data/index.ts 的 PICK 白名单一致）。</summary>

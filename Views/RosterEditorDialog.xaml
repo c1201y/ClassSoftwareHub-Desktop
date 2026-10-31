@@ -37,7 +37,7 @@
             <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock x:Name="CountText" FontSize="13" FontWeight="Bold" Text="共 0 人" />
                 <TextBlock FontSize="11.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="名字直接改：单击即可编辑，按回车或点别处生效；右侧按键移除这一行；「添加姓名」在末尾加人。" />
+                           Text="单击名字即可编辑，右侧按键移除该行。" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <!-- ⚠️ 2026-09-29 Nick 抓到：「只有删除没有增加，只删不增是吧？」
@@ -106,7 +106,7 @@
         <StackPanel Grid.Row="2" Spacing="6">
             <TextBlock x:Name="EmptyHint" FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
                        Visibility="Collapsed"
-                       Text="名单是空的。可以单击上方「添加姓名」逐个输入，也可以关闭本窗口后单击「导入名单」选择 Excel（.xlsx）或 txt / csv 文件；不清楚该怎么做，可先单击「示例名单」看一份现成的。" />
+                       Text="名单为空，可逐个添加或导入 Excel / txt / csv。" />
             <TextBlock x:Name="ToastText" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
         </StackPanel>
     </Grid>

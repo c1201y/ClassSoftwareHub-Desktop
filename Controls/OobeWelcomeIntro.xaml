@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClassSoftwareHub.Desktop.Controls.OobeWelcomeIntro"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsHitTestVisible="False">
+
+    <!--
+      欢迎页开场（2026-10-31，按需求给的 12 格分镜重做）。整段是一次性的：
+
+        空窗 → 倾斜跑马灯（软件功能名）向左滚出 →
+        「Fast, Useful & Convenient for class」逐字从左曲线飞入 →
+        字母高频乱码、部分消失，收成 ClassSoftwareHub →
+        品牌名曲线下移，图标 / 欢迎语 / 版本号围上来。
+
+      ⛔ 收拢（字距 + 字位收紧）那套已经删掉了，别加回来。
+      ⛔ 跑马灯、字母、最终排版都在这一层里画，页面只挂这个控制、不再有自己的标题元素。
+    -->
+
+    <Grid x:Name="Stage" Background="Transparent">
+        <!-- 第 2–3 幕：倾斜跑马灯。整层转 -20°，行内文字沿自身 x 轴向左滚。 -->
+        <Canvas x:Name="MarqueeCanvas" Opacity="0">
+            <Grid x:Name="MarqueeLayer" RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <CompositeTransform x:Name="MarqueeShift" Rotation="-20" />
+                </Grid.RenderTransform>
+                <StackPanel x:Name="MarqueeRows" VerticalAlignment="Center" Spacing="10" />
+            </Grid>
+        </Canvas>
+
+        <!-- 第 4–5 幕：逐字飞入 / 乱码。每个字是**钉死宽度**的 TextBlock、按累积字宽摆位：
+             乱码换字不会改变行宽，整行不会跟着抖（StackPanel 自然排布会抖）。 -->
+        <Canvas x:Name="LineCanvas" Opacity="0">
+            <Canvas x:Name="SloganLine" />
+        </Canvas>
+
+        <!-- 第 6 幕的最终排版。品牌名靠 WordmarkShift 先抬到画面中线，再落回这里。 -->
+        <!-- ⛔ 品牌名是**逐字**摆的（跟中线那行同一套字宽算法）：整串 TextBlock 排版带 kerning，
+             和中线上的逐字排版会差几个像素，交接时就会叠出一层双影（踩过）。 -->
+        <StackPanel x:Name="FinalStack" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Image x:Name="Logo" Width="84" Height="84" Stretch="Uniform"
+                   HorizontalAlignment="Center" Opacity="0"
+                   RenderTransformOrigin="0.5,0.5">
+                <Image.RenderTransform>
+                    <CompositeTransform x:Name="LogoShift" />
+                </Image.RenderTransform>
+            </Image>
+
+            <TextBlock x:Name="WelcomeLine" Text="欢迎使用(。・∀・)/～"
+                       FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"
+                       Margin="0,14,0,0" Opacity="0">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform x:Name="WelcomeShift" />
+                </TextBlock.RenderTransform>
+            </TextBlock>
+
+            <StackPanel x:Name="Wordmark" Orientation="Horizontal"
+                        HorizontalAlignment="Center" Margin="0,16,0,0" Opacity="0"
+                        RenderTransformOrigin="0.5,0.5">
+                <StackPanel.RenderTransform>
+                    <CompositeTransform x:Name="WordmarkShift" />
+                </StackPanel.RenderTransform>
+            </StackPanel>
+
+            <TextBlock x:Name="VersionLine" FontSize="11.5" HorizontalAlignment="Center"
+                       Margin="0,8,0,0" Opacity="0"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform x:Name="VersionShift" />
+                </TextBlock.RenderTransform>
+            </TextBlock>
+        </StackPanel>
+    </Grid>
+</UserControl>

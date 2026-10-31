@@ -5,6 +5,7 @@ using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Services.Diagnostics;
 using ClassSoftwareHub.Desktop.Services.HubAi;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -65,6 +66,29 @@ public sealed partial class HubAiFlyout : UserControl
     private string _answerRendered = "";
 
     private bool _busy;
+
+    /// <summary>
+    /// 「正在思考」那个占位气泡（2026-10-31 Nick：长时间思考时卡片里毫无反应）。
+    /// <para>
+    /// 放在助手气泡**下面**、正文一到就撤掉 —— 它是独立控件而不是塞进气泡内部，
+    /// 因为正文是 <see cref="MarkdownText.Apply"/> 每次整块重绘的，塞进去会被一起清掉。
+    /// </para>
+    /// </summary>
+    private Border? _thinkingBubble;
+
+    private ProgressRing? _thinkingRing;
+
+    private TextBlock? _thinkingText;
+
+    /// <summary>
+    /// 每秒刷新一次"已等 N 秒"。
+    /// ⛔ 必须存成字段：局部变量建出来的 <see cref="DispatcherQueueTimer"/> 会被 GC 收走，
+    /// 收走之后**不再 tick**，界面就永远停在"正在思考 · 2 秒"（项目里踩过这个坑）。
+    /// </summary>
+    private DispatcherQueueTimer? _thinkingTimer;
+
+    /// <summary>开始等待的时刻（<see cref="Environment.TickCount64"/>，毫秒）。</summary>
+    private long _thinkingSince;
 
     /// <summary>
     /// 当前页面的现场数据生成器，由宿主页面在构造时挂上（2026-10-30 二版）。
@@ -200,6 +224,9 @@ public sealed partial class HubAiFlyout : UserControl
         _answerPanel = null;
         _answerRendered = "";
 
+        HideThinking();
+        ShowStatusLine(null);
+
         Messages.Children.Clear();
         Intro.Visibility = Visibility.Visible;
 
@@ -216,13 +243,23 @@ public sealed partial class HubAiFlyout : UserControl
     /// ⚠️ 走运行时而不是自己收增量：这样浮层与页面永远是同一份内容，
     /// 也才能做到"页面那边跑、浮层这边看得到"。
     /// </para>
+    /// <para>
+    /// 2026-10-31：① 正文一到就撤掉「正在思考」气泡；
+    /// ② 有正文但又在等工具时，阶段说明改到底部那行小字上（两处不会同时出现）。
+    /// </para>
     /// </summary>
     private void RenderLive()
     {
-        if (_runtime is null || _answerPanel is null) return;
+        if (_runtime is null) return;
 
         var body = _runtime.LiveBody;
-        if (body == _answerRendered) return;
+
+        if (body.Length > 0) HideThinking();
+        else if (_busy) ShowThinking();          // 幂等：还空着就一直挂着
+
+        ShowStatusLine(body.Length > 0 ? _runtime.LiveStatus : null);
+
+        if (_answerPanel is null || body == _answerRendered) return;
 
         _answerRendered = body;
         MarkdownText.Apply(_answerPanel, body, ThemeBrush.Get(this, "TextFillColorPrimaryBrush"),
@@ -287,6 +324,10 @@ public sealed partial class HubAiFlyout : UserControl
         _busy = true;
         SetBusyUi(true);
 
+        // 从这里到第一个字回来之间可能是几十秒（读本机概况 + 等模型首包），
+        // 期间界面上原本什么都没有，看着就像卡死了 —— 先挂上「正在思考」
+        ShowThinking();
+
         try
         {
             // 每次现采一次本机概况：缓存下来的隔一会就不准，这一步也只要几百毫秒
@@ -304,6 +345,8 @@ public sealed partial class HubAiFlyout : UserControl
         catch (Exception ex)
         {
             AppLog.Warn("hubai", "浮层提问失败：" + ex.Message);
+            HideThinking();
+            ShowStatusLine(null);
             AddBubble("出错了：" + ex.Message, mine: false);
             _busy = false;
             SetBusyUi(false);
@@ -327,6 +370,8 @@ public sealed partial class HubAiFlyout : UserControl
         {
             _busy = false;
             SetBusyUi(false);
+            HideThinking();
+            ShowStatusLine(null);
         }
 
         if (error is not null)
@@ -450,6 +495,129 @@ public sealed partial class HubAiFlyout : UserControl
     {
         SendGlyph.Glyph = busy ? "\uE71A" : "\uE724";       // ■ 停止 / ➤ 发送
         ToolTipService.SetToolTip(SendButton, busy ? "停止生成" : "发送");
+    }
+
+    // ── 「正在思考」 ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 挂上「正在思考 · N 秒」气泡（幂等，已经在就不重复建）。
+    ///
+    /// <para>
+    /// 2026-10-31 Nick：「假如 AI 思考的很久的话，那这个卡片里是没有任何反应的」。
+    /// 原来从发出去到第一个字回来之间完全是空白，看不出是"在想"还是"卡了"。
+    /// </para>
+    /// <para>
+    /// 用原生 <see cref="ProgressRing"/> —— 转圈本身就是"它还活着"的证据，再加上秒数，
+    /// 用户能判断是等一会儿还是按停止。⛔ 不自己画三点跳动那种假动画（那是自造控件）。
+    /// </para>
+    /// </summary>
+    private void ShowThinking()
+    {
+        if (_thinkingBubble is not null)
+        {
+            UpdateThinkingText();
+            return;
+        }
+
+        _thinkingRing = new ProgressRing
+        {
+            Width = 16,
+            Height = 16,
+            IsActive = true,
+            IsIndeterminate = true,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        _thinkingText = new TextBlock
+        {
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = ThemeBrush.Get(this, "TextFillColorSecondaryBrush"),
+        };
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        row.Children.Add(_thinkingRing);
+        row.Children.Add(_thinkingText);
+
+        _thinkingBubble = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(12, 9, 12, 9),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = ThemeBrush.Get(this, "SubtleFillColorSecondaryBrush"),
+            Child = row,
+        };
+
+        Messages.Children.Add(_thinkingBubble);
+
+        _thinkingSince = Environment.TickCount64;
+        UpdateThinkingText();
+        StartThinkingTimer();
+        ScrollToEnd();
+    }
+
+    /// <summary>撤掉「正在思考」气泡并停表。</summary>
+    private void HideThinking()
+    {
+        try { _thinkingTimer?.Stop(); } catch { }
+
+        if (_thinkingBubble is not null)
+        {
+            Messages.Children.Remove(_thinkingBubble);
+            _thinkingBubble = null;
+        }
+
+        _thinkingRing = null;
+        _thinkingText = null;
+    }
+
+    /// <summary>
+    /// 每秒刷新一次文案。
+    /// <para>
+    /// 优先用运行时的阶段说明（「正在统计目录占用，可能需要一会儿」）——
+    /// 那比笼统的"思考"更能解释为什么慢；没有阶段说明时才退回"正在思考"。
+    /// </para>
+    /// </summary>
+    private void UpdateThinkingText()
+    {
+        if (_thinkingText is null) return;
+
+        var status = _runtime?.LiveStatus;
+        if (string.IsNullOrWhiteSpace(status) || status == "思考中") status = "正在思考";
+
+        // 补一个省略号，读起来是"进行中"而不是一个静止的标签
+        if (!status.EndsWith('…') && !status.EndsWith('.')) status += "…";
+
+        var seconds = (int)((Environment.TickCount64 - _thinkingSince) / 1000);
+        _thinkingText.Text = seconds >= 1 ? $"{status} {seconds} 秒" : status;
+    }
+
+    private void StartThinkingTimer()
+    {
+        var queue = DispatcherQueue;
+        if (queue is null) return;
+
+        _thinkingTimer ??= queue.CreateTimer();
+        _thinkingTimer.Interval = TimeSpan.FromSeconds(1);
+
+        // ⛔ 先减再加：重复调用 ShowThinking 时不能挂上两个处理函数
+        _thinkingTimer.Tick -= OnThinkingTick;
+        _thinkingTimer.Tick += OnThinkingTick;
+        _thinkingTimer.Start();
+    }
+
+    private void OnThinkingTick(DispatcherQueueTimer sender, object args) => UpdateThinkingText();
+
+    /// <summary>
+    /// 底部那行阶段小字（有正文、又在等工具时才用）。
+    /// 与「正在思考」气泡**互斥**：空正文时气泡说话，已有正文时这行说话，不会同时出现。
+    /// </summary>
+    private void ShowStatusLine(string? status)
+    {
+        var text = status ?? string.Empty;
+
+        if (StatusLine.Text != text) StatusLine.Text = text;
+        StatusLine.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>切回 UI 线程执行（运行时回调来自后台线程）。</summary>

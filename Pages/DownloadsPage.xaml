@@ -144,7 +144,7 @@
                     <TextBlock Text="当前无下载任务" FontSize="14" FontWeight="SemiBold" Opacity="0.75"
                                HorizontalAlignment="Center" />
                     <TextBlock MaxWidth="440" TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Opacity="0.6"
-                               Text="在「软件下载」中打开任意软件并开始下载，任务将显示在此处。软件更新选择「后台下载」时同样显示于此。下载完成的安装包可在此直接安装，压缩包可在此解压。下载期间可继续使用其他功能，左侧入口显示进行中的任务数。" />
+                               Text="在软件下载页开始下载后，任务会显示在这里。" />
                 </StackPanel>
 
                 <!-- 底部：左边是页面级操作，右边是「完成后自动删除」开关。

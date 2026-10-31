@@ -181,8 +181,36 @@
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                                                         VerticalAlignment="Center">
                                                 <!-- 文案随链接类型变：直链写「下载」，网盘写「前往网盘」、
-                                                     官网下载页写「前往官网」（Data/DownloadLinkKind.cs） -->
+                                                     官网下载页写「前往官网」（Data/DownloadLinkKind.cs）。
+
+                                                     直链用 SplitButton（2026-11-01，GitHub Issue #322）：主键还是「下载」，
+                                                     右边那半点开是「下载到其他文件夹…」与「打开下载文件夹」——
+                                                     存哪儿这个问题应该就在下载按钮上问，而不是逼人去设置页找。
+                                                     ⚠️ 跳转类（网盘 / 官网）不给拆分：没有文件要落盘，菜单是空的。 -->
+                                                <SplitButton Content="{x:Bind ActionText}" Tag="{x:Bind Url}"
+                                                             Visibility="{x:Bind FileActionVisibility}"
+                                                             Click="DownloadSplit_Click">
+                                                    <SplitButton.Flyout>
+                                                        <!-- ⚠️ URL 直接绑到菜单项自己的 Tag 上：MenuFlyout 的内容住在独立的
+                                                             popup 根里，DataContext 未必传得进来，靠它认行会在点击时拿到 null。 -->
+                                                        <MenuFlyout Opening="DownloadMenu_Opening">
+                                                            <MenuFlyoutItem Text="下载到其他文件夹…" Tag="{x:Bind Url}"
+                                                                            Click="DownloadTo_Click">
+                                                                <MenuFlyoutItem.Icon>
+                                                                    <FontIcon Glyph="&#xE8B7;" />
+                                                                </MenuFlyoutItem.Icon>
+                                                            </MenuFlyoutItem>
+                                                            <MenuFlyoutItem Text="打开下载文件夹" Click="OpenDownloadFolder_Click">
+                                                                <MenuFlyoutItem.Icon>
+                                                                    <FontIcon Glyph="&#xE838;" />
+                                                                </MenuFlyoutItem.Icon>
+                                                            </MenuFlyoutItem>
+                                                        </MenuFlyout>
+                                                    </SplitButton.Flyout>
+                                                </SplitButton>
+
                                                 <Button Content="{x:Bind ActionText}" Tag="{x:Bind Url}"
+                                                        Visibility="{x:Bind JumpActionVisibility}"
                                                         Style="{StaticResource AccentButtonStyle}"
                                                         Click="Download_Click" />
                                                 <Button Tag="{x:Bind Url}" Click="Mirror_Click"

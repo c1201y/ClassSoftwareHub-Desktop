@@ -114,16 +114,52 @@ public static class DownloadService
     {
         try
         {
-            Directory.CreateDirectory(DefaultDir);
+            Directory.CreateDirectory(SaveDir);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                FileName = DefaultDir,
+                FileName = SaveDir,
                 UseShellExecute = true,      // 经 shell 打开，由系统复用已有的资源管理器窗口
             });
         }
         catch
         {
             // 打开失败时静默处理，不提示用户
+        }
+    }
+
+    /// <summary>
+    /// 这一版下载该存到哪儿：用户指定过就用他指定的，否则用系统「下载」文件夹。
+    ///
+    /// <para>
+    /// ⚠️ 指定目录已经不在了（U 盘拔了、网络盘掉线、被手动删掉）→ 退回系统「下载」。
+    /// 不能让「保存位置只剩一个死路径」变成「下载永远失败」—— 用户很难把这两件事联系起来。
+    /// </para>
+    /// </summary>
+    public static string SaveDir
+    {
+        get
+        {
+            var custom = App.Settings.Current.DownloadFolder;
+            if (string.IsNullOrWhiteSpace(custom)) return DefaultDir;
+
+            try
+            {
+                if (Path.IsPathFullyQualified(custom))
+                {
+                    if (Directory.Exists(custom)) return custom;
+
+                    // 目录本身没建出来、但父目录还在 ⇒ 建一下就能用（用户选了 D:\下载 而还没建的情况）
+                    var parent = Path.GetDirectoryName(custom);
+                    if (!string.IsNullOrEmpty(parent) && Directory.Exists(parent)) return custom;
+                }
+            }
+            catch (Exception ex)
+            {
+                Core.AppLog.Warn("download", $"自定义下载文件夹读不了，改用系统下载文件夹：{ex.Message}");
+            }
+
+            Core.AppLog.Info("download", $"自定义下载文件夹不可用（{custom}），改用 {DefaultDir}");
+            return DefaultDir;
         }
     }
 
@@ -180,7 +216,7 @@ public static class DownloadService
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("下载地址为空。", nameof(url));
 
-        var dir = string.IsNullOrWhiteSpace(directory) ? DefaultDir : directory!;
+        var dir = string.IsNullOrWhiteSpace(directory) ? SaveDir : directory!;
         Directory.CreateDirectory(dir);
 
         var fileName = ResolveFileName(url, suggestedName);

@@ -57,7 +57,7 @@
             <StackPanel Spacing="2">
                 <TextBlock Text="编码 / 哈希工具" FontSize="28" FontWeight="Bold" />
                 <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                           Text="校验文件：拖入文件即得四种哈希值，粘贴官方提供的哈希值会立即给出核对结论。也可对文本做 Base64 / URL 编解码。全部在本机完成。" />
+                           Text="校验文件哈希，也可对文本做 Base64 / URL 编解码。" />
             </StackPanel>
 
             <!-- 用途：一行原生单选，不再占掉两张卡片的高度。
@@ -123,7 +123,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="ExpectedBox" Header="核对官方哈希值"
-                                     PlaceholderText="在此粘贴官网给出的 MD5 / SHA-1 / SHA-256 / SHA-512 值（空格、大小写、冒号均可忽略）"
+                                     PlaceholderText="粘贴 MD5 / SHA-1 / SHA-256 / SHA-512 值，忽略空格与大小写"
                                      FontFamily="Consolas" FontSize="12" TextChanged="Expected_TextChanged" />
                             <!-- 结论跟输入框**本体**对齐（不是跟它的标题对齐），粘完一眼就看到 -->
                             <TextBlock x:Name="MatchText" Grid.Column="1" FontSize="14" FontWeight="Bold"

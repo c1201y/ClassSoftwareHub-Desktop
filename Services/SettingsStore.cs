@@ -469,6 +469,20 @@ public sealed class AppSettings
     /// </summary>
     public string GithubDownloadRoute { get; set; } = GithubRoutes.Official;
 
+    /// <summary>
+    /// 下载**存到哪个文件夹**（2026-11-01，GitHub Issue #322「下载可否自定义下载路径」）。
+    ///
+    /// <para>
+    /// 空串 = 跟着系统「下载」文件夹走（<see cref="Services.DownloadService.DefaultDir"/>，用户改过系统
+    /// 下载位置也照样生效）。填了就用这个目录。
+    /// </para>
+    /// <para>
+    /// ⚠️ 与上面 <see cref="GithubDownloadRoute"/> 是两回事：那条决定「从哪儿取」，这条决定「放哪儿」，
+    /// 别混成一个设置项。也不影响应用自身的更新包 —— 更新包必须留在已知位置，装完才好收拾。
+    /// </para>
+    /// </summary>
+    public string DownloadFolder { get; set; } = "";
+
     // ── 教室喊话（2026-10-25：对齐设计稿 docs/教室喊话功能设计.md 的 §6 配置表）──────────
 
     /// <summary>是否接收喊话（= 是否开轮询）。默认关：不该替所有用户默认后台上报。</summary>
@@ -519,6 +533,45 @@ public sealed class AppSettings
 
     /// <summary>提示音路径；空 = 用内嵌的 announce-alert.wav。文件不存在时自动退回内嵌。</summary>
     public string AnnounceSoundPath { get; set; } = "";
+
+    /// <summary>
+    /// 初次配置（OOBE，需求 1:22）走到哪一步了，取值见 <see cref="OobeStates"/>。
+    ///
+    /// <para>
+    /// ⛔ 为什么不是单纯的 bool「走完了吗」：升级上来的老用户存档里**没有这个字段**，
+    /// 布尔默认 false 会被读成"没走过" → 每次更新完再弹一次 OOBE，而需求原文明确禁止这件事。
+    /// 所以默认值刻意取 <see cref="OobeStates.Unknown"/>（= 没有这个字段 = 老用户，不弹），
+    /// 只有**新装**（settings.json 不存在）那一次启动才会置成 Pending。
+    /// </para>
+    /// </summary>
+    public int OobeState { get; set; } = OobeStates.Unknown;
+
+    /// <summary>
+    /// 查单词优先用哪个词源（需求清单第 17 条，2026-11-01），取值见 <c>DictSourceModes</c>：
+    /// <c>offline-first</c>（默认）/ <c>online-first</c> / <c>offline-only</c> / <c>online-only</c>。
+    ///
+    /// <para>
+    /// 存字符串而不是枚举：以后要加第五档（比如"只在 Wi-Fi 下走在线"）时，
+    /// 老存档读出来也不会因为枚举值对不上而崩成默认值以外的东西。
+    /// </para>
+    /// </summary>
+    public string DictionarySource { get; set; } = "offline-first";
+
+    /// <summary>查单词的最近查询词，最多十条，最新的在前。点一下就能重查。</summary>
+    public List<string> DictionaryHistory { get; set; } = new();
+}
+
+/// <summary>初次配置的状态值（存在 <see cref="AppSettings.OobeState"/> 里）。</summary>
+public static class OobeStates
+{
+    /// <summary>存档里没有这个字段 = 升级上来的老用户。**不弹**。</summary>
+    public const int Unknown = 0;
+
+    /// <summary>新装、还没走完（含配到一半被强杀）。下次正常启动接着弹。</summary>
+    public const int Pending = 1;
+
+    /// <summary>走完 / 点过跳过 / 点过关闭。以后不再弹。</summary>
+    public const int Done = 2;
 }
 
 /// <summary>设置存储：%LOCALAPPDATA%\ClassSoftwareHub\settings.json</summary>

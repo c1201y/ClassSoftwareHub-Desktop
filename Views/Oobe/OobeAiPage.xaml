@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Oobe.OobeAiPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
+
+    <!-- 第 11 步：Hub AI。 -->
+    <Grid>
+        <StackPanel x:Name="ContentRoot" Width="600"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+
+            <StackPanel Spacing="6" Margin="0,0,0,12">
+                <TextBlock Text="Hub AI" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <controls:SettingsCard Header="启用 Hub AI"
+                                   Description="关闭后各页入口隐藏，配置保留。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE8F2;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ToggleSwitch x:Name="AiSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="Ai_Toggled" />
+            </controls:SettingsCard>
+
+            <controls:SettingsCard Header="称呼"
+                                   Description="AI 在对话中如何称呼你。留空则直接使用「你」。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE77B;" />
+                </controls:SettingsCard.HeaderIcon>
+                <TextBox x:Name="NameBox" MinWidth="220" PlaceholderText="例如：张老师" MaxLength="24"
+                         TextChanged="Name_Changed" />
+            </controls:SettingsCard>
+        </StackPanel>
+    </Grid>
+</Page>

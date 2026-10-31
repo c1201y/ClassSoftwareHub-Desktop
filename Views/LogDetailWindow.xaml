@@ -249,7 +249,7 @@
                         <TextBlock x:Name="RawText" FontFamily="Consolas" FontSize="12" LineHeight="18"
                                    TextWrapping="Wrap" IsTextSelectionEnabled="True"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   Text="在上面的表格里选中一条日志，这里会显示它在文件里的原始内容。" />
+                                   Text="选中一条日志，这里显示原文。" />
                     </ScrollViewer>
                 </Border>
 

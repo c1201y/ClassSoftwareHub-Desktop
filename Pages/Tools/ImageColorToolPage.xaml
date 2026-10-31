@@ -25,7 +25,7 @@
             <StackPanel Spacing="2">
                 <TextBlock Text="图片取色" FontSize="24" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
-                           Text="上传一张图片，自动提取一组柔和的配色（类似 Win11 壁纸主题色的取法）。单击色块复制 hex。图片只在本机处理，不会上传。" />
+                           Text="提取图片的柔和配色，单击色块复制色值。" />
             </StackPanel>
 
             <!-- ═══ 内容 ═══ -->
@@ -61,7 +61,7 @@
                             <FontIcon Glyph="&#xEB9F;" FontSize="30" HorizontalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <TextBlock Text="单击选择图片" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="或将图片拖入 · 支持 PNG / JPG / WebP / GIF" FontSize="12" Opacity="0.6"
+                            <TextBlock Text="或拖入图片 · PNG / JPG / WebP / GIF" FontSize="12" Opacity="0.6"
                                        HorizontalAlignment="Center" />
                         </StackPanel>
 

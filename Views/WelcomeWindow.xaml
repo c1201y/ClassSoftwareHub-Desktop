@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.WelcomeWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      初次配置（OOBE，需求 1:22，2026-10-31）。
+
+      结构按 ClassIsland 的 WelcomeWindow：窗口只留一个 Frame，
+      每一步是一个独立 Page（见 Views/Oobe），步骤表与前进/后退在 OobeSession 里。
+      页面实例被 Frame 缓存，往回翻时用户刚填的值还在。
+
+      保留的自家逻辑：三态 OobeState、完成 / 关窗都落定、主机窗口等配置完再亮。
+      ⚠️ 主窗口在新装首启时**不显示**，这一屏是唯一窗口；关掉它主界面才出来（见 App.OnLaunched）。
+    -->
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBarHost" Grid.Row="0" Padding="16,0,140,0" Background="Transparent">
+            <TextBlock Text="欢迎使用ClassSoftwareHub-Desktop" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+        </Grid>
+
+        <Frame x:Name="StepFrame" Grid.Row="1" />
+
+        <!--
+          底部导航条：钉在窗口上、不跟页面内容走 —— 每一步的「上一步 / 下一步」都在同一个位置，
+          翻页时按钮不会跟着页面滑走。用的都是原生 Button（主按钮走 AccentButtonStyle），
+          别再换成自绘的圆角图标按钮。
+
+          ⛔ 不做「跳过设置」（Nick 2026-10-31）：初次配置是必选的，跳过会把用户
+             刚才选的主题等设置整批丢掉，看起来就像"选了浅色、进主界面还是深色"。
+        -->
+        <StackPanel x:Name="NavHost" Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Center" Margin="0,8,0,16">
+            <Button x:Name="BackNavButton" Content="上一步" Click="NavBack_Click"
+                    MinWidth="96" Visibility="Collapsed" />
+            <Button x:Name="NextNavButton" Content="下一步" Click="NavNext_Click"
+                    Style="{StaticResource AccentButtonStyle}" MinWidth="96" />
+        </StackPanel>
+    </Grid>
+</Window>

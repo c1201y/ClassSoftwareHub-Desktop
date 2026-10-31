@@ -41,7 +41,7 @@
                         <StackPanel MaxWidth="680" HorizontalAlignment="Left" Spacing="0">
                             <TextBlock Text="帮助改进 ClassSoftwareHub" FontSize="40" FontWeight="SemiBold"
                                        LineHeight="48" TextWrapping="Wrap" Margin="0,0,0,14" />
-                            <TextBlock Text="报告软件信息错误、下载链接失效或其他使用问题；亦可提出功能建议。每条反馈均进入公开的议题列表，由维护者跟进。"
+                            <TextBlock Text="报告问题或提出建议，每条都会进入公开议题。"
                                        FontSize="14" LineHeight="22" TextWrapping="Wrap"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
@@ -152,7 +152,7 @@
 
                                     <StackPanel Grid.Column="1" Spacing="5">
                                         <TextBlock Text="填写反馈信息" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="选择反馈类型，说明问题或建议。填写内容将在本地自动保存为草稿，中途离开亦不会丢失。"
+                                        <TextBlock Text="填写内容会自动存为草稿，不会丢失。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
@@ -180,7 +180,7 @@
 
                                     <StackPanel Grid.Column="1" Spacing="5">
                                         <TextBlock Text="提交反馈" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="在应用里点一下即可提交，无需登录任何账号；内容将公开可见。若提交服务连不上，也可跳转 GitHub 议题表单手动提交。"
+                                        <TextBlock Text="无需登录即可提交，内容公开可见。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
@@ -208,7 +208,7 @@
 
                                     <StackPanel Grid.Column="1" Spacing="5">
                                         <TextBlock Text="维护者跟进处理" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="反馈将进入公开议题列表，处理进度可在议题下方查看，亦可继续补充说明。"
+                                        <TextBlock Text="进度可在议题下方查看。"
                                                    FontSize="13" LineHeight="19" TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
@@ -230,7 +230,7 @@
 
                             <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
                                 <TextBlock Text="请先查阅已有反馈" FontSize="14" FontWeight="SemiBold" />
-                                <TextBlock Text="桌面版反馈均记录于公开议题列表中，建议先行搜索关键词，以避免重复提交。"
+                                <TextBlock Text="建议先搜索关键词，避免重复提交。"
                                            FontSize="13" TextWrapping="Wrap"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>

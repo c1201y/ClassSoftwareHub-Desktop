@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Oobe.OobeScreenshotPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
+
+    <!-- 第 8 步：截图。与「侧边布局 → 截图」同源，只是初次上手先把最常用的两项问一遍。 -->
+    <Grid>
+        <StackPanel x:Name="ContentRoot" Width="600"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+
+            <StackPanel Spacing="6" Margin="0,0,0,12">
+                <TextBlock Text="截图" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <controls:SettingsCard Header="截图后自动保存一份原图"
+                                   Description="文件名格式：截图_年月日_时分秒.png">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE722;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ToggleSwitch x:Name="ShotAutoSaveSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="ShotAutoSave_Toggled" />
+            </controls:SettingsCard>
+
+            <controls:SettingsCard x:Name="DirCard" Header="截图保存位置">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE8F4;" />
+                </controls:SettingsCard.HeaderIcon>
+                <controls:SettingsCard.Description>
+                    <StackPanel Spacing="8" Margin="0,4,0,0">
+                        <TextBlock x:Name="ShotDirText" TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="更改目录…" Click="ShotDir_Change_Click" />
+                            <Button Content="打开目录" Click="ShotDir_Open_Click" />
+                            <Button Content="恢复默认（桌面）" Click="ShotDir_Reset_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </controls:SettingsCard.Description>
+            </controls:SettingsCard>
+        </StackPanel>
+    </Grid>
+</Page>

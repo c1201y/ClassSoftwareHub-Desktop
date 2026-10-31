@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Oobe.OobeStartupPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
+
+    <!-- 第 9 步：启动方式。 -->
+    <Grid>
+        <StackPanel x:Name="ContentRoot" Width="600"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+            <!-- 下方说明文字变长/变短会顶动后面的卡片，让它滑过去（路线图第 26 项） -->
+            <StackPanel.ChildrenTransitions>
+                <TransitionCollection>
+                    <RepositionThemeTransition />
+                </TransitionCollection>
+            </StackPanel.ChildrenTransitions>
+
+            <StackPanel Spacing="6" Margin="0,0,0,12">
+                <TextBlock Text="启动方式" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <controls:SettingsCard Header="开机自动启动"
+                                   Description="登录 Windows 后自动运行本程序。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE7E8;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ToggleSwitch x:Name="AutoStartSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="AutoStart_Toggled" />
+            </controls:SettingsCard>
+
+            <controls:SettingsCard x:Name="MinimizeCard" Header="开机时最小化启动">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE921;" />
+                </controls:SettingsCard.HeaderIcon>
+                <controls:SettingsCard.Description>
+                    <TextBlock x:Name="MinimizeHint" TextWrapping="Wrap"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </controls:SettingsCard.Description>
+                <ToggleSwitch x:Name="MinimizeSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="Minimize_Toggled" />
+            </controls:SettingsCard>
+
+            <controls:SettingsCard Header="点关闭时收进托盘"
+                                   Description="关闭主窗口时程序继续在后台运行，从托盘图标可重新打开。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE7E7;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ToggleSwitch x:Name="TraySwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="Tray_Toggled" />
+            </controls:SettingsCard>
+        </StackPanel>
+    </Grid>
+</Page>

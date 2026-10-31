@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Oobe.OobeWelcomePage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ClassSoftwareHub.Desktop.Controls">
+
+    <!--
+      欢迎页（2026-10-31，按 12 格分镜重做）。
+
+      整页只有两样东西：开场控制（跑马灯 → 标语 → 乱码 → 品牌名 → 图标 / 欢迎语 / 版本号，
+      全在 OobeWelcomeIntro 里），和页底那句 Win10 提示。
+      ⛔ 页面自己不要再摆标题 / 图标 / 版本号 —— 这些已经是开场动画的终态，多一份就重影了。
+    -->
+    <Grid>
+        <controls:OobeWelcomeIntro x:Name="Intro" Completed="Intro_Completed" />
+
+        <TextBlock x:Name="Caveat"
+                   VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                   Margin="0,0,0,8" FontSize="11" Opacity="0"
+                   MaxWidth="520" TextAlignment="Center" TextWrapping="Wrap" />
+    </Grid>
+</Page>

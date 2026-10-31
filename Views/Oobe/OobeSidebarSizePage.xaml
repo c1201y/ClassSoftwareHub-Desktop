@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Oobe.OobeSidebarSizePage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
+
+    <!--
+      第 7 步：侧边栏大小。
+      收起条与展开面板可以分别选标准 / 紧凑；「展开面板高度 / 自适应高度」只在每行一个时有效
+      （每行三个时行数天然少，不受高度上限约束），切到舒展模式会把这两项置灰。
+    -->
+    <Grid>
+        <StackPanel x:Name="ContentRoot" Width="600"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+            <StackPanel.ChildrenTransitions>
+                <TransitionCollection>
+                    <RepositionThemeTransition />
+                </TransitionCollection>
+            </StackPanel.ChildrenTransitions>
+
+            <StackPanel Spacing="6" Margin="0,0,0,12">
+                <TextBlock Text="侧边栏大小" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <controls:SettingsCard x:Name="DensityCard" Header="侧边栏大小样式"
+                                   Description="收起成抓手时的粗细。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE747;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ComboBox x:Name="DensityCombo" MinWidth="170" SelectionChanged="Density_SelectionChanged">
+                    <ComboBoxItem Content="标准" Tag="standard" />
+                    <ComboBoxItem Content="紧凑" Tag="compact" />
+                </ComboBox>
+            </controls:SettingsCard>
+
+            <controls:SettingsCard x:Name="ExpandedDensityCard" Header="展开后的大小样式"
+                                   Description="默认与收起时一致。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE70E;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ComboBox x:Name="ExpandedDensityCombo" MinWidth="170"
+                          SelectionChanged="ExpandedDensity_SelectionChanged">
+                    <ComboBoxItem Content="跟随收起时的样式" Tag="same" />
+                    <ComboBoxItem Content="标准" Tag="standard" />
+                    <ComboBoxItem Content="紧凑" Tag="compact" />
+                </ComboBox>
+            </controls:SettingsCard>
+
+            <controls:SettingsCard x:Name="ColumnsCard" Header="工具排列模式"
+                                   Description="仅贴靠屏幕左右两边时生效。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE8FD;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ComboBox x:Name="ColumnsCombo" MinWidth="170" SelectionChanged="Columns_SelectionChanged">
+                    <ComboBoxItem Content="舒展模式" Tag="3" />
+                    <ComboBoxItem Content="紧凑模式" Tag="1" />
+                </ComboBox>
+            </controls:SettingsCard>
+
+            <controls:SettingsCard x:Name="HeightCard" Header="展开面板高度"
+                                   Description="面板高度上限，仅对「紧凑模式」有效。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE740;" />
+                </controls:SettingsCard.HeaderIcon>
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Slider x:Name="HeightRatioSlider" Width="190"
+                            Minimum="45" Maximum="95" Value="75"
+                            StepFrequency="5" TickFrequency="5"
+                            IsThumbToolTipEnabled="False"
+                            ValueChanged="HeightRatio_ValueChanged" />
+                    <TextBlock x:Name="HeightRatioText" MinWidth="40" VerticalAlignment="Center"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </controls:SettingsCard>
+
+            <controls:SettingsCard x:Name="HeightAutoCard" Header="自适应高度"
+                                   Description="模块少时面板随之收短。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE9A6;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ToggleSwitch x:Name="HeightAutoSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="HeightAuto_Toggled" />
+            </controls:SettingsCard>
+
+            <TextBlock x:Name="OffHint" Text="侧边栏当前处于关闭状态，此处选项暂不生效。"
+                       FontSize="12" Opacity="0.6" Margin="0,12,0,0" Visibility="Collapsed"
+                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</Page>

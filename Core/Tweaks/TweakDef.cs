@@ -2,14 +2,23 @@ using System;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>一项改动什么时候生效。</summary>
-public enum TweakApply
+/// <summary>
+/// 改完要用哪条外壳通知让界面重读（机制照 Dism++ 的 <c>ExplorerNotify</c>）。
+/// <para>
+/// ⚠️ 这里刻意**不叫"要不要重启资源管理器"**：2026-10-31 起默认走通知，杀 explorer 只是兜底按钮。
+/// 只有 <see cref="None"/> 是"写完注册表就完事"，其余两种由 <see cref="ShellNotify"/> 执行。
+/// </para>
+/// </summary>
+public enum TweakRefresh
 {
-    /// <summary>改完立刻生效（下一次读注册表就是新值）。</summary>
-    Instant,
+    /// <summary>不需要通知（下次读注册表自然就是新值，比如主题、输入法设置）。</summary>
+    None,
 
-    /// <summary>要重启资源管理器（explorer.exe）才看得出效果。</summary>
-    RestartExplorer,
+    /// <summary>任务栏 / 托盘相关：发 <c>WM_SETTINGCHANGE + "TraySettings"</c>。</summary>
+    Tray,
+
+    /// <summary>桌面与资源管理器视图相关：让桌面执行一次"刷新"。</summary>
+    Desktop,
 }
 
 /// <summary>这条改动写在哪一格注册表单元（决定要不要提权）。</summary>
@@ -31,6 +40,9 @@ public enum TweakScope
     /// </summary>
     System,
 }
+
+/// <summary>下拉框里的一个选项（<paramref name="Value"/> 就是要写进注册表的 DWORD）。</summary>
+public sealed record TweakChoice(string Label, int Value);
 
 /// <summary>风险级别。<see cref="Caution"/> 的项在切换前要弹二次确认。</summary>
 public enum TweakRisk
@@ -83,9 +95,53 @@ public sealed record TweakDef
     /// <summary>关闭时的 DWORD 值（键或值缺失时也按它解释）。</summary>
     public required int OffValue { get; init; }
 
-    public TweakApply Apply { get; init; } = TweakApply.Instant;
+    public TweakRefresh Refresh { get; init; } = TweakRefresh.None;
+
+    /// <summary>
+    /// 多选一的可选值（2026-10-31 加）。非空 ⇒ 界面上用下拉框，而不是开关。
+    ///
+    /// <para>
+    /// 照 Dism++ 的 <c>Type="Combo"</c> 那套：像"任务栏搜索框"其实是隐藏 / 仅图标 / 显示搜索框 **三态**，
+    /// 拿开关表达只能覆盖两态，用户还得去系统设置里补第三态。下拉框才是它本来的样子。
+    /// </para>
+    /// <para>
+    /// ⚠️ 有 <see cref="Choices"/> 的项，<see cref="OnValue"/> / <see cref="OffValue"/> 不再表示"开/关"，
+    /// 只用来解释"值缺失时算哪一档"（<see cref="OffValue"/>）与"推荐值"（<see cref="OnValue"/>）。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<TweakChoice> Choices { get; init; } = Array.Empty<TweakChoice>();
+
+    /// <summary>这一项是不是下拉框。</summary>
+    public bool IsChoice => Choices.Count > 0;
+
+    /// <summary>
+    /// 最低适用 build（0 = 不限）。22000 = Windows 11 门槛。
+    /// <para>
+    /// 判定口径与 Dism++ 的 <c>&lt;Applicable&gt;&lt;OSVersion Compare="&gt;="&gt;…</c> 一致：
+    /// 不满足就不在界面上出现 —— 在 Win10 上摆一个"任务栏靠左"只会让人以为程序坏了
+    /// （那个键在 Win10 根本不存在，写进去等于什么都没做）。
+    /// </para>
+    /// </summary>
+    public int MinBuild { get; init; }
+
+    /// <summary>最高适用 build（0 = 不限）。留给将来 Win10 专有的项。</summary>
+    public int MaxBuild { get; init; }
 
     public TweakRisk Risk { get; init; } = TweakRisk.Normal;
+
+    /// <summary>
+    /// 关闭时**删掉这个值**而不是写一个"关"的值（照 Dism++ 的做法）。
+    ///
+    /// <para>
+    /// 为什么需要：<c>Software\Policies</c> 下的项，留一个 <c>0</c> 和"根本没有这个值"在语义上不同 ——
+    /// 部分工具与环境会把"存在即已配置策略"当成已经被管理，用户之后在系统设置里改不动。
+    /// 这类项关掉时应当把值整个删掉，回到从未配置过的状态。
+    /// </para>
+    /// <para>
+    /// ⚠️ 只对"缺值 ≡ 关态"的项可用，否则删完会被读成别的意思。当前只有两条设了它。
+    /// </para>
+    /// </summary>
+    public bool DeleteWhenOff { get; init; }
 
     /// <summary>完整路径（日志、.reg 生成、排查都用它）。</summary>
     public string FullPath => $@"{RootName}\{KeyPath}\{ValueName}";

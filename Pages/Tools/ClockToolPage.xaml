@@ -37,7 +37,7 @@
                 <StackPanel Spacing="2" VerticalAlignment="Center">
                     <TextBlock Text="全屏时钟" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="将屏幕变为大型时钟，便于考试、自习时查看时间。默认使用跟随主题的黑白配色，也可设置背景图片并叠加蒙版、亚克力或云母材质。" />
+                               Text="全屏时钟，可设背景图片与材质。" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="在工具窗口打开" VerticalAlignment="Center"
                         Click="OpenPalette_Click" ToolTipService.ToolTip="打开置顶小窗口，便于随时查看时间" />
@@ -92,7 +92,7 @@
                             </Border>
 
                             <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                       Text="可将图片直接拖入上方区域作为背景，也可在右侧「背景图片」中选择图片。" />
+                                       Text="也可把图片拖入上方区域。" />
 
                             <!-- 这一页唯一的强调按钮：其余（保存预设、校时…）一律普通按钮 -->
                             <Button x:Name="FullscreenButton" Content="全屏显示" Click="Fullscreen_Click"
@@ -256,7 +256,7 @@
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="外观预设" FontSize="14" FontWeight="Bold" />
                                 <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                           Text="把当前外观整体存下来，下次一键套用。下面每张卡片就是该预设的实际效果。" />
+                                           Text="下面每张卡片即预设效果。" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                 <Button x:Name="SavePresetButton" Content="保存预设" Click="SavePreset_Click" />

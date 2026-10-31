@@ -56,6 +56,12 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="1" MaxWidth="960">
+                <!-- 折叠区展开/收起会顶动下面的分组，让它们滑过去而不是瞬间跳（路线图第 26 项） -->
+                <StackPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <RepositionThemeTransition />
+                    </TransitionCollection>
+                </StackPanel.ChildrenTransitions>
 
                 <TextBlock Text="设置" FontSize="28" FontWeight="Bold" />
 
@@ -87,6 +93,11 @@
                 <!-- ================= 外观 ================= -->
                 <TextBlock Text="外观" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
+                    <StackPanel.ChildrenTransitions>
+                        <TransitionCollection>
+                            <RepositionThemeTransition />
+                        </TransitionCollection>
+                    </StackPanel.ChildrenTransitions>
 
                     <controls:SettingsCard x:Name="ThemeCard" Header="颜色模式" Description="跟随系统时，随 Windows 的深浅色设置自动切换。">
                         <controls:SettingsCard.HeaderIcon>
@@ -100,7 +111,7 @@
                     </controls:SettingsCard>
 
                     <controls:SettingsCard Header="桌面悬浮窗单独设置外观"
-                                           Description="只作用于桌面上的悬浮件：屏幕边缘的工具侧边栏，以及「常用工具」浮窗（随机抽号、课堂计时、秒表计时、全屏时钟）。主界面与其它窗口都跟「主题」一致。">
+                                           Description="只影响侧边栏与常用工具浮窗。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE772;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -125,7 +136,7 @@
                     </controls:SettingsCard>
 
                     <controls:SettingsCard Header="窗口背景效果"
-                                           Description="主界面、常用工具浮窗与截图编辑窗都随此项；截图框选层与钉图不参与。">
+                                           Description="截图框选层与钉图不参与。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE81E;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -141,6 +152,11 @@
                 <!-- ================= 窗口 ================= -->
                 <TextBlock Text="窗口" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
+                    <StackPanel.ChildrenTransitions>
+                        <TransitionCollection>
+                            <RepositionThemeTransition />
+                        </TransitionCollection>
+                    </StackPanel.ChildrenTransitions>
 
                     <controls:SettingsCard Header="窗口始终置于最前"
                                            Description="开启后主窗口不会被其他窗口遮挡。">
@@ -191,12 +207,36 @@
                 <StackPanel Spacing="4">
 
                     <controls:SettingsCard x:Name="HubAiCard" Header="Hub AI"
-                                           Description="电脑顾问的总开关与模型配置。模型服务由你自己提供，本软件不代收费用、不托管密钥。"
+                                           Description="模型服务自备，本软件不托管密钥。"
                                            IsClickEnabled="True" Click="OpenHubAiSettings_Click">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8F2;" />
                         </controls:SettingsCard.HeaderIcon>
                         <!-- 右侧留空：IsClickEnabled=True 时 SettingsCard 自带一颗 Chevron，别自己再放箭头 -->
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+                <!-- ================= 查阅单词 ================= -->
+                <!-- 2026-11-01（需求第 17 条）：两个词源都做，优先级交给用户选。
+                     默认「离线优先」——查词是高频短动作，先问本地能立刻出结果，教室里网络时好时坏。 -->
+                <TextBlock Text="查阅单词" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+
+                    <controls:SettingsCard Header="词典源优先级" Description="先查本地，未收录再联网。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8F1;" />
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <!-- ⛔ 不用 ComboBox.ItemTemplate + x:Bind（MustRead §3：这份 XamlCompiler 会崩），
+                             四项都是纯文本，直接写 ComboBoxItem 就够 -->
+                        <ComboBox x:Name="DictSourceCombo" MinWidth="128"
+                                  SelectionChanged="DictSource_SelectionChanged">
+                            <ComboBoxItem Content="离线优先" Tag="offline-first" />
+                            <ComboBoxItem Content="在线优先" Tag="online-first" />
+                            <ComboBoxItem Content="仅离线" Tag="offline-only" />
+                            <ComboBoxItem Content="仅在线" Tag="online-only" />
+                        </ComboBox>
                     </controls:SettingsCard>
 
                 </StackPanel>
@@ -209,7 +249,7 @@
                 <StackPanel Spacing="4">
 
                     <controls:SettingsCard Header="日志查看"
-                                           Description="在应用内查看运行日志，可按级别与内容筛选，一键导出全部日志交给开发者。"
+                                           Description="可按级别筛选，也可导出交给开发者。"
                                            IsClickEnabled="True" Click="OpenLogViewer_Click">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE7C3;" />
@@ -231,9 +271,14 @@
                         XAML 解析途中就展开、抢跑 Expanded 事件，那时 x:Name 字段还没绑完 ⇒ 空引用崩页。 -->
                 <TextBlock Text="存储" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
+                    <StackPanel.ChildrenTransitions>
+                        <TransitionCollection>
+                            <RepositionThemeTransition />
+                        </TransitionCollection>
+                    </StackPanel.ChildrenTransitions>
 
                     <controls:SettingsCard Header="缓存保留数量"
-                                           Description="每个版本的应用素材（图标、首页大图、引导图、铃声…）各存一份，保留最近几个，更早的启动时自动清理。正在使用的那个版本永不清理。">
+                                           Description="保留最近几个版本，更早的在启动时清理。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE74D;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -253,7 +298,7 @@
 
                     <!-- 本地缓存：列表在展开时现读（平时折叠，不占加载时间）。 -->
                     <controls:SettingsExpander x:Name="CacheExpander" Header="本地缓存"
-                                               Description="各版本留下的素材缓存，可打开目录查看，也可单独删除某个版本。"
+                                               Description="可打开目录，也可删除旧版本。"
                                                IsExpanded="False"
                                                Expanded="Cache_Expanded">
                         <controls:SettingsExpander.HeaderIcon>
@@ -291,7 +336,7 @@
                     </controls:SettingsExpander>
 
                     <controls:SettingsCard Header="日志保留天数"
-                                           Description="应用每启动一次就单独存一份日志。这里设定这些日志留多久，超期的启动时自动清理。正在运行的那一份永不清理。">
+                                           Description="超期的在启动时自动清理。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE81C;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -306,7 +351,7 @@
 
                     <!-- 本地日志：列表在展开时现读（平时折叠，不占加载时间）。 -->
                     <controls:SettingsExpander x:Name="LogExpander" Header="本地日志"
-                                               Description="每次运行留下的日志目录，可展开目录查看，也可单独删除某一次。"
+                                               Description="可展开查看，也可删除某一次。"
                                                IsExpanded="False"
                                                Expanded="Log_Expanded">
                         <controls:SettingsExpander.HeaderIcon>
@@ -355,7 +400,7 @@
                         </controls:SettingsCard.HeaderIcon>
                         <controls:SettingsCard.Description>
                             <StackPanel Spacing="6" Margin="0,4,0,0">
-                                <TextBlock Text="软件清单与分类来自网络（安装包不自带），每次启动自动获取最新；「重新读取」只是把本地这份再解析一遍。"
+                                <TextBlock Text="每次启动自动获取最新清单。"
                                            TextWrapping="Wrap"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -387,7 +432,7 @@
                         </controls:SettingsCard.HeaderIcon>
                         <controls:SettingsCard.Description>
                             <StackPanel Spacing="6" Margin="0,4,0,0">
-                                <TextBlock Text="指定软件内 GitHub 下载链接的取用路径。官网直链、网盘等非 GitHub 来源不受影响。"
+                                <TextBlock Text="仅影响 GitHub 来源，官网直链不受影响。"
                                            TextWrapping="Wrap"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -421,6 +466,29 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
+                    <!-- 下载文件夹（2026-11-01，GitHub Issue #322「下载可否自定义下载路径」）：
+                         管的是下载**存到哪儿**，与上面那条「从哪儿取」分工明确、别合并。
+                         细节放这儿而不是每次下载都问：定一次就够；临时换地方走详情页
+                         下载按钮右半边的「下载到其他文件夹…」。 -->
+                    <controls:SettingsCard Header="下载文件夹">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8B7;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <controls:SettingsCard.Description>
+                            <StackPanel Spacing="8" Margin="0,4,0,0">
+                                <TextBlock x:Name="DownloadDirText" TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="更改文件夹…" Click="DownloadDir_Change_Click" />
+                                    <Button Content="打开文件夹" Click="DownloadDir_Open_Click" />
+                                    <Button x:Name="DownloadDirResetBtn" Content="恢复默认"
+                                            Click="DownloadDir_Reset_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </controls:SettingsCard.Description>
+                    </controls:SettingsCard>
+
                 </StackPanel>
 
                 <!-- ================= 回声洞 ================= -->
@@ -433,6 +501,11 @@
                      点开是个 Flyout：一个输入框 + 一个提交按钮，不跳浏览器；回执也留在这个弹层里。 -->
                 <TextBlock Text="回声洞" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
+                    <StackPanel.ChildrenTransitions>
+                        <TransitionCollection>
+                            <RepositionThemeTransition />
+                        </TransitionCollection>
+                    </StackPanel.ChildrenTransitions>
 
                     <controls:SettingsExpander x:Name="EchoCaveExpander" Header="回声洞"
                                                Description="请点击这里收看 ClassSoftwareHub 群友的逆天发言！"
@@ -486,6 +559,11 @@
                 <!-- ================= 更新 ================= -->
                 <TextBlock x:Name="UpdateSectionHeader" Text="更新" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
+                    <StackPanel.ChildrenTransitions>
+                        <TransitionCollection>
+                            <RepositionThemeTransition />
+                        </TransitionCollection>
+                    </StackPanel.ChildrenTransitions>
 
                     <controls:SettingsCard Header="当前版本">
                         <controls:SettingsCard.HeaderIcon>
@@ -549,7 +627,7 @@
                     <!-- 安装包自动清理：updates 目录只留最近 N 个，更早的启动时删除（InstallerCleanup）。
                          留下的包给「版本记录 → 装回旧版本」用：本地有同名包且校验通过就不再下载。 -->
                     <controls:SettingsCard Header="安装包保留数量"
-                                           Description="自动清理更新时下载的安装包：本地保留最近几个，更早的自动删除。保留的安装包可用于装回旧版本，无需重新下载。">
+                                           Description="保留最近几个安装包，便于装回旧版。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE74D;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -570,7 +648,7 @@
                     <!-- 本地安装包：列表在展开时现读（平时折叠，不占加载时间）。
                          ⚠️ 内容走 Items / Description —— ContentAlignment="Vertical" 实测无效（§K.6） -->
                     <controls:SettingsExpander x:Name="InstallerExpander" Header="本地安装包"
-                                               Description="更新时下载的安装包存放在此，可直接用来覆盖安装当前（或更旧）版本，也可单独删除。"
+                                               Description="可直接覆盖安装当前或更旧版本。"
                                                IsExpanded="False"
                                                Expanded="Installer_Expanded">
                         <controls:SettingsExpander.HeaderIcon>
@@ -634,7 +712,7 @@
                             <controls:SettingsCard Header="从仓库装回旧版本">
                                 <controls:SettingsCard.Description>
                                     <StackPanel Spacing="8" Margin="0,4,0,0">
-                                        <TextBlock Text="从更新仓库加载可回滚的版本（正式版与 Insider 版）。装回旧版会覆盖当前程序文件，设置与软件内容不受影响。"
+                                        <TextBlock Text="装回旧版会覆盖程序文件，设置不受影响。"
                                                    TextWrapping="Wrap"
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

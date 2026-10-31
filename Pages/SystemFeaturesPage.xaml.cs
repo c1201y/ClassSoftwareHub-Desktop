@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Data.SysFeatures;
 using ClassSoftwareHub.Desktop.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -10,59 +12,113 @@ using Microsoft.UI.Xaml.Navigation;
 namespace ClassSoftwareHub.Desktop.Pages;
 
 /// <summary>
-/// 系统功能（需求清单第 20 条，2026-10-30 第一版）：休眠、快速启动的开关，分页文件的只读体检。
+/// 系统功能（需求清单第 20 条，2026-10-31 重做）。
 ///
 /// <para>
-/// ⚠️ 开关行的状态**只从服务层读**，不在页面里缓存：这两项的值用户可能在系统设置里改过、
-/// 也可能被组策略改回，页面每次进来重读一遍最省事（读注册表是微秒级）。
+/// 与「系统优化」页的分工：那一页全是 <c>HKCU</c> 的界面设置、不提权；这一页全是
+/// <c>HKLM</c> 与 <c>powercfg</c>、**必须提权**，部分项要重启才生效。
 /// </para>
+///
 /// <para>
-/// ⛔ 回填开关会触发 <c>Toggled</c>，所以整段回填必须压在 <c>_loading</c> 里 ——
-/// 这个坑本项目踩过不止一次（AppData 卡的开关、侧边栏布局页）。
+/// 交互照 Nick 2026-10-31 的定案「排队 + 一次弹 UAC」：拨开关只进队列，
+/// 点右下角提示条的主按钮时，<see cref="SystemFeatures.ApplyAsync"/> 把所有改动
+/// 拼成一个临时脚本跑一次，只弹一次授权。
+/// </para>
+///
+/// <para>
+/// ⛔ 状态**只从服务层读**，页面不缓存：这些值用户可能在系统设置或组策略里改过，
+/// 每次进来重读一遍最省事（读注册表是微秒级）。回填必须压在 <c>_loading</c> 里，
+/// 否则 <c>Toggled</c> / <c>SelectionChanged</c> 会把程序写入当成用户操作 —— 这个坑踩过多次。
 /// </para>
 /// </summary>
 public sealed partial class SystemFeaturesPage : Page
 {
-    /// <summary>正在回填界面：此时 Toggled 是程序自己触发的，不能当作用户操作。</summary>
+    private static readonly IReadOnlyList<SysFeatureDef> All = SystemFeatureCatalog.All;
+
+    private static readonly Dictionary<string, SysFeatureDef> ById =
+        All.ToDictionary(d => d.Id, StringComparer.Ordinal);
+
+    /// <summary>待应用的改动：Id → 目标值（按 Id 去重，来回拨只留最后一次）。</summary>
+    private readonly Dictionary<string, int> _pending = new(StringComparer.Ordinal);
+
+    /// <summary>正在回填界面，此时的 Toggled / SelectionChanged 是程序触发的。</summary>
     private bool _loading;
 
-    /// <summary>有一次改动正在等 UAC 返回。</summary>
     private bool _busy;
 
-    public SystemFeaturesPage() => InitializeComponent();
+    /// <summary>确认框是否已经弹着 —— 同一时刻只允许一个 ContentDialog，第二个会抛异常。</summary>
+    private bool _dialogOpen;
+
+    /// <summary>用户点过「暂不应用」；之后再拨开关才重新弹。</summary>
+    private bool _tipDismissed;
+
+    private TipMode _tipMode = TipMode.Pending;
+
+    private enum TipMode
+    {
+        Pending,
+        Failed,
+    }
+
+    public SystemFeaturesPage()
+    {
+        InitializeComponent();
+
+        Loaded += (_, _) =>
+        {
+            BuildChoices();   // 下拉框选项由清单生成（XAML 里写 ItemTemplate + x:Bind 会崩）
+            LoadStates();
+        };
+
+        HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        AiFlyout.ContextProvider = BuildAiContext;
+    }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        Load();
+
+        // 从别的页面切回来时也重读一遍：可能刚在系统设置里改过
+        if (IsLoaded) LoadStates();
     }
 
     // ── 读取 ─────────────────────────────────────────────────────────────
 
-    private void Load()
+    private void LoadStates()
     {
         _loading = true;
         try
         {
-            var hibernate = SystemFeatures.Hibernate();
-            var fast = SystemFeatures.FastStartup();
+            foreach (var def in All)
+            {
+                var value = def.Read();
 
-            HibernateSwitch.IsOn = hibernate == FeatureState.On;
-            HibernateSwitch.IsEnabled = hibernate != FeatureState.Unknown && !_busy;
+                if (def.Kind == SysFeatureKind.Toggle)
+                {
+                    if (Find<ToggleSwitch>("Sw_", def.Id) is not { } toggle) continue;
 
-            FastStartupSwitch.IsOn = fast == FeatureState.On;
+                    toggle.IsOn = value is int v && v != 0;
+                    toggle.IsEnabled = value is not null && !_busy;
+                }
+                else
+                {
+                    if (Find<ComboBox>("Cmb_", def.Id) is not { } combo) continue;
 
-            // ⚠️ 休眠关着的时候快速启动不可能生效（它靠休眠文件工作），所以直接把开关禁掉，
-            //    比让用户点了没反应好 —— 说明文字里也写了这一层关系。
-            FastStartupSwitch.IsEnabled = fast != FeatureState.Unknown && hibernate == FeatureState.On && !_busy;
+                    combo.SelectedIndex = value is int v ? IndexOf(def, v) : -1;
+                    combo.IsEnabled = value is not null && !_busy;
+                }
+            }
 
-            if (hibernate == FeatureState.Unknown)
-                ShowNotice("读不到休眠状态，可能是注册表访问被安全软件拦截。", InfoBarSeverity.Warning);
+            // 休眠关着时快速启动不可能生效：整行停用，比让用户点了没反应好
+            if (SystemFeatures.Hibernate() != FeatureState.On &&
+                Find<ToggleSwitch>("Sw_", "fast-startup") is { } fast)
+                fast.IsEnabled = false;
 
             var bytes = SystemFeatures.HibernateFileBytes();
             HibernateFileText.Text = bytes > 0 ? AppLog.Size(bytes) : "不存在（休眠已关闭）";
-
-            FillPageFileCard();
         }
         finally
         {
@@ -70,137 +126,384 @@ public sealed partial class SystemFeaturesPage : Page
         }
     }
 
-    /// <summary>
-    /// 把分页文件信息填进那一行 SettingsCard。
-    /// <para>
-    /// ⚠️ 不用列表控件：分页文件通常只有一条，多条时把配置拼在 Description 里照样读得懂 ——
-    ///    第一版用 SettingsExpander + ItemsRepeater，一进页面进程就被杀（2026-10-30 实测），不值当。
-    /// </para>
-    /// </summary>
-    private void FillPageFileCard()
+    /// <summary>把清单里的档位灌进对应下拉框（选项只有一个来源，别在 XAML 里再抄一遍字）。</summary>
+    private void BuildChoices()
     {
-        var entries = SystemFeatures.PageFiles();
-
-        if (entries.Count == 0)
+        foreach (var def in All.Where(d => d.Kind == SysFeatureKind.Choice))
         {
-            PageFileDescText.Text = "未配置分页文件。";
-            PageFileSizeText.Text = "—";
-            return;
+            if (Find<ComboBox>("Cmb_", def.Id) is not { } combo || def.Choices is null) continue;
+
+            combo.Items.Clear();
+            foreach (var choice in def.Choices)
+                combo.Items.Add(new ComboBoxItem { Content = choice.Label, Tag = choice.Value });
         }
-
-        PageFileDescText.Text = string.Join("；", entries.Select(e => e.ConfigText));
-        PageFileSizeText.Text = entries[0].SizeText;
-
-        if (entries.Count > 1)
-            PageFileSizeText.Text = $"{entries[0].SizeText} 等 {entries.Count} 个";
     }
 
-    // ── 开关 ─────────────────────────────────────────────────────────────
+    private static int IndexOf(SysFeatureDef def, int value)
+    {
+        if (def.Choices is null) return -1;
 
-    private async void Hibernate_Toggled(object sender, RoutedEventArgs e)
+        for (var i = 0; i < def.Choices.Count; i++)
+            if (def.Choices[i].Value == value) return i;
+
+        // 值不在档位里（系统里是别的数字）：不选中，别乱指一档骗人
+        return -1;
+    }
+
+    /// <summary>按 <c>Sw_xxx_yyy</c> / <c>Cmb_xxx_yyy</c> 找 XAML 里那张卡上的控件。</summary>
+    private T? Find<T>(string prefix, string id) where T : class =>
+        FindName(prefix + id.Replace('-', '_')) as T;
+
+    // ── 排队 ─────────────────────────────────────────────────────────────
+
+    private void Row_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading || _busy) return;
+        if (sender is not ToggleSwitch toggle || toggle.Tag is not string id) return;
+        if (!ById.TryGetValue(id, out var def)) return;
 
-        var want = HibernateSwitch.IsOn;
-        var current = SystemFeatures.HibernateFileBytes();
-
-        var confirmed = await ConfirmAsync(
-            want ? "开启休眠" : "关闭休眠",
-            want
-                ? "开启后系统会在系统盘生成与内存容量相当的休眠文件，用于休眠与快速启动。继续吗？"
-                : $"关闭后系统会删除休眠文件（当前占用 {AppLog.Size(current)}），快速启动随之失效。继续吗？");
-
-        if (!confirmed)
-        {
-            Revert(HibernateSwitch, !want);
-            return;
-        }
-
-        await ApplyAsync("休眠", () => SystemFeatures.SetHibernateAsync(want));
+        Queue(def, toggle.IsOn ? 1 : 0);
     }
 
-    private async void FastStartup_Toggled(object sender, RoutedEventArgs e)
+    private void Row_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || _busy) return;
+        if (sender is not ComboBox combo || combo.Tag is not string id) return;
+        if (!ById.TryGetValue(id, out var def)) return;
+        if (combo.SelectedItem is not ComboBoxItem { Tag: int value }) return;
 
-        var want = FastStartupSwitch.IsOn;
-        var confirmed = await ConfirmAsync(
-            want ? "开启快速启动" : "关闭快速启动",
-            want
-                ? "开启后关机时会保存系统状态，下次开机更快；装有双系统的机器可能因此无法正常进入另一个系统。继续吗？"
-                : "关闭后每次关机都是完整关机，开机速度会变慢，但更接近「彻底重启」。继续吗？");
-
-        if (!confirmed)
-        {
-            Revert(FastStartupSwitch, !want);
-            return;
-        }
-
-        await ApplyAsync("快速启动", () => SystemFeatures.SetFastStartupAsync(want));
+        Queue(def, value);
     }
 
-    /// <summary>取消时把开关拨回去。⚠️ 必须压在 _loading 里，否则会再触发一次 Toggled。</summary>
-    private void Revert(ToggleSwitch control, bool value)
+    private void Queue(SysFeatureDef def, int target)
     {
+        // 与当前系统值一致就不排队（否则"拨回去"也会留下一条什么都不改的待应用项）
+        if (def.Read() == target) _pending.Remove(def.Id);
+        else _pending[def.Id] = target;
+
+        AppLog.Step("sysfeatures", _pending.ContainsKey(def.Id)
+            ? $"排队：{def.Id} = {target}（{def.Label(target)}）"
+            : $"取消排队：{def.Id}（与当前系统状态一致）");
+
+        _tipDismissed = false;
+        _tipMode = TipMode.Pending;
+        UpdatePendingUi();
+    }
+
+    private void CancelPending_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string id }) return;
+        if (!ById.TryGetValue(id, out var def)) return;
+
+        _pending.Remove(id);
+
+        // 界面上那一行要拨回注册表里的真实值，否则它停在一个"看着改了、其实不会写入"的位置
         _loading = true;
-        control.IsOn = value;
+        var actual = def.Read();
+
+        if (def.Kind == SysFeatureKind.Toggle && Find<ToggleSwitch>("Sw_", id) is { } toggle)
+            toggle.IsOn = actual is int v && v != 0;
+        else if (Find<ComboBox>("Cmb_", id) is { } combo)
+            combo.SelectedIndex = actual is int v2 ? IndexOf(def, v2) : -1;
+
         _loading = false;
+
+        AppLog.Step("sysfeatures", $"取消排队：{id}");
+        UpdatePendingUi();
+    }
+
+    // ── 提示条 ───────────────────────────────────────────────────────────
+
+    private void UpdatePendingUi()
+    {
+        if (_pending.Count == 0)
+        {
+            ApplyTip.IsOpen = false;
+            _tipMode = TipMode.Pending;
+            _tipDismissed = false;
+            PendingButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        BuildPendingList();
+
+        if (_tipMode == TipMode.Pending) ShowTipPending();
+
+        // 两个入口不同时出现：提示开着就不显示顶部按钮
+        PendingButton.Content = $"待应用 {_pending.Count} 项";
+        PendingButton.Visibility = ApplyTip.IsOpen ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>清单：每行「项名 → 目标值」+ 一颗「取消」。</summary>
+    private void BuildPendingList()
+    {
+        PendingList.Items.Clear();
+
+        foreach (var (id, value) in _pending)
+        {
+            if (!ById.TryGetValue(id, out var def)) continue;
+
+            var row = new Grid { ColumnSpacing = 16, Margin = new Thickness(0, 7, 0, 7) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var text = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 13,
+            };
+            text.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = def.Header });
+            text.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = "  →  " + def.Label(value),
+                Foreground = ThemeBrush.Get(this, "TextFillColorSecondaryBrush"),
+            });
+
+            var cancel = new Button
+            {
+                Content = "取消",
+                Tag = id,
+                MinWidth = 0,
+                Padding = new Thickness(8, 2, 8, 2),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            cancel.Click += CancelPending_Click;
+
+            Grid.SetColumn(cancel, 1);
+            row.Children.Add(text);
+            row.Children.Add(cancel);
+
+            PendingList.Items.Add(row);
+        }
+    }
+
+    private void ShowTipPending()
+    {
+        ApplyTip.Title = $"有 {_pending.Count} 项待应用";
+        ApplyTip.Subtitle = "应用时会请求一次管理员授权。";
+        ApplyTip.ActionButtonContent = "应用更改";
+        ApplyTip.CloseButtonContent = "暂不应用";
+
+        ApplyTipMaxWidth(windowWidth: XamlRoot?.Size.Width ?? 1024);
+
+        if (!_tipDismissed && !ApplyTip.IsOpen) ApplyTip.IsOpen = true;
+    }
+
+    private void ShowTipFailed()
+    {
+        ApplyTip.Title = $"有 {_pending.Count} 项未生效";
+        ApplyTip.Subtitle = "可能被组策略限定。可以再试一次。";
+        ApplyTip.ActionButtonContent = "重试";
+        ApplyTip.CloseButtonContent = "关闭";
+
+        ApplyTipMaxWidth(windowWidth: XamlRoot?.Size.Width ?? 1024);
+        ApplyTip.IsOpen = true;
     }
 
     /// <summary>
-    /// 执行一次改动，然后**按实际状态**回填并给一句结果。
-    /// ⛔ 不写"已执行命令"，只写读回来的状态 —— 用户拒绝 UAC 时命令根本没跑。
+    /// 提示宽度上限按窗口算，不写死 —— 写死一个比内容区大的值会把右侧「取消」推出可视区
+    /// （2026-10-31 在系统优化页连错两次的教训）。
     /// </summary>
-    private async Task ApplyAsync(string name, Func<Task<FeatureState>> action)
-    {
-        _busy = true;
-        HibernateSwitch.IsEnabled = false;
-        FastStartupSwitch.IsEnabled = false;
+    private void ApplyTipMaxWidth(double windowWidth) =>
+        ApplyTip.MaxWidth = Math.Clamp(windowWidth - 120, 320, 520);
 
+    private void ApplyTip_Closed(TeachingTip sender, object args)
+    {
+        PendingButton.Content = $"待应用 {_pending.Count} 项";
+        PendingButton.Visibility = _pending.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void PendingButton_Click(object sender, RoutedEventArgs e)
+    {
+        _tipDismissed = false;
+        _tipMode = TipMode.Pending;
+        UpdatePendingUi();
+    }
+
+    private void ApplyTip_CloseClick(TeachingTip sender, object args)
+    {
+        // 只是收起来，队列原样保留
+        _tipDismissed = true;
+        PendingButton.Content = $"待应用 {_pending.Count} 项";
+        PendingButton.Visibility = _pending.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void ApplyTip_ActionClick(TeachingTip sender, object args)
+    {
         try
         {
-            var state = await action();
-            Load();
-
-            ShowNotice(
-                state == FeatureState.Unknown
-                    ? $"{name}的设置没有生效。可能是未授予管理员权限，或该设置被组策略限定。"
-                    : $"{name}已{(state == FeatureState.On ? "开启" : "关闭")}。",
-                state == FeatureState.Unknown ? InfoBarSeverity.Warning : InfoBarSeverity.Success);
+            await ApplyPendingAsync();
         }
         catch (Exception ex)
         {
-            AppLog.Exception("sysfeatures", ex, $"设置{name}");
-            ShowNotice($"{name}设置失败，详情见日志。", InfoBarSeverity.Error);
+            // async void 里漏出去的异常会直接终止进程 —— 兜到底
+            AppLog.Exception("sysfeatures", ex, "应用更改");
+            ShowNotice("应用失败：" + ex.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    // ── 应用 ─────────────────────────────────────────────────────────────
+
+    private async Task ApplyPendingAsync()
+    {
+        if (_busy || _pending.Count == 0) return;
+
+        if (_dialogOpen) return;
+
+        var changes = _pending
+            .Where(kv => ById.ContainsKey(kv.Key))
+            .Select(kv => (Def: ById[kv.Key], Value: kv.Value))
+            .ToList();
+
+        if (changes.Count == 0) return;
+
+        // 整批一次总确认：逐项弹窗的话，十几项要点十几次（与"一次 UAC"是同一个道理）
+        var needRestart = changes.Any(c => c.Def.NeedsRestart);
+        var warn = changes.FirstOrDefault(c => c.Def.Confirm is not null).Def?.Confirm;
+
+        var message = $"将修改 {changes.Count} 项系统设置，需要一次管理员授权。" +
+                      (warn is null ? "" : $"\n\n{warn}") +
+                      (needRestart ? "\n\n其中有的项要重启后才生效。" : "");
+
+        if (!await ConfirmAsync("应用系统设置", message)) return;
+
+        _busy = true;
+        ApplyTip.IsOpen = false;
+
+        try
+        {
+            var result = await SystemFeatures.ApplyAsync(changes);
+
+            if (!result.Ok)
+            {
+                ShowNotice(result.Error ?? "应用失败。", InfoBarSeverity.Error);
+                _tipMode = TipMode.Failed;
+                UpdatePendingUi();
+                return;
+            }
+
+            if (result.AllMatched)
+            {
+                _pending.Clear();
+                ShowNotice($"已应用 {result.Requested} 项。", InfoBarSeverity.Success);
+            }
+            else
+            {
+                // 只有确认没生效的项留在队列里，方便直接重试
+                foreach (var id in result.Failed) _pending.Remove(id);
+
+                ShowNotice(
+                    $"已应用 {result.Matched}/{result.Requested} 项，未生效：{string.Join("、", result.Failed.Select(NameOf))}。",
+                    InfoBarSeverity.Warning);
+
+                _tipMode = _pending.Count > 0 ? TipMode.Failed : TipMode.Pending;
+            }
+
+            LoadStates();
         }
         finally
         {
             _busy = false;
-            HibernateSwitch.IsEnabled = true;
-            FastStartupSwitch.IsEnabled = true;
-            Load();   // 重新按真实状态摆一次开关
+            LoadStates();
+            UpdatePendingUi();
         }
     }
 
-    // ── 界面小工具 ────────────────────────────────────────────────────────
+    private static string NameOf(string id) => ById.TryGetValue(id, out var def) ? def.Header : id;
+
+    // ── Hub AI ───────────────────────────────────────────────────────────
+
+    private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
+
+    /// <summary>
+    /// 给浮层准备这一页的现场数据。
+    /// <para>
+    /// 这一页的项直接动系统，用户最爱问的是"改了会不会有影响」「为什么点了没反应」，
+    /// 所以每项都附**当前值 + 目标值 + 是否要重启 + 读不到的原因**。
+    /// </para>
+    /// </summary>
+    private PageContextDoc BuildAiContext()
+    {
+        var doc = new PageContextDoc(
+            "系统功能",
+            "这一页修改的是整台电脑的系统设置（HKLM 与电源方案），需要管理员授权，部分项要重启才生效。" +
+            "回答时以「全部条目」里的当前值为准，直接点名是哪一项；不要给与本页无关的建议。" +
+            "⚠️ 你无法替用户改设置，也不要说「已经帮你改好了」—— 写入只能由用户拨动开关、" +
+            "再点右下角提示条的主按钮完成，而且必须经过一次管理员授权。");
+
+        doc.Add("状态", new
+        {
+            待应用项数 = _pending.Count,
+            正在应用 = _busy,
+            休眠文件 = SystemFeatures.HibernateFileBytes() is var b && b > 0 ? AppLog.Size(b) : "不存在",
+        });
+
+        doc.Add("全部条目", All.Select(d =>
+        {
+            var value = d.Read();
+            return new
+            {
+                d.Id,
+                d.Header,
+                分组 = d.Group,
+                说明 = d.Description,
+                当前值 = value,
+                当前显示 = value is int v ? d.Label(v) : "读取不到",
+                可选档位 = d.Choices?.Select(c => new { c.Label, c.Value }).ToList(),
+                待应用目标值 = _pending.TryGetValue(d.Id, out var t) ? t : (int?)null,
+                需要重启 = d.NeedsRestart,
+                改前提示 = d.Confirm,
+            };
+        }).ToList());
+
+        doc.Add("界面怎么操作", new
+        {
+            拨开关或改下拉框 = "只排队，不改系统",
+            应用更改 = "右下角提示条的主按钮，一次授权、一次写入全部待应用项",
+            单项取消 = "提示条清单里每行右侧的「取消」",
+            提示被收起 = "页面顶部出现「待应用 N 项」按钮",
+        });
+
+        return doc;
+    }
+
+    // ── 界面小工具 ───────────────────────────────────────────────────────
 
     private async Task<bool> ConfirmAsync(string title, string message)
     {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = "继续",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Close,
-        };
+        if (_dialogOpen) return false;
 
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        _dialogOpen = true;
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = title,
+                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "继续",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+            };
+
+            return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("sysfeatures", "确认框没能弹出：" + ex.Message);
+            return false;
+        }
+        finally
+        {
+            _dialogOpen = false;
+        }
     }
 
     private void ShowNotice(string message, InfoBarSeverity severity)
     {
+        // NoticeBar 平时 Collapsed（避免那条 8px 外边距在页头下面撑出空档），用之前先放出来
+        NoticeBar.Visibility = Visibility.Visible;
         NoticeBar.Severity = severity;
         NoticeBar.Message = message;
         NoticeBar.IsOpen = true;

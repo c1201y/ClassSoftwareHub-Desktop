@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Oobe.OobeDownloadsPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
+
+    <!-- 第 10 步：下载与存储。 -->
+    <Grid>
+        <StackPanel x:Name="ContentRoot" Width="600"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+
+            <StackPanel Spacing="6" Margin="0,0,0,12">
+                <TextBlock Text="下载与存储" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <controls:SettingsCard Header="GitHub 下载体验优化"
+                                   Description="仅影响 GitHub 来源，官网直链不受影响。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE945;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ComboBox x:Name="RouteCombo" MinWidth="240" SelectionChanged="Route_Changed">
+                    <ComboBoxItem Tag="auto">
+                        <TextBlock Text="自动" />
+                    </ComboBoxItem>
+                    <ComboBoxItem Tag="selfhosted">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="自建加速服务" />
+                            <TextBlock Text="Exp"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        </StackPanel>
+                    </ComboBoxItem>
+                    <ComboBoxItem Tag="github">
+                        <TextBlock Text="GitHub 源" />
+                    </ComboBoxItem>
+                </ComboBox>
+            </controls:SettingsCard>
+
+            <controls:SettingsCard Header="启动时自动检查更新"
+                                   Description="仅检查，不自动安装。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE72C;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ToggleSwitch x:Name="AutoCheckSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                              Toggled="AutoCheck_Toggled" />
+            </controls:SettingsCard>
+
+            <controls:SettingsCard Header="缓存保留数量"
+                                   Description="保留最近几个版本，更早的在启动时清理。">
+                <controls:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE74D;" />
+                </controls:SettingsCard.HeaderIcon>
+                <ComboBox x:Name="CacheCombo" MinWidth="150" SelectionChanged="Cache_Changed">
+                    <ComboBoxItem Content="3 个" Tag="3" />
+                    <ComboBoxItem Content="5 个" Tag="5" />
+                    <ComboBoxItem Content="10 个" Tag="10" />
+                </ComboBox>
+            </controls:SettingsCard>
+        </StackPanel>
+    </Grid>
+</Page>

@@ -22,7 +22,7 @@
                 <StackPanel Spacing="4" Margin="0,0,0,20">
                     <TextBlock Text="提交软件" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
-                               Text="提交内容先以草稿形式存入仓库（submissions/），审核通过后上架。带 * 的为必填项。" />
+                               Text="先存为草稿，审核通过后上架。带 * 为必填。" />
                 </StackPanel>
 
                     <!-- ═══ 从 GitHub 一键读取 ═══ -->
@@ -32,7 +32,7 @@
                         <StackPanel Spacing="12">
                             <TextBlock Text="从 GitHub 读取" FontSize="18" FontWeight="Bold" />
                             <TextBlock FontSize="12.5" Opacity="0.7" TextWrapping="Wrap"
-                                       Text="填写 GitHub 仓库地址，自动读取简介、版本号与各安装包的直链，无需手动抄录。读取使用公开接口，不会改动任何内容。" />
+                                       Text="自动读取简介、版本号与安装包直链。" />
 
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
@@ -71,7 +71,7 @@
                             <TextBlock Text="基本信息" FontSize="18" FontWeight="Bold" />
 
                             <TextBox x:Name="IdBox" PlaceholderText="小写字母 / 数字 / 短横线，如 7-zip"
-                                     Description="详情页网址为 #/download/&lt;id&gt;，不可包含 ? &amp; = 等符号">
+                                     Description="形如 #/download/&lt;id&gt;，不含 ? &amp; =">
                                 <TextBox.Header>
                                     <TextBlock><Run Text="软件 ID" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" /></TextBlock>
                                 </TextBox.Header>
@@ -172,9 +172,9 @@
                     <!-- ═══ 下载项 ═══ -->
                     <TextBlock Text="下载项" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="直链需填写文件本身（.exe / .zip / .msi 等），单击后直接开始下载；请勿填写官网下载页。" />
+                               Text="需填文件直链，不是官网下载页。" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="没有自己的网盘也可以：点「上传到本站」把文件传到站点存储，回填的文件键在下载时同样走票据闸门（单文件上限 2.5 GB，超过请改填官网或 GitHub Releases 直链）。" />
+                               Text="可上传到本站存储，单文件上限 2.5 GB。" />
                     <StackPanel x:Name="DownloadsHost" Spacing="12" />
                     <Button x:Name="AddDownloadButton" Content="+ 添加下载项" Click="AddDownload_Click"
                             HorizontalAlignment="Left" />
@@ -202,7 +202,7 @@
                             <Button Content="在 GitHub 提交" Click="OpenGithubSubmit_Click" />
                         </StackPanel>
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="在 GitHub 提交：打开「新建文件」页面并携带文件名，粘贴内容后保存即可（无写权限时，GitHub 会引导 fork 并提交 PR），合并后同样生成审核工单。" />
+                                   Text="在 GitHub 新建文件并提交，合并后生成工单。" />
                     </StackPanel>
 
                     <TextBlock x:Name="Toast" FontSize="12" Opacity="0.75" Margin="0,4,0,10" />

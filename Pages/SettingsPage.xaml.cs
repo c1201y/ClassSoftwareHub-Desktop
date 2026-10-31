@@ -179,6 +179,16 @@ public sealed partial class SettingsPage : Page
             _ => 0,
         };
         UpdateGithubRouteHint();
+        RefreshDownloadFolder();
+
+        // 查单词的词源优先级（需求第 17 条）：认不出的值一律当「离线优先」，与设置层的归一保持一致
+        DictSourceCombo.SelectedIndex = Core.Dictionary.DictSourceModes.Normalize(s.DictionarySource) switch
+        {
+            Core.Dictionary.DictSourceModes.OnlineFirst => 1,
+            Core.Dictionary.DictSourceModes.OfflineOnly => 2,
+            Core.Dictionary.DictSourceModes.OnlineOnly => 3,
+            _ => 0,
+        };
 
         // 外部组件（分体）外观
         SplitThemeSwitch.IsOn = s.SplitTheme;
@@ -569,6 +579,82 @@ public sealed partial class SettingsPage : Page
         // 「自动」那次探测结果立刻作废 —— 否则刚换完设置还要等最多 10 分钟才认。
         Services.GithubRoute.InvalidateCache();
         UpdateGithubRouteHint();
+    }
+
+    // ══════════ 下载文件夹（2026-11-01，GitHub Issue #322）══════════
+
+    /// <summary>
+    /// 把落点写清楚：改过的照实写路径；没改过的写明「系统下载文件夹」并给出实际路径 ——
+    /// 光写"默认"等于没说，用户看不出东西最后躺在哪儿。
+    /// </summary>
+    private void RefreshDownloadFolder()
+    {
+        var custom = App.Settings.Current.DownloadFolder;
+        var resolved = Services.DownloadService.SaveDir;
+
+        if (string.IsNullOrWhiteSpace(custom))
+            DownloadDirText.Text = "系统下载文件夹：" + resolved;
+        else if (string.Equals(custom, resolved, StringComparison.OrdinalIgnoreCase))
+            DownloadDirText.Text = resolved;
+        else
+            // 自定义目录读不到（U 盘拔了、网络盘掉线）时 DownloadService 已经退回系统下载，
+            // 这里必须跟着说，否则卡片上写着 D:\下载、东西其实在 C:\Users\…\Downloads。
+            DownloadDirText.Text = "原设定的文件夹当前不可用，已改用：" + resolved;
+
+        DownloadDirResetBtn.IsEnabled = !string.IsNullOrWhiteSpace(custom);
+    }
+
+    private async void DownloadDir_Change_Click(object sender, RoutedEventArgs e)
+    {
+        var picked = await PickFolderAsync(this);
+        if (string.IsNullOrEmpty(picked)) return;
+
+        App.Settings.Current.DownloadFolder = picked;
+        App.Settings.Save();
+        RefreshDownloadFolder();
+    }
+
+    private void DownloadDir_Open_Click(object sender, RoutedEventArgs e)
+        => Services.DownloadService.OpenDownloadsFolder();
+
+    private void DownloadDir_Reset_Click(object sender, RoutedEventArgs e)
+    {
+        App.Settings.Current.DownloadFolder = "";
+        App.Settings.Save();
+        RefreshDownloadFolder();
+    }
+
+    /// <summary>选文件夹；取消或对话框打不开都返回 null。</summary>
+    private static async Task<string?> PickFolderAsync(FrameworkElement owner)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads,
+            };
+            picker.FileTypeFilter.Add("*");
+            Core.WindowHandle.BindPicker(picker, owner);
+
+            var folder = await picker.PickSingleFolderAsync();
+            return folder?.Path;
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Warn("download", "选择下载文件夹失败：" + ex.Message);
+            return null;
+        }
+    }
+
+    // ══════════ 查单词的词源优先级（需求第 17 条；设置 → 查单词）══════════
+
+    private void DictSource_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (DictSourceCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string mode) return;
+
+        App.Settings.Current.DictionarySource = Core.Dictionary.DictSourceModes.Normalize(mode);
+        App.Settings.Save();
     }
 
     /// <summary>

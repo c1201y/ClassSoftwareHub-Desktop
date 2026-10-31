@@ -31,7 +31,7 @@
                 <StackPanel Spacing="2">
                     <TextBlock Text="方程求解" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="一次方程组给出精确分数解；一元方程按方程本身的性质求根，支持 π、三角函数与对数。" />
+                               Text="一次方程组给分数解，一元方程按性质求根。" />
                 </StackPanel>
 
                 <!-- 方程卡片区 -->
@@ -81,7 +81,7 @@
                 </ScrollViewer>
 
                 <TextBlock Grid.Row="3" FontSize="11.5" Opacity="0.45" TextWrapping="Wrap"
-                           Text="一元方程的未知数用 x；方程组的未知数用任意字母，一条方程一张卡片。多元非一次方程组不在本工具范围内。" />
+                           Text="一元方程用 x，方程组用任意字母。" />
             </Grid>
         </Grid>
 

@@ -29,7 +29,7 @@
                         <TextBlock Text="白板专杀" FontSize="28" FontWeight="Bold" />
                     </StackPanel>
                     <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="希沃白板5 在退出后，进程可能仍驻留于任务管理器的后台进程中，导致应用无法再次启动。到达设定时间点后自动结束此类后台滞留进程；存在可见窗口（即正在使用）的进程不处理。" />
+                               Text="定时结束后台残留进程，让白板能再次启动。" />
                 </StackPanel>
 
                 <!-- 开关：SettingsCard 原生控件（与设置页同一套），不再手叠 Border -->
@@ -46,7 +46,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="结束时间点" FontSize="14" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="每天到达设定时间点检查一次。检查时进程若正在使用（存在可见窗口）则跳过，等待下一个时间点，不会持续重试。" />
+                                   Text="正在使用则跳过，等下个时间点。" />
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TimePicker x:Name="TimePick" ClockIdentifier="24HourClock" MinuteIncrement="5" />
                             <Button x:Name="AddTimeButton" Content="添加" Click="AddTime_Click"
@@ -81,19 +81,14 @@
                 </Border>
 
                 <!-- 页脚：讲清楚依据和局限，不含糊 -->
-                <Border Style="{StaticResource CshCardStyle}">
-                    <StackPanel Spacing="7">
-                        <TextBlock Text="执行依据与限制" FontSize="12" FontWeight="Bold" Opacity="0.85" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 匹配范围：进程名以 EasiNote 开头者均视为白板5（EasiNote.exe、EasiNote.Mirror.exe、EasiNote5.exe 等）。学校希沃集控端（EasiAgent）与更新组件（EasiUpdate*）不在此列，不会被结束。" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 判「是否正在使用」：仅检查该进程有无可见的顶层窗口。存在可见窗口即判定为正在使用，予以跳过；无可见窗口的后台滞留进程才会被结束。" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 生效条件：本程序需处于运行状态。本程序完全退出后，到达设定时间点也不会执行（执行依赖本程序自身的计时，未向系统注册计划任务）。" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 结束失败的常见原因：白板5 以管理员身份运行时，本程序权限不足，无法结束其进程。此时结果区会如实记录，不会标记为成功。" />
-                    </StackPanel>
-                </Border>
+                <!--
+                    常驻警示（2026-10-31 文案收敛）。原来是一块「执行依据与限制」+ 四条「·」，
+                    讲匹配规则、怎么判定"正在使用"、为什么权限不足 —— 那些是开发者要知道的；
+                    用户只需要知道"程序退了不生效"与"正在用的不会被关"。
+                -->
+                <InfoBar IsOpen="True" IsClosable="False" Severity="Warning"
+                         Title="程序退出后不会执行"
+                         Message="只结束没有窗口的后台进程，正在使用中的会跳过。" />
 
             </StackPanel>
         </Grid>

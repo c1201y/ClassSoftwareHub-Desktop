@@ -63,9 +63,31 @@
     <EmbeddedResource Include="Assets\StoreLogo.png" />
     <EmbeddedResource Include="Assets\AppIcon.ico" />
     <EmbeddedResource Include="Assets\ToolIcon.ico" />
+    <!-- 查单词的内置词库（2026-11-01）：29,417 个常用词，每行「单词 \t 音标 \t 释义…」，约 2 MB。
+         源数据是 ECDICT（MIT 协议，skywind3000/ECDICT），按词频 / 考试标签 / 柯林斯星级筛出来的常用部分，
+         释义取中文、音标换成标准 IPA 符号。生成脚本的思路见 .workbuddy/memory/2026-11-01.md。
+         ⚠️ 这是个 2 MB 的纯文本，删了「查单词」就只剩在线源；别当临时文件清掉。 -->
+    <EmbeddedResource Include="Assets\Dict\dict-core.tsv" />
     <!-- 首页横幅：每个功能版本换一张（文件名跟着版本走，换图时这里和 Pages/WelcomePage.xaml.cs
          的 LoadBanner() 一起改）。⚠️ 文件名一律 ASCII。 -->
     <EmbeddedResource Include="Assets\dv1.2.png" />
+    <!-- OOBE「外观」三张预览图（2026-10-31 Nick 给的 1920x1080 原图，这里缩到 480x270）。
+         黑白 → 跟随系统、白 → 浅色、黑 → 深色。⚠️ 文件名一律 ASCII。 -->
+    <EmbeddedResource Include="Assets\Oobe\appearance-system.png" />
+    <EmbeddedResource Include="Assets\Oobe\appearance-light.png" />
+    <EmbeddedResource Include="Assets\Oobe\appearance-dark.png" />
+    <!-- OOBE「完成」页三屏的配图（2026-10-31 Nick 给的 1920x1020 应用截图，缩到 960x510；
+         白 = 浅色主题版，深色主题用另一份）。最后一张是设置完成页的大图（dv1.2，转成 JPG 省体积）。
+         ⚠️ 文件名一律 ASCII。 -->
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-back-light.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-back-dark.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-front-light.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-front-dark.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-tools-back-light.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-tools-back-dark.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-tools-front-light.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-slide-tools-front-dark.png" />
+    <EmbeddedResource Include="Assets\Oobe\oobe-finish-banner.jpg" />
     <!-- 反馈中心两张卡片的图：跟网页版 src/assets/feedback 是同一套文件（2026-09-26） -->
     <EmbeddedResource Include="Assets\feedback\report.png" />
     <EmbeddedResource Include="Assets\feedback\suggest.png" />

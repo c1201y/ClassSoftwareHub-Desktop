@@ -41,7 +41,7 @@
                         </Border>
                     </StackPanel>
                     <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                               Text="为指定的程序单独设定结束时间：到达时间点后，若该程序仍驻留于后台，则结束其进程。每条程序规则各自独立配置，互不影响。" />
+                               Text="到点后结束仍驻留后台的进程，每条规则独立。" />
                 </StackPanel>
 
                 <!-- 总开关：SettingsCard 原生控件（与设置页同一套），不再手叠 Border -->
@@ -58,7 +58,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="添加程序" FontSize="14" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                   Text="填写进程名即可（例如 chrome、notepad）。可省略 .exe 后缀；不区分大小写。添加后在下方为该程序设定结束时间。" />
+                                   Text="例如 chrome，可省略 .exe 后缀。" />
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TextBox x:Name="NameBox" MinWidth="260" PlaceholderText="进程名" />
                             <Button x:Name="AddRuleButton" Content="添加程序" Click="AddRule_Click"
@@ -101,19 +101,14 @@
                 </Border>
 
                 <!-- 页脚：说明判定依据与局限 -->
-                <Border Style="{StaticResource CshCardStyle}">
-                    <StackPanel Spacing="7">
-                        <TextBlock Text="执行依据与限制" FontSize="12" FontWeight="Bold" Opacity="0.85" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 匹配方式：按进程名逐字比较，忽略大小写，.exe 后缀可省略。「chrome」与「chrome.exe」视为同一个程序。" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 判「是否正在使用」：仅检查该进程有无可见的顶层窗口。存在可见窗口即判定为正在使用，按规则设定跳过；无可见窗口的后台驻留进程才会被结束。" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 生效条件：本程序需处于运行状态。本程序完全退出后，到达时间点也不会执行（执行依赖本程序自身的计时，未向系统注册计划任务）。" />
-                        <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                                   Text="· 结束失败的常见原因：目标进程的权限高于本程序（例如以管理员身份运行）。此时结果区会如实记录，不会标记为成功。" />
-                    </StackPanel>
-                </Border>
+                <!--
+                    常驻警示（2026-10-31 文案收敛）。原来是一块「执行依据与限制」+ 四条「·」，
+                    讲匹配规则、怎么判定"正在使用"、为什么权限不足 —— 那些是开发者要知道的；
+                    用户只需要知道"程序退了不生效"与"正在用的不会被关"。
+                -->
+                <InfoBar IsOpen="True" IsClosable="False" Severity="Warning"
+                         Title="程序退出后不会执行"
+                         Message="只结束没有窗口的后台进程，正在使用中的会跳过。" />
 
             </StackPanel>
         </Grid>

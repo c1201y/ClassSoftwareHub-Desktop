@@ -58,6 +58,12 @@ public sealed class TrayIcon : IDisposable
     public event Action? BalloonClicked;
 
     /// <summary>
+    /// 右键菜单的呈现方式。参数 = 菜单项、选中某项后的回调；返回 true 表示已经弹出来了。
+    /// 没订阅、或订阅方返回 false / 抛异常时，退回 <see cref="ShowNativeMenu"/> 的 Win32 原生菜单。
+    /// </summary>
+    public Func<IReadOnlyList<TrayMenuItem>, Action<string>, bool>? MenuRequested;
+
+    /// <summary>
     /// 右键菜单内容（按顺序显示）。留空就用默认那几项。
     /// 可以挂多个托盘图标实例，各自给自己的菜单。
     /// </summary>
@@ -356,10 +362,32 @@ public sealed class TrayIcon : IDisposable
         return DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
+    /// <summary>
+    /// 右键：先问宿主能不能用 WinUI 菜单画（路线图第 25 项），画不了再退回原生 Win32 菜单。
+    /// </summary>
     private void ShowMenu()
     {
         var items = MenuItems.Count > 0 ? MenuItems : DefaultMenu();
 
+        if (MenuRequested is { } present)
+        {
+            try
+            {
+                if (present(items, cmd => CommandInvoked?.Invoke(cmd)))
+                    return;
+            }
+            catch (Exception ex)
+            {
+                Log("WinUI 菜单失败，退回原生菜单: " + ex);
+            }
+        }
+
+        ShowNativeMenu(items);
+    }
+
+    /// <summary>Win32 原生右键菜单（回退路径；没有 UI 框架参与，永远都能弹）。</summary>
+    private void ShowNativeMenu(IReadOnlyList<TrayMenuItem> items)
+    {
         var menu = CreatePopupMenu();
         if (menu == IntPtr.Zero) return;
         try

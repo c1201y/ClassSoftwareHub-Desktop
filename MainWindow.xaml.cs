@@ -33,6 +33,9 @@ public sealed partial class MainWindow : Window
     private readonly bool _startMinimized;
     private readonly bool _startPalette;
 
+    /// <summary>Shell 初始化被推迟到初次配置结束（见构造函数里的说明）。</summary>
+    private bool _shellPending;
+
     private TrayIcon? _tray;
     private TrayIcon? _trayTools;      // 第二个托盘图标：常用工具（左键直接开工具窗口）
     private bool _exitRequested;
@@ -67,7 +70,19 @@ public sealed partial class MainWindow : Window
         // ⚠️ 安装包**不自带**内容包，这里的 Load() 在新装的机器上必然读到空目录。
         //    清单要等下面的 SyncContentAsync() 联网拉回来 —— 首启的"空 → 有"靠 ContentStore.Changed 通知界面。
         App.Content.Load();
-        NativeShell.Init();
+
+        // ⛔ 初次配置期间不建 Shell 首页：主窗口这会儿是隐形的，首页那一帧照样要占掉
+        //    一整个渲染周期 —— 实测把刚弹出来的向导窗口压成 1 秒多的空白窗（2026-10-31）。
+        //    等向导收尾（App.EndOobeAndShowMainWindow）再补 <see cref="StartShell"/>。
+        if (App.ShellDeferredForOobe)
+        {
+            _shellPending = true;
+        }
+        else
+        {
+            NativeShell.Init();
+        }
+
         NativeShell.SetIcon(LoadAppIcon());
         SetTitleBar(NativeShell.TitleBarElement);
 
@@ -90,6 +105,17 @@ public sealed partial class MainWindow : Window
         //     ⚠️ InitTray() 里已经把工具侧边栏显示出来了 —— 崩在它之后，正是
         //        「侧边栏挂在屏幕上、主窗口却没有」那种形态（2026-10-02 用户反馈）。
         Core.AppLog.Info("startup", "主窗口构造完成");
+    }
+
+    /// <summary>
+    /// 补做构造时被推迟的那一步 Shell 初始化（只有初次配置那条路会推迟）。
+    /// 由 <see cref="App.EndOobeAndShowMainWindow"/> 在 <c>Activate()</c> 之前调 —— 窗口露脸时首页已经就位。
+    /// </summary>
+    public void StartShell()
+    {
+        if (!_shellPending) return;
+        _shellPending = false;
+        NativeShell.Init();
     }
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
@@ -125,6 +151,9 @@ public sealed partial class MainWindow : Window
         // 还没就绪，跳转会落到首页。放在更新检查之后：更新提示是"顺带问一句"，跳转是用户刚点的。
         var startupLink = App.TakeStartupLink();
         if (startupLink is { Length: > 0 }) _ = HandleAppUriAsync(startupLink);
+
+        // 初次配置（OOBE，需求 1:22）不在这里弹了 —— 新装首启时主窗口根本不出现，
+        // OOBE 由 App.OnLaunched 直接拉起来，走完才 Activate 本窗口（会再进一次这里）。
     }
 
     /// <summary>
@@ -369,7 +398,11 @@ public sealed partial class MainWindow : Window
 
         if (task.State == DownloadState.Completed)
         {
-            ShowBalloon("下载完成", $"{task.FileName}\n已保存到：{DownloadService.DefaultDir}",
+            // 落点以**实际写入的路径**为准：用户可能这一条点了「下载到其他文件夹…」，
+            // 也可能默认目录换了地方，写成固定值会报错地方（2026-11-01）。
+            var folder = Path.GetDirectoryName(task.Path ?? "");
+            if (string.IsNullOrEmpty(folder)) folder = DownloadService.SaveDir;
+            ShowBalloon("下载完成", $"{task.FileName}\n已保存到：{folder}",
                 () => { ShowFromTray(); Shell.NavigateTo("downloads"); });
         }
         else if (task.State == DownloadState.Failed)
@@ -1331,6 +1364,10 @@ public sealed partial class MainWindow : Window
             _tray.LeftClick += ToggleMainWindow;
             _tray.CommandInvoked += OnTrayCommand;
             _tray.BalloonClicked += OnBalloonClicked;
+
+            // 右键菜单用 WinUI 画（路线图第 25 项）；起不来时 TrayIcon 自己退回原生菜单
+            _tray.MenuRequested = (items, invoke) => Views.TrayMenuWindow.Show(items, invoke);
+
             _tray.MenuItems.Add(new TrayMenuItem { Text = "打开主界面", Command = "show", IsDefault = true });
             _tray.MenuItems.Add(new TrayMenuItem { Text = "常用工具", Command = "palette" });
             _tray.MenuItems.Add(new TrayMenuItem { Text = "工具侧边栏", Command = "sidebar" });
@@ -1347,6 +1384,7 @@ public sealed partial class MainWindow : Window
             _trayTools = new TrayIcon(ToolIconPath());
             _trayTools.LeftClick += () => Views.ToolPaletteWindow.TogglePalette();
             _trayTools.CommandInvoked += OnTrayCommand;
+            _trayTools.MenuRequested = (items, invoke) => Views.TrayMenuWindow.Show(items, invoke);
             _trayTools.MenuItems.Add(new TrayMenuItem { Text = "打开常用工具", Command = "palette", IsDefault = true });
             _trayTools.MenuItems.Add(new TrayMenuItem { Text = "打开主界面", Command = "show" });
             _trayTools.MenuItems.Add(new TrayMenuItem { Separator = true });
@@ -1864,12 +1902,15 @@ public sealed partial class MainWindow : Window
     ///   · 想反悔就按「取消下载」，或者去左侧「任务进行」页取消；
     ///   · 下完/失败会弹系统通知，通知点开直接跳到「任务进行」。
     /// 弹窗还开着的时候跑完了，更省事：直接在这儿弹「下载完成」。
+    ///
+    /// <paramref name="directory"/> 只在「这一次换个地方存」时给（详情页的「下载到其他文件夹…」）；
+    /// 不给就按用户设的默认下载文件夹走（见 <see cref="DownloadService.SaveDir"/>）。
     /// </summary>
-    public async void DownloadFile(string? url, string? suggestedName = null)
+    public async void DownloadFile(string? url, string? suggestedName = null, string? directory = null)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
 
-        var task = DownloadManager.Current.Start(url, suggestedName, suggestedName);
+        var task = DownloadManager.Current.Start(url, suggestedName, suggestedName, directory);
         _downloadDialogTaskId = task.Id;   // 这条由本方法负责收尾，别让系统通知重复报一次
 
         var root = (Content as FrameworkElement)?.XamlRoot;
@@ -1890,7 +1931,7 @@ public sealed partial class MainWindow : Window
         var status = new TextBlock { Text = "正在连接", FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
         var hint = new TextBlock
         {
-            Text = $"保存到：{DownloadService.DefaultDir}\n单击「后台继续」后，下载任务转入后台运行。",
+            Text = $"保存到：{directory ?? DownloadService.SaveDir}\n单击「后台继续」后，下载任务转入后台运行。",
             FontSize = 11.5,
             Opacity = 0.6,
             TextWrapping = TextWrapping.Wrap,
@@ -2297,6 +2338,7 @@ public sealed partial class MainWindow : Window
         try { Views.LegalWindow.CloseForExit(); } catch { }
         try { Views.SubjectToolsWindow.CloseForExit(); } catch { }
         try { Views.HashCheckWindow.CloseForExit(); } catch { }
+        try { Views.QuickLookupWindow.CloseForExit(); } catch { }
         try { Close(); } catch { }
         Core.AppLog.Info("exit", "窗口已全部请求关闭");
 

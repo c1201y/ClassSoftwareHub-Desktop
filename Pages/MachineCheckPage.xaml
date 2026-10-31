@@ -55,7 +55,7 @@
                     </Border>
                 </StackPanel>
                 <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
-                           Text="对照软件清单核实本机安装情况，列出未安装与建议升级的软件。检测依据为 Windows 已安装程序记录；Microsoft Store 应用与免安装版不在记录中，可能显示为「未安装」。" />
+                           Text="对照软件清单核实安装情况，标出未安装与需升级的软件。" />
             </StackPanel>
 
             <!-- 工具栏：左边统计，右边筛选（合成一行，把纵向空间让给列表） -->

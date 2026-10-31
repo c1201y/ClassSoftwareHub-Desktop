@@ -139,7 +139,7 @@
                 </StackPanel>
                 <TextBlock x:Name="StopwatchHint" Visibility="Collapsed" FontSize="12" Opacity="0.65"
                            HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
-                           Text="秒表模式不需要设定时长：单击「开始」即开始计时，再次单击暂停，单击「重置」归零。" />
+                           Text="秒表无需设定时长，开始、暂停、重置。" />
             </StackPanel>
         </Grid>
     </Grid>

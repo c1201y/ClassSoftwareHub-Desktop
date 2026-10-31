@@ -272,7 +272,7 @@
                                    HorizontalAlignment="Center" />
                         <TextBlock MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap"
                                    FontSize="12" Opacity="0.55"
-                                   Text="卸载软件后会自动扫描残留并在本页列出，判定确定的项目默认勾选。" />
+                                   Text="卸载后自动扫描残留，确定的项目默认勾选。" />
                         <Button Content="查看隔离区" Click="Quarantine_Click"
                                 HorizontalAlignment="Center" />
                     </StackPanel>

@@ -369,8 +369,80 @@ public sealed partial class DetailPage : Page
 
     private void Download_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button b && b.DataContext is DownloadItem item)
-            OpenDownload(item, b);
+        if (sender is FrameworkElement el && el.DataContext is DownloadItem item)
+            OpenDownload(item, el);
+    }
+
+    /// <summary>
+    /// 拆分按钮的**主键**（左半边「下载」）。
+    /// ⚠️ <see cref="SplitButton.Click"/> 的参数是 <c>TypedEventHandler&lt;SplitButton, SplitButtonClickEventArgs&gt;</c>，
+    ///    跟 <c>Button.Click</c> 的 <see cref="RoutedEventArgs"/> 不是一回事，别指望共用同一段处理器。
+    /// </summary>
+    private void DownloadSplit_Click(SplitButton sender, SplitButtonClickEventArgs args)
+    {
+        if (sender.DataContext is DownloadItem item)
+            OpenDownload(item, sender);
+    }
+
+    /// <summary>
+    /// 菜单刚被点开的那一行（<see cref="DownloadMenu_Opening"/> 记下来的），给不需要 URL 的情形兜底。
+    ///
+    /// <para>
+    /// ⚠️ 菜单项**不能只靠 <c>DataContext</c> 认行**：<c>MenuFlyout</c> 的内容住在独立的 popup 根里，
+    /// 模板的 DataContext 不一定传得进去，拿到 null 时表现就是"菜单点了没反应"。
+    /// 所以 URL 直接从菜单项自己的 <c>Tag</c> 取（XAML 里 <c>{x:Bind Url}</c> 编进模板），
+    /// 这里只是第二道保险。
+    /// </para>
+    /// </summary>
+    private DownloadItem? _menuRow;
+
+    private void DownloadMenu_Opening(object? sender, object e)
+    {
+        var flyout = sender as Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase;
+        _menuRow = (flyout?.Target as FrameworkElement)?.DataContext as DownloadItem;
+
+        if (_menuRow is null && flyout is MenuFlyout { Items.Count: > 0 } menu && menu.Items[0] is FrameworkElement first)
+            _menuRow = first.DataContext as DownloadItem;
+    }
+
+    /// <summary>「下载到其他文件夹…」：这一次换地方存，不改默认位置。</summary>
+    private async void DownloadTo_Click(object sender, RoutedEventArgs e)
+    {
+        var url = (sender as FrameworkElement)?.Tag as string;
+        if (string.IsNullOrEmpty(url)) url = _menuRow?.Url ?? "";
+        if (url.Length == 0) return;
+
+        var folder = await PickFolderAsync();
+        if (string.IsNullOrEmpty(folder)) return;
+
+        App.MainWindow?.DownloadFile(url, DownloadNameFor(_menuRow), folder);
+    }
+
+    private void OpenDownloadFolder_Click(object sender, RoutedEventArgs e)
+        => Services.DownloadService.OpenDownloadsFolder();
+
+    /// <summary>选一个文件夹；用户点取消或对话框打不开都返回 null（打不开只记日志，不打扰用户）。</summary>
+    private async Task<string?> PickFolderAsync()
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads,
+            };
+            picker.FileTypeFilter.Add("*");
+
+            // 用「元素所在窗口」的句柄：详情页以后若被装进浮窗/工具窗，对话框也跟着走
+            WindowHandle.BindPicker(picker, this);
+
+            var folder = await picker.PickSingleFolderAsync();
+            return folder?.Path;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("download", "选择下载文件夹失败：" + ex.Message);
+            return null;
+        }
     }
 
     /// <summary>
@@ -380,7 +452,7 @@ public sealed partial class DetailPage : Page
     ///   · netdisk  网盘分享页 → 只能跳转（要密码 / 登录 / 客户端）
     ///   · page     官网下载页 → 只能跳转（链接由 JS 生成或带签名，取不到）
     /// </summary>
-    private async void OpenDownload(DownloadItem item, Button? source = null)
+    private async void OpenDownload(DownloadItem item, FrameworkElement? source = null)
     {
         var url = item.Url;
         if (url.Length == 0) return;
@@ -392,7 +464,7 @@ public sealed partial class DetailPage : Page
         }
 
         if (item.Kind == DownloadKind.File)
-            App.MainWindow?.DownloadFile(url, source is null ? null : DownloadNameFor(source));
+            App.MainWindow?.DownloadFile(url, DownloadNameFor(source is null ? null : item));
         else
             App.MainWindow?.ShowWebSheet(url, item.Kind == DownloadKind.Netdisk ? "网盘分享" : "官网下载");
     }
@@ -464,11 +536,10 @@ public sealed partial class DetailPage : Page
     }
 
     /// <summary>下载文件名：优先「软件名 + 版本」，实在没有就让 DownloadService 从 URL 猜。</summary>
-    private string? DownloadNameFor(Button b)
+    private string? DownloadNameFor(DownloadItem? item)
     {
         if (_app is null) return null;
 
-        var item = b.DataContext as DownloadItem;
         var platform = item?.Platform ?? "";
 
         // 用软件名当文件名，扩展名从 URL 里取 —— 这样下载下来是「微信 4.0.exe」而不是一串 hash

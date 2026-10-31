@@ -28,7 +28,7 @@
 
                 <TextBlock Text="Hub AI" FontSize="28" FontWeight="Bold" />
                 <TextBlock Margin="0,6,0,0" FontSize="13" Opacity="0.65" TextWrapping="Wrap"
-                           Text="电脑顾问：读取硬件与存储概况，判断瓶颈，再从软件库里给出建议。全程只读。" />
+                           Text="读取本机概况，给出诊断与软件建议。" />
 
                 <!-- 「会动系统」的功能一律常驻红条 —— 这一页反过来：它是唯一**不会**动系统的东西，
                      所以用 Informational 把边界写清楚，省得用户自己猜。
@@ -41,7 +41,7 @@
                 <TextBlock Text="总开关" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <controls:SettingsCard Header="启用 Hub AI"
-                                           Description="关闭后，软件下载页里的 Hub AI 入口不再显示，对话页会切回启用引导。导航栏的 Hub AI 始终保留，方便随时看到这项功能。已经填过的配置会保留。">
+                                           Description="关闭后各页入口隐藏，配置保留。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8F2;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -86,7 +86,7 @@
                 <StackPanel Spacing="4">
 
                     <controls:SettingsCard Header="启用工具"
-                                           Description="允许 Hub AI 调用只读工具（查看磁盘明细、检索软件库等）。首次启用会从仓库下载工具包。">
+                                           Description="首次启用会从仓库下载工具包。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE71D;" />
                         </controls:SettingsCard.HeaderIcon>
@@ -97,7 +97,7 @@
                     </controls:SettingsCard>
 
                     <controls:SettingsCard Header="工具包"
-                                           Description="只包含能力声明，不包含程序代码。下载走「软件下载」里选定的线路。">
+                                           Description="仅含能力声明，不含程序代码。">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TextBlock x:Name="ToolPackState" VerticalAlignment="Center" FontSize="12" Opacity="0.6" />
                             <Button x:Name="ToolPackUpdateBtn" Content="重新下载" Click="UpdateToolPack_Click" />
@@ -113,7 +113,7 @@
                 <TextBlock Text="数据" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <controls:SettingsCard Header="发送范围"
-                                           Description="硬件概况、磁盘占用、已装软件清单。发送前可以逐项关闭，路径中的用户名会被抹掉。">
+                                           Description="发送前可逐项关闭，路径中的用户名会被抹掉。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE72E;" />
                         </controls:SettingsCard.HeaderIcon>

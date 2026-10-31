@@ -207,7 +207,7 @@
                         Padding="16,14,16,14">
                     <TextBlock FontSize="12.5" LineHeight="19" TextWrapping="Wrap"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               Text="群相册中的内容对全体群成员可见，请勿上传含密码、手机号等敏感信息的截图。若反馈信息在剪贴板中已被覆盖，可回到反馈中心重新复制。" />
+                               Text="群成员均可见，请勿上传含密码或手机号的截图。" />
                 </Border>
 
                 <!-- 动作 -->

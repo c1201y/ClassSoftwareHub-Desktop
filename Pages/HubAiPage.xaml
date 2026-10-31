@@ -118,7 +118,7 @@
                                    Foreground="{ThemeResource HubAiTitleForeground}" />
                         <TextBlock FontSize="13" TextWrapping="Wrap" LineHeight="21"
                                    Foreground="{ThemeResource HubAiSubForeground}"
-                                   Text="在设置里启用之后，这里会显示对话与诊断建议。已填过的配置不会因为关闭而丢失。" />
+                                   Text="在设置里启用 Hub AI 后即可对话。" />
                         <Button Content="去启用" Style="{StaticResource AccentButtonStyle}"
                                 HorizontalAlignment="Left" Click="GoEnable_Click" />
                     </StackPanel>

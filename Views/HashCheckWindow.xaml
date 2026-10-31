@@ -52,7 +52,7 @@
                             <TextBlock x:Name="DropTitle" Text="把文件拖到这里，或单击选择"
                                        FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
                             <TextBlock x:Name="DropSub" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                                       Text="支持任意文件类型；大文件按 1 MB 分块流式计算，不占内存" />
+                                       Text="任意文件类型，大文件不占内存" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -105,7 +105,7 @@
                 </ListView>
 
                 <TextBlock FontSize="12" Opacity="0.55" TextWrapping="Wrap"
-                           Text="校验值只在本机比对，不会上传到任何位置。哈希一致说明文件与发布方给出的那份完全相同。" />
+                           Text="只在本机比对，不上传。一致即与发布方相同。" />
             </StackPanel>
         </ScrollViewer>
     </Grid>

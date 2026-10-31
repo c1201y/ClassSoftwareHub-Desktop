@@ -221,6 +221,11 @@
                         <FontIcon Glyph="&#xE9D2;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="查阅单词" Tag="dictionary">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8F1;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="ClassroomToolsNav" Content="课堂工具" Tag="tools-classroom">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
@@ -248,86 +253,11 @@
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEA80;" />
                     </NavigationViewItem.Icon>
-                    <NavigationViewItem.MenuItems>
-                        <!--
-                          本机核实：拿本机已装软件跟清单对一遍。
-                          ⚠️ 为啥塞进实验性：结果**明显不准**（只读「程序和功能」注册表，
-                             匹配靠名称模糊比对，Store 版/免安装版/改了名的全认不出来）。
-                             放一级导航容易被当成装机验收依据，所以降级成"供你自己玩"。
-                        -->
-                        <NavigationViewItem Content="本机核实" Tag="machinecheck">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE7F4;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-                        <!--
-                          程序专杀：用户自己指定进程名，每个程序单独配结束时间点。
-                          ⚠️ 与白板专杀各存各的配置、各跑各的定时器（Nick 明确要求白板独立出来）。
-                        -->
-                        <NavigationViewItem Content="程序专杀" Tag="procguard">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE7E8;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-                        <!--
-                          应用卸载：2026-10-12 加（Nick：「既然是以软件下载起步的，为什么不也管卸载」）。
-                          ⚠️ 为啥塞实验性：卸载是**不可逆操作**，而扫描口径有已知盲区（免安装版没有任何登记、
-                             别的账户注册的商店应用读不到），结果不像"能装机验收"那么权威 ——
-                             先放这儿用一阵，反馈好了再议要不要上主界面。
-                          ⚠️ 图标 E74D（垃圾桶）：MDL2 里没有专门的"卸载"字形，垃圾桶是最通用的隐喻；
-                             改之前先过 glyphs.ps1 渲图看有没有字形（ED 那段的坑见 MEMORY §6）。
-                        -->
-                        <NavigationViewItem Content="应用卸载" Tag="uninstaller">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE74D;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-                        <!--
-                          开机启动项：2026-10-16 加（1.2.0 第二批第一条，Nick：「可以试试」）。
-                          ⚠️ 为啥塞实验性：它改动的是**系统启动配置**，而且扫描口径有已知盲区 ——
-                             只覆盖注册表 Run 与启动文件夹这两大类，服务、计划任务、Group Policy 启动脚本
-                             都不在范围内。用户若把它当成"这台机器上所有自启项"就会漏判。
-                          ⚠️ 关掉一项写的是 Windows 自己的 StartupApproved 状态位（与任务管理器同一套），
-                             ⛔ 不删注册表值、不移动文件 —— 不可逆操作一律不做，见 Services/StartupItems.cs。
-                          ⚠️ 图标 E945（闪电）：E7E8（电源）被「程序专杀」用了，重复会分不清；
-                             改之前先过 glyphs 脚本渲图看有没有字形（ED 那段的坑见 MEMORY §6）。
-                        -->
-                        <NavigationViewItem Content="开机启动项" Tag="startup">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE945;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-                        <!--
-                          自动关机：2026-10-12 转正搬去「内置工具」分组 —— 子项由 ToolCatalog 自动生成，
-                          这里不能再手写一条（否则导航里会出现两个同名项）。见 Data/ToolDef.cs。
-                        -->
-                        <!--
-                          日志查看：Nick 2026-10-02 拍板「不要实验性」，入口挪到 设置 → 诊断
-                          （Pages/SettingsPage.xaml）。NavigateTagCore 的 "logs" case 保留，
-                          供设置页跳转（含 page=logs 启动参数）用。
-                        -->
-                    
-                        <!--
-                          系统优化（2026-10-31，需求清单第 20 条）：对齐 Dism++「系统优化」里能安全落地的部分。
-                          ⚠️ 为什么先放实验性（Nick 明确要求）：它改的是**整机系统设置**，
-                             猜错一个键就变成"某功能突然不按预期"，先跑一段再说转正。
-                          ⚠️ 口径：只做系统级（HKLM）、不抄安全/服务/更新策略那几类。
-                        -->
-                        <NavigationViewItem Content="系统优化" Tag="systemtweaks">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE713;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-                        <!--
-                          系统功能（2026-10-31）：休眠、快速启动、分页文件体检。
-                          ⚠️ 也先放实验性：休眠与快速启动是 UAC 写入，分页文件目前只读。
-                        -->
-                        <NavigationViewItem Content="系统功能" Tag="sysfeatures">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE7E8;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-</NavigationViewItem.MenuItems>
+                    <!--
+                      子项由 ShellPage.BuildExperimentalNavItems 按 ExperimentalFeatureCatalog.All 填，
+                      ⛔ 别在这里手写：以前手写七条、总览页另有一份，两份必然漂移
+                      （白板专杀 / AppData 管理 / 系统修复 转正后仍留在总览页，虚拟内存却漏了卡片）。
+                    -->
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 

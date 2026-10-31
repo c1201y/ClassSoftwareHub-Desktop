@@ -176,19 +176,19 @@
                     <TextBlock FontSize="12" TextWrapping="Wrap" LineHeight="18"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}">
                         <Run Text="「提交反馈」" FontWeight="SemiBold" />
-                        <Run Text="：使用机器人代为提交，无需注册或登录 GitHub 账户，提交后即进入公开议题列表。由于议题并非由本人创建，开发者在该议题下的回复将不会通知到您。" />
+                        <Run Text="：无需 GitHub 账户；开发者回复不会通知到您。" />
                     </TextBlock>
 
                     <TextBlock FontSize="12" TextWrapping="Wrap" LineHeight="18"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}">
                         <Run Text="「在 GitHub 上提交」" FontWeight="SemiBold" />
-                        <Run Text="：将打开 GitHub 议题创建页并预先填好标题与正文，此通道需要用户拥有 GitHub 账户，登录后单击「Submit new issue」即可。议题由本人创建，可收到开发者的回复通知。" />
+                        <Run Text="：需 GitHub 账户；可收到回复通知。" />
                     </TextBlock>
 
                     <TextBlock FontSize="12" TextWrapping="Wrap" LineHeight="18"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}">
                         <Run Text="「在 Q 群中反馈」" FontWeight="SemiBold" />
-                        <Run Text="：打开交流群并弹出图文流程，可复制完整反馈内容，粘贴至群相册的说明栏即可；以上两者均不便使用时改用此通道。" />
+                        <Run Text="：以上两者不便使用时改用此通道。" />
                     </TextBlock>
 
                     <TextBlock Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" LineHeight="18"

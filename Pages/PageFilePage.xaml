@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.PageFilePage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
+
+    <!--
+      虚拟内存 / 分页文件（需求清单第 19 条，2026-10-31）。
+
+      搬的是系统「高级系统设置 → 性能选项 → 高级 → 虚拟内存」那个对话框，换成 WinUI 3 的排法：
+      先选驱动器，再给这一个驱动器三选一（自定义 / 系统管理 / 无），差值写进待应用队列。
+
+      版式照抄母版 Pages/AutoShutdownPage.xaml：三列 Grid 把内容钉在中间 960 宽。
+      ⚠️ 别用 Stretch + MaxWidth —— 触发上限时 WinUI 会把整列右甩。
+
+      交互与「系统功能」页一致（Nick 定「排队 + 一次弹 UAC」），
+      所以右下角有同一套 TeachingTip：清单 + 单项取消 + 一次授权。
+    -->
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Grid Margin="24,36,24,44">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="24" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel x:Name="RowsPanel" Grid.Column="1" MaxWidth="960" Spacing="4">
+
+                    <Grid Margin="0,0,0,16" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="虚拟内存" FontSize="28" FontWeight="Bold" VerticalAlignment="Center" />
+
+                        <!-- 提示条被收起后的回入口：两个入口不同时出现 -->
+                        <Button x:Name="PendingButton" Grid.Column="1" Visibility="Collapsed"
+                                VerticalAlignment="Center" Click="PendingButton_Click" />
+
+                        <Button x:Name="HubAiEntry" Grid.Column="2" Padding="12,6" Click="HubAiEntry_Click"
+                                VerticalAlignment="Center" ToolTipService.ToolTip="打开 Hub AI 顾问">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8F2;" FontSize="13" />
+                                <TextBlock Text="AI" FontSize="12.5" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <InfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" Visibility="Collapsed"
+                             Severity="Informational" Message="" Margin="0,0,0,8" />
+
+                    <!-- 常驻：这件事改完不重启看不到效果，且重启是唯一生效方式 -->
+                    <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
+                             Title="修改后需重启"
+                             Message="系统在启动时按这份配置创建或删除分页文件，进入系统后配置才生效。" />
+
+                    <controls:SettingsCard Header="自动管理所有驱动器的分页文件大小" Margin="0,4,0,0">
+                        <controls:SettingsCard.Description>
+                            <TextBlock Text="由系统决定各盘分页文件的大小。" TextWrapping="Wrap" />
+                        </controls:SettingsCard.Description>
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xEDA2;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <ToggleSwitch x:Name="SwAutomatic" MinWidth="0"
+                                      OnContent="已开启" OffContent="已关闭" Toggled="Automatic_Toggled" />
+                    </controls:SettingsCard>
+
+                    <!-- ═════════ 驱动器列表 ═════════ -->
+                    <TextBlock Text="每个驱动器的分页文件大小" FontSize="14" Margin="0,18,0,2" />
+
+                    <!--
+                      原生 ListView：选中态、键盘导航、焦点框都是控件自带的。
+                      ⚠️ 行内容在代码里构造（BuildDriveRows），⛔ 不用 ItemTemplate + x:Bind ——
+                         这套组合在这份 XamlCompiler 上会崩（见 MustRead §3）。
+                    -->
+                    <ListView x:Name="DriveList" MaxHeight="260" SelectionMode="Single"
+                              SelectionChanged="DriveList_SelectionChanged" />
+
+                    <TextBlock x:Name="EmptyHint" Visibility="Collapsed" FontSize="12.5" Opacity="0.65"
+                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="没有检测到可用的固定磁盘。" />
+
+                    <!-- ═════════ 所选驱动器的设置 ═════════ -->
+                    <Border Style="{StaticResource CshCardStyle}" Margin="0,10,0,0" Padding="16,14">
+                        <StackPanel x:Name="EditPanel" Spacing="10">
+
+                            <StackPanel Spacing="2">
+                                <TextBlock x:Name="SelTitle" FontSize="14" />
+                                <TextBlock x:Name="SelSub" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <RadioButton x:Name="RbCustom" GroupName="PageFileMode" Content="自定义大小"
+                                         Checked="Mode_Checked" />
+                            <Grid ColumnSpacing="12" Margin="28,0,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <NumberBox x:Name="NumMin" Header="初始大小（MB）" Minimum="16" Maximum="1048576"
+                                           SpinButtonPlacementMode="Compact" ValueChanged="Number_Changed" />
+                                <NumberBox x:Name="NumMax" Grid.Column="1" Header="最大值（MB）" Minimum="16"
+                                           Maximum="1048576" SpinButtonPlacementMode="Compact"
+                                           ValueChanged="Number_Changed" />
+                            </Grid>
+
+                            <RadioButton x:Name="RbSystem" GroupName="PageFileMode" Content="系统管理的大小"
+                                         Checked="Mode_Checked" />
+                            <RadioButton x:Name="RbNone" GroupName="PageFileMode" Content="无分页文件"
+                                         Checked="Mode_Checked" />
+
+                            <TextBlock x:Name="ShapeHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                       Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═════════ 汇总 ═════════ -->
+                    <Border Style="{StaticResource CshCardStyle}" Margin="0,10,0,0" Padding="16,12">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="允许的最小值" FontSize="12.5" Opacity="0.75" />
+                                <TextBlock x:Name="SumFloor" Grid.Column="1" FontSize="12.5" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="当前已分配" FontSize="12.5" Opacity="0.75" />
+                                <TextBlock x:Name="SumAllocated" Grid.Column="1" FontSize="12.5" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!--
+            应用提示：非目标式 TeachingTip，固定在右下角浮出。
+            ⚠️ 必须挂在 ScrollViewer **外面**，否则会随内容一起滚走。
+        -->
+        <TeachingTip x:Name="ApplyTip"
+                     PreferredPlacement="BottomRight"
+                     IsLightDismissEnabled="False"
+                     ActionButtonContent="应用更改"
+                     CloseButtonContent="暂不应用"
+                     ActionButtonClick="ApplyTip_ActionClick"
+                     CloseButtonClick="ApplyTip_CloseClick"
+                     Closed="ApplyTip_Closed">
+            <TeachingTip.Content>
+                <!-- ⛔ 不用 ItemsRepeater / ListView + 模板：塞进模板容器时进程会被直接杀掉（2026-10-30 实测） -->
+                <ScrollViewer MaxHeight="260"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="PendingList" />
+                </ScrollViewer>
+            </TeachingTip.Content>
+        </TeachingTip>
+
+        <ui:HubAiFlyout x:Name="AiFlyout" />
+    </Grid>
+</Page>

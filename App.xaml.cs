@@ -595,6 +595,21 @@ public partial class App : Application
             return;
         }
 
+        // ── 分页文件（虚拟内存）的提权助手（2026-10-31 加，与上面同一个套路） ──
+        //  PagingFiles 在 HKLM 下，普通权限写不动。这里**不用 reg.exe 拼命令行**，
+        //  而是让本程序以管理员身份重入一次、用注册表 API 直接写 string[] ——
+        //  改错要重启才看得见，所以宁可绕这一下也不赌命令行的转义。
+        //  ⛔ 同样必须在**最前面**接管：不建界面、不碰互斥体、不往托盘塞图标，干完就走。
+        for (var i = 0; i < argv.Length - 1; i++)
+        {
+            if (!argv[i].Equals(Services.PageFileService.AdminSwitch, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Services.PageFileService.ApplyElevated(argv[i + 1]);
+            Environment.Exit(0);
+            return;
+        }
+
         // ── 系统修复任务的提权助手（2026-10-16 加，同一个套路） ──
         //  7 张修复卡全部要管理员权限。命令跑在助手里，输出/进度/心跳/结局写成文件，
         //  非提权的父进程读那些文件来显示；中止也是父进程写哨兵、助手自己杀子进程树。
@@ -722,6 +737,24 @@ public partial class App : Application
         return link;
     }
 
+    /// <summary>
+    /// 本次启动要不要走初次配置（OOBE，需求 1:22）。由 <see cref="OnLaunched"/> 在读出存档后置位，
+    /// 之后一直有效到 <see cref="EndOobeAndShowMainWindow"/>。
+    /// <para>
+    /// ⚠️ 隐藏式启动（<c>--minimized</c> / <c>--palette</c>）不会置位：那两种启动本来就是
+    /// "主窗口别露脸"，压一扇欢迎窗上去等于把用户从托盘里拽出来。此时**不动** OobeState，
+    /// 还是 Pending，下次正常启动接着问。
+    /// </para>
+    /// </summary>
+    private static bool _oobePending;
+
+    /// <summary>
+    /// 主窗口要不要把 Shell 初始化推迟到初次配置结束。
+    /// ⚠️ 只有"这次真的会弹向导"才为真 —— 新装带 <c>--minimized</c> / <c>--palette</c> 时
+    /// <see cref="_oobePending"/> 仍是 true 但向导不弹，那种情况不能推迟，否则 Shell 永远是空的。
+    /// </summary>
+    internal static bool ShellDeferredForOobe { get; private set; }
+
     /// <summary>建"叫醒"事件。建不出来（极罕见）只是丢掉这条兜底路径，不影响启动。</summary>
     private static void TryCreateActivateSignal()
     {
@@ -785,7 +818,32 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // 初次配置（需求 1:22）到底该不该弹，**必须在 Load 之前**取这个事实。
+        // ⛔ 别改成 Load 之后再 File.Exists：Load 里的 EnsureNewSidebarModules 对新用户会 Save，
+        //    一 Save 文件就存在了，"这是新装"这个事实当场丢失，OOBE 永远弹不出来（2026-10-31）。
+        var hadSettingsFile = System.IO.File.Exists(Settings.FilePath);
+
         Settings.Load();
+
+#if DEBUG
+        // 仅调试构建：--oobe-preview 强制预览一次向导，不写 OobeState、不应用设置，
+        // 方便反复看动画（见 WelcomeWindow.ShowPreview）。发布构建里这段不存在。
+        var previewOobe = Environment.GetCommandLineArgs().Any(a =>
+            a.Equals("--oobe-preview", StringComparison.OrdinalIgnoreCase));
+        if (previewOobe)
+        {
+            _oobePending = true;
+        }
+        else
+#endif
+        // 两种要弹：① 新装（存档本来就不存在）；② 上次配到一半没走完（Pending）。
+        // 升级上来的老用户存档在、但这个字段是 Unknown → 不弹，也不写盘（免得白改一次用户文件）。
+        if (!hadSettingsFile || Settings.Current.OobeState == OobeStates.Pending)
+        {
+            Settings.Current.OobeState = OobeStates.Pending;
+            Settings.Save();                 // 立刻落盘：之后就算被强杀，下次仍认得出"没走完"
+            _oobePending = true;
+        }
 
         // ⛔⛔ 文本框右键菜单**只能在这里**装，不能挪进构造函数：实测构造函数期间访问
         //     Application.Resources 直接抛 COMException 0x8000FFFF(E_UNEXPECTED)，
@@ -831,6 +889,19 @@ public partial class App : Application
         //  点桌面图标没反应」这一组症状。
         StartActivateListener();
 
+        // 本次启动是不是"故意不露脸"（开机最小化 / 只开工具浮窗）。放这么前是因为它同时决定
+        // 初次配置要不要弹、主窗口要不要立刻 Activate。
+        var startupHidesWindow = Environment.GetCommandLineArgs().Any(a =>
+            a.Equals("--minimized", StringComparison.OrdinalIgnoreCase) ||
+            a.Equals("--palette", StringComparison.OrdinalIgnoreCase));
+
+        // ⛔ 初次配置（需求 1:22）：主窗口**只建不 Activate**，等 OOBE 走完再亮出来。
+        //    他要的顺序是「先配置、再出主界面」（2026-10-31），不是以前那样两扇窗同时出现。
+        //    ⚠️ 建窗不能省：托盘、csh:// 协议注册、右键钩子、后台巡检全挂在 MainWindow 身上。
+        var deferForOobe = _oobePending && !startupHidesWindow;
+
+        ShellDeferredForOobe = deferForOobe;
+
         try
         {
             MainWindow = new MainWindow();
@@ -840,13 +911,20 @@ public partial class App : Application
             Core.AppLog.Info("startup", "主窗口构造失败: " + ex);
         }
 
-        try
+        if (!deferForOobe)
         {
-            MainWindow?.Activate();
+            try
+            {
+                MainWindow?.Activate();
+            }
+            catch (Exception ex)
+            {
+                Core.AppLog.Info("startup", "主窗口 Activate 失败: " + ex);
+            }
         }
-        catch (Exception ex)
+        else
         {
-            Core.AppLog.Info("startup", "主窗口 Activate 失败: " + ex);
+            Core.AppLog.Info("startup", "本次是新装首启：主窗口先不显示，等初次配置走完");
         }
 
         // 应用链接（csh://，需求 1:18）：
@@ -906,11 +984,9 @@ public partial class App : Application
         //   不可见就再亮一次并把结果写进日志 —— 这条链路以后出问题能一眼定位。
         //   ⚠️ --minimized / --palette 是**故意**藏主窗口的，这两种启动方式不装兜底，
         //      否则刚藏起来就被自己叫回来。
-        var startupHidesWindow = Environment.GetCommandLineArgs().Any(a =>
-            a.Equals("--minimized", StringComparison.OrdinalIgnoreCase) ||
-            a.Equals("--palette", StringComparison.OrdinalIgnoreCase));
-
-        if (!startupHidesWindow) MainWindow?.ArmStartupVisibleWatchdog();
+        //   ⚠️ 等 OOBE 的那一轮也不装：这时主窗口本就该是"没显示"的状态，
+        //      装了兜底会把它当场亮出来，初次配置就被压在下面了。
+        if (!startupHidesWindow && !deferForOobe) MainWindow?.ArmStartupVisibleWatchdog();
 
         // 两个实验性功能的到点巡检。⚠️ 都靠本进程内的定时器 —— 本程序没在跑就不会查杀
         //    （2026-09-28 Nick 确认按这个来，不往系统里装计划任务）。
@@ -968,6 +1044,58 @@ public partial class App : Application
         catch (Exception ex)
         {
             Core.AppLog.Exception("announce-lan", ex, "启动局域网通道");
+        }
+
+        // 初次配置放最后弹：前面这些起完，用户关掉 OOBE 时主界面是"随时可用"的状态，
+        // 不会出现"配置完了、主界面还在初始化"的空档。
+        if (deferForOobe)
+        {
+#if DEBUG
+            if (previewOobe) Views.WelcomeWindow.ShowPreview(EndOobeAndShowMainWindow);
+            else
+#endif
+            Views.WelcomeWindow.ShowForFirstRun(EndOobeAndShowMainWindow);
+        }
+    }
+
+    /// <summary>
+    /// 初次配置结束（完成 / 关窗）后亮主窗口 —— 这是新装首启时主窗口的**唯一**显示时机。
+    ///
+    /// <para>
+    /// ⚠️ 三个动作缺一不可：<c>Activate</c> 让窗口出现；<c>ArmStartupVisibleWatchdog</c> 补上
+    /// 启动时被跳过的那道兜底；日志留痕便于对时序。
+    /// </para>
+    /// </summary>
+    private static void EndOobeAndShowMainWindow()
+    {
+        Core.AppLog.Info("oobe", "初次配置结束，显示主窗口");
+
+        // 向导期间故意没建 Shell 首页（见 MainWindow 构造函数），露脸前先补上。
+        try
+        {
+            MainWindow?.StartShell();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("oobe", ex, "向导结束后初始化 Shell 失败");
+        }
+
+        try
+        {
+            MainWindow?.Activate();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Warn("oobe", "初次配置结束后激活主窗口失败：" + ex.Message);
+        }
+
+        try
+        {
+            MainWindow?.ArmStartupVisibleWatchdog();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Warn("oobe", "主窗口可见性兜底安装失败：" + ex.Message);
         }
     }
 

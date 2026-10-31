@@ -33,7 +33,7 @@
                 <StackPanel Spacing="5">
                     <TextBlock Text="侧边布局" FontSize="28" FontWeight="Bold" />
                     <TextBlock FontSize="13" Opacity="0.7" TextWrapping="Wrap"
-                               Text="从左侧模块库选择模块，拖入右侧侧边栏预览（亦可单击卡片添加）；在预览区拖动可调整顺序，拖出即移除。右侧即侧边栏的实际效果。触摸屏操作：按住卡片约半秒且手指不移动即可拖动；直接滑动则为滚动整页。" />
+                               Text="从左侧拖入右侧预览区，预览即侧边栏实际效果。" />
                 </StackPanel>
 
                 <Grid Grid.Row="1" ColumnSpacing="22">
@@ -79,7 +79,7 @@
                         </Border>
 
                         <TextBlock FontSize="11.5" Opacity="0.6" Width="240" TextWrapping="Wrap"
-                                   Text="右侧三个按钮：上移 / 下移 / 移除。将模块拖出后松手亦可移除。" />
+                                   Text="也可把模块拖出预览区移除。" />
                     </StackPanel>
                 </Grid>
 
@@ -105,7 +105,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="屏幕边缘侧边栏"
-                                               Description="在屏幕边缘常驻一条工具栏，可放置常用工具与内置功能。">
+                                               Description="屏幕边缘的常驻工具栏。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8A0;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -116,7 +116,7 @@
                         <!-- 按钮文字：短名（两三个字）还是长名（最多四个字，2026-10-30 Nick 要）。
                              ⚠️ 只影响**侧边栏按钮上那行字**，悬停提示和「侧边布局」这里的名字一直用全名。 -->
                         <controls:SettingsCard Header="按钮使用长名"
-                                               Description="两三个字常常看不出用途，改用最多四个字的名称（例如「抽号」改为「随机抽号」）。">
+                                               Description="最多四个字，便于辨认。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8D2;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -156,7 +156,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="侧边栏大小样式"
-                                               Description="侧边栏收起成那条小抓手时的大小样式。「标准」为默认；「紧凑」把条收细、图标与文字相应缩小，按钮的点击区域仍保持较大尺寸（不至于点不准）。展开后的面板默认跟着这项走，也可以在下一条里单独指定。">
+                                               Description="收起成抓手时的粗细。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE747;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -168,7 +168,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="展开后的大小样式"
-                                               Description="侧边栏展开成面板后用哪套大小样式。默认「跟随收起时的样式」，即上下两态一致；也可以单独指定（例如收起时用紧凑省地方、展开后仍用标准）。">
+                                               Description="默认与收起时一致。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE70E;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -181,7 +181,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="工具排列模式"
-                                               Description="「舒展模式」每行三个、放满自动折行，面板更宽、能横向铺开；「紧凑模式」每行一个、自上而下竖排，面板更窄、更省地方。仅在贴靠屏幕左右两边时生效，贴上边或下边时为横向单行。">
+                                               Description="仅贴靠屏幕左右两边时生效。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8FD;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -193,7 +193,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="展开面板高度"
-                                               Description="侧边栏展开后最多占屏幕可用高度的比例，拖动即时生效。上方数值是上限，实际高度见下一条。仅对「紧凑模式」（单列）有效。">
+                                               Description="面板高度上限，仅对「紧凑模式」有效。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE740;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -217,7 +217,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="自适应高度"
-                                               Description="展开面板的高度随其中模块的数量伸缩，上方设置的比例只作为上限：模块较少时面板随之收短，不会在下方留出空白。关闭后高度固定为上方比例，模块较少时下方会留白。">
+                                               Description="模块少时面板随之收短。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE9A6;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -226,7 +226,7 @@
                         </controls:SettingsCard>
 
                         <controls:SettingsCard Header="收起时离屏幕边缘"
-                                               Description="侧边栏收起成那条小抓手时，与屏幕边缘之间留出的距离。选「0」即紧贴屏幕边缘。此项仅对收起状态生效，展开后的面板始终紧贴边缘。">
+                                               Description="仅对收起状态生效。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE71D;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -254,7 +254,7 @@
                     <StackPanel Spacing="4">
 
                         <controls:SettingsCard Header="截图后自动保存一份原图"
-                                               Description="保存至下方目录，文件名格式为 截图_年月日_时分秒.png（重名时自动追加序号）。">
+                                               Description="文件名格式：截图_年月日_时分秒.png">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE722;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -295,7 +295,7 @@
                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap" Margin="0,-4,0,8"
-                               Text="侧边栏展开面板底部自带的一排按钮，逐颗控制显示与隐藏；侧边栏按实际显示的颗数收缩。" />
+                               Text="按实际显示的颗数收缩。" />
                     <StackPanel Spacing="4">
 
                         <controls:SettingsCard Header="收起" Description="把侧边栏收成一条窄条，收起来后仍可重新展开。">
@@ -350,11 +350,11 @@
                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap" Margin="0,-4,0,8"
-                               Text="侧边栏「关机」按钮触发后的行为。该按钮按下后会先弹出确认，避免误触。" />
+                               Text="按下后会先弹出确认。" />
                     <StackPanel Spacing="4">
 
                         <controls:SettingsCard Header="关机方式"
-                                               Description="手动关机：调用系统「滑动关机」界面，下滑滑块才真正关机。直接关机：立即关闭计算机。">
+                                               Description="手动关机需滑动滑块确认。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE7E8;" />
                             </controls:SettingsCard.HeaderIcon>
@@ -375,14 +375,10 @@
                     -->
                     <TextBlock Text="动画方案" Style="{StaticResource BodyStrongTextBlockStyle}"
                                Margin="0,24,0,8" />
-                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               TextWrapping="Wrap" Margin="0,-4,0,8"
-                               Text="拖放卡片落位时的收尾效果。两种方案均已完成验证，手感取向不同；其实两者观感差异不大，只是开发过程中两种效果均做得不错，删之可惜，一并保留，交由各位自行选择。" />
                     <StackPanel Spacing="4">
 
                         <controls:SettingsCard Header="落位收尾"
-                                               Description="平滑收势：落位后直接收掉提起效果。轻落一下：落位后再轻轻下沉一次，落地感更实。">
+                                               Description="平滑收势：直接收起。轻落一下：再下沉一次。">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8CB;" />
                             </controls:SettingsCard.HeaderIcon>

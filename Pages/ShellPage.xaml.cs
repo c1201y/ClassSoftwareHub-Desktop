@@ -36,6 +36,9 @@ public sealed partial class ShellPage : UserControl
         // 「内置工具」分组的子项从 ToolCatalog 动态生成（tag = ToolDef.Id，工具清单只有一份）
         BuildToolNavItems();
 
+        // 「实验性功能」同理，清单在 ExperimentalFeatureCatalog（2026-11-01 收编）
+        BuildExperimentalNavItems();
+
         // 下载任务数变了 → 同步「任务进行」上的徽标（在下载就不占着界面，但得让人随时看见有几个在下）
         Services.DownloadManager.Current.Changed += UpdateDownloadBadge;
         UpdateDownloadBadge();
@@ -76,6 +79,30 @@ public sealed partial class ShellPage : UserControl
             {
                 Content = def.Name,
                 Tag = def.Id,
+                Icon = new FontIcon { Glyph = def.Glyph },
+            });
+        }
+    }
+
+    /// <summary>
+    /// 「实验性功能」分组的子项：按 <see cref="ExperimentalFeatureCatalog.All"/> 动态生成
+    /// （tag = <see cref="ExperimentalFeature.Tag"/>）。
+    ///
+    /// <para>
+    /// ⛔ 清单只有 ExperimentalFeatureCatalog 一份 —— 导航子项与总览页卡片都从它来。
+    /// 2026-11-01 之前这里是 <c>ShellPage.xaml</c> 里手写的七条，另一份在 ExperimentalPage 里，
+    /// 结果「白板专杀 / AppData 管理 / 系统修复」转正搬走后总览页还留着三张旧卡，
+    /// 而「虚拟内存」只加进了导航、总览页根本看不见 —— 两份清单必然漂移。
+    /// </para>
+    /// </summary>
+    private void BuildExperimentalNavItems()
+    {
+        foreach (var def in ExperimentalFeatureCatalog.All)
+        {
+            ExperimentalNav.MenuItems.Add(new NavigationViewItem
+            {
+                Content = def.Name,
+                Tag = def.Tag,
                 Icon = new FontIcon { Glyph = def.Glyph },
             });
         }
@@ -392,6 +419,14 @@ public sealed partial class ShellPage : UserControl
                 return;
             case "sysfeatures":
                 ContentFrame.Navigate(typeof(SystemFeaturesPage));
+                return;
+            case "pagefile":
+                ContentFrame.Navigate(typeof(PageFilePage));
+                return;
+            case "dictionary":
+                // 查单词（需求清单第 17 条）：纯原生页，词源调度在 Services/Dictionary 里，
+                // 不经 ToolCarrier —— 它不是可替换的网页小工具，也不需要 WebView2。
+                ContentFrame.Navigate(typeof(DictionaryPage));
                 return;
             case "experimental":
                 // 「实验性功能」分组的父项**自己就是总览入口**：点它 = 展开/收起分组 + 进这一页。

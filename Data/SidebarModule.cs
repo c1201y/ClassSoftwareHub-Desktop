@@ -109,6 +109,15 @@ public static class SidebarModules
         new() { Id = "stopwatch", Name = "秒表计时", ShortName = "秒表", LongName = "秒表计时", Glyph = "\uE916", Kind = SidebarModuleKinds.Palette },
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", LongName = "全屏时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
         new() { Id = "image-color", Name = "图片取色", ShortName = "取色", LongName = "图片取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
+        // 查单词（需求清单第 17 条，2026-11-01）。刻意**不**走 SidebarModulesRevision 自动补入 ——
+        // 侧边栏是老师上课时一直挂着的一排按钮，位置很贵，新功能默认塞进去反而添乱。
+        // 想要的人去「侧边布局」页自己勾，那里会看到这一项（Kind=Page，跳主窗口的那一页）。
+        // 查阅单词（需求清单第 17 条，2026-11-01）：侧边栏上这颗开的是**小浮窗**（QuickLookupWindow），
+        // 不是把主界面那整页拉出来 —— 讲课中途查一个词，不该盖住课件。
+        // 整页入口在左侧导航「查阅单词」（Tag=dictionary）。
+        // 刻意**不**走 SidebarModulesRevision 自动补入：侧边栏是上课时一直挂着的一排按钮，
+        // 位置很贵，新功能默认塞进去反而添乱；要用的人去「侧边布局」页自己勾。
+        new() { Id = "dictionary", Name = "查阅单词", ShortName = "查阅", LongName = "查阅单词", Glyph = "\uE8F1", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.QuickLookupWindow), Note = "弹出小浮窗查阅单词：英译中、中译英都支持，先查本地词库，未收录的再联网" },
         // 2026-10-30 定稿：这里开的是**小浮窗**（HashCheckWindow），不是把应用里那整页搬进窗口。
         // 整页（编码 + 文本编解码）仍在「系统工具 → 编码 / 哈希工具」里，那才是给它留的位置。
         new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", LongName = "编码校验", Glyph = "\uE943", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.HashCheckWindow), Note = "弹出小浮窗做哈希校验：拖入文件即出 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴官方校验值自动比对" },

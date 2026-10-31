@@ -17,7 +17,7 @@
         <StackPanel Spacing="14">
 
             <TextBlock FontSize="13" Opacity="0.75" TextWrapping="Wrap"
-                       Text="下面两份是同一批姓名的两种做法，任选一种 —— 左边是 Excel 表格里的样子，右边是记事本里的样子。程序只认「一格 / 一行一个名字」：表头（如「姓名」）会自动跳过，重复的姓名只算一次，最多支持 2000 人。" />
+                       Text="两种写法任选其一，一格或一行一个名字。" />
 
             <Grid ColumnSpacing="14">
                 <Grid.ColumnDefinitions>
@@ -44,7 +44,7 @@
                 <StackPanel Grid.Column="1" Spacing="6">
                     <TextBlock Text="做法二：纯文本（.txt / .csv）" FontSize="12.5" FontWeight="SemiBold" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
-                               Text="用记事本一行写一个名字；一行里写多个，用逗号、顿号或分号隔开也行。" />
+                               Text="一行一个名字，也可用逗号、顿号或分号隔开。" />
                     <Border Height="380" CornerRadius="8" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource ControlFillColorDefaultBrush}">
