@@ -1,0 +1,11 @@
+{
+  "title": "C 盘空间不足时的清理顺序",
+  "author": "椰汁",
+  "contact": "GitHub @c1201y",
+  "summary": "先统计占用，再从可回退的位置开始清理。",
+  "tags": ["磁盘", "清理", "系统"],
+  "type": "markdown",
+  "file": "article.md",
+  "date": "2026-11-01",
+  "order": 10
+}

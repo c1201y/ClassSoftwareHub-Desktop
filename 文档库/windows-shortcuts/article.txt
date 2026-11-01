@@ -1,0 +1,31 @@
+教室电脑常用快捷键与设置入口
+
+整理：椰汁
+更新：2026-11-01
+
+一、窗口与桌面
+Win + D          显示桌面
+Win + E          打开文件资源管理器
+Win + L          锁定电脑
+Alt + Tab        切换窗口
+Win + Tab        任务视图
+
+二、课堂演示
+Win + P          切换投影模式（复制 / 扩展）
+Win + 加号       打开放大镜
+Win + V          打开剪贴板历史（需先在系统设置中开启）
+F5               刷新当前页面
+Alt + F4         关闭当前窗口
+
+三、系统设置入口
+投影设置：ms-settings:display
+声音设置：ms-settings:sound
+存储设置：ms-settings:storagesense
+Windows 更新：ms-settings:windowsupdate
+
+四、应用内入口
+软件下载：csh://page/apps
+磁盘空间工具：csh://tool/disk-map
+系统功能：csh://page/sysfeatures
+
+说明：键盘上没有 Win 键时，多数键鼠套装可以用 Ctrl + Esc 代替 Win 键。

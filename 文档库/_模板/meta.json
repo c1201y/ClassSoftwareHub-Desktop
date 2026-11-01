@@ -1,0 +1,11 @@
+{
+  "title": "文章标题",
+  "author": "署名",
+  "contact": "联系方式，可留空",
+  "summary": "一句话简介，列表页显示",
+  "tags": ["标签"],
+  "type": "markdown",
+  "file": "article.md",
+  "date": "2026-11-01",
+  "order": 999
+}

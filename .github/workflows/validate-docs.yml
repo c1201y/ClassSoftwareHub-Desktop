@@ -1,0 +1,50 @@
+name: 校验文档库
+
+# 文档库文章跟桌面端代码放在同一个仓库（文档库/），这个工作流只做一件事：
+# 在文章目录变动时按**客户端的读取口径**校验一遍，避免「仓库里看着没问题、桌面端读不出来」。
+#
+# 校验内容与 Services/Docs/DocLibrary.cs、Controls/DocView.cs 对齐：
+#   · 目录名：小写字母 / 数字 / 横杠（客户端按 id 拼路径，大小写与空格都会出问题）
+#   · meta.json：字段齐全、JSON 合法、UTF-8、未知字段只提醒
+#   · type 与正文扩展名一致，file 指向的文件真实存在（区分大小写）
+#   · Markdown 里相对路径的图片必须存在；外链图片只提醒（要联网）
+#   · csh://article/<id> 指向的文章必须存在（只提醒，允许先发正文后补文章）
+#   · 单文件与整篇的体积上限（文档会整文件下载到本机缓存）
+#
+# 这是纯校验任务：只读仓库，不写回、不部署。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '文档库/**'
+      - 'scripts/validate-docs.mjs'
+      - '.github/workflows/validate-docs.yml'
+  pull_request:
+    paths:
+      - '文档库/**'
+      - 'scripts/validate-docs.mjs'
+      - '.github/workflows/validate-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出源码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 校验「文档库」目录
+        run: node scripts/validate-docs.mjs

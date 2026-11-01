@@ -1,0 +1,63 @@
+name: 文档投稿
+description: 向文档库投稿一篇电脑优化教程
+title: "[文档投稿] "
+labels: ["文档投稿"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交后会自动整理成 `文档库/<id>/` 并开一个草稿 PR，维护者审核内容后合并。
+        图片请在正文里使用直链（issue 带不了图片文件）；正文支持 Markdown。
+  - type: input
+    id: doc-title
+    attributes:
+      label: 文章标题
+      placeholder: 例如：投影无法识别的排查顺序
+    validations:
+      required: true
+  - type: input
+    id: doc-id
+    attributes:
+      label: 文章 id
+      description: 英文小写，用短横线连接，会成为仓库里的文件夹名；收录后不建议再改
+      placeholder: 例如：projector-not-recognized
+    validations:
+      required: true
+  - type: input
+    id: author
+    attributes:
+      label: 署名
+      description: 显示在文章页与列表中的作者名
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: 联系方式
+      description: 仅用于投稿沟通，不会显示在文章中
+      placeholder: QQ / 邮箱 / GitHub 用户名
+    validations:
+      required: false
+  - type: textarea
+    id: summary
+    attributes:
+      label: 一句话简介
+      description: 列表页显示，尽量控制在 30 字以内
+    validations:
+      required: true
+  - type: input
+    id: tags
+    attributes:
+      label: 标签
+      description: 用顿号分隔
+      placeholder: 投影、显示、排查
+    validations:
+      required: false
+  - type: textarea
+    id: content
+    attributes:
+      label: 正文
+      description: Markdown 可直接粘贴；docx / pdf 请附下载链接
+      render: markdown
+    validations:
+      required: true

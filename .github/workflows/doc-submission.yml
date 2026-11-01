@@ -1,0 +1,76 @@
+name: 整理文档投稿
+
+# 只处理「文档投稿」表单开出来的 issue：整理成 文档库/<id>/，校验，然后开草稿 PR。
+# 权限只够写本仓库并在 issue 回帖；正文全程走环境变量，不拼进命令行。
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: doc-submission-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    if: startsWith(github.event.issue.title, '[文档投稿]')
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 整理成目录
+        id: build
+        continue-on-error: true
+        run: node scripts/issue-to-doc.mjs
+
+      - name: 回帖说明哪里不合格
+        if: steps.build.outcome == 'failure'
+        run: gh issue comment "$ISSUE_NUMBER" --body-file submission-message.md
+
+      - name: 中止
+        if: steps.build.outcome == 'failure'
+        run: exit 1
+
+      - name: 校验文档库
+        id: validate
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          node scripts/validate-docs.mjs 2>&1 | tee validation.log
+
+      - name: 校验失败时回帖
+        if: steps.validate.outcome == 'failure'
+        run: |
+          {
+            printf '自动整理生成了目录，但没通过文档库校验：\n\n```\n'
+            tail -30 validation.log
+            printf '```\n'
+          } > validation-message.md
+          gh issue comment "$ISSUE_NUMBER" --body-file validation-message.md
+          exit 1
+
+      - name: 提交分支并开草稿 PR
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "docs/issue-$ISSUE_NUMBER"
+          git add -- "文档库"
+          git commit -m "$(cat submission-title.txt)"
+          git push -u origin "docs/issue-$ISSUE_NUMBER"
+          url=$(gh pr create --draft --base main --head "docs/issue-$ISSUE_NUMBER" \
+            --title "$(cat submission-title.txt)" --body-file submission-pr-body.md)
+          printf '\n草稿 PR：%s\n' "$url" >> submission-message.md
+          gh issue comment "$ISSUE_NUMBER" --body-file submission-message.md
