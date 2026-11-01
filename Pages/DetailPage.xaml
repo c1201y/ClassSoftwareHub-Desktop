@@ -75,6 +75,13 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel>
+                        <!-- 文件存在本站对象存储的软件：说明来源（2026-11-01 加）。
+                             这类软件的安装包由投稿者上传到本站 OSS，不是官方渠道 —— 出问题时
+                             用户得知道该找谁，而不是回头找下载站。
+                             ⛔ 同样默认 Collapsed：关着的 InfoBar 仍占一排高度（约 32px）。 -->
+                        <InfoBar x:Name="OssBar" Severity="Warning" IsOpen="False"
+                                 Visibility="Collapsed" IsClosable="False" Margin="0,0,0,14" />
+
                         <!-- 小提示（数据里 notice 字段）。⛔ 默认 Collapsed：
                              关着的 InfoBar 仍会占掉一排高度（约 32px），把「应用介绍」压低、
                              跟右栏的「推荐应用」错开一大截。 -->

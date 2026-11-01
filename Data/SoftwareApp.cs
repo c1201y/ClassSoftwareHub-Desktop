@@ -129,9 +129,34 @@ public sealed class SoftwareApp : System.ComponentModel.INotifyPropertyChanged
 
     public string Website { get; set; } = "";
     public string Github { get; set; } = "";
+
+    /// <summary>
+    /// 开发者名称（可选，2026-11-01 加）：个人或团队。投稿时由提交者填，详情页有值才显示。
+    /// 主要给用户自制软件用 —— 官方软件顺着 Github / Website 就能找到作者，不必重复一遍。
+    /// </summary>
+    public string Author { get; set; } = "";
+
+    /// <summary>
+    /// 开源协议（可选，2026-11-01 加）：SPDX 标识或协议全名，如 MIT / GPL-3.0。
+    /// 不开源的软件留空，界面不显示这一行（⛔ 不要填「未标注」之类的占位）。
+    /// </summary>
+    public string License { get; set; } = "";
+
     public string Notice { get; set; } = "";
     public string Store { get; set; } = "";
     public List<DownloadItem> Downloads { get; set; } = new();
+
+    /// <summary>
+    /// 有没有存在本站对象存储里的文件（下载地址以 <c>oss://</c> 开头）。
+    ///
+    /// <para>
+    /// 这是唯一一种「文件真的在咱们机器上」的分发方式，其余全是官方直链或网盘跳转。
+    /// 有它就要在详情页说明来源：文件是投稿者自己传的，不是官方渠道 —— 出问题时用户
+    /// 能判断该找谁，而不是回头找下载站。
+    /// </para>
+    /// </summary>
+    public bool HasOssDownload =>
+        Downloads.Any(d => d.Url.StartsWith("oss://", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>卡片副标题：有版本号显示版本，否则显示一句话简介。</summary>
     public string CardSubtitle => Version.Length > 0 ? "v" + Version : Tagline;

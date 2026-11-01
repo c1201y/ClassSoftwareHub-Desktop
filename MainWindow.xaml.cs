@@ -147,6 +147,12 @@ public sealed partial class MainWindow : Window
         // 启动时查一次更新：**不强制**，有新版就问用户（主窗口没露脸时发系统通知）
         _ = CheckUpdateOnStartupAsync();
 
+        // 条款正文拉一次（2026-11-01）：站点改完条款提交即生效，不必等下一次发版。
+        // 后台跑、不挡任何界面；六条线路全失败就继续用内置那份，条款窗顶部会说明一句。
+        // ⚠️ 放在首帧之后：它自己的读写都是文件与网络，但拉完要换内存里那份，
+        //    在窗口还没成型时换，用户第一眼看到的是哪一版就说不清了。
+        _ = Services.LegalTextSource.RefreshAsync();
+
         // 本次启动带着链接（csh://…，需求 1:18）：等到这里才处理 —— 首帧之前 Shell 的 Frame
         // 还没就绪，跳转会落到首页。放在更新检查之后：更新提示是"顺带问一句"，跳转是用户刚点的。
         var startupLink = App.TakeStartupLink();

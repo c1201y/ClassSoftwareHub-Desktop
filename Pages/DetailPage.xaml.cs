@@ -122,6 +122,23 @@ public sealed partial class DetailPage : Page
         AppDescription.Visibility = app.Description.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         IntroTitle.Visibility = AppDescription.Visibility;
 
+        // ── 来源说明（文件存在本站对象存储时）──
+        // 只有 `oss://` 那种「文件真的在咱们机器上」的才需要：其余都是官方直链或网盘跳转，
+        // 用户点下去看到的是官方域名，本来就清楚文件从哪来（2026-11-01）。
+        if (app.HasOssDownload)
+        {
+            OssBar.Title = ui.T("detail.oss-title", "来源说明");
+            OssBar.Message = ui.T("detail.oss-notice",
+                "文件由投稿者上传，本站未作修改，请自行核对来源与安全性。");
+            OssBar.IsOpen = true;
+            OssBar.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            OssBar.IsOpen = false;
+            OssBar.Visibility = Visibility.Collapsed;
+        }
+
         // ── 小提示 ──
         if (app.Notice.Length > 0)
         {
@@ -143,6 +160,10 @@ public sealed partial class DetailPage : Page
         AddInfoRow(ui.T("detail.system", "系统限制"), app.System);
         AddLinkRow(ui.T("detail.website", "官方网站"), app.Website);
         AddLinkRow(ui.T("detail.github", "GitHub"), app.Github);
+        // 开发者 / 开源协议：选填字段，⛔ 不能用 AddInfoRow（它会给空值补一句「待补充」，
+        // 而这两个字段没有就是没有，补占位反而像漏填）。
+        AddOptionalRow(ui.T("detail.author", "开发者"), app.Author);
+        AddOptionalRow(ui.T("detail.license", "开源协议"), app.License);
 
         // ── 下载 ──
         // 商店项不进下载列表，交给上方那张商店卡（判据与站点一致：kindOf() === 'store'）
@@ -291,6 +312,25 @@ public sealed partial class DetailPage : Page
             Opacity = value.Length > 0 ? 1.0 : 0.6,
         };
         InfoList.Children.Add(InfoRow(label, text));
+    }
+
+    /// <summary>
+    /// 选填的一行（开发者 / 开源协议）。没值就整行不出现。
+    ///
+    /// ⚠️ 跟 <see cref="AddInfoRow"/> 的唯一区别就在这里：版本 / 体积 / 系统是必有信息，
+    /// 空着要补一句「待补充」才不显得像坏了；而作者和协议本来就是选填，补占位反而像漏填。
+    /// </summary>
+    private void AddOptionalRow(string label, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+
+        InfoList.Children.Add(InfoRow(label, new TextBlock
+        {
+            Text = value.Trim(),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsTextSelectionEnabled = true,
+        }));
     }
 
     private void AddLinkRow(string label, string url)

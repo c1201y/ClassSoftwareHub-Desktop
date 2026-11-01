@@ -52,7 +52,12 @@ public sealed class ContentStore
     private static readonly string[] Pick =
     {
         "id", "name", "icon", "category", "tagline", "description", "version",
-        "size", "system", "website", "github", "notice", "store"
+        "size", "system", "website", "github",
+        // ⚠️ 2026-11-01 加：详情页「详细信息」区要显示开发者与开源协议。
+        //    ⛔ 这是硬白名单 —— 漏一项，json 里写了也不会出现在界面上。
+        //    （文件同步下来、缓存里也有值，但界面空着，就是因为漏在这里。）
+        "author", "license",
+        "notice", "store"
     };
 
     public List<SoftwareApp> Apps { get; } = new();
@@ -241,6 +246,8 @@ public sealed class ContentStore
                         case "system": app.System = value; break;
                         case "website": app.Website = value; break;
                         case "github": app.Github = value; break;
+                        case "author": app.Author = value; break;
+                        case "license": app.License = value; break;
                         case "notice": app.Notice = value; break;
                         case "store": app.Store = value; break;
                     }

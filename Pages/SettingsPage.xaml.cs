@@ -531,11 +531,16 @@ public sealed partial class SettingsPage : Page
 
     // ══════════ 条款与声明（用户协议 / 隐私政策 / 免责声明）══════════
     //
-    // 三份内容与站点同源：站点仓库根目录 `法律文本.ts` ⇒ Core/LegalText.cs
-    // （由 tools/sync-legal.mjs 生成；安装程序那一页 installer/Legal.rtf 同一次生成）。
-    // ⇒ 卡片文字**不许在 XAML 写死**，一律按这份数据刷，站点改条款桌面端自然跟着变。
+    // 真源：站点仓库根目录 `法律文本.ts`。
+    // 路径：站点 `public/legal.json` ⇒ Services/LegalTextSource（在线 → 缓存 → 内置）。
+    // 内置那份 Core/LegalText.cs 仍由 tools/sync-legal.mjs 生成，现在的角色只是**兜底**
+    // （安装程序那一页 installer/Legal.rtf 也还是同一次生成出来的，安装时不可能联网）。
+    //
+    // ⚠️ 2026-11-01 改：以前这里读 Core/LegalText.cs 常量，等于「改一次条款就要发一次版」。
+    //    现在读 LegalTextSource，站点改完提交即生效，旧版本客户端也能看到新条款。
+    // ⇒ 卡片文字**不许在 XAML 写死**，一律按这份数据刷。
 
-    /// <summary>按 Core/LegalText.cs 刷三张卡片的标题与说明（每份文档的版本 / 生效日期也在里面）。</summary>
+    /// <summary>按当前生效的条款数据刷三张卡片的标题与说明（每份文档的版本 / 生效日期也在里面）。</summary>
     private void RefreshLegalCards()
     {
         try
@@ -546,7 +551,7 @@ public sealed partial class SettingsPage : Page
 
             void Bind(CommunityToolkit.WinUI.Controls.SettingsCard card, string key, string blurb)
             {
-                var doc = LegalText.Find(key);
+                var doc = Services.LegalTextSource.Find(key);
                 if (doc is null) return;
                 card.Header = doc.Title;
                 card.Description = $"{blurb} · {doc.VersionLine}";

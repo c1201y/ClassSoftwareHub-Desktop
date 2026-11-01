@@ -15,7 +15,9 @@
         · 顶部：文档标题 + 「版本 v1.0 · 生效日期 …」副标题 + 三档切换（SelectorBar，
           文字直接取文档 title，跟站点标签一致）；
         · 正文：按「小节标题 + 逐条」渲染，**可选中可复制**（条款这东西用户会想复制）；
-        · 内容全部来自 Core/LegalText.cs（由 tools/sync-legal.mjs 从站点那份 TS 生成）⇒ **离线可见，不联网**。
+        · 内容由 Services/LegalTextSource 提供：在线优先 → 本地缓存 → 程序内置（2026-11-01 起）。
+          在线那份是站点导出的 `public/legal.json`，只有拉不到时才退回 Core/LegalText.cs 那份兜底，
+          此时顶部会出现一条提示，说明当前可能不是最新。
 
       ⚠️ 正文用代码往 BodyHost 里塞（不是 DataTemplate）：结构就是「节 → 条」两层、
          样式三种，代码直白得多，也免了嵌套 ItemsControl 的模板麻烦。
@@ -66,9 +68,15 @@
         <StackPanel Grid.Row="1" Margin="28,4,28,10" Spacing="4">
             <TextBlock x:Name="DocTitle" FontSize="26" FontWeight="Bold" TextWrapping="Wrap" />
             <TextBlock x:Name="DocVersion" FontSize="12" Opacity="0.75" />
-            <!-- 档位文字在代码里按 Core/LegalText.cs 的 title 生成（⛔ 别在 XAML 写死） -->
+            <!-- 档位文字在代码里按条款数据里的 title 生成（⛔ 别在 XAML 写死） -->
             <SelectorBar x:Name="DocSelector" Margin="0,8,0,0" HorizontalAlignment="Left"
                          SelectionChanged="DocSelector_SelectionChanged" />
+
+            <!-- 拉不到在线条款时才有内容（= 正在显示随程序内置的那份）。
+                 ⚠️ 只在「一次都没拉到过」时出现：正常情况用户不需要知道内容是从哪来的，
+                    写出来反而像推责。它出现时也只陈述事实，不做解释。 -->
+            <InfoBar x:Name="SourceBar" IsOpen="False" IsClosable="False"
+                     Severity="Informational" Margin="0,8,0,0" />
         </StackPanel>
 
         <!-- ⛔ 不在 ScrollViewer 上写 Padding：底部不参与滚动范围，滚到底最后一条会被裁（WinUI 3 已知坑）。

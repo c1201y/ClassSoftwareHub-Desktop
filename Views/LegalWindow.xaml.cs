@@ -15,10 +15,10 @@ namespace ClassSoftwareHub.Desktop.Views;
 /// <summary>
 /// 条款阅读窗 —— 独立 AppWindow，站点「条款」页（#/agreement）的桌面版。
 ///
-/// 三份文档（用户协议 / 隐私政策 / 免责声明）来自 <see cref="LegalText"/>，
-/// 而它又是 tools/sync-legal.mjs 从**站点仓库根目录的 `法律文本.ts`**生成的
-/// （唯一真源；站点「条款」页、站点设置页「关于」区、本窗口、安装程序那一页，
-/// 四处内容同源）。⇒ 本窗口**完全离线**，不依赖网络、不动 WebView2。
+/// 三份文档（用户协议 / 隐私政策 / 免责声明）由 <see cref="LegalTextSource"/> 提供：
+/// **在线优先、本地缓存次之、程序内置兜底**（2026-11-01 改）。
+/// 真源仍是站点仓库根目录的 `法律文本.ts` —— 站点改动后通过 `public/legal.json`
+/// 传到客户端，**不必重新发版**；断网时退回内置那份，此时窗口顶部会说一句「可能不是最新」。
 ///
 /// 入口：设置页「条款与声明」组里的三张卡片（各带一个 key）。
 ///
@@ -64,6 +64,7 @@ public sealed partial class LegalWindow : Window
         {
             _instance ??= new LegalWindow();
             _instance._wantKey = NormalizeKey(key);
+            _instance.BuildTabs();          // 可能刚拉到新条款，档位跟着文档标题走
             _instance.ShowDoc(_instance._wantKey);
             _instance.BringUp();
         }
@@ -88,17 +89,27 @@ public sealed partial class LegalWindow : Window
     // ── 内容 ─────────────────────────────────────────────────────────────
 
     /// <summary>把三档标签按文档顺序建出来。文字直接用文档 title（跟站点「条款」页的标签一致）。</summary>
+    ///
+    /// ⚠️ 可以被重复调用（每次 Show 前刷一遍）：条款是启动后从网络拉的，拉到新版时
+    ///    文档标题 / 档位可能跟着变，复用同一个窗口实例时必须重建，否则标签还是旧的。
+    ///    ⛔ 别忘了先 Clear —— 以前这里是纯追加，重复调用会越攒越多档。
     private void BuildTabs()
     {
         try
         {
-            foreach (var doc in LegalText.All)
+            _suppress = true;
+            DocSelector.Items.Clear();
+
+            foreach (var doc in LegalTextSource.All)
             {
                 DocSelector.Items.Add(new SelectorBarItem { Text = doc.Title, Tag = doc.Key });
             }
+
+            _suppress = false;
         }
         catch (Exception ex)
         {
+            _suppress = false;
             AppLog.Warning("legal", "条款档位生成失败：" + ex.Message);
         }
     }
@@ -108,8 +119,8 @@ public sealed partial class LegalWindow : Window
     {
         try
         {
-            var doc = LegalText.Find(key) ?? LegalText.All.FirstOrDefault();
-            if (doc is null) return;                       // 理论上不会（生成物固定三份）
+            var doc = LegalTextSource.Find(key) ?? LegalTextSource.All.FirstOrDefault();
+            if (doc is null) return;                       // 理论上不会（内置那份固定三份）
 
             _wantKey = doc.Key;
             DocTitle.Text = doc.Title;
@@ -120,10 +131,39 @@ public sealed partial class LegalWindow : Window
             _suppress = false;
 
             Render(doc);
+            UpdateSourceBar();
         }
         catch (Exception ex)
         {
             AppLog.Warning("legal", "条款渲染失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 只有「一次都没拉到过、现在显示的是随程序内置那份」时才出这条提示。
+    ///
+    /// <para>
+    /// 正常情况用户不需要知道正文是从站点还是缓存来的 —— 写出来像推责。
+    /// 但它出现时必须说清一件事：手上这份可能已经过期，否则用户在旧条款上做的判断会失真。
+    /// </para>
+    /// </summary>
+    private void UpdateSourceBar()
+    {
+        try
+        {
+            if (!LegalTextSource.IsBuiltIn)
+            {
+                SourceBar.IsOpen = false;
+                return;
+            }
+
+            SourceBar.Severity = InfoBarSeverity.Informational;
+            SourceBar.Message = "当前显示随程序内置的条款，可能不是最新；联网后会自行获取最新版本。";
+            SourceBar.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warning("legal", "条款来源提示刷新失败：" + ex.Message);
         }
     }
 

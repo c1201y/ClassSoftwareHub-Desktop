@@ -6,8 +6,14 @@
 //  中英双语，站点「条款」页 #/agreement 和站点设置页「关于」区都读它）。
 //  桌面端不另存一份手抄件 —— 本脚本把它转成桌面端要用的两个文件：
 //
-//    ① Core/LegalText.cs    —— 设置页「条款与声明」阅读窗口的原生数据（只取中文）
-//    ② installer/Legal.rtf  —— 安装程序那一页（Inno Setup 的 LicenseFile）
+//    ① Core/LegalText.cs    —— **兜底副本**（拉不到在线条款时用，见下）
+//    ② installer/Legal.rtf  —— 安装程序那一页（Inno Setup 的 LicenseFile，编译期嵌入，改不了）
+//
+//  ⚠️ 2026-11-01 起，桌面端运行时**优先从网络拉**条款：站点把同一份内容额外导出成
+//     `public/legal.json`（站点仓库 scripts/gen-legal-json.mjs），客户端启动后拉一次，
+//     拉到了就用它 —— 于是改条款不必再发版，装在用户机器上的旧版本也能看到新条款。
+//     本脚本生成的那两个文件现在的角色是**兜底**：离线、首装、或者六条线路全失败时用。
+//     所以它们的文字旧一点没关系，但⛔ 不能删 —— 教室网断网是常态，删了连协议都看不了一眼。
 //
 //  【用法】（在本仓库根目录）
 //      node tools/sync-legal.mjs
@@ -94,9 +100,14 @@ function genCsharp(docs) {
   L.push('//  ⚠️ 本文件由 tools/sync-legal.mjs 自动生成，⛔ 别手改（下次同步会被覆盖）。');
   L.push('//');
   L.push('//  条款的真源是**站点仓库根目录**的 `法律文本.ts`（中英双语，站点「条款」页');
-  L.push('//  #/agreement 用的就是它）。桌面端不另存手抄件 —— 要改条款：');
-  L.push('//    ① 改站点那份 `法律文本.ts`；');
-  L.push('//    ② 在本仓库跑 `node tools/sync-legal.mjs`（会重写本文件与 installer/Legal.rtf）。');
+  L.push('//  #/agreement 用的就是它）。');
+  L.push('//');
+  L.push('//  ⚠️ 2026-11-01 起，这份是**兜底副本**，不再是界面的唯一来源：');
+  L.push('//     客户端启动后会从站点 `public/legal.json` 拉最新条款（Services/LegalTextSource），');
+  L.push('//     拉到就用它 —— 改条款不必再发版。只有离线 / 首装 / 六条线路全失败时才用这里。');
+  L.push('//     ⇒ 本文件的文字旧一点不影响使用，但⛔ 不能删（断网时全靠它）。');
+  L.push('//');
+  L.push('//  要刷新这份兜底：跑 `node tools/sync-legal.mjs`（同时重写 installer/Legal.rtf）。');
   L.push('//');
   L.push('//  ⚠️ 站点是双语的，桌面端界面全中文 ⇒ 这里只取 zh，没有 en。');
   L.push('// ══════════════════════════════════════════════════════════════════════');
