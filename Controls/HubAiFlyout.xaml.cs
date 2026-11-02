@@ -114,7 +114,11 @@ public sealed partial class HubAiFlyout : UserControl
 
         // 深色下换成原生底色 + 主题色描边（浅色那套 Nick 说好看，别动）
         ApplySurface();
-        ActualThemeChanged += (_, _) => ApplySurface();
+        ActualThemeChanged += (_, _) =>
+        {
+            ApplySurface();
+            RepaintConversation();
+        };
     }
 
     /// <summary>浮层当前是否展开（页面想在切走时收起，可以问它）。</summary>
@@ -396,6 +400,9 @@ public sealed partial class HubAiFlyout : UserControl
 
             var title = turns.FirstOrDefault(m => m.Role == "user")?.Content ?? "未命名对话";
 
+            // 需求 27：回答末尾的按钮。放在存档之前 —— 它只动界面，跟存档成败无关。
+            if (current) RenderActions(runtime);
+
             var savedId = ChatSessionStore.SaveBranch(
                 sessionId,
                 parentId: null,
@@ -456,6 +463,79 @@ public sealed partial class HubAiFlyout : UserControl
         }
     }
 
+    /// <summary>
+    /// 回答末尾的按钮（需求 27）。挂在那条回答气泡里面 —— 浮层只有一列，单独一条面板会显得断开。
+    /// </summary>
+    private void RenderActions(HubAiRuntime runtime)
+    {
+        var actions = runtime.Chat.Session.Actions;
+        if (actions.Count == 0 || _answerPanel is null) return;
+
+        var panel = AiActionBar.Build(actions, RunAction);
+        if (panel is null) return;
+
+        panel.Margin = new Thickness(0, 6, 0, 0);
+        _answerPanel.Children.Add(panel);
+        ScrollToEnd();
+    }
+
+    /// <summary>
+    /// 用户点了按钮。跳转前先收起浮层 —— 否则它会盖在刚打开的那一页上。
+    /// 换主题不收：用户可能还想接着聊，改了主题背后能直接看到。
+    /// </summary>
+    private void RunAction(AiAction action)
+    {
+        if (action.Kind == AiActionKind.Navigate) Hide();
+
+        AiActionRunner.Run(action);
+    }
+
+    /// <summary>
+    /// 主题换了 → 按新主题重画气泡。
+    /// <para>
+    /// 气泡里的画笔是建的那一刻取的（见 <see cref="AddBubble"/>），不会自己跟着主题变 ——
+    /// 在回答末尾点「切换为深色 / 浅色」之后，浮层里的字会和底色糊在一起。
+    /// </para>
+    /// <para>
+    /// ⚠️ 只回放**最终正文**：浮层本来就不显示思考过程与工具轨迹（那些在完整页里）。
+    /// </para>
+    /// </summary>
+    private void RepaintConversation()
+    {
+        if (_runtime is null || !IsOpen) return;
+
+        var messages = _runtime.Chat.Snapshot();
+        if (messages.Count == 0) return;
+
+        HideThinking();
+        Messages.Children.Clear();
+        Intro.Visibility = Visibility.Collapsed;
+        _answerPanel = null;
+
+        foreach (var message in messages)
+        {
+            if (message.Role == "user")
+                AddBubble(message.Content, mine: true);
+            else if (message.Role == "assistant" && message.Content.Length > 0)
+                _answerPanel = AddBubble(message.Content, mine: false);
+        }
+
+        // 正在生成：末尾要有一个接续面板，否则后面的增量刷不进来
+        if (_runtime.IsRunning)
+        {
+            var live = _runtime.LiveBody;
+            _answerPanel = AddBubble(live, mine: false);
+            _answerRendered = live;
+            if (live.Length == 0) ShowThinking();
+        }
+        else
+        {
+            _answerRendered = "";
+        }
+
+        RenderActions(_runtime);
+    }
+
     /// <summary>加一条气泡。<paramref name="mine"/> = 用户自己说的（右对齐）。</summary>
     private StackPanel AddBubble(string text, bool mine)
     {
@@ -486,7 +566,13 @@ public sealed partial class HubAiFlyout : UserControl
 
     private void ScrollToEnd()
     {
-        try { MessagesScroll.ChangeView(null, MessagesScroll.ScrollableHeight, null, disableAnimation: true); }
+        try
+        {
+            // ⚠️ 先强制走一次布局：刚 Add 进来的子元素还没量高度，ScrollableHeight 是**旧的**，
+            //    直接滚会差一截（需求 27 的按钮就正好卡在输入框后面）。
+            Messages.UpdateLayout();
+            MessagesScroll.ChangeView(null, MessagesScroll.ScrollableHeight, null, disableAnimation: true);
+        }
         catch { }
     }
 

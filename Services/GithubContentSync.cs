@@ -313,16 +313,56 @@ public static class GithubContentSync
         throw last ?? new HttpRequestException("GitHub 接口所有入口均不可用");
     }
 
-    /// <summary>取仓库里某个文件的内容（raw → jsDelivr → gh-proxy 镜像）。</summary>
-    private static async Task<string> GetRawAsync(string sha, string repoPath, CancellationToken ct)
+    /// <summary>
+    /// 文档库（需求 15）复用这条通道取正文与图片。
+    /// 按**分支**取而不是按 sha：文档是一次打开一篇、不需要"整个版本快照"的一致性，
+    /// 而且 raw 走 CDN，不吃未登录的接口配额。
+    /// </summary>
+    internal static Task<string> GetBranchFileTextAsync(
+        string owner, string repo, string branch, string repoPath, CancellationToken ct)
+        => GetRawAsync(owner, repo, branch, repoPath, ct);
+
+    /// <summary>同上，二进制（docx / pdf / 图片）。</summary>
+    internal static async Task<byte[]> GetBranchFileBytesAsync(
+        string owner, string repo, string branch, string repoPath, CancellationToken ct)
     {
         var escaped = string.Join('/', repoPath.Split('/').Select(Uri.EscapeDataString));
         Exception? last = null;
 
         foreach (var index in PreferredOrder("raw", RawTemplates.Length))
         {
-            var url = string.Format(RawTemplates[index],
-                ShellConfig.SiteRepoOwner, ShellConfig.SiteRepoName, sha, escaped);
+            var url = string.Format(RawTemplates[index], owner, repo, branch, escaped);
+            try
+            {
+                var bytes = await Http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+                Remember("raw", index, "raw#" + index);
+                return bytes;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+            }
+        }
+        throw last ?? new HttpRequestException("文件内容所有入口均不可用");
+    }
+
+    /// <summary>取仓库里某个文件的内容（raw → jsDelivr → gh-proxy 镜像）。</summary>
+    private static Task<string> GetRawAsync(string sha, string repoPath, CancellationToken ct)
+        => GetRawAsync(ShellConfig.SiteRepoOwner, ShellConfig.SiteRepoName, sha, repoPath, ct);
+
+    private static async Task<string> GetRawAsync(
+        string owner, string repo, string sha, string repoPath, CancellationToken ct)
+    {
+        var escaped = string.Join('/', repoPath.Split('/').Select(Uri.EscapeDataString));
+        Exception? last = null;
+
+        foreach (var index in PreferredOrder("raw", RawTemplates.Length))
+        {
+            var url = string.Format(RawTemplates[index], owner, repo, sha, escaped);
             try
             {
                 var text = await Http.GetStringAsync(url, ct).ConfigureAwait(false);

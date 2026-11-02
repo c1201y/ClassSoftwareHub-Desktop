@@ -32,6 +32,32 @@ public sealed partial class HubAiPage : Page
     public HubAiPage()
     {
         InitializeComponent();
+
+        // 气泡里的画笔是建的那一刻取的（见 BubblePalette），不会自己跟着主题变
+        ActualThemeChanged += (_, _) => RepaintConversation();
+    }
+
+    /// <summary>
+    /// 主题换了 → 按新主题重画消息流。
+    /// <para>
+    /// 不重画的话，在回答末尾点「切换为深色 / 浅色」之后，整段对话的字会和底色糊在一起
+    /// （画笔是浅色时取的，底色已经换成深色了）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 走 <see cref="LoadSessions"/> 这条老路（重设选中项 ⇒ SelectionChanged 整段重画），
+    ///    别自己再写一份渲染 —— 分支、相邻回答合并、在飞那一轮的处理都在那儿。
+    /// </para>
+    /// </summary>
+    private void RepaintConversation()
+    {
+        if (!_uiReady || string.IsNullOrEmpty(_currentSessionId)) return;
+
+        // ⚠️ LoadSessions 重设选中项之后，SelectionChanged 是**下一拍**才跑的（见 OnNavigatedTo 的注释），
+        //    所以按钮要等那边重画完再补 —— 这里直接补会被随后的大重画清掉。
+        _repaintSessionId = _currentSessionId;
+        _repaintActions = _runtime.Chat.Session.Actions.ToList();
+        _repaintAfterTheme = true;
+        LoadSessions();
     }
 
     /// <summary>
@@ -116,6 +142,19 @@ public sealed partial class HubAiPage : Page
 
     /// <summary>刷新列表时压住 <c>SelectionChanged</c>，否则每刷一次就会重载一遍当前对话。</summary>
     private bool _switchingSession;
+
+    /// <summary>这次重画是换主题引起的：等 SelectionChanged 画完，把回答末尾的按钮补回去。</summary>
+    private bool _repaintAfterTheme;
+
+    /// <summary>
+    /// 换主题重画前临时存下的按钮清单。
+    /// ⚠️ 重画走的是 SelectionChanged 里的 <c>Chat.Restore</c>，它会 <c>Session.Reset()</c> 清掉这一轮的按钮 ——
+    ///    不留一份，画完就没东西可补了（"点一次按钮，剩下的按钮全没了"）。
+    /// </summary>
+    private List<AiAction>? _repaintActions;
+
+    /// <summary>重画要落回哪条会话；切到别的会话时这份按钮清单就作废。</summary>
+    private string? _repaintSessionId;
 
     /// <summary>页面是否已初始化。⚠️ 与 NavigationCacheMode=Required 配套，见 OnNavigatedTo 的注释。</summary>
     private bool _uiReady;
@@ -268,6 +307,14 @@ public sealed partial class HubAiPage : Page
     {
         if (_switchingSession) return;
         if (SessionList.SelectedItem is not ChatSession session) return;
+
+        // 重画还没落地用户就切走了：那份按钮属于原来那条会话，别补到这条上
+        if (_repaintAfterTheme && session.Id != _repaintSessionId)
+        {
+            _repaintAfterTheme = false;
+            _repaintActions = null;
+            _repaintSessionId = null;
+        }
 
         // ⛔⛔ 2026-10-23（方案 B）：切会话**不再被拦住**。
         //    每个会话有独立的运行时，正在跑的那条会在后台继续，不会被这里的 Restore 覆盖。
@@ -435,9 +482,29 @@ public sealed partial class HubAiPage : Page
         }
 
         ScrollToBottom();
+
+        if (_repaintAfterTheme)
+        {
+            _repaintAfterTheme = false;
+
+            // 重画只回放存档，前一回答末尾那排按钮不在存档里（而且刚被 Restore 清空了）—— 放回去再画
+            if (_repaintActions is { Count: > 0 })
+            {
+                _runtime.Chat.Session.Actions.Clear();
+                _runtime.Chat.Session.Actions.AddRange(_repaintActions);
+            }
+
+            _repaintActions = null;
+            _repaintSessionId = null;
+            RenderActions(_runtime);
+
+            // 重画后 ScrollableHeight 还是旧的，上面那次 ScrollToBottom 的距离判据会误判成
+            // "用户在看上面"而跳过；这里用户刚点完底部的按钮，直接落到最底。
+            HubAiMessages.UpdateLayout();
+            ChatScroll.ChangeView(null, ChatScroll.ScrollableHeight, null, disableAnimation: true);
+        }
     }
 
-    /// <summary>清掉对话气泡，**保留开头那两张卡**（本机概况 / 初步判断）。</summary>
     /// <summary>
     /// 清掉对话气泡，**保留欢迎屏**。
     /// ⚠️ 2026-10-20 重做后：诊断卡已搬到右栏，消息流里只剩「欢迎屏（静态）+ 动态消息」，
@@ -1619,6 +1686,7 @@ public sealed partial class HubAiPage : Page
         {
             ShowStatus(null);
             RenderSoftwareHits();
+            RenderActions(rt);
             SetBusy(false);
         }
 
@@ -2018,6 +2086,25 @@ public sealed partial class HubAiPage : Page
             button.Click += (_, _) => Frame.Navigate(typeof(DetailPage), id);
             panel.Children.Add(button);
         }
+
+        HubAiMessages.Children.Add(panel);
+        ScrollToBottom();
+    }
+
+    /// <summary>
+    /// 回答末尾「可以直接点」的按钮（需求 27）：换主题当场生效，其余只把用户送到对应页面。
+    /// <para>
+    /// ⚠️ 读的是**这一轮运行时**的会话（<paramref name="rt"/>），不是页面上的字段 ——
+    ///    这一轮可能在用户切走之后才收尾，两个值那时已经不一样了（同 <see cref="FinishRun"/> 的说明）。
+    /// </para>
+    /// </summary>
+    private void RenderActions(HubAiRuntime rt)
+    {
+        var actions = rt.Chat.Session.Actions;
+        if (actions.Count == 0) return;
+
+        var panel = Controls.AiActionBar.Build(actions, Services.HubAi.AiActionRunner.Run);
+        if (panel is null) return;
 
         HubAiMessages.Children.Add(panel);
         ScrollToBottom();

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services.Diagnostics;
+using ClassSoftwareHub.Desktop.Services.Docs;
 
 namespace ClassSoftwareHub.Desktop.Services.HubAi;
 
@@ -21,10 +22,14 @@ public sealed class ToolSession
     public List<SoftwareHit> SoftwareHits { get; } = new();
     public List<string> Trace { get; } = new();
 
+    /// <summary>模型建议放到回答末尾的动作（需求 27）。收尾时渲染成按钮，用户点了才生效。</summary>
+    public List<AiAction> Actions { get; } = new();
+
     public void Reset()
     {
         SoftwareHits.Clear();
         Trace.Clear();
+        Actions.Clear();
     }
 }
 
@@ -74,6 +79,11 @@ public static class ToolRunner
         "list_startup_items",
         "web_search",
         "fetch_url",
+        // 只往回答末尾放按钮，用户点了才生效 —— 本身不改任何东西，所以不需要确认框
+        "suggest_actions",
+        // 文档库（需求 1:15）：读本机清单与缓存正文，不写任何东西
+        "list_documents",
+        "read_document",
     };
 
     /// <summary>
@@ -113,6 +123,13 @@ public static class ToolRunner
                 "search_software_library" => SearchLibrary(argumentsJson, session),
                 "list_installed_apps" => await ListInstalledAsync(argumentsJson, timeout.Token),
                 "list_startup_items" => await ListStartupAsync(timeout.Token),
+
+                // 动作建议（需求 27）：只记下"回答末尾该放哪几个按钮"，真正的执行在用户点击时
+                "suggest_actions" => SuggestActions(argumentsJson, session),
+
+                // 文档库（需求 1:15）：清单与正文都只读；正文没缓存就下到本机缓存再读
+                "list_documents" => await ListDocumentsAsync(argumentsJson, timeout.Token),
+                "read_document" => await ReadDocumentAsync(argumentsJson, timeout.Token),
 
                 // 联网（2026-10-21）：自建实现，不依赖第三方 key
                 "web_search" => await WebTools.SearchAsync(argumentsJson, timeout.Token),
@@ -253,6 +270,193 @@ public static class ToolRunner
 
         sb.Append("只能从以上条目中推荐，不得提及其他软件。");
         return sb.ToString();
+    }
+
+    // ── 文档库（需求 1:15） ──────────────────────────────────────
+
+    /// <summary>
+    /// 列出文档库清单（标题 / id / 作者 / 简介）。只读元信息，不碰正文。
+    /// 本机没同步过就先补一次 —— <see cref="DocLibrary.SyncAsync"/> 自带十分钟节流。
+    /// </summary>
+    private static async Task<string> ListDocumentsAsync(string argumentsJson, CancellationToken ct)
+    {
+        var query = "";
+
+        using (var doc = JsonDocument.Parse(NormalizeArgs(argumentsJson)))
+        {
+            if (doc.RootElement.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String)
+                query = (q.GetString() ?? "").Trim();
+        }
+
+        if (DocLibrary.Articles.Count == 0)
+            await DocLibrary.SyncAsync(ct: ct);
+
+        var articles = DocLibrary.Articles.ToList();
+        if (articles.Count == 0)
+        {
+            return "本机还没有文档库清单（可能没有网络）。请如实告知用户暂时读不到文档库，" +
+                   "可以建议打开导航里的「文档库」页面重试。";
+        }
+
+        var matched = query.Length == 0
+            ? articles
+            : articles.Where(a => SearchText(a).Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (matched.Count == 0)
+            return $"文档库里没有匹配「{query}」的文章。可以换个说法，或先列出全部文章看看。";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"文档库共 {articles.Count} 篇，匹配「{query}」的有 {matched.Count} 篇：");
+        foreach (var article in matched.Take(20))
+        {
+            sb.Append($"- {article.Title}（id: {article.Id}");
+            if (article.Author.Length > 0) sb.Append($"，作者 {article.Author}");
+            sb.Append($"，{article.TypeLabel}）");
+            if (article.Summary.Length > 0) sb.Append("：" + article.Summary);
+            sb.AppendLine();
+        }
+
+        sb.Append("要读正文请用 read_document，id 只能取自上面这些条目。");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 读一篇文章的正文。已缓存直接读本机；没缓存就先下到本机缓存（无扩展名随机文件）。
+    /// PDF 没有文字层，如实说明读不了。
+    /// </summary>
+    private static async Task<string> ReadDocumentAsync(string argumentsJson, CancellationToken ct)
+    {
+        var id = "";
+
+        using (var doc = JsonDocument.Parse(NormalizeArgs(argumentsJson)))
+        {
+            if (doc.RootElement.TryGetProperty("id", out var value) && value.ValueKind == JsonValueKind.String)
+                id = (value.GetString() ?? "").Trim();
+        }
+
+        if (id.Length == 0) return "没有给出文章 id。先用 list_documents 查一下。";
+
+        var article = DocLibrary.Find(id);
+        if (article is null)
+        {
+            await DocLibrary.SyncAsync(ct: ct);
+            article = DocLibrary.Find(id);
+        }
+
+        if (article is null)
+            return $"文档库里没有 id 为「{id}」的文章。请用 list_documents 查真实的 id，不要编造。";
+
+        try
+        {
+            var content = DocLibrary.TryGetCachedContent(article.Id)
+                          ?? await DocLibrary.EnsureContentAsync(article.Id, null, ct);
+
+            var body = await DocReading.ToTextAsync(content, ct);
+            if (body.Length == 0) body = "（这篇文章的正文是空的。）";
+
+            var header = new StringBuilder();
+            header.Append("《").Append(article.Title).Append('》');
+            if (article.Author.Length > 0) header.Append("　作者：").Append(article.Author);
+            if (article.DisplayDate.Length > 0) header.Append("　更新：").Append(article.DisplayDate);
+            header.AppendLine().AppendLine();
+
+            return header.Append(body).ToString();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("hubai", $"读取文档 {id} 失败：{ex.Message}");
+            return "这篇文档的正文暂时读不到（可能没有网络）。请如实告知用户，不要编造正文内容。";
+        }
+    }
+
+    private static string SearchText(DocArticle article) =>
+        article.Title + "\n" + article.Summary + "\n" + article.Author + "\n"
+        + string.Join(" ", article.Tags);
+
+    /// <summary>
+    /// 记下模型建议的动作（需求 27）。**不执行任何东西** —— 按钮由界面在回答末尾渲染，
+    /// 用户点了才走 <see cref="AiActionRunner"/>。
+    ///
+    /// <para>
+    /// ⛔ id 必须能在 <see cref="AiActionCatalog"/> 里找到，认不出的一律丢掉；
+    /// 已经是当前主题的那一条也丢掉，否则会出现「点了什么都不会发生」的按钮。
+    /// 丢掉的都要在回给模型的文字里说清楚 —— 它才知道结果里少了什么，不会在正文里继续描述那个按钮。
+    /// </para>
+    /// </summary>
+    private static string SuggestActions(string argumentsJson, ToolSession session)
+    {
+        var wanted = new List<string>();
+
+        using (var doc = JsonDocument.Parse(NormalizeArgs(argumentsJson)))
+        {
+            if (doc.RootElement.TryGetProperty("ids", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in arr.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String) wanted.Add(item.GetString() ?? "");
+                }
+            }
+        }
+
+        if (wanted.Count == 0) return "没有给出动作 id，回答末尾没有放按钮。";
+
+        const int max = 4;
+
+        // 上限按「这一轮已经放上去的 + 这次要放的」一起算 —— 模型可以在同一条回答里调用两次
+        var room = Math.Max(0, max - session.Actions.Count);
+
+        var shown = new List<AiAction>();
+        var rejected = new List<string>();
+        var currentTheme = App.Settings.Current.Theme;
+
+        foreach (var raw in wanted)
+        {
+            var action = AiActionCatalog.Find(raw);
+            if (action is null)
+            {
+                rejected.Add($"「{raw}」不是清单里的 id");
+                continue;
+            }
+
+            if (action.Kind == AiActionKind.Theme &&
+                string.Equals(action.Target, currentTheme, StringComparison.OrdinalIgnoreCase))
+            {
+                rejected.Add($"「{action.Label}」不需要——当前已经是这个主题");
+                continue;
+            }
+
+            if (session.Actions.Any(a => a.Id == action.Id) || shown.Any(a => a.Id == action.Id)) continue;
+            if (shown.Count >= room)
+            {
+                rejected.Add($"「{action.Label}」超出 {max} 个上限");
+                continue;
+            }
+
+            shown.Add(action);
+        }
+
+        if (shown.Count == 0)
+        {
+            return "这次没有可用的动作，回答末尾没有放按钮。"
+                 + (rejected.Count > 0 ? "原因：" + string.Join("；", rejected) + "。" : "")
+                 + "可用 id：" + string.Join("、", AiActionCatalog.All.Select(a => a.Id)) + "。";
+        }
+
+        foreach (var action in shown)
+        {
+            if (!session.Actions.Any(a => a.Id == action.Id)) session.Actions.Add(action);
+        }
+
+        var text = $"已在回答末尾放上 {shown.Count} 个按钮：{string.Join("、", shown.Select(a => a.Label))}。"
+                 + "正文里不要再教用户怎么点，说明一句「可以点下面的按钮」即可。";
+
+        if (rejected.Count > 0) text += "未放上的：" + string.Join("；", rejected) + "。";
+
+        return text;
     }
 
     private static Task<string> ListInstalledAsync(string argumentsJson, CancellationToken ct)

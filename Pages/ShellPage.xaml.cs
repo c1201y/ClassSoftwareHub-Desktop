@@ -423,6 +423,10 @@ public sealed partial class ShellPage : UserControl
             case "pagefile":
                 ContentFrame.Navigate(typeof(PageFilePage));
                 return;
+            case "ppttouch":
+                // PowerPoint 触控优化（2026-11-01，需求 2）：实验性功能分组下
+                ContentFrame.Navigate(typeof(PptTouchPage));
+                return;
             case "dictionary":
                 // 查单词（需求清单第 17 条）：纯原生页，词源调度在 Services/Dictionary 里，
                 // 不经 ToolCarrier —— 它不是可替换的网页小工具，也不需要 WebView2。
@@ -453,6 +457,10 @@ public sealed partial class ShellPage : UserControl
             case "hubai":
                 // Hub AI 对话页（2026-10-18 加，导航上半区，紧跟软件下载）
                 ContentFrame.Navigate(typeof(HubAiPage));
+                return;
+            case "docs":
+                // 文档库列表页（需求 1:15）。正文页走 NavigateToDocArticle，不在导航里出现。
+                ContentFrame.Navigate(typeof(DocLibraryPage));
                 return;
             case "hubai-settings":
                 // Hub AI 二级设置页：不在导航栏，入口是「设置 → Hub AI」那张卡
@@ -649,8 +657,31 @@ public sealed partial class ShellPage : UserControl
         _lastOpenedKey = hit.Key;
         _lastOpenedAt = now;
 
-        if (hit.Kind == SearchHitKind.App) NavigateToApp(hit.Key);
-        else NavigateTo(hit.Target);
+        switch (hit.Kind)
+        {
+            case SearchHitKind.App:
+                NavigateToApp(hit.Key);
+                break;
+
+            case SearchHitKind.Doc:
+                NavigateToDocArticle(hit.Key);
+                break;
+
+            default:
+                NavigateTo(hit.Target);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 进「文档库」里的一篇文章（列表点击、全局搜索、文章内 <c>csh://article/…</c> 链接共用）。
+    /// 导航高亮停在「文档库」—— 正文页属于这一区，导航里不给每篇文章单独建项。
+    /// </summary>
+    public void NavigateToDocArticle(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return;
+        SelectTag("docs");
+        ContentFrame.Navigate(typeof(DocArticlePage), id);
     }
 
     /// <summary>

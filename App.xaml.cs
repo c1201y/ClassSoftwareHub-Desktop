@@ -1000,6 +1000,17 @@ public partial class App : Application
         //      到点仍会关机；要反悔走侧边栏那颗「取消关机」（shutdown /a）。
         Data.AutoShutdown.Start();
 
+        // PowerPoint 触控优化（需求 2，2026-11-01）：Start 内部看开关，默认关。
+        // ⚠️ 它装的是全局鼠标钩子 + 补真实点击，只在用户主动打开后才会上电。
+        try
+        {
+            Services.PptTouch.Start();
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("ppttouch", ex, "启动轻点翻页");
+        }
+
         // 虚拟键盘（实验性功能）已于 2026-10-09 **整体下线** —— 原来这儿是
         //   Services.VirtualKeyboard.VirtualKeyboardService.Start();
         // 只留下一句收尾：虚拟键盘是那套功能里唯一写注册表的地方（把系统触摸键盘的

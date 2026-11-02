@@ -84,6 +84,16 @@ public static class ExperimentalFeatureCatalog
             Glyph = "\uE7E8", Tag = "sysfeatures"
         },
 
+        // PowerPoint 触控优化（2026-11-01，需求 2）：放映时轻点翻页。
+        // ⚠️ 为啥塞实验性：它挂的是全局鼠标钩子、补的是真实点击，行为跟触屏驱动/PPT 版本有关，
+        //    先跑一段看看再决定转正。
+        new ExperimentalFeature
+        {
+            Id = "ppttouch", Name = "PowerPoint 触控优化",
+            Desc = "放映时轻点屏幕翻到下一页，视频与按钮照常响应",
+            Glyph = "\uE786", Tag = "ppttouch"
+        },
+
         // 虚拟内存（2026-10-31，需求 19）：搬系统的「虚拟内存」对话框。
         // ⚠️ 单独一页不并进「系统功能」：它改的是逐个驱动器的初始/最大值，形态完全不同，
         //    而且改完必须重启，风险等级也不一样。

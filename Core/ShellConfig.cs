@@ -128,6 +128,14 @@ public static class ShellConfig
     public const string SiteRepoDataDir = "软件数据";
 
     /// <summary>
+    /// 文档库所在仓库（2026-11-02 调整）：文章跟桌面端代码放同一个仓库，不再进站点仓库。
+    /// 原因：文章只给客户端读，放在站点仓库会让每发一篇文章都触发一次整站部署（Pages / FTP / 网盘三路）。
+    /// </summary>
+    public const string DocsRepoOwner = "c1201y";
+    public const string DocsRepoName = "ClassSoftwareHub-Desktop";
+    public const string DocsRepoBranch = "main";
+
+    /// <summary>
     /// Hub AI 工具包在站点仓库里的位置（2026-10-18）。
     ///
     /// <para>

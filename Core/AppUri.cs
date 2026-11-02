@@ -14,7 +14,7 @@ public enum AppUriKind
     /// <summary>某个内置工具（<c>csh://tool/function-plot</c>，id 跟 <c>ToolCatalog</c> 一致）。</summary>
     Tool,
 
-    /// <summary>文档库里的一篇文章（<c>csh://article/xxx</c>，文档库上线后才有实际去处）。</summary>
+    /// <summary>文档库里的一篇文章（<c>csh://article/xxx</c>，落到对应的正文页）。</summary>
     Article,
 
     /// <summary>交给系统的协议（<c>ms-settings:windowsupdate</c> 这类）。</summary>
@@ -39,7 +39,7 @@ public sealed record AppUriTarget(AppUriKind Kind, string Target, string Raw);
 /// csh://settings/update      设置页 → 更新分组
 /// csh://page/downloads       主界面 → 软件下载
 /// csh://tool/function-plot   打开函数图像
-/// csh://article/clear-c      文档库文章（文档库上线后生效）
+/// csh://article/clear-c      文档库 → 对应的正文页
 /// ms-settings:windowsupdate  系统设置，原样交给 Windows
 /// </code>
 /// </para>

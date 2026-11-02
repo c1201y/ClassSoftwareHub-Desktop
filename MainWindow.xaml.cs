@@ -2281,8 +2281,8 @@ public sealed partial class MainWindow : Window
                     break;
 
                 case Core.AppUriKind.Article:
-                    // 文档库还没做（需求 1:15 在后续批次）。先如实记日志，别假装跳过去了。
-                    Core.AppLog.Info("links", $"文章链接暂未支持（文档库尚未实现）：{target.Target}");
+                    // 文档库正文页（需求 1:15）。找不到这篇文章时由页面自己给出人话提示。
+                    Shell?.NavigateToDocArticle(target.Target);
                     break;
 
                 case Core.AppUriKind.System:

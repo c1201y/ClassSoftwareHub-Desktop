@@ -28,6 +28,15 @@ public static class ActiveTools
         {
             var pack = ToolPackStore.Load();
             if (pack?.Tools is { Count: > 0 } packTools) tools.AddRange(packTools);
+
+            // 文档库（需求 1:15）：看清单 / 读正文。随程序内置，不依赖工具包。
+            tools.AddRange(BuiltinTools.Docs);
+
+            // 需求 27：回答末尾的可点按钮。**不依赖工具包** —— 它随程序内置，
+            // 工具包没装成（或下载失败）时这一项照样能用。
+            // ⚠️ 跟着「工具总闸」走：总闸在用户那里的含义就是"让不让模型调工具"，
+            //    关掉之后连按钮也不要出现，免得出现"关了还照常"的矛盾。
+            tools.Add(AiActionCatalog.ToolDefinition);
         }
 
         if (App.Settings.Current.HubAiWebEnabled) tools.AddRange(BuiltinTools.Web);

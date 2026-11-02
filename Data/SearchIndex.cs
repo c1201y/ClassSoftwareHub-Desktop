@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ClassSoftwareHub.Desktop.Services.Docs;
 using Microsoft.UI.Xaml;
 
 namespace ClassSoftwareHub.Desktop.Data;
@@ -10,6 +11,7 @@ public enum SearchHitKind
 {
     App,
     Tool,
+    Doc,
     Page,
 }
 
@@ -47,6 +49,7 @@ public sealed class SearchHit
     {
         SearchHitKind.App => "软件",
         SearchHitKind.Tool => "内置工具",
+        SearchHitKind.Doc => "文章",
         _ => "页面",
     };
 
@@ -97,6 +100,7 @@ public sealed class SearchGroup
 /// <list type="number">
 /// <item>软件 —— 软件名 / 一句话简介 / 详细介绍（数据来自 <c>ContentStore</c>，即站点的「软件数据/apps/」）</item>
 /// <item>内置工具 —— 工具名 / 说明（清单只有 <see cref="ToolCatalog.All"/> 一份）</item>
+/// <item>文档库 —— 文章标题 / 简介 / 作者 / 标签（⛔ 不查正文，需求 1:15）</item>
 /// <item>页面 —— 导航栏的各个页面（见下面的页面注册表）</item>
 /// </list>
 /// <para>
@@ -118,6 +122,7 @@ public static class SearchIndex
     {
         SearchHitKind.App => "软件",
         SearchHitKind.Tool => "内置工具",
+        SearchHitKind.Doc => "文档库",
         _ => "页面",
     };
 
@@ -180,7 +185,41 @@ public static class SearchIndex
         return byName.Concat(byDesc).Take(limit).ToList();
     }
 
-    // ── ③ 页面 ────────────────────────────────────────────────────
+    // ── ③ 文档库 ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// 文档库文章：只查**清单里的**标题 / 简介 / 作者 / 标签，⛔ 不读正文
+    /// （需求 1:15 明确要求"应用全局搜索不检索文章正文"）。
+    /// 清单没同步过时这里就是空表 —— 进一次「文档库」才有数据。
+    /// </summary>
+    private static List<SearchHit> SearchDocs(string q, string[] parts, int limit)
+    {
+        var byTitle = new List<SearchHit>();
+        var byMeta = new List<SearchHit>();
+
+        foreach (var article in DocLibrary.Articles)
+        {
+            var hit = new SearchHit
+            {
+                Kind = SearchHitKind.Doc,
+                Key = article.Id,
+                Title = article.Title,
+                Subtitle = Clip(article.Summary),
+                Glyph = "\uE8A5",
+                Target = article.Id,
+            };
+
+            if (Hit(article.Title, q, parts)) byTitle.Add(hit);
+            else if (Hit(article.Summary, q, parts)
+                     || Hit(article.Author, q, parts)
+                     || Hit(string.Join(" ", article.Tags), q, parts))
+                byMeta.Add(hit);
+        }
+
+        return byTitle.Concat(byMeta).Take(limit).ToList();
+    }
+
+    // ── ④ 页面 ────────────────────────────────────────────────────
 
     /// <summary>
     /// 页面：标题 / 说明 / 关键词三处任一命中即可。
@@ -306,6 +345,7 @@ public static class SearchIndex
         {
             new() { Kind = SearchHitKind.App, Hits = SearchApps(q, parts, limitPerKind) },
             new() { Kind = SearchHitKind.Tool, Hits = SearchTools(q, parts, limitPerKind) },
+            new() { Kind = SearchHitKind.Doc, Hits = SearchDocs(q, parts, limitPerKind) },
             new() { Kind = SearchHitKind.Page, Hits = SearchPages(q, parts, limitPerKind) },
         };
 

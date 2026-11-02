@@ -464,8 +464,12 @@ public sealed class AiChatService
 
         var hasTools = tools is { Count: > 0 };
 
+        // 需求 27 的按钮工具：提示词里必须**确有其事**才提它（联网开着但总闸关着时它不在清单里）
+        var hasActions = tools?.Any(t => t.Id == "suggest_actions") == true;
+
         // 摘要要拼在**原始提示**之后，所以先把原始提示记下来（见 ApplySummary）
-        var prompt = BuildSystemPrompt(MachineDigest.ToPrompt(snapshot), App.Settings.Current.UserDisplayName, hasTools);
+        var prompt = BuildSystemPrompt(MachineDigest.ToPrompt(snapshot), App.Settings.Current.UserDisplayName,
+                                       hasTools, hasActions);
         _baseSystemPrompt = prompt;
 
         _messages.Insert(0, AiMessage.System(prompt));
@@ -489,16 +493,23 @@ public sealed class AiChatService
     /// </list>
     /// 除此之外：**什么问题都可以答，想答多细就答多细**。
     /// </para>
+    /// <para>
+    /// ⚠️ 2026-11-01（需求 27）：模型还能调 <c>suggest_actions</c> 在回答末尾放按钮。
+    /// 这不破坏上面第一条 —— 按钮是给**用户**点的，点了才算用户自己的操作；模型本身仍然什么都不改。
+    /// </para>
     /// </summary>
-    private static string BuildSystemPrompt(string digest, string? userName, bool hasTools) => $"""
+    private static string BuildSystemPrompt(string digest, string? userName, bool hasTools, bool hasActions) => $"""
         你是 ClassSoftwareHub 内置的 AI 助手，一个通用型的对话助手。
 
         能力范围：
         - 可以回答任何领域的问题，不限于电脑相关。
         - 这台电脑的一份快照已经放在下方「本机数据」里，可以直接据此回答与这台机器有关的问题。
         {(hasTools
-            ? "- 需要更细的数据时（磁盘明细、已装软件清单、开机启动项等），可以调用工具查询。\n- 可以检索站内软件库，帮用户挑选软件。"
+            ? "- 需要更细的数据时（磁盘明细、已装软件清单、开机启动项等），可以调用工具查询。\n- 可以检索站内软件库，帮用户挑选软件。\n- 应用内有「文档库」教程文章：用户问到具体操作步骤时，可以先用 list_documents 找、再用 read_document 读正文，转述时注明文章标题。"
             : "- ⛔ 工具当前没有启用：不要声称要调用工具，不要输出任何 `<tool_call>`、XML 或 JSON 形式的调用语句，也不要描述你打算怎么调用。本机数据只有下面这一份，缺什么就直说没有。\n- ⛔ 无法联网检索、无法打开网页。")}
+        {(hasActions
+            ? "- 用户的问题涉及换主题、查看外观设置、清理 AppData、打开系统功能，并确实要动手时，调用 suggest_actions 把按钮放到回答末尾。只放与问题直接相关的 1~3 个。"
+            : "")}
 
         必须遵守的三条：
         1. 你不能修改这台电脑：不删文件、不改设置、不装软件、不结束进程。需要用户动手的地方，告诉他去哪个页面。
@@ -663,6 +674,8 @@ public sealed class AiChatService
         "search_software_library" => "正在检索软件库",
         "list_installed_apps" => "正在核对已安装的软件",
         "list_startup_items" => "正在读取开机启动项",
+        "list_documents" => "正在浏览文档库",
+        "read_document" => "正在阅读文档正文",
         _ => "正在处理",
     };
 
@@ -674,6 +687,8 @@ public sealed class AiChatService
         "search_software_library" => "已检索软件库",
         "list_installed_apps" => "已核对已安装软件",
         "list_startup_items" => "已读取开机启动项",
+        "list_documents" => "已浏览文档库",
+        "read_document" => "已阅读文档正文",
         _ => "已完成一次工具调用",
     };
 }

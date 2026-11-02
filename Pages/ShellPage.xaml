@@ -226,6 +226,15 @@
                         <FontIcon Glyph="&#xE8F1;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <!--
+                  文档库（需求 1:15）：与「查阅单词」同属"查资料"这一类的常驻页，
+                  所以紧挨着放。文章放在站点仓库里，桌面端只缓存清单与读过的正文。
+                -->
+                <NavigationViewItem Content="文档库" Tag="docs">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="ClassroomToolsNav" Content="课堂工具" Tag="tools-classroom">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
