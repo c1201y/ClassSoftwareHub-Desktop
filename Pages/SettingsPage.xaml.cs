@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
+using ClassSoftwareHub.Desktop.Services.License;
 using ClassSoftwareHub.Desktop.Services.Updating;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -54,7 +55,61 @@ public sealed partial class SettingsPage : Page
 
         // 主题一切（浅色 ⇄ 深色）就把 SVG 快捷图标重染成对应颜色
         ActualThemeChanged += (_, _) => ApplyQuickLinkIcons();
+
+        // 授权状态每次进页面都重读：可能是别处（授权提示框）刚激活完
+        Loaded += (_, _) => RefreshLicense();
     }
+
+    // ── 授权 ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 刷新「授权状态」这一张卡。
+    /// <para>
+    /// 三种情况，文案都只说用户需要知道的：官方版不用管、激活了看什么时候到期、没激活去输码。
+    /// ⛔ 不写令牌 / 密钥 / 签名 / 服务端判定这类词（界面给用户看服务，不给用户看技术）。
+    /// </para>
+    /// </summary>
+    private void RefreshLicense()
+    {
+        try
+        {
+            var ticket = LicenseStore.Current;
+
+            if (ticket is null && BuildIdentity.IsOfficial)
+            {
+                LicenseStatus.Text = "官方版本，在线服务可直接使用。";
+                LicenseActionButton.Content = "输入激活码";
+                return;
+            }
+
+            if (ticket is not null)
+            {
+                var until = ticket.ExpiresAtLocal;
+                LicenseStatus.Text = until is null
+                    ? "已激活，长期有效。"
+                    : $"已激活，有效期至 {until:yyyy-MM-dd}。";
+                LicenseActionButton.Content = "更换激活码";
+                return;
+            }
+
+            LicenseStatus.Text = "未激活。输入激活码后可使用投稿、反馈、喊话等在线服务。";
+            LicenseActionButton.Content = "输入激活码";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("license", ex, "刷新授权状态");
+            LicenseStatus.Text = "无法读取本机的授权状态。";
+        }
+    }
+
+    private async void LicenseAction_Click(object sender, RoutedEventArgs e)
+    {
+        // 对话框本体在 Views/LicenseDialog：请求被闸门挡下来时弹的是同一个，
+        // 两处的长相和行为必须一致，⛔ 别在这里再抄一份。
+        await Views.LicenseDialog.ShowAsync(XamlRoot);
+        RefreshLicense();
+    }
+
 
     /// <summary>给带 SVG 的快捷入口按当前主题色染图标；主题一切就重染（浅色/深色自适应）。</summary>
     private void ApplyQuickLinkIcons()
@@ -93,6 +148,7 @@ public sealed partial class SettingsPage : Page
             "logs" or "log" => LogExpander,
             "content" => ContentCard,
             "update" or "updates" or "version" => UpdateSectionHeader,
+            "license" or "auth" => LicenseSectionHeader,
             "about" => AboutVersion,
             _ => null,
         };

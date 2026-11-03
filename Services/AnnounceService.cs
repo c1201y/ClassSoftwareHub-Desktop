@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Services.License;
 using ClassSoftwareHub.Desktop.Views;
 
 namespace ClassSoftwareHub.Desktop.Services;
@@ -36,7 +37,7 @@ namespace ClassSoftwareHub.Desktop.Services;
 public static class AnnounceService
 {
     /// <summary>单个入口的超时（与投稿一致：超时就换下一个入口，别让用户干等）。</summary>
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient Http = new(new AuthHandler()) { Timeout = TimeSpan.FromSeconds(10) };
 
     /// <summary>
     /// 轮询专用客户端，超时压到 6 秒（2026-10-27）。
@@ -46,7 +47,7 @@ public static class AnnounceService
     /// 6 秒还没回应基本可以判这一个入口不通，换下一个更划算。
     /// </para>
     /// </summary>
-    private static readonly HttpClient PollHttp = new() { Timeout = TimeSpan.FromSeconds(6) };
+    private static readonly HttpClient PollHttp = new(new AuthHandler()) { Timeout = TimeSpan.FromSeconds(6) };
 
     private static readonly object Gate = new();
 

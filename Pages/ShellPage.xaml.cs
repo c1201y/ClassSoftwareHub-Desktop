@@ -6,6 +6,7 @@ using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Data;
 using ClassSoftwareHub.Desktop.Services;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -38,6 +39,12 @@ public sealed partial class ShellPage : UserControl
 
         // 「实验性功能」同理，清单在 ExperimentalFeatureCatalog（2026-11-01 收编）
         BuildExperimentalNavItems();
+
+        // 新功能角标（New / Beta）：必须在上面两组子项都建好之后挂。
+        // ⚠️ 放到 Loaded 而不是构造函数里 —— 角标底色来自 ThemeBrush，要等这个控件进了树、
+        //    拿到真实的 ActualTheme 才准（构造期拿到的是系统主题，跟应用主题可能对不上）。
+        Loaded += (_, _) => ApplyNavBadges();
+        ActualThemeChanged += (_, _) => ApplyNavBadges();
 
         // 下载任务数变了 → 同步「任务进行」上的徽标（在下载就不占着界面，但得让人随时看见有几个在下）
         Services.DownloadManager.Current.Changed += UpdateDownloadBadge;
@@ -105,6 +112,166 @@ public sealed partial class ShellPage : UserControl
                 Tag = def.Tag,
                 Icon = new FontIcon { Glyph = def.Glyph },
             });
+        }
+    }
+
+    /// <summary>
+    /// 导航项右侧的文字角标：tag →（文字，是否用警告色）。
+    ///
+    /// <para>
+    /// 目的：每次更新用户不知道加了什么，靠这个让新入口自己冒出来。三种状态的含义
+    /// （2026-11-03 Nick 定的口径）：
+    /// <list type="bullet">
+    ///   <item><b>New</b>（绿色）＝ 这个版本刚加，用户第一次见；</item>
+    ///   <item><b>Beta</b>（黄色）＝ 功能**已经确定要做**，只是还在打磨；</item>
+    ///   <item><b>实验性功能</b>（页面标题旁的胶囊，<c>Controls/ExperimentalBadge</c>）＝
+    ///         连要不要做都没定，随时可能拿掉 —— 和 Beta 不是一回事，别混用。</item>
+    /// </list>
+    /// </para>
+    ///
+    /// <para>
+    /// ⛔ 别一直挂着：每次发版把上一版的 New 改成 Beta 或者直接删掉这一行。
+    /// 满屏都是"新功能"之后，用户就把它当装饰看了，这条信息也就废了。
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, (string Text, bool Warning)> NavBadges =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ghostfile"] = ("New", false),
+            ["dictionary"] = ("New", false),
+            ["docs"] = ("New", false),
+            ["ppttouch"] = ("Beta", true),
+        };
+
+    /// <summary>
+    /// 导航项原本的文字。角标是把 <see cref="NavigationViewItem.Content"/> 换成「文字 + 角标」的组合，
+    /// 换完就取不到原文了；而主题切换时要重造一次（颜色是代码设的具体值，不会自己跟着变），
+    /// 所以第一次换之前把原文记下来。
+    /// </summary>
+    private readonly Dictionary<NavigationViewItem, string> _navLabels = new();
+
+    /// <summary>把 <see cref="NavBadges"/> 挂到对应的导航项上。必须在导航项都建好之后调用。</summary>
+    private void ApplyNavBadges()
+    {
+        foreach (var item in EnumerateNavItems(Nav.MenuItems))
+        {
+            if (item.Tag is not string tag) continue;
+
+            // 记下原文（第一次进来时 Content 还是 XAML 里写的字符串）
+            if (!_navLabels.ContainsKey(item) && item.Content is string label)
+                _navLabels[item] = label;
+
+            if (!_navLabels.TryGetValue(item, out var text)) continue;
+
+            if (NavBadges.TryGetValue(tag, out var badge))
+            {
+                // ⚠️ NavigationViewItem 默认 HorizontalContentAlignment = Left，
+                //    不改成 Stretch 的话内容不会被撑开，上面 Grid 的 * 列等于没设。2026-11-04
+                item.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                item.Content = ComposeLabel(text, badge.Text, badge.Warning);
+
+                // 内容换成组合元素后，列表项自己念不出名字了（UIA 里它退化成「NavigationViewItem」），
+                // 显式把名字挂回列表项上。2026-11-04
+                AutomationProperties.SetName(item, text);
+            }
+            else if (item.Content is not string)
+            {
+                // 从表里删掉这一行 = 角标自动摘掉，文字原样还原
+                item.Content = text;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 文字和角标并排。用 <see cref="Grid"/> 而不是水平 <see cref="StackPanel"/>：
+    /// 面板展开宽度 296（`OpenPaneLength`，2026-11-04 从 252 加宽 —— 252 下
+    /// 「PowerPoint 触控优化」作为子项还多一层缩进，加个 Beta 就撑爆，实测会截成「PowerPoint 触控…」），
+    /// 再长就让 Grid 的 <c>*</c> 列先省略文字，角标永远完整。2026-11-04。
+    ///
+    /// <para>
+    /// 角标右对齐到内容区右边缘（分组项则是展开箭头左边一格），所以列与列之间看着有空白 ——
+    /// 这是刻意的：一列角标对齐成一条竖线，比各自紧贴文字更好扫读。
+    /// </para>
+    /// </summary>
+    private FrameworkElement ComposeLabel(string text, string badgeText, bool warning)
+    {
+        var label = new TextBlock
+        {
+            Text = text,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            // 字体不显式设：让它继承导航项自己的字体，跟其它项保持一致
+        };
+
+        var badge = MakeTextBadge(badgeText, warning);
+
+        // 文字列用 *（占满剩余宽度、能省略），角标列 Auto（永远完整）。
+        // ⚠️ 两列都 Auto 时水平布局**不会**约束文字 —— 文本原样画出去被裁掉，角标一起被挤出可视区
+        //    （「PowerPoint 触控优化」是子项还有一层缩进，实测就撑爆了）。2026-11-04。
+        var grid = new Grid
+        {
+            ColumnSpacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center,
+            // 帮朗读工具念出导航项名字（内容换成组合元素后，它自己读不出文字了）
+            Children = { label, badge },
+        };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        AutomationProperties.SetName(grid, text);
+
+        Grid.SetColumn(label, 0);
+        Grid.SetColumn(badge, 1);
+
+        return grid;
+    }
+
+    /// <summary>
+    /// 文字角标：<see cref="Border"/> + <see cref="TextBlock"/> 两个原生基础控件的组合。
+    ///
+    /// <para>
+    /// ⛔ 别换回 <c>InfoBadge</c>（2026-11-04 Nick 定的）：它只认数字（Value）和图标，
+    /// 想放文字只能整个替换它的 ControlTemplate —— 那就是自己画控件了，和「能原生就原生」冲突。
+    /// </para>
+    /// <para>
+    /// 配色不写死色值：底色 = 系统语义色本身压到 15% 透明，字色 = 同一个语义色。
+    /// 深浅主题各自都对（浅色下是淡绿底深绿字，深色下是暗绿底亮绿字），
+    /// 和系统 InfoBar 用的是同一套语义色。
+    /// </para>
+    /// </summary>
+    private Border MakeTextBadge(string text, bool warning)
+    {
+        var fg = (SolidColorBrush)ThemeBrush.Get(this, warning ? "SystemFillColorCautionBrush" : "SystemFillColorSuccessBrush");
+        var c = fg.Color;
+
+        return new Border
+        {
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0x26, c.R, c.G, c.B)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 1, 6, 1),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = 11,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = fg,
+            },
+        };
+    }
+
+    /// <summary>连子项一起往下走（实验性功能、内置工具这两组下面都是有子项的）。</summary>
+    private static IEnumerable<NavigationViewItem> EnumerateNavItems(IList<object> items)
+    {
+        foreach (var raw in items)
+        {
+            if (raw is not NavigationViewItem item) continue;
+
+            yield return item;
+
+            foreach (var child in EnumerateNavItems(item.MenuItems)) yield return child;
         }
     }
 
@@ -426,6 +593,10 @@ public sealed partial class ShellPage : UserControl
             case "ppttouch":
                 // PowerPoint 触控优化（2026-11-01，需求 2）：实验性功能分组下
                 ContentFrame.Navigate(typeof(PptTouchPage));
+                return;
+            case "ghostfile":
+                // 幽灵文件清理（2026-11-03）：实验性功能分组下
+                ContentFrame.Navigate(typeof(GhostFilePage));
                 return;
             case "dictionary":
                 // 查单词（需求清单第 17 条）：纯原生页，词源调度在 Services/Dictionary 里，

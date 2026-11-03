@@ -4,7 +4,8 @@
     NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
+    xmlns:local="using:ClassSoftwareHub.Desktop.Pages"
+    xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
     <!-- 卡片容器样式（关掉 GridViewItem 自带的焦点框/悬停底色）在 App.xaml 里：CshCardItemStyle -->
 
@@ -43,16 +44,7 @@
             <StackPanel Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="本机核实" FontSize="28" FontWeight="Bold" />
-                    <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                            BorderThickness="1"
-                            BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                      Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            <TextBlock Text="实验性功能" FontSize="12"
-                                       Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                        </StackPanel>
-                    </Border>
+                    <ui:ExperimentalBadge FeatureId="machinecheck" />
                 </StackPanel>
                 <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
                            Text="对照软件清单核实安装情况，标出未安装与需升级的软件。" />

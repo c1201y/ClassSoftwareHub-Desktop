@@ -1,4 +1,4 @@
-﻿; ══════════════════════════════════════════════════════════════════════
+; ══════════════════════════════════════════════════════════════════════
 ;  ClassSoftwareHub 桌面版 — Inno Setup 6 安装脚本
 ;
 ;  编译（在工程根目录）：
@@ -25,7 +25,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.2.0-insider1.8"
+  #define DesktopVersion "1.2.0-insider1.9"
 #endif
 
 #define AppName "ClassSoftwareHub"

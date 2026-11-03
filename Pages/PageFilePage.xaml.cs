@@ -50,6 +50,18 @@ public sealed partial class PageFilePage : Page
     /// <summary>自动管理这一档有没有被改过（它本身也算一项待应用）。</summary>
     private bool _autoChanged;
 
+    /// <summary>打开这一页时读到的「系统盘锁定」状态。</summary>
+    private OsVolumeLock _osLockCurrent = OsVolumeLock.Unknown;
+
+    /// <summary>打开这一页时系统盘是不是锁着的（用来判断用户有没有动过开关）。</summary>
+    private bool _osLockInitial;
+
+    /// <summary>应用之后打算让系统盘锁着还是不锁。</summary>
+    private bool _osLockPending;
+
+    /// <summary>「系统盘锁定」有没有被改过。</summary>
+    private bool _osLockChanged;
+
     private string? _selected;
 
     /// <summary>正在回填界面，此时的控件事件是程序触发的。</summary>
@@ -67,6 +79,9 @@ public sealed partial class PageFilePage : Page
     private bool _tipDismissed;
 
     private TipMode _tipMode = TipMode.Pending;
+
+    /// <summary>待应用清单里「系统盘锁定」那一行的标识。⛔ 不能长得像盘符（`C:`），会和逐盘改动撞。</summary>
+    private const string OsLockKey = "oslock";
 
     private enum TipMode
     {
@@ -110,6 +125,15 @@ public sealed partial class PageFilePage : Page
 
             SwAutomatic.IsOn = _autoCurrent;
 
+            // 系统盘锁定：读不到就别让用户拨（拨了也判断不了结果）
+            _osLockCurrent = PageFileService.ReadOsVolumeLock();
+            _osLockInitial = _osLockCurrent == OsVolumeLock.Locked;
+            _osLockPending = _osLockInitial;
+            _osLockChanged = false;
+
+            SwOsLock.IsOn = _osLockPending;
+            SwOsLock.IsEnabled = _osLockCurrent != OsVolumeLock.Unknown;
+
             EmptyHint.Visibility = _drives.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             SumFloor.Text = $"{PageFileRules.MinAllowedMb} MB";
@@ -125,7 +149,8 @@ public sealed partial class PageFilePage : Page
             UpdateEditability();
 
             AppLog.Step("pagefile", $"读取：自动管理={_autoCurrent}，驱动器 {_drives.Count} 个（"
-                + string.Join("、", _drives.Select(d => $"{d.Drive}={d.Plan.SizeText}")) + "）");
+                + string.Join("、", _drives.Select(d => $"{d.Drive}={d.Plan.SizeText}")) + "）"
+                + $"，系统盘锁定={_osLockCurrent}");
         }
         finally
         {
@@ -326,8 +351,26 @@ public sealed partial class PageFilePage : Page
         UpdatePendingUi();
     }
 
-    private void DriveList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// 「系统盘锁定」开关。和这一页其它改动一样先排队，按「应用更改」时一次提权写完。
+    /// </summary>
+    private void OsLock_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_loading || _busy) return;
+
+        _osLockPending = SwOsLock.IsOn;
+        _osLockChanged = _osLockPending != _osLockInitial;
+
+        AppLog.Step("pagefile", _osLockChanged
+            ? $"排队：系统盘锁定 = {(_osLockPending ? "开" : "解除")}"
+            : "系统盘锁定回到原状态");
+
+        _tipDismissed = false;
+        _tipMode = TipMode.Pending;
+        UpdatePendingUi();
+    }
+
+    private void DriveList_SelectionChanged(object sender, SelectionChangedEventArgs e)    {
         if (_syncing) return;
 
         if (DriveList.SelectedItem is FrameworkElement { Tag: string drive })
@@ -437,7 +480,8 @@ public sealed partial class PageFilePage : Page
 
     // ── 待应用与提示条 ───────────────────────────────────────────────────
 
-    private int PendingCount => (_autoChanged ? 1 : 0) + (_autoPending ? 0 : _pending.Count);
+    private int PendingCount =>
+        (_autoChanged ? 1 : 0) + (_autoPending ? 0 : _pending.Count) + (_osLockChanged ? 1 : 0);
 
     private void UpdatePendingUi()
     {
@@ -471,6 +515,16 @@ public sealed partial class PageFilePage : Page
             AddPendingRow("自动管理所有驱动器的分页文件大小",
                 _autoPending ? "开启" : "关闭",
                 cancel: null);
+        }
+
+        // ⚠️ 放在 `if (_autoPending) return` **之前**：自动管理决定的是"各盘多大"，
+        //    系统盘锁定决定的是"允不允许不放在系统盘"，两件事互不影响 ——
+        //    自动管理开着的时候，这一项照样可能被改。2026-11-04
+        if (_osLockChanged)
+        {
+            AddPendingRow("系统盘的分页文件锁定",
+                _osLockPending ? "开启" : "解除",
+                cancel: OsLockKey);
         }
 
         if (_autoPending) return;
@@ -521,15 +575,30 @@ public sealed partial class PageFilePage : Page
 
     private void CancelPending_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string driveId }) return;
+        if (sender is not Button { Tag: string key }) return;
 
-        _pending.Remove(driveId);
+        // 「系统盘锁定」不是某个盘，单独处理：把开关拨回去即可
+        if (key == OsLockKey)
+        {
+            _loading = true;
+            try { SwOsLock.IsOn = _osLockInitial; }
+            finally { _loading = false; }
+
+            _osLockPending = _osLockInitial;
+            _osLockChanged = false;
+
+            AppLog.Step("pagefile", "取消排队：系统盘锁定");
+            UpdatePendingUi();
+            return;
+        }
+
+        _pending.Remove(key);
 
         // 选项区要拨回真实配置，否则它停在一个"看着改了、其实不会写入"的位置
-        if (_selected == driveId) FillEditor(driveId);
-        UpdateRowSize(driveId);
+        if (_selected == key) FillEditor(key);
+        UpdateRowSize(key);
 
-        AppLog.Step("pagefile", $"取消排队：{driveId}");
+        AppLog.Step("pagefile", $"取消排队：{key}");
         UpdatePendingUi();
     }
 
@@ -627,8 +696,11 @@ public sealed partial class PageFilePage : Page
 
         var plans = BuildTargetPlans();
 
+        // 这次动没动分页文件本身。只改「系统盘锁定」时不校验、也不写 PagingFiles
+        var plansChanged = _autoChanged || _pending.Count > 0;
+
         // 与服务层同一套校验：越界的大小写进去之后，Windows 不会报错，只是这个盘实际没有分页文件
-        if (!_autoPending)
+        if (plansChanged && !_autoPending)
         {
             if (PageFileRules.ValidateAll(plans) is { } none)
             {
@@ -647,11 +719,21 @@ public sealed partial class PageFilePage : Page
             }
         }
 
-        var summary = _autoPending
-            ? "改为由系统自动管理所有驱动器的分页文件大小。"
-            : string.Join("\n", plans
-                .Where(p => p.Mode != PageFileMode.None)
-                .Select(p => $"{p.Drive}  {p.SizeText}"));
+        var summaryParts = new List<string>();
+
+        if (plansChanged)
+        {
+            summaryParts.Add(_autoPending
+                ? "改为由系统自动管理所有驱动器的分页文件大小。"
+                : string.Join("\n", plans
+                    .Where(p => p.Mode != PageFileMode.None)
+                    .Select(p => $"{p.Drive}  {p.SizeText}")));
+        }
+
+        if (_osLockChanged)
+            summaryParts.Add(_osLockPending ? "允许系统在系统盘保留分页文件。" : "解除系统盘的分页文件锁定。");
+
+        var summary = string.Join("\n", summaryParts);
 
         if (!await ConfirmAsync("应用虚拟内存设置",
                 $"{summary}\n\n需要一次管理员授权。改动在**重启之后**生效。"))
@@ -662,7 +744,8 @@ public sealed partial class PageFilePage : Page
 
         try
         {
-            var result = await PageFileService.ApplyAsync(_autoPending, plans);
+            var result = await PageFileService.ApplyAsync(
+                _autoPending, plans, plansChanged, _osLockChanged ? _osLockPending : null);
 
             if (!result.Ok)
             {
@@ -712,6 +795,14 @@ public sealed partial class PageFilePage : Page
         {
             自动管理 = _autoCurrent,
             目标自动管理 = _autoChanged ? _autoPending : (bool?)null,
+            系统盘锁定 = _osLockCurrent switch
+            {
+                OsVolumeLock.Locked => "已锁定：分页文件只能留在系统盘",
+                OsVolumeLock.Unlocked => "已解除",
+                OsVolumeLock.Absent => "没有设置（等于不干预）",
+                _ => "读不到",
+            },
+            目标系统盘锁定 = _osLockChanged ? _osLockPending : (bool?)null,
             待应用项数 = PendingCount,
             正在应用 = _busy,
             允许的最小值MB = PageFileRules.MinAllowedMb,
@@ -741,6 +832,8 @@ public sealed partial class PageFilePage : Page
             上限 = "不能超过该盘可用空间，否则分页文件建不出来，而系统不会报错",
             至少一个 = "不允许所有驱动器都设为「无分页文件」",
             生效时机 = "重启",
+            系统盘锁定 = "系统盘锁定开着时，即使把每个盘的分页文件都设到别处，系统仍会在系统盘另建一份；" +
+                        "用户说「设了不管用、C 盘还是有 pagefile」时先看这一项",
             三种设置的含义 = new
             {
                 自定义大小 = "固定占用，初始值立即分配、最大值为上限",

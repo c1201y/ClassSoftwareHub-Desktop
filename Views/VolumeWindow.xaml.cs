@@ -178,7 +178,10 @@ public sealed partial class VolumeWindow : Window
     {
         try
         {
-            ThemeHost.Apply(Root);                   // 跟应用主题（分体只管常用工具浮窗）
+            // 跟**侧边栏**那套外观（2026-11-04 Nick 定）：这一栏是挨着边条长出来的，
+            // 属于侧边栏的一部分。以前跟应用主题，于是「应用深色 + 侧边栏浅色」时
+            // 边条发白、贴出来的音量和亮度面板整片发黑，像两个不相干的东西。
+            ThemeHost.Apply(Root, external: true);
             VolumeFlyoutGroup.MainHwnd = _chrome.Hwnd;
 
             // ⚠️ handledEventsToo: true —— Slider 内部会把 PointerPressed 标成 handled，

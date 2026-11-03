@@ -8,48 +8,55 @@
       文档正文页（需求 15）。正文由 Controls/DocView 现场渲染：
       Markdown / 纯文本 / docx 自己解析，PDF 用系统 PdfDocument 逐页画。
       正文文件来自本机缓存（无扩展名），首次打开时才下载。
+
+      版式（2026-11-02 改）：照 AutoShutdownPage / WelcomePage 的骨架 ——
+      ScrollViewer 在最外层，里面放带 Margin 的 Grid，再用「三列 Grid」把正文钉在中间 960 宽。
+      ⛔ 别写成「Grid 包 ScrollViewer」：那样正文会被 ScrollViewer 居中，宽屏下整块右移；
+        也别给正文 StackPanel 写 HorizontalAlignment="Left"：Left 会把它收缩到内容自然宽度。
     -->
     <Grid Background="Transparent">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="24" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="24" />
-        </Grid.ColumnDefinitions>
+        <ScrollViewer x:Name="BodyScroll" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="24,32,24,56">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="24" />
+                </Grid.ColumnDefinitions>
 
-        <ScrollViewer x:Name="BodyScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
-                      Padding="2,0,12,0">
-            <StackPanel MaxWidth="960" Margin="0,32,0,56">
-                <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold"
-                           TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                <StackPanel Grid.Column="1" MaxWidth="960">
+                    <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold"
+                               TextWrapping="Wrap" IsTextSelectionEnabled="True" />
 
-                <TextBlock x:Name="MetaText" FontSize="12" Opacity="0.6" Margin="0,8,0,0"
-                           TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <TextBlock x:Name="MetaText" FontSize="12" Opacity="0.6" Margin="0,8,0,0"
+                               TextWrapping="Wrap" IsTextSelectionEnabled="True" />
 
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,16,0,10">
-                    <Button x:Name="SourceButton" Click="Source_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <FontIcon Glyph="&#xE8A0;" FontSize="13" />
-                            <TextBlock Text="查看源文件" />
-                        </StackPanel>
-                    </Button>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,16,0,10">
+                        <Button x:Name="SourceButton" Click="Source_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <FontIcon Glyph="&#xE8A0;" FontSize="13" />
+                                <TextBlock Text="查看源文件" />
+                            </StackPanel>
+                        </Button>
 
-                    <Button Click="Submit_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <FontIcon Glyph="&#xE898;" FontSize="13" />
-                            <TextBlock Text="投稿文章" />
-                        </StackPanel>
-                    </Button>
+                        <Button Click="Submit_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <FontIcon Glyph="&#xE898;" FontSize="13" />
+                                <TextBlock Text="投稿文章" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            Margin="0,6,0,18" />
+
+                    <ContentControl x:Name="DocHost" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch" />
                 </StackPanel>
-
-                <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        Margin="0,6,0,18" />
-
-                <ContentControl x:Name="DocHost" HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Stretch" />
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
 
-        <StackPanel x:Name="LoadingPanel" Grid.Column="1" Spacing="12"
+        <StackPanel x:Name="LoadingPanel" Spacing="12"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
                     Visibility="Collapsed">
             <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
@@ -57,7 +64,7 @@
                        HorizontalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel x:Name="ErrorPanel" Grid.Column="1" Spacing="10" Visibility="Collapsed"
+        <StackPanel x:Name="ErrorPanel" Spacing="10" Visibility="Collapsed"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
             <FontIcon Glyph="&#xE8A5;" FontSize="30" Opacity="0.4" HorizontalAlignment="Center" />
             <TextBlock x:Name="ErrorText" MaxWidth="440" TextAlignment="Center"

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ClassSoftwareHub.Desktop.Services.License;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -33,7 +34,8 @@ public sealed partial class SubmitPage : Page
     /// <summary>合法校验值位数：32=MD5 / 40=SHA-1 / 56=SHA-224 / 64=SHA-256 / 96=SHA-384 / 128=SHA-512</summary>
     private static readonly int[] HashLengths = { 32, 40, 56, 64, 96, 128 };
 
-    private static readonly HttpClient Http = new();
+    // 投稿是受保护路由，必须带身份头 → 走认证处理器（见 Services/License/AuthHandler.cs）
+    private static readonly HttpClient Http = new(new AuthHandler(new HttpClientHandler()));
 
     private static string DataDir => Core.AppPaths.DataDir;
     private static string DraftFile => System.IO.Path.Combine(DataDir, "submit-draft.json");

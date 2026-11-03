@@ -44,6 +44,36 @@ public sealed record PageFileDrive(
 public sealed record PageFileApplyResult(bool Ok, string? Error, bool Applied = false);
 
 /// <summary>
+/// 「分页文件锁定在系统盘」的当前状态，来自 <c>PagefileOnOsVolume</c>。
+///
+/// <para>
+/// 这个值不是微软给用户的手动开关，而是 **BitLocker 在启用时自动写进去的**
+/// （微软 KB 929820）：它的本意是防止分页文件被挪到未加密的卷上、把内存内容漏出去。
+/// 值 = 1 时，会话管理器**只把系统盘当作分页文件的位置**。
+/// </para>
+/// <para>
+/// 坑在于：BitLocker 关掉之后**这个值会留下**，于是机器上继续维持"系统盘必须有一份分页文件"，
+/// 用户在界面上把分页文件全设到 D 盘也不生效 —— 系统会在 C 盘另建一个小的。
+/// 2026-11-04 Nick 反馈的就是这一种。
+/// </para>
+/// </summary>
+public enum OsVolumeLock
+{
+    /// <summary>注册表里没有这个值 —— 系统不干预，各盘按配置走。</summary>
+    Absent,
+
+    /// <summary>= 1。只允许系统盘放分页文件。</summary>
+    Locked,
+
+    /// <summary>= 0。显式解除。</summary>
+    Unlocked,
+
+    /// <summary>读不到（异常）。</summary>
+    Unknown,
+}
+
+
+/// <summary>
 /// 虚拟内存（分页文件）的读写（2026-10-31，需求清单第 19 条）。
 ///
 /// <para>
@@ -66,6 +96,16 @@ public static class PageFileService
 
     /// <summary>分页文件配置所在的键（<c>PagingFiles</c> 在它下面）。</summary>
     public const string MemoryKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management";
+
+    /// <summary>
+    /// 「System 盘必须有分页文件」那个值。见 <see cref="OsVolumeLock"/>。
+    /// <para>
+    /// ⛔ 同一个键下的 <c>ExistingPageFiles</c> **一律不要碰**：微软文档写明它反映的是
+    /// "当前实际使用位置"，是系统自己维护的结果，手改无效还可能引出新问题（Nick 2026-11-04 提醒）。
+    /// 本程序从来只写 <c>PagingFiles</c> 和这一个值。
+    /// </para>
+    /// </summary>
+    public const string OsVolumeName = "PagefileOnOsVolume";
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 
@@ -106,9 +146,65 @@ public static class PageFileService
     /// <summary>是不是「自动管理所有驱动器的分页文件大小」。</summary>
     public static bool IsAutomatic() => PageFileRules.IsAutomatic(RawEntries());
 
-    /// <summary>当前的完整配置（每盘一条）。</summary>
+    /// <summary>当前完整的配置（每盘一条）。</summary>
     public static List<PageFilePlan> CurrentPlans() =>
         PageFileRules.Parse(RawEntries(), SystemDrive);
+
+    /// <summary>
+    /// 「分页文件锁定在系统盘」这个值（<c>PagefileOnOsVolume</c>，REG_DWORD）。
+    /// 读不到返回 <see cref="OsVolumeLock.Unknown"/>，读得到就按 0/1 判。
+    /// </summary>
+    public static OsVolumeLock ReadOsVolumeLock()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(MemoryKey, writable: false);
+            if (key?.GetValue(OsVolumeName) is not { } raw) return OsVolumeLock.Absent;
+
+            return Convert.ToInt32(raw, System.Globalization.CultureInfo.InvariantCulture) == 0
+                ? OsVolumeLock.Unlocked
+                : OsVolumeLock.Locked;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("pagefile", ex, "读取 PagefileOnOsVolume");
+            return OsVolumeLock.Unknown;
+        }
+    }
+
+    /// <summary>
+    /// 改之前把原状态存一份到数据目录。这个值只有「有 / =0 / =1」三种，还原很容易，
+    /// 但用户手动改过注册表之后很难想起来原来是多少 —— 留着这条能对照。
+    /// </summary>
+    private static void BackupOsVolumeLock()
+    {
+        try
+        {
+            var state = ReadOsVolumeLock();
+            var file = Path.Combine(AppPaths.DataDir, "pagefile-on-os-volume-backup.json");
+
+            File.WriteAllText(file, JsonSerializer.Serialize(new
+            {
+                savedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                existed = state != OsVolumeLock.Absent && state != OsVolumeLock.Unknown,
+                value = state switch
+                {
+                    OsVolumeLock.Locked => 1,
+                    OsVolumeLock.Unlocked => 0,
+                    _ => (int?)null,
+                },
+                key = @"HKEY_LOCAL_MACHINE\" + MemoryKey,
+                name = OsVolumeName,
+            }, Json));
+
+            AppLog.Info("pagefile", $"已备份原状态：{state}（{file}）");
+        }
+        catch (Exception ex)
+        {
+            // 备份失败不阻断写入 —— 值本身就三种，用户还能手动改回来
+            AppLog.Exception("pagefile", ex, "备份 PagefileOnOsVolume");
+        }
+    }
 
     /// <summary>
     /// 枚举本机的固定磁盘，并附上它当前的分页文件配置。
@@ -193,10 +289,23 @@ public static class PageFileService
     /// </summary>
     /// <param name="automatic">是否改为「自动管理所有驱动器」。</param>
     /// <param name="plans">手动配置时的完整列表（要含 <see cref="OrphanPlans"/> 里的项）。</param>
+    /// <param name="plansChanged">
+    /// 这次动没动分页文件本身。只改「系统盘锁定」时不写 <c>PagingFiles</c> ——
+    /// 那时的 <paramref name="plans"/> 只是当前配置的回读，写一遍没有意义，
+    /// 而且用户如果本来就把分页文件全关了，还会撞上"目标配置里没有任何分页文件"的拦截。
+    /// </param>
+    /// <param name="osVolumeLock">
+    /// 要把 <c>PagefileOnOsVolume</c> 设成什么：<c>true</c> = 锁定（1），<c>false</c> = 解除（0），
+    /// <c>null</c> = 不动。
+    /// </param>
     public static async Task<PageFileApplyResult> ApplyAsync(
-        bool automatic, IReadOnlyList<PageFilePlan> plans, CancellationToken ct = default)
+        bool automatic,
+        IReadOnlyList<PageFilePlan> plans,
+        bool plansChanged,
+        bool? osVolumeLock,
+        CancellationToken ct = default)
     {
-        if (!automatic && PageFileRules.ValidateAll(plans) is { } invalid)
+        if (plansChanged && !automatic && PageFileRules.ValidateAll(plans) is { } invalid)
             return new PageFileApplyResult(false, invalid);
 
         var manifest = Path.Combine(Path.GetTempPath(), $"csh-pagefile-{Guid.NewGuid():N}.json");
@@ -205,11 +314,9 @@ public static class PageFileService
         try
         {
             await File.WriteAllTextAsync(manifest,
-                JsonSerializer.Serialize(new PageFileTask(automatic, plans.ToList()), Json), ct);
+                JsonSerializer.Serialize(new PageFileTask(automatic, plans.ToList(), plansChanged, osVolumeLock), Json), ct);
 
-            AppLog.Step("pagefile", automatic
-                ? "应用：自动管理所有驱动器"
-                : $"应用：{string.Join("，", plans.Where(p => p.Mode != PageFileMode.None).Select(p => $"{p.Drive}={p.SizeText}"))}");
+            AppLog.Step("pagefile", Describe(automatic, plans, plansChanged, osVolumeLock));
 
             var exe = Environment.ProcessPath;
             if (string.IsNullOrEmpty(exe))
@@ -264,8 +371,26 @@ public static class PageFileService
         }
     }
 
-    // ── 提权助手（在管理员令牌下跑在另一个进程里） ──────────────────────
+    /// <summary>一行日志，说清这次要写什么。</summary>
+    private static string Describe(
+        bool automatic, IReadOnlyList<PageFilePlan> plans, bool plansChanged, bool? osVolumeLock)
+    {
+        var parts = new List<string>();
 
+        if (plansChanged)
+        {
+            parts.Add(automatic
+                ? "自动管理所有驱动器"
+                : string.Join("，", plans.Where(p => p.Mode != PageFileMode.None).Select(p => $"{p.Drive}={p.SizeText}")));
+        }
+
+        if (osVolumeLock is { } lockIt)
+            parts.Add(lockIt ? "系统盘锁定=开启" : "系统盘锁定=解除");
+
+        return "应用：" + (parts.Count == 0 ? "（无改动）" : string.Join("；", parts));
+    }
+
+    // ── 提权助手（在管理员令牌下跑在另一个进程里） ──────────────────────
     /// <summary>
     /// 由 <c>App</c> 在启动最前面接管：读清单 → 写注册表 → 重读校验 → 写回结果文件 → 退出。
     /// ⛔ 不建界面、不碰单实例、不弹窗。
@@ -309,40 +434,71 @@ public static class PageFileService
     {
         try
         {
-            var entries = task.Automatic
-                ? new List<string> { PageFileRules.AutomaticEntry }
-                : PageFileRules.BuildEntries(task.Plans, SystemDrive);
-
-            if (!task.Automatic && entries.Count == 0)
-                return new PageFileResult(false, "目标配置里没有任何分页文件，已拒绝写入。");
-
-            using (var key = Registry.LocalMachine.OpenSubKey(MemoryKey, writable: true))
+            if (task.PlansChanged)
             {
-                if (key is null) return new PageFileResult(false, "打不开分页文件配置所在的注册表键。");
+                var entries = task.Automatic
+                    ? new List<string> { PageFileRules.AutomaticEntry }
+                    : PageFileRules.BuildEntries(task.Plans, SystemDrive);
 
-                key.SetValue("PagingFiles", entries.ToArray(), RegistryValueKind.MultiString);
+                if (!task.Automatic && entries.Count == 0)
+                    return new PageFileResult(false, "目标配置里没有任何分页文件，已拒绝写入。");
+
+                using (var key = Registry.LocalMachine.OpenSubKey(MemoryKey, writable: true))
+                {
+                    if (key is null) return new PageFileResult(false, "打不开分页文件配置所在的注册表键。");
+
+                    key.SetValue("PagingFiles", entries.ToArray(), RegistryValueKind.MultiString);
+                }
+
+                // 成败按**重读出来的配置**判定：写入调用不抛异常 ≠ Windows 采纳了
+                var after = PageFileRules.Parse(RawEntries(), SystemDrive);
+
+                var ok = task.Automatic
+                    ? IsAutomatic()
+                    : PageFileRules.SameAs(task.Plans, after);
+
+                if (!ok)
+                    return new PageFileResult(false, "写入后重读的配置与目标不一致，可能被组策略或安全软件拦下。");
             }
 
-            // 成败按**重读出来的配置**判定：写入调用不抛异常 ≠ Windows 采纳了
-            var after = PageFileRules.Parse(RawEntries(), SystemDrive);
+            // 解除（或恢复）系统盘的锁定。⚠️ 这一项和上面的 PagingFiles 是两件事：
+            // 上面决定"哪些盘要分页文件"，这一项决定"系统允不允许不放在系统盘"。
+            if (task.OsVolumeLock is { } wantLock)
+            {
+                BackupOsVolumeLock();
 
-            var ok = task.Automatic
-                ? IsAutomatic()
-                : PageFileRules.SameAs(task.Plans, after);
+                using (var key = Registry.LocalMachine.OpenSubKey(MemoryKey, writable: true))
+                {
+                    if (key is null) return new PageFileResult(false, "打不开分页文件配置所在的注册表键。");
 
-            return ok
-                ? new PageFileResult(true, null)
-                : new PageFileResult(false, "写入后重读的配置与目标不一致，可能被组策略或安全软件拦下。");
+                    key.SetValue(OsVolumeName, wantLock ? 1 : 0, RegistryValueKind.DWord);
+                }
+
+                var state = ReadOsVolumeLock();
+                var locked = state == OsVolumeLock.Locked;
+
+                if (state == OsVolumeLock.Unknown)
+                    return new PageFileResult(false, "写入后读不回来，无法确认是否生效。");
+
+                if (locked != wantLock)
+                    return new PageFileResult(false, "写入后重读的值与目标不一致，可能被组策略或安全软件拦下。");
+            }
+
+            return new PageFileResult(true, null);
         }
         catch (Exception ex)
         {
-            AppLog.Exception("pagefile", ex, "写入 PagingFiles");
+            AppLog.Exception("pagefile", ex, "写入分页文件配置");
             return new PageFileResult(false, ex.Message);
         }
     }
 
     /// <summary>提权清单。显式字段名，避免缩略化之后两边对不上。</summary>
-    private sealed record PageFileTask(bool Automatic, List<PageFilePlan> Plans);
+    private sealed record PageFileTask(
+        bool Automatic,
+        List<PageFilePlan> Plans,
+        bool PlansChanged = true,
+        bool? OsVolumeLock = null);
 
     /// <summary>提权结果。</summary>
     private sealed record PageFileResult(bool Ok, string? Error);

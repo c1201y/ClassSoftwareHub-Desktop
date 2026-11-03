@@ -123,6 +123,39 @@
 - `Frame.CacheSize = 2`（0 会切页顿、12 会攒一堆页面，两个都被否过）
 - Hub AI 那一项**永远常驻**，不受总闸控制（Nick 2026-10-28：要留作展示位）
 
+### 1.5 实验性功能标记 与 导航角标（Nick 2026-11-03 定）
+
+**凡是在「实验性功能」分组下的页面，标题右边必须有「实验性功能」标记。**
+写法就一行，放在标题所在的横向 `StackPanel` 里：
+
+```xml
+<StackPanel Orientation="Horizontal" Spacing="10">
+    <TextBlock Text="某某功能" FontSize="28" FontWeight="Bold" />
+    <ui:ExperimentalBadge FeatureId="导航 tag" />
+</StackPanel>
+```
+
+- ⛔ **不要在页面里手抄那圈 Border。** 2026-11-03 之前正是这么干的：四个页面各抄了一份，
+  后来新加的五个页面全忘了加 —— 同一批实验性功能，有的带标记有的不带。
+- **显示与否不归页面管**：`Controls/ExperimentalBadge` 自己去 `ExperimentalFeatureCatalog.Find(FeatureId)` 查，
+  查不到就整块收起。所以**功能转正时只要从 catalog 删掉那一条，标记就自动没了**，不用回头改页面。
+- `FeatureId` 必须和 catalog 里的 `Tag` 一字不差（大小写不敏感）。
+
+导航项右侧的文字角标是**另一回事**，三种状态别混用：
+
+| 角标 | 颜色 | 含义 |
+| --- | --- | --- |
+| `New` | 绿（Success） | 这个版本刚加，用户第一次见 |
+| `Beta` | 黄（Caution） | 功能**已经确定要做**，只是还在打磨 |
+| 实验性功能（页面标题旁胶囊） | 黄 | 连要不要做都没定，随时可能拿掉 |
+
+- ⛔ **Beta ≠ 实验性功能**：Beta 是"一定会做，还在测"；实验性是"探索可行性，不一定上"。
+  以前两者混着用，用户看不出区别，这条口径是 Nick 2026-11-03 明确纠正的。
+- 角标表在 `ShellPage.xaml.cs` 的 `NavBadges`，加一项只改那一处（键是导航 tag）。
+  文字靠 `NavTextBadgeTemplate` 渲染 —— `InfoBadge` 原生只认数字和图标，放文字必须换模板。
+- ⛔ **别一直挂着 New/Beta**：每次发版把上一版的 `New` 改成 `Beta` 或直接删掉该行。
+  满屏都是"新功能"之后用户就当装饰看了，这条信息也就废了。
+
 ---
 
 ## 2. 交互与文案：最容易返工的几条

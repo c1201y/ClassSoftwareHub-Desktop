@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClassSoftwareHub.Desktop.Controls.ExperimentalBadge"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      页面标题旁边那枚「实验性功能」标记（2026-11-03 收成一个控件）。
+
+      ⛔ 不要再把它手抄进页面：之前四个页面各抄一份、五个新页面干脆忘了抄，
+         结果同一批实验性功能有的带标记有的不带（Nick 2026-11-03 指出的问题）。
+      用法：<controls:ExperimentalBadge FeatureId="ghostfile" />，放在标题所在的横向 StackPanel 里。
+      ⚠️ 显示与否**不归页面管** —— 由 ExperimentalFeatureCatalog 里有没有这条决定，见 code-behind。
+    -->
+    <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
+            BorderThickness="1"
+            BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
+        <StackPanel Orientation="Horizontal" Spacing="5">
+            <FontIcon Glyph="&#xEA80;" FontSize="11"
+                      Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+            <TextBlock Text="实验性功能" FontSize="12"
+                       Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+        </StackPanel>
+    </Border>
+</UserControl>

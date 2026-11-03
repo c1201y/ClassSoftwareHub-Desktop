@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Services.License;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
@@ -98,7 +99,7 @@ internal static class SubmitClient
 
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
+        var client = new HttpClient(new AuthHandler(new HttpClientHandler { AllowAutoRedirect = true }))
         {
             Timeout = TimeSpan.FromSeconds(20),
         };

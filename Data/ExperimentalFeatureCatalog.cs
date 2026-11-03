@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace ClassSoftwareHub.Desktop.Data;
@@ -103,5 +104,37 @@ public static class ExperimentalFeatureCatalog
             Desc = "逐个驱动器设置分页文件大小，重启后生效",
             Glyph = "\uEDA2", Tag = "pagefile"
         },
+
+        // 幽灵文件清理（2026-11-03）：文件删了、图标还在、双击提示找不到路径的那一类。
+        // ⚠️ 为啥塞实验性：删除是**永久**的（这些怪名字进不了回收站），一旦误删没法还原。
+        //    另外"幽灵"有多种成因，其中资源管理器显示缓存那一路本程序只能刷新视图，清不掉条目 ——
+        //    先跑一段，确认口径不会让用户误以为"所有删不掉的文件它都能处理"。
+        new ExperimentalFeature
+        {
+            Id = "ghostfile", Name = "幽灵文件清理",
+            Desc = "清理删不掉、双击提示找不到路径的残留条目",
+            Glyph = "\uE7C4", Tag = "ghostfile"
+        },
     };
+
+    /// <summary>
+    /// 按导航 tag 找一条定义；找不到返回 null。
+    ///
+    /// <para>
+    /// 页面标题旁那枚「实验性功能」标记（<c>Controls/ExperimentalBadge</c>）就靠它决定显示与否：
+    /// **功能转正时只要从这里删掉这一条，标志会自动消失**，不用回头去改页面
+    /// （2026-11-03 Nick 定的规矩，见 MustRead）。
+    /// </para>
+    /// </summary>
+    public static ExperimentalFeature? Find(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return null;
+
+        foreach (var def in All)
+        {
+            if (string.Equals(def.Tag, tag, StringComparison.OrdinalIgnoreCase)) return def;
+        }
+
+        return null;
+    }
 }

@@ -91,16 +91,7 @@
                 <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock x:Name="TitleText" Text="应用卸载" FontSize="28" FontWeight="Bold" />
-                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                                BorderThickness="1"
-                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                <TextBlock Text="实验性功能" FontSize="12"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            </StackPanel>
-                        </Border>
+                        <ui:ExperimentalBadge FeatureId="uninstaller" />
                     </StackPanel>
 
                     <!-- 标题下面这一行原本是一段解释话（已移进「说明」弹窗），现在放**计数**。

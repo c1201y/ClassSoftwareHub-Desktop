@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.PptMenuWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      长按菜单的隐形宿主（做法同 TrayMenuWindow）：窗口只有 1×1、无边框、不进任务栏和 Alt+Tab，
+      菜单本体（MenuFlyout）是系统画的独立浮层，不受这个窗口尺寸约束。
+      ⛔ 别往里加可见内容 —— 它就该是看不见的。
+    -->
+    <Grid x:Name="Root" Background="Transparent" />
+</Window>

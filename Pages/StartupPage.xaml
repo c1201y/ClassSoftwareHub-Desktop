@@ -4,7 +4,8 @@
     NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
+    xmlns:local="using:ClassSoftwareHub.Desktop.Pages"
+    xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
     <!--
       开机启动项（2026-10-16 新功能，实验性功能分组下）。
@@ -63,16 +64,7 @@
                 <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="开机启动项" FontSize="28" FontWeight="Bold" />
-                        <Border CornerRadius="5" Padding="8,3" Margin="0,0,0,6" VerticalAlignment="Bottom"
-                                BorderThickness="1"
-                                BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <FontIcon Glyph="&#xEA80;" FontSize="11"
-                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                <TextBlock Text="实验性功能" FontSize="12"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                            </StackPanel>
-                        </Border>
+                        <ui:ExperimentalBadge FeatureId="startup" />
                     </StackPanel>
 
                     <!-- 标题下面放**计数**（不是解释话，解释在「说明」弹窗里）。

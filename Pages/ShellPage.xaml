@@ -4,6 +4,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!--
+      导航项右侧的文字角标没有写在这里，而是 ShellPage.xaml.cs 的 MakeTextBadge 现造：
+      InfoBadge 原生只能放数字和图标，放文字得整个替换它的模板，那是"自己画的控件"。
+      改成 Border + TextBlock 两个原生基础控件的组合，颜色跟系统语义色走。2026-11-04。
+    -->
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
@@ -91,7 +96,7 @@
              （1008 = WinUI 系统默认，与 Gallery 同款）：≥1008 展开、700~1008 图标条、<700 全隐 -->
         <NavigationView x:Name="Nav" Grid.Row="1" Background="{x:Null}"
                         IsBackButtonVisible="Visible" IsSettingsVisible="False"
-                        PaneDisplayMode="Auto" OpenPaneLength="252"
+                        PaneDisplayMode="Auto" OpenPaneLength="296"
                         CompactModeThresholdWidth="700" ExpandedModeThresholdWidth="1008"
                         BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">

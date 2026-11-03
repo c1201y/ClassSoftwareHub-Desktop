@@ -742,6 +742,29 @@
 
                 </StackPanel>
 
+                <!-- ================= 授权 ================= -->
+                <!--
+                  2026-11-04 加，对应后端《防滥用接入指南》§2。
+                  官方流水线打出来的包自带构建签名，服务端验过之后会下发令牌，用户什么都不用做；
+                  自己编译的版本没有签名，只能靠激活码。所以这一块对绝大多数用户是"看一眼就走"的。
+                  ⚠️ 状态文案里不写令牌、密钥、签名这类词，也不解释服务端怎么判定 ——
+                     用户只需要知道"能不能用、到期没到期、去哪激活"。
+                -->
+                <TextBlock x:Name="LicenseSectionHeader" Text="授权" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+                    <controls:SettingsCard Header="授权状态">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE72E;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <controls:SettingsCard.Description>
+                            <TextBlock x:Name="LicenseStatus" TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </controls:SettingsCard.Description>
+                        <Button x:Name="LicenseActionButton" Content="输入激活码" Click="LicenseAction_Click" />
+                    </controls:SettingsCard>
+                </StackPanel>
+
                 <!-- ================= 条款与声明 ================= -->
                 <!--
                   2026-10-11：网站新增了三份条款（《用户协议》《隐私政策》《免责声明》），

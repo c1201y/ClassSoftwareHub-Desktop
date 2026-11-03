@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using ClassSoftwareHub.Desktop.Services.License;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -88,7 +89,7 @@ public static class OssUpload
     private const string DefaultContentType = "application/octet-stream";
 
     /// <summary>大文件上传可能很久，超时交给调用方的 CancellationToken 管。</summary>
-    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = true })
+    private static readonly HttpClient Http = new(new AuthHandler(new HttpClientHandler { AllowAutoRedirect = true }))
     {
         Timeout = Timeout.InfiniteTimeSpan,
     };

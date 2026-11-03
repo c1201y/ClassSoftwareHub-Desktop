@@ -101,7 +101,9 @@ public sealed partial class VolumeMixerWindow : Window
     {
         try
         {
-            ThemeHost.Apply(Root);                   // 跟应用主题（分体只管常用工具浮窗）
+            // 跟**侧边栏**那套外观（2026-11-04 Nick 定）：合成器是从音量浮窗「展开」出来的，
+            // 和边条、主音量浮窗是一整块，不能一个白一个黑。
+            ThemeHost.Apply(Root, external: true);
             VolumeFlyoutGroup.MixerHwnd = _chrome.Hwnd;
 
             Activated += (_, args) =>

@@ -11,6 +11,7 @@
       点开某篇时才下载正文，正文落地为无扩展名随机文件（见 Services/Docs/DocLibrary.cs）。
       版式照更新日志页：标题 → 工具条 → 列表，内容列 960 上限。
     -->
+    <!-- 版式照 ChangelogPage：三列 Grid 把列表钉在中间 960 宽，宽屏下左右留白对称。 -->
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />

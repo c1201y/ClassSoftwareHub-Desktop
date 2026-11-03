@@ -34,7 +34,10 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="系统优化" FontSize="28" FontWeight="Bold" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="系统优化" FontSize="28" FontWeight="Bold" />
+                            <ui:ExperimentalBadge FeatureId="systemtweaks" />
+                        </StackPanel>
 
                         <!--
                             Hub AI 入口（2026-10-31，与「软件下载」「AppData 管理」「应用卸载」一致）：

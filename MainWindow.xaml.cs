@@ -63,6 +63,10 @@ public sealed partial class MainWindow : Window
         // 托盘图标：关窗口收托盘、开机最小化收托盘、托盘菜单（工具浮窗 / 退出）都靠它
         InitTray();
 
+        // 在线服务被授权闸门挡下来（403 csh_license_required）→ 引导用户激活。
+        // 事件可能在后台线程触发，进 UI 线程再弹。
+        Services.License.ClientAuth.ActivationRequired += OnActivationRequired;
+
         // 下载跑完（成功 / 失败）→ 弹系统通知。谁在盯着弹窗的那条不弹，交给弹窗自己收尾。
         DownloadManager.Current.Finished += OnDownloadFinished;
 
@@ -1108,6 +1112,47 @@ public sealed partial class MainWindow : Window
             }
         }
         catch { }
+    }
+
+    // ── 授权 ─────────────────────────────────────────────────────────────
+
+    /// <summary>激活对话框是否已经弹着（同一次未激活会连着撞好几次 403，不能弹一串）。</summary>
+    private bool _activationPromptShowing;
+
+    /// <summary>
+    /// 某个在线请求被闸门挡下来了 → 引导激活。
+    ///
+    /// <para>
+    /// ⚠️ 可能在后台线程触发（HttpClient 的响应回调），必须切回 UI 线程再弹窗。
+    /// ⚠️ 不做"激活成功后自动重放原请求"：那次请求已经失败了，用户手上还停在一个
+    ///    报了错的界面上，让他再点一次比替他重放更清楚。文档允许重放，但不是必须。
+    /// </para>
+    /// </summary>
+    private void OnActivationRequired()
+    {
+        if (_activationPromptShowing) return;
+
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (_activationPromptShowing) return;
+
+            // 窗口最小化到托盘时 XamlRoot 还在，但弹出来用户看不见 —— 先等它露头
+            if (Content?.XamlRoot is null) return;
+
+            _activationPromptShowing = true;
+            try
+            {
+                await Views.LicenseDialog.ShowAsync(Content.XamlRoot, fromGate: true);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Exception("license", ex, "弹出激活引导");
+            }
+            finally
+            {
+                _activationPromptShowing = false;
+            }
+        });
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)

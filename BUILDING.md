@@ -18,12 +18,26 @@ dotnet build ClassSoftwareHub.Desktop.csproj -c Debug
 
 ```powershell
 # 1. 发布到 dist\app
+#    ⚠️ 发出去的包必须带构建签名，否则服务端会把它当"自行编译版"、要求用户输激活码。
+#    密钥只在维护者手里，不写进任何文件；这一步拿不到密钥就跳过 -p:CshBuildStampB64，
+#    本地自用的包不带签名完全没问题。
+$env:CSH_BUILD_SECRET = "..."                                  # 只在当前终端
+$stamp = node tools/build-stamp.mjs --version 1.2.0-insider1.9  # 版本号不写就自动读源码
+
 dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform=x64 `
-  --self-contained true -p:PublishTrimmed=false -o dist\app
+  --self-contained true -p:PublishTrimmed=false -o dist\app `
+  -p:CshBuildStampB64="$stamp"
 
 # 2. 用 Inno Setup 6 编译脚本（ISCC 装在 %LOCALAPPDATA%\Programs\Inno Setup 6\）
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\ClassSoftwareHub.iss
 ```
+
+构建签名（`tools/build-stamp.mjs`）做的事：`hex(HMAC-SHA256(CSH_BUILD_SECRET, "v1|" + 构建号))`，
+连同构建号和签发时间一起 base64 进程序集元数据 `CshBuildStamp`，运行时由 `Core/BuildIdentity.cs` 读回来
+放进 `X-CSH-Sig` 请求头。构建号形如 `dv1.2.0-insider1.9+20261104T0144Z`。
+
+> **构建号必须和签名一起生成**。先改版本号、再拿旧签名打包，服务端会判签名无效并静默降级成「需要激活」，
+> 客户端不报任何错。`node tools/build-stamp.mjs --check <base64>` 可以核对一个已有 stamp 的构建号与签名。
 
 版本号默认取 `.iss` 里的 `DesktopVersion`，不用在命令行传。临时想改就加 `/DDesktopVersion=1.1.0-insider1.3`。
 

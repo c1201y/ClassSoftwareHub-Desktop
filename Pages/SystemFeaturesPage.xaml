@@ -38,7 +38,10 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="系统功能" FontSize="28" FontWeight="Bold" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="系统功能" FontSize="28" FontWeight="Bold" />
+                            <ui:ExperimentalBadge FeatureId="sysfeatures" />
+                        </StackPanel>
 
                         <!-- 提示条被收起后的回入口：两个入口不同时出现 -->
                         <Button x:Name="PendingButton" Grid.Column="1" Visibility="Collapsed"

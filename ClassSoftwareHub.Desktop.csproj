@@ -25,10 +25,10 @@
          预览版末段跟着 insider 迭代号走（insider1.5 → 1.2.0.5），
          **转正式版时末段回落 0**（1.2.0 → 1.2.0.0）。
          界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
-    <Version>1.2.0-insider1.8</Version>
+    <Version>1.2.0-insider1.9</Version>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
-    <InformationalVersion>1.2.0-insider1.8</InformationalVersion>
+    <InformationalVersion>1.2.0-insider1.9</InformationalVersion>
     <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
          否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -36,6 +36,20 @@
     <AssemblyTitle>ClassSoftwareHub</AssemblyTitle>
     <Company>ClassSoftwareHub</Company>
   </PropertyGroup>
+
+  <!--
+    ===== 官方构建签名（2026-11-04，对应后端《防滥用接入指南》§2.3）=====
+    打包流水线传 -p:CshBuildStampB64=<base64("v1|buildId|sig|issuedAt")>，
+    这里把它落成程序集元数据，运行时由 Core/BuildIdentity.cs 读回来当 X-CSH-Sig 用。
+
+    ⚠️ 不传这个参数 = 社区版（没有签名），服务端会按"需要激活"处理 —— 本地开发默认就是这一支，
+       不需要任何额外设置就能编译。
+    ⛔ 签名值只从命令行/CI Secret 进来，**不要**把 base64 串写进这个文件：
+       仓库是公开的，写进来等于把签名交出去。
+  -->
+  <ItemGroup Condition="'$(CshBuildStampB64)' != ''">
+    <AssemblyMetadata Include="CshBuildStamp" Value="$(CshBuildStampB64)" />
+  </ItemGroup>
 
   <!-- tools/ 下面是发版脚本和**独立的验证工程**（自己一个 csproj，手动 dotnet run 才跑）。
        ⛔ 必须排除：默认 glob 会把 tools/**/*.cs 也收进产品编译，
