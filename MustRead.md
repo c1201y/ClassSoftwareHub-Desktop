@@ -153,8 +153,14 @@
   以前两者混着用，用户看不出区别，这条口径是 Nick 2026-11-03 明确纠正的。
 - 角标表在 `ShellPage.xaml.cs` 的 `NavBadges`，加一项只改那一处（键是导航 tag）。
   文字靠 `NavTextBadgeTemplate` 渲染 —— `InfoBadge` 原生只认数字和图标，放文字必须换模板。
-- ⛔ **别一直挂着 New/Beta**：每次发版把上一版的 `New` 改成 `Beta` 或直接删掉该行。
-  满屏都是"新功能"之后用户就当装饰看了，这条信息也就废了。
+- **角标会自动过期，不用再手工撤**（Nick 2026-11-04 定）：挂多久由 `ShellPage.BadgeLifetimeDays`
+  决定，现在是 **15 天**，从**本版本第一次运行**起算。到期后 `NavBadges` 里那些行一个都不显示，
+  文字原样还原；换版本（`ShellConfig.ShellVersion` 变了）重新起算一轮。
+  - 计时存在 `settings.json` 的 `BadgeSinceVersion` / `BadgeSinceUtc`，⛔ 别改字段名。
+  - 记的是**首次运行**时间而不是安装时间 —— 装完隔几天才打开的情况更常见。
+  - 存档读不出来或时间解析失败时**照常显示**：宁可多提示一次，也别因为坏字段把提示吞掉。
+- ⛔ **仍然不要靠"挂着不撤"来传达新功能**：15 天是上限不是目标。功能已经不新了就把那一行删掉，
+  发版时顺手看一眼这张表 —— 满屏 New/Beta 用户就当装饰看了，这条信息也就废了。
 
 ---
 
@@ -363,6 +369,43 @@ Start-Process explorer.exe -ArgumentList '"<仓库>\bin\x64\Debug\net10.0-window
 - 实测（2026-10-31）：应用 PID 12408，父进程 `explorer.exe` PID 4328。
 - ⛔ **别在 bash 里直接调 `explorer.exe "路径"`** —— 本机静默无响应（当时的错误结论就是这么来的：还拿记事本做对照，误判成"被安全策略拦了"）。必须走 PowerShell 的 `Start-Process explorer.exe`，这两条不是一回事。
 - ⛔ **也别用 `cmd /c start` + 后台 `sleep` 托住** —— 会在任务列表里堆一串后台任务，Nick 明确反对（「能看到你后台任务有1万个」）。
+
+---
+
+## 10.5 首页公告（改完 push 就生效，不用发版）
+
+仓库根目录的 `公告/` 就是首页顶部那几条横幅的正文，格式与字段见 `公告/README.md`。
+
+- `公告/all.json` → 所有版本；`公告/1.2.0.json` → 只给 1.2.0 这个发行版（`1.2.0-insider1.9` 也读它）。
+  预览版的完整号（`1.2.0-insider1.9.json`）优先于主版本文件，只有确实只想给某一个预览构建看时才建。
+- 代码：`Services/NoticeFeed.cs`（拉取 + 线路回退 + 缓存）、`Data/Notice.cs`（解析）、
+  `WelcomePage.RefreshNoticesAsync`（渲染成 InfoBar）。
+- ⛔ **这是单向拉静态文件，不是云控**：不上报、不统计、不做 A/B。一旦掺进上报，它就要后端配合，
+  "后端挂了也能发通知"这个唯一优点当场消失。
+- ⛔ **别加"已读回传"**。要统计有多少人看到，那是另一件事，别挂在这条通道上。
+- 线路顺序 `raw → jsDelivr → fastly → gh-proxy`，成功的入口记在 `%LOCALAPPDATA%\ClassSoftwareHub\notice-base.txt`，
+  下次先试它。本机实测 raw 硬超时、jsDelivr 的 SSL 直接断，只有 gh-proxy 通 —— 不记的话每次启动都要白等。
+- **生效有延迟**：客户端自己 10 分钟内不重复拉，加上 CDN 缓存（raw 约 5 分钟、jsDelivr 对分支更长）。
+  改完想立刻看到效果就重启应用；想让人人可见大概等十分钟。
+- ⛔ **`IsClosable = false`**（2026-11-05 Nick 定）：公告不给关闭按钮。失效靠 `endsAt` 到点，
+  或者从 json 里删掉 —— 那是对所有人一起失效。给用户一颗 X 等于让同一件事在每台机器上各关一遍。
+- **正文用 `Content` + 自己的 `TextBlock`，宽度按容器驱动**（`RefreshNoticeWidths`）：
+  `Title` 单独一行、正文放 `Content` 时，模板给正文的下内边距几乎为 0 —— 实测文字底边离横幅下沿只剩
+  1 像素（上边距有 7 个），看着就是"文字贴着底边"（Nick 指出过）。合成一块之后上下对称。
+  ⚠️ 宽度要用 **`NoticeHost.ActualWidth`**，别用 InfoBar 自己的（它被长正文撑大了，减出来永远偏大）。
+- **ActionButton 用 `HyperlinkButton` + `NavigateUri`**，跟 WinUI Gallery 示例一致。
+  ⛔ 别换成普通 Button 再自己接 Click 去 `LaunchUriAsync` —— 那是把控件自带的导航拆了重装。
+
+### ⛔ 验证界面别信 `PrintWindow`
+
+`PrintWindow` 抓 WinUI 3 窗口会**少一块**：本轮抓出来 1550×830，而窗口实际 1938×1038，
+右边 388 像素根本没进图。我把"截图的右边缘"当成了"文字溢出"，连改五轮、全是修一个不存在的问题，
+最后被 Nick 一句「这他妈文字哪里溢出了」点破。
+
+- 视觉结论一律以**用户实际看到**的为准。
+- 自己要抓图就用 `shot-rect.ps1` 截屏幕区域（抓真实合成结果），但**截之前必须确认目标窗口真的在前台** ——
+  同一轮里还有一次截到了盖在上面的 WorkBuddy。
+
 
 ---
 
