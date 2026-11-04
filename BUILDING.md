@@ -34,7 +34,7 @@ dotnet publish ClassSoftwareHub.Desktop.csproj -c Release -r win-x64 -p:Platform
 
 构建签名（`tools/build-stamp.mjs`）做的事：`hex(HMAC-SHA256(CSH_BUILD_SECRET, "v1|" + 构建号))`，
 连同构建号和签发时间一起 base64 进程序集元数据 `CshBuildStamp`，运行时由 `Core/BuildIdentity.cs` 读回来
-放进 `X-CSH-Sig` 请求头。构建号形如 `dv1.2.0-insider1.9+20261104T0144Z`。
+放进 `X-CSH-Sig` 请求头。构建号形如 `dv1.2.0-insider1.9+f788dd5`（版本 + 提交短 SHA，与 Win7 版同一套口径：同一提交重跑得到同一份签名）。
 
 > **构建号必须和签名一起生成**。先改版本号、再拿旧签名打包，服务端会判签名无效并静默降级成「需要激活」，
 > 客户端不报任何错。`node tools/build-stamp.mjs --check <base64>` 可以核对一个已有 stamp 的构建号与签名。

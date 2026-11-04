@@ -24,6 +24,22 @@
 
 import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+
+/// 当前提交的短 SHA（7 位）。取不到（不在 git 仓库里）就退回 UTC 时间戳，保证总能出串。
+async function shortSha() {
+  try {
+    const { stdout } = await run('git', ['rev-parse', '--short=7', 'HEAD']);
+    const sha = stdout.trim();
+    if (/^[0-9a-f]{7,}$/i.test(sha)) return sha;
+  } catch {
+    // 落在这里是正常的：导出的源码包没有 .git
+  }
+  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
 
 const args = process.argv.slice(2);
 function opt(name, fallback = '') {
@@ -107,10 +123,11 @@ if (!version) {
 }
 
 const now = new Date();
-const stampDate = (d) =>
-  d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');   // 20261104T0144Z
 
-const buildId = opt('build') || `dv${version}+${stampDate(now)}`;
+// 构建号默认用 commit 短 SHA，而不是时间戳 —— 与 Win7 版的流水线（tools/make-build-stamp.ps1）
+// 保持同一套口径：同一个提交重跑得到同一份签名，排障时能直接对号；时间戳做不到这一点。
+// 拿不到 SHA（比如在导出的源码目录里跑）就退回时间戳，保证总能出串。
+const buildId = opt('build') || `dv${version}+${await shortSha()}`;
 const issuedAt = opt('date') || now.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 if (buildId.length > 96) {
