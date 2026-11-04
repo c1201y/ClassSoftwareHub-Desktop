@@ -1,0 +1,9 @@
+[
+  {
+    "id": "notice-version-scope-check",
+    "level": "success",
+    "title": "这条只对 1.2.0 显示",
+    "body": "文件名就是筛选条件：1.2.0.json 里的条目只给 1.2.0 这个发行版本看，预览版 1.2.0-insider1.9 也会读到它。",
+    "dismissible": true
+  }
+]

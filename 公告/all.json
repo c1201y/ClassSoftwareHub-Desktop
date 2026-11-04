@@ -1,0 +1,9 @@
+[
+  {
+    "id": "notice-channel-ready",
+    "level": "info",
+    "title": "公告通道已启用",
+    "body": "以后的重要通知会出现在首页这里。这条只是功能验证，关掉之后不会再出现。",
+    "dismissible": true
+  }
+]
