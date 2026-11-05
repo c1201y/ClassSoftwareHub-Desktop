@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using ClassSoftwareHub.Desktop.Core;
@@ -32,10 +33,15 @@ public sealed partial class ShellPage : UserControl
     {
         InitializeComponent();
 
+        // 角标只在本版本装好后的头两周出现（见 BadgesAreFresh）。
+        // ⚠️ 必须在 ApplyNavLayout 之前算 —— 那里会调 ApplyNavBadges。
+        _badgesFresh = BadgesAreFresh();
+
         InitSearch();
 
-        // 「内置工具」分组的子项从 ToolCatalog 动态生成（tag = ToolDef.Id，工具清单只有一份）
-        BuildToolNavItems();
+        // 内置工具分组的子项、以及「查阅单词 / 文档库 / 教室喊话」这三个可变页面，
+        // 全按 Data/NavLayout 摆位（2026-11-04：用户可以在设置里把常用的拎到一级、把不常用的收进分组）。
+        ApplyNavLayout();
 
         // 「实验性功能」同理，清单在 ExperimentalFeatureCatalog（2026-11-01 收编）
         BuildExperimentalNavItems();
@@ -45,6 +51,11 @@ public sealed partial class ShellPage : UserControl
         //    拿到真实的 ActualTheme 才准（构造期拿到的是系统主题，跟应用主题可能对不上）。
         Loaded += (_, _) => ApplyNavBadges();
         ActualThemeChanged += (_, _) => ApplyNavBadges();
+
+        // 搜索框要从标题栏拖动区里挖出来（见 UpdateTitleBarPassthrough 的注释）。
+        // ⚠️ 只靠 TitleBarArea.SizeChanged 不够：SizeChanged 有可能在 App.MainWindow 赋值之前就触发，
+        //    那一次会静默 return，之后再也不算 —— 所以进树之后再补一次。
+        Loaded += (_, _) => UpdateTitleBarPassthrough();
 
         // 下载任务数变了 → 同步「任务进行」上的徽标（在下载就不占着界面，但得让人随时看见有几个在下）
         Services.DownloadManager.Current.Changed += UpdateDownloadBadge;
@@ -68,27 +79,113 @@ public sealed partial class ShellPage : UserControl
     }
 
     /// <summary>
-    /// 「内置工具」分组的子项：按 <see cref="ToolCatalog.All"/> 动态生成（tag = <see cref="ToolDef.Id"/>）。
-    /// ⛔ 工具清单只有 ToolCatalog 一份 —— 导航子项、工具索引页卡片都从它来，别另写一份。
+    /// 按 <see cref="NavLayout"/> 把可移动项摆到该在的位置（2026-11-04 导航自定义）。
+    ///
+    /// <para>
+    /// 可重复调用：设置页改完一项就调一次 <see cref="ReloadNavLayout"/>，导航立刻跟着变。
+    /// 做法是**先全部撤下来再重摆** —— 逐个移动要处理索引漂移，而且「从一个分组换到另一个分组」
+    /// 根本没法用 Remove/Insert 在原对象上表达。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 撤的是**导航项对象本身**：XAML 里带 x:Name 的那三个撤下来后对象还在，
+    /// 原样插回去即可（图标、角标、无障碍名字都不丢），不必重建。
+    /// </para>
+    ///
+    /// <para>
+    /// 顺序规则（保持默认状态与加这个功能之前逐项一致）：教室喊话在「函数图像」上面；
+    /// 其余提到一级的项统一排在「函数图像」之后、「课堂工具」之前，课堂类在前、系统类在后。
+    /// </para>
     /// </summary>
-    private void BuildToolNavItems()
+    private void ApplyNavLayout()
     {
-        foreach (var def in ToolCatalog.All)
+        var managed = new HashSet<string>(
+            NavLayout.All.Select(p => p.Tag), StringComparer.OrdinalIgnoreCase);
+
+        // 1) 把上次摆在一级的可移动项全部撤下来（含 XAML 里那三个静态项）
+        for (var i = Nav.MenuItems.Count - 1; i >= 0; i--)
         {
-            // 已经单独占了导航栏顶层项的工具（2026-10-28，见 ToolDef.Standalone）——
-            // 这里跳过，否则导航里会出现两个入口。
-            if (def.Standalone) continue;
-
-            // …… 按分组送到对应父项下（2026-10-22）
-            var parent = def.Group == ToolGroup.System ? SystemToolsNav : ClassroomToolsNav;
-
-            parent.MenuItems.Add(new NavigationViewItem
-            {
-                Content = def.Name,
-                Tag = def.Id,
-                Icon = new FontIcon { Glyph = def.Glyph },
-            });
+            if (Nav.MenuItems[i] is NavigationViewItem { Tag: string tag } && managed.Contains(tag))
+                Nav.MenuItems.RemoveAt(i);
         }
+
+        // 2) 两个分组的子项整体重建
+        ClassroomToolsNav.MenuItems.Clear();
+        SystemToolsNav.MenuItems.Clear();
+
+        // 3) 一级区：可移动项按「课堂在前、系统在后」排队，统一插在「课堂工具」上面
+        var top = NavLayout.All
+            .Where(p => p.AboveFunctionPlot == false && NavLayout.IsTopLevel(p.Tag))
+            .OrderBy(p => p.Group == ToolGroup.System ? 1 : 0)
+            .ToList();
+
+        var at = Nav.MenuItems.IndexOf(ClassroomToolsNav);
+        foreach (var placeable in top)
+            Nav.MenuItems.Insert(at++, NavigationItemFor(placeable));
+
+        // 4) 教室喊话那个特例：在一级时固定落在「函数图像」上面
+        foreach (var placeable in NavLayout.Pages.Where(p => p.AboveFunctionPlot))
+        {
+            if (NavLayout.IsTopLevel(placeable.Tag))
+                Nav.MenuItems.Insert(Nav.MenuItems.IndexOf(FunctionPlotNav), NavigationItemFor(placeable));
+        }
+
+        // 5) 二级：按分组挂回各自父项。顺序与总览页卡片同源（NavLayout.SecondLevel），两处不会对不上。
+        foreach (var group in new[] { ToolGroup.Classroom, ToolGroup.System })
+        {
+            var parent = group == ToolGroup.System ? SystemToolsNav : ClassroomToolsNav;
+            foreach (var placeable in NavLayout.SecondLevel(group))
+            {
+                parent.MenuItems.Add(new NavigationViewItem
+                {
+                    Content = placeable.Name,
+                    Tag = placeable.Tag,
+                    Icon = new FontIcon { Glyph = placeable.Glyph },
+                });
+            }
+        }
+
+        // 6) 当前页可能刚被搬了位置（一级 ⇄ 二级）—— 重新点亮，否则高亮会停在已撤下的那一项上
+        SelectTag(CurrentTag);
+
+        // 7) 角标：重建后新造出来的项还没挂（旧对象上的已随对象带走，_navLabels 记着原文，重复调用无害）
+        ApplyNavBadges();
+
+        AppLog.Step("shell", $"导航布局：一级 {Nav.MenuItems.OfType<NavigationViewItem>().Count()} 项，"
+            + $"课堂工具 {ClassroomToolsNav.MenuItems.Count} 项，系统工具 {SystemToolsNav.MenuItems.Count} 项");
+    }
+
+    /// <summary>
+    /// 可移动项对应的导航项：XAML 里那三个静态项复用原对象，工具项现造一个。
+    /// </summary>
+    private NavigationViewItem NavigationItemFor(NavPlaceable placeable)
+    {
+        NavigationViewItem? existing = placeable.Tag switch
+        {
+            "announce" => AnnounceNav,
+            "dictionary" => DictionaryNav,
+            "docs" => DocsNav,
+            _ => null,
+        };
+
+        return existing ?? new NavigationViewItem
+        {
+            Content = placeable.Name,
+            Tag = placeable.Tag,
+            Icon = new FontIcon { Glyph = placeable.Glyph },
+        };
+    }
+
+    /// <summary>
+    /// 设置页改完导航项之后调这个，立即生效（不重启、不重开窗口）。
+    /// </summary>
+    public void ReloadNavLayout()
+    {
+        ApplyNavLayout();
+
+        // 正停在工具总览页时，卡片列表也得跟着变：那个页 NavigationCacheMode=Enabled，
+        // 不重新导航一次就不会重算（变化本身在 OnNavigatedTo 里）。
+        if (CurrentTag is "tools-classroom" or "tools-system") NavigateTo(CurrentTag);
     }
 
     /// <summary>
@@ -130,8 +227,10 @@ public sealed partial class ShellPage : UserControl
     /// </para>
     ///
     /// <para>
-    /// ⛔ 别一直挂着：每次发版把上一版的 New 改成 Beta 或者直接删掉这一行。
-    /// 满屏都是"新功能"之后，用户就把它当装饰看了，这条信息也就废了。
+    /// ⚠️ 不再需要"每次发版手动改这张表"：角标**只在本版本装好后的 15 天内出现**
+    /// （<see cref="BadgeLifetimeDays"/>），过期自动消失，不用谁去删行（2026-11-04 Nick 定）。
+    /// 换了版本会重新起算，所以新版里的新功能仍然会被提示一轮。
+    /// 表里留着的行 = 这个功能还在"新 / Beta"的语义里，只是平时不显示；功能转正时再删。
     /// </para>
     /// </summary>
     private static readonly Dictionary<string, (string Text, bool Warning)> NavBadges =
@@ -142,6 +241,62 @@ public sealed partial class ShellPage : UserControl
             ["docs"] = ("New", false),
             ["ppttouch"] = ("Beta", true),
         };
+
+    /// <summary>
+    /// 导航角标挂多久（天）：**本版本第一次运行**起算。改这个数就行。
+    /// <para>
+    /// 15 天是 Nick 2026-11-04 定的口径 —— 装完头两周足够注意到，再长就变装饰。
+    /// </para>
+    /// </summary>
+    private const int BadgeLifetimeDays = 15;
+
+    /// <summary>本版本还在角标有效期内（构造时算一次，一次运行中不会变）。</summary>
+    private bool _badgesFresh;
+
+    /// <summary>
+    /// 角标还能不能挂。顺带承担"本版本第一次运行"的打点：版本号跟存档里记的不一样就重新计时。
+    /// <para>
+    /// ⚠️ 记的是**首次运行**时间，不是安装时间 —— 装完隔几天才打开的情况更常见，按运行时间算才准。
+    /// ⚠️ 存档读不出来 / 时间解析失败时返回 true（照常显示）：宁可多提示一次，
+    ///    也别因为一个坏字段把功能提示整个吞掉。
+    /// </para>
+    /// </summary>
+    private static bool BadgesAreFresh()
+    {
+        try
+        {
+            var settings = App.Settings.Current;
+            var version = ShellConfig.ShellVersion;
+
+            if (!string.Equals(settings.BadgeSinceVersion, version, StringComparison.Ordinal))
+            {
+                settings.BadgeSinceVersion = version;
+                settings.BadgeSinceUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                App.Settings.Save();
+                AppLog.Step("shell", $"导航角标：新版本 {version} 首次运行，{BadgeLifetimeDays} 天计时从这里开始");
+                return true;
+            }
+
+            if (!DateTime.TryParse(settings.BadgeSinceUtc, CultureInfo.InvariantCulture,
+                                   DateTimeStyles.RoundtripKind, out var since))
+                return true;
+
+            // 时钟被往回拨时 age 是负的，仍算"新鲜"（显示），不折腾用户
+            var age = DateTime.UtcNow - since.ToUniversalTime();
+            var fresh = age < TimeSpan.FromDays(BadgeLifetimeDays);
+
+            AppLog.Step("shell", fresh
+                ? $"导航角标：本版本第 {age.TotalDays:0.#} 天，还有 {(BadgeLifetimeDays - age.TotalDays):0.#} 天到期"
+                : $"导航角标：本版本已过 {age.TotalDays:0.#} 天，到期不再显示");
+
+            return fresh;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("shell", "导航角标计时读取失败（照常显示）：" + ex.Message);
+            return true;
+        }
+    }
 
     /// <summary>
     /// 导航项原本的文字。角标是把 <see cref="NavigationViewItem.Content"/> 换成「文字 + 角标」的组合，
@@ -163,7 +318,8 @@ public sealed partial class ShellPage : UserControl
 
             if (!_navLabels.TryGetValue(item, out var text)) continue;
 
-            if (NavBadges.TryGetValue(tag, out var badge))
+            // _badgesFresh = false（装好超过 15 天）时就当表是空的：一次也不挂，文字原样还原
+            if (_badgesFresh && NavBadges.TryGetValue(tag, out var badge))
             {
                 // ⚠️ NavigationViewItem 默认 HorizontalContentAlignment = Left，
                 //    不改成 Stretch 的话内容不会被撑开，上面 Grid 的 * 列等于没设。2026-11-04
@@ -232,31 +388,48 @@ public sealed partial class ShellPage : UserControl
     /// 文字角标：<see cref="Border"/> + <see cref="TextBlock"/> 两个原生基础控件的组合。
     ///
     /// <para>
-    /// ⛔ 别换回 <c>InfoBadge</c>（2026-11-04 Nick 定的）：它只认数字（Value）和图标，
-    /// 想放文字只能整个替换它的 ControlTemplate —— 那就是自己画控件了，和「能原生就原生」冲突。
+    /// ⛔ 不用 <see cref="InfoBadge"/>：它原生只认数字和图标，要塞文字得整个替换 ControlTemplate ——
+    /// 那就是"自己画一个控件"，跟"能原生就原生"这条铁律正相反（2026-11-04 Nick 定）。
     /// </para>
+    ///
     /// <para>
-    /// 配色不写死色值：底色 = 系统语义色本身压到 15% 透明，字色 = 同一个语义色。
-    /// 深浅主题各自都对（浅色下是淡绿底深绿字，深色下是暗绿底亮绿字），
-    /// 和系统 InfoBar 用的是同一套语义色。
+    /// 2026-11-04 第二次调：Nick 对着 WinUI Gallery 的「Experimental」标签说我们这版
+    /// "第三方味道很浓"。差在四处，全部往系统那边靠：
+    /// <list type="bullet">
+    ///   <item><b>字重</b>：SemiBold → Normal。小字加粗是网页 tag 的做法，系统标签一律常规字重；</item>
+    ///   <item><b>内边距</b>：6,1 → 7,1。垂直只留 1 像素容易被压扁，水平给够才不显得挤；</item>
+    ///   <item><b>底色</b>：自己算的"语义色 + 15% 透明" → 系统 <c>SystemFillColor*Background</c> 的**实色**
+    ///         （深色下 Success 是 #393D1B、Caution 是 #433519）—— InfoBar 的严重性底色就是这对资源。
+    ///         叠透明度会跟着窗口背景跑，Mica / 亚克力上发灰，这就是"第三方味"的来源；</item>
+    ///   <item><b>圆角</b>：4，跟 InfoBar / 卡片同一档，⛔ 不要做成胶囊。</item>
+    /// </list>
+    /// 颜色仍取系统语义色（Success / Caution），深浅主题各自适配。
     /// </para>
     /// </summary>
     private Border MakeTextBadge(string text, bool warning)
     {
         var fg = (SolidColorBrush)ThemeBrush.Get(this, warning ? "SystemFillColorCautionBrush" : "SystemFillColorSuccessBrush");
-        var c = fg.Color;
+
+        // 底色用系统那对**调好的实色**（Success/Caution Background），⛔ 不是"语义色压透明度"。
+        // 叠透明度会跟着窗口背景走，Mica / 亚克力上发灰发脏 —— 这正是"第三方味"的来源（2026-11-04）。
+        // InfoBar 的严重性底色用的也是同一对资源。
+        var bg = (SolidColorBrush)ThemeBrush.Get(
+            this, warning ? "SystemFillColorCautionBackgroundBrush" : "SystemFillColorSuccessBackgroundBrush");
 
         return new Border
         {
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0x26, c.R, c.G, c.B)),
+            Background = bg,
+            // 4 = InfoBar / 卡片同一档圆角，跟系统控件对齐（3 会更像网页 chip）
             CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(6, 1, 6, 1),
+            Padding = new Thickness(7, 1, 7, 1),
             VerticalAlignment = VerticalAlignment.Center,
+            // 离导航项右边缘留一档，别真的顶到边 —— 官方那个标签也没贴死
+            Margin = new Thickness(0, 0, 2, 0),
             Child = new TextBlock
             {
                 Text = text,
                 FontSize = 11,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontWeight = Microsoft.UI.Text.FontWeights.Normal,
                 Foreground = fg,
             },
         };
@@ -781,6 +954,63 @@ public sealed partial class ShellPage : UserControl
     {
         var w = e.NewSize.Width;
         SearchBox.Width = w >= 880 ? 360d : w >= 720 ? 250d : 170d;
+
+        // 宽度改完要等布局跑完才算得出新矩形，排到下一轮空闲再算
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, UpdateTitleBarPassthrough);
+    }
+
+    /// <summary>
+    /// 把搜索框那块从「标题栏拖动区」里挖出来，交还给客户区（2026-11-04 Nick 报）。
+    ///
+    /// <para>
+    /// 症状：在搜索框里按住鼠标往左右拖，想选中已输入的文字，结果整个窗口跟着走。
+    /// 原因：整条 48 高的标题栏都交给了 <c>SetTitleBar</c>，系统把它当非客户区 ——
+    /// 在非客户区按下鼠标，拖动就是"移动窗口"，输入框根本收不到这次拖拽。
+    /// </para>
+    ///
+    /// <para>
+    /// 解法是 WinUI 自己的机制：<see cref="Microsoft.UI.Input.InputNonClientPointerSource"/> 的
+    /// <c>Passthrough</c> 区域 —— 命中这些矩形时，指针直接透传给客户区，
+    /// 拖动就回到输入框手里（选字），而标题栏其余部分照旧可以拖窗。⛔ 不要自己写 WM_NCHITTEST 钩子。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 矩形用物理像素、以客户区左上角为原点（不是 DIP），所以要乘 <c>RasterizationScale</c>。
+    /// ⚠️ 只设一个区域，每次整组覆盖 —— 不追加，避免窗口缩放后留下旧矩形。
+    /// </para>
+    /// </summary>
+    private void UpdateTitleBarPassthrough()
+    {
+        try
+        {
+            if (App.MainWindow is not { } main) return;
+            if (XamlRoot is not { } root) return;
+            if (SearchBox.ActualWidth <= 0 || SearchBox.ActualHeight <= 0) return;
+
+            var bounds = SearchBox
+                .TransformToVisual(null)
+                .TransformBounds(new Windows.Foundation.Rect(
+                    0, 0, SearchBox.ActualWidth, SearchBox.ActualHeight));
+
+            var scale = root.RasterizationScale;
+            var rect = new Windows.Graphics.RectInt32(
+                (int)Math.Round(bounds.X * scale),
+                (int)Math.Round(bounds.Y * scale),
+                (int)Math.Round(bounds.Width * scale),
+                (int)Math.Round(bounds.Height * scale));
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(main);
+            var source = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(
+                Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd));
+
+            source.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough, new[] { rect });
+        }
+        catch (Exception ex)
+        {
+            // 老系统 / API 不可用时退回原行为（搜索框能点、但按住拖动仍会拖窗），不影响正常使用
+            AppLog.Warn("shell", "搜索框拖动区透传设置失败：" + ex.Message);
+        }
     }
 
     private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)

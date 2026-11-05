@@ -33,6 +33,17 @@ public sealed partial class MainWindow : Window
     private readonly bool _startMinimized;
     private readonly bool _startPalette;
 
+    /// <summary>
+    /// <c>--window=&lt;模块 id&gt;</c>：启动直接开一扇浮窗（<c>image-color</c> / <c>encoding</c> / <c>dictionary</c>…），
+    /// 主窗口照常露脸。空 = 什么都不做。
+    /// <para>
+    /// 为什么留它：验证浮窗以前得先把侧边栏叫出来、再点那颗按钮 —— 侧边栏还可能收在屏幕边上、被别的窗口压住，
+    /// 几轮截图都截不到目标。有了这个参数就能直达，也能给常用浮窗做桌面快捷方式。
+    /// ⚠️ id 直接用 <c>Data/SidebarModules</c> 那一份，⛔ 别在这里写 if/switch —— 加新窗口不用回来改。
+    /// </para>
+    /// </summary>
+    private readonly string? _startWindow;
+
     /// <summary>Shell 初始化被推迟到初次配置结束（见构造函数里的说明）。</summary>
     private bool _shellPending;
 
@@ -99,6 +110,12 @@ public sealed partial class MainWindow : Window
         // 直接开工具浮窗（可以拿它建个桌面快捷方式：ClassSoftwareHub.exe --palette）
         _startPalette = Environment.GetCommandLineArgs()
             .Any(a => a.Equals("--palette", StringComparison.OrdinalIgnoreCase));
+
+        // 直接开某扇专用浮窗：--window=image-color / encoding / dictionary …
+        _startWindow = Environment.GetCommandLineArgs()
+            .FirstOrDefault(a => a.StartsWith("--window=", StringComparison.OrdinalIgnoreCase))
+            ?["--window=".Length..]
+            ?.Trim();
         Activated += OnFirstActivated;
 
         _ = BootAsync();
@@ -148,6 +165,9 @@ public sealed partial class MainWindow : Window
             HideToTray();
         }
 
+        // --window=<id>：跟上面两条不冲突，主窗口该露脸还是露脸，浮窗叠在上面
+        if (_startWindow is { Length: > 0 } windowId) ShowSidebarWindowById(windowId);
+
         // 启动时查一次更新：**不强制**，有新版就问用户（主窗口没露脸时发系统通知）
         _ = CheckUpdateOnStartupAsync();
 
@@ -164,6 +184,46 @@ public sealed partial class MainWindow : Window
 
         // 初次配置（OOBE，需求 1:22）不在这里弹了 —— 新装首启时主窗口根本不出现，
         // OOBE 由 App.OnLaunched 直接拉起来，走完才 Activate 本窗口（会再进一次这里）。
+    }
+
+    /// <summary>
+    /// 按模块 id 打开一扇专用浮窗（<c>--window=&lt;id&gt;</c>）。
+    ///
+    /// <para>
+    /// 走 <see cref="Data.SidebarModules"/> 的 <c>WindowType</c> + 反射调 <c>Show()</c>，
+    /// 跟侧边栏点按钮是同一条路 —— ⛔ 不在这里写 if/switch，加新浮窗不用回来改。
+    /// 那扇窗没遵守"public static Show()"约定时静默跳过并留一笔日志。
+    /// </para>
+    /// </summary>
+    private static void ShowSidebarWindowById(string id)
+    {
+        try
+        {
+            var type = Data.SidebarModules.Find(id)?.WindowType;
+            if (type is null)
+            {
+                Core.AppLog.Warn("startup", $"--window={id} 没有对应的浮窗模块，忽略");
+                return;
+            }
+
+            var show = type.GetMethod(
+                "Show",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                binder: null, types: Type.EmptyTypes, modifiers: null);
+
+            if (show is null)
+            {
+                Core.AppLog.Warn("startup", $"--window={id}：{type.Name} 没有 public static Show()");
+                return;
+            }
+
+            show.Invoke(null, null);
+            Core.AppLog.Step("startup", $"--window={id} 已打开 {type.Name}");
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Warn("startup", $"--window={id} 打开失败：" + ex.Message);
+        }
     }
 
     /// <summary>
@@ -2389,6 +2449,7 @@ public sealed partial class MainWindow : Window
         try { Views.LegalWindow.CloseForExit(); } catch { }
         try { Views.SubjectToolsWindow.CloseForExit(); } catch { }
         try { Views.HashCheckWindow.CloseForExit(); } catch { }
+        try { Views.ImageColorWindow.CloseForExit(); } catch { }
         try { Views.QuickLookupWindow.CloseForExit(); } catch { }
         try { Close(); } catch { }
         Core.AppLog.Info("exit", "窗口已全部请求关闭");

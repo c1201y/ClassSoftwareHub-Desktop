@@ -38,14 +38,18 @@ public sealed partial class ToolsPage : Page
             ? ToolGroup.System
             : ToolGroup.Classroom;
 
-        // ⚠️ Standalone 的工具已经单独占了导航栏顶层项，索引页里不再重复出卡片（2026-10-28 Nick 定）。
-        var items = ToolCatalog.All.Where(t => t.Group == group && !t.Standalone).ToList();
+        // ⚠️ 卡片清单与导航子项同源（都走 NavLayout.SecondLevel）：2026-11-04 起用户可以
+        //    把「查阅单词 / 文档库」收进分组、也可以把常用工具拎到一级，
+        //    这里显示的就是"当前确实留在本组二级里"的那些。
+        var items = NavLayout.SecondLevel(group).ToList();
 
         // 两列板式（见 .xaml：照搬首页「快速开始」）：偶数序号进左列、奇数进右列。
         CardColumnLeft.ItemsSource = items.Where((_, i) => i % 2 == 0).ToList();
         CardColumnRight.ItemsSource = items.Where((_, i) => i % 2 == 1).ToList();
 
         TitleText.Text = group == ToolGroup.System ? "系统工具" : "课堂工具";
+
+        EmptyHint.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // 「常用工具窗口」那一块讲的是抽号/计时/时钟，只属于课堂组
         // ⚠️ 必须整张 Border（PaletteCard）一起藏，不能只藏 PaletteTitle 的父级那个 StackPanel ——
@@ -66,9 +70,9 @@ public sealed partial class ToolsPage : Page
     // 卡片整张可点（首页同款：容器 chrome 关掉、反馈由卡片自己给，见 App.xaml 的 CshNavCardStyle）
     private void Card_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
-        // 走导航栏那一套（不是 Frame.Navigate）：左侧「内置工具」对应子项才会跟着高亮
-        if ((sender as FrameworkElement)?.DataContext is ToolDef def)
-            App.MainWindow?.Shell.NavigateTo(def.Id);
+        // 走导航栏那一套（不是 Frame.Navigate）：左侧分组里对应的子项才会跟着高亮
+        if ((sender as FrameworkElement)?.DataContext is NavPlaceable placeable)
+            App.MainWindow?.Shell.NavigateTo(placeable.Tag);
     }
 
     // 卡片自己的悬停反馈（容器 chrome 已关掉，见 App.xaml 里的 CshCardItemStyle）

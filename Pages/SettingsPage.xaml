@@ -149,6 +149,23 @@
 
                 </StackPanel>
 
+                <!-- ================= 侧边栏导航 ================= -->
+                <!--
+                  2026-11-04 Nick：常用的东西被收在二级菜单里、不常用的却占着一级。
+                  这里只决定"显不显示在一级"，**分类不给改**（查阅单词永远算课堂、文档库永远算系统），
+                  否则两个工具总览页会变成两不像的东西。判定与写入全在 Data/NavLayout.cs。
+                -->
+                <TextBlock Text="侧边栏导航" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+                    <controls:SettingsCard Header="导航栏项目"
+                                           Description="选择哪些页面单独放在导航栏上，其余的收进「课堂工具」或「系统工具」。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8A0;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <Button Content="自定义" Click="CustomizeNav_Click" />
+                    </controls:SettingsCard>
+                </StackPanel>
+
                 <!-- ================= 窗口 ================= -->
                 <TextBlock Text="窗口" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">

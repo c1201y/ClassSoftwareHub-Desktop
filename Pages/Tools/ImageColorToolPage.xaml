@@ -8,13 +8,13 @@
     <!-- 版式：标题行 / 内容（滚动，Grid 铺满 → 不会被 ScrollViewer 算歪）/ 状态行 -->
     <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
          但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，内容区纹丝不动（与首页手感不一致）。 -->
-    <Grid Background="Transparent">
+    <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="1*" />
             <ColumnDefinition Width="998*" MaxWidth="1008" />
             <ColumnDefinition Width="1*" />
         </Grid.ColumnDefinitions>
-        <Grid Grid.Column="1" Margin="24,14,24,20" RowSpacing="12">
+        <Grid x:Name="BodyGrid" Grid.Column="1" Margin="24,14,24,20" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -22,7 +22,9 @@
             </Grid.RowDefinitions>
 
             <!-- ═══ 标题 ═══ -->
-            <StackPanel Spacing="2">
+            <!-- ⚠️ 嵌进浮窗（ImageColorWindow）时整行会被隐藏：窗口自绘标题栏已经写了「图片取色」，
+                 再来一个大标题就是重复（2026-11-04）。 -->
+            <StackPanel x:Name="HeaderPanel" Spacing="2">
                 <TextBlock Text="图片取色" FontSize="24" FontWeight="Bold" />
                 <TextBlock FontSize="12.5" Opacity="0.6" TextWrapping="Wrap"
                            Text="提取图片的柔和配色，单击色块复制色值。" />
@@ -56,12 +58,16 @@
                                    Stroke="{ThemeResource AccentFillColorDefaultBrush}"
                                    Fill="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
 
+                        <!-- 空态文案（2026-11-04 Nick 要求）：
+                             「拖动」不能只写在底下那行 12px 小字里 —— 太小，多数人根本看不见，
+                             以为只能点。两种入口都放进主标题，副标题只留格式信息。 -->
                         <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center"
                                     Spacing="10" Padding="24">
                             <FontIcon Glyph="&#xEB9F;" FontSize="30" HorizontalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                            <TextBlock Text="单击选择图片" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="或拖入图片 · PNG / JPG / WebP / GIF" FontSize="12" Opacity="0.6"
+                            <TextBlock Text="单击选择图片，或把图片拖到这里" FontSize="15" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+                            <TextBlock Text="支持 PNG / JPG / WebP / GIF" FontSize="12" Opacity="0.6"
                                        HorizontalAlignment="Center" />
                         </StackPanel>
 

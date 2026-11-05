@@ -389,10 +389,13 @@ Start-Process explorer.exe -ArgumentList '"<仓库>\bin\x64\Debug\net10.0-window
   改完想立刻看到效果就重启应用；想让人人可见大概等十分钟。
 - ⛔ **`IsClosable = false`**（2026-11-05 Nick 定）：公告不给关闭按钮。失效靠 `endsAt` 到点，
   或者从 json 里删掉 —— 那是对所有人一起失效。给用户一颗 X 等于让同一件事在每台机器上各关一遍。
-- **正文用 `Content` + 自己的 `TextBlock`，宽度按容器驱动**（`RefreshNoticeWidths`）：
-  `Title` 单独一行、正文放 `Content` 时，模板给正文的下内边距几乎为 0 —— 实测文字底边离横幅下沿只剩
-  1 像素（上边距有 7 个），看着就是"文字贴着底边"（Nick 指出过）。合成一块之后上下对称。
-  ⚠️ 宽度要用 **`NoticeHost.ActualWidth`**，别用 InfoBar 自己的（它被长正文撑大了，减出来永远偏大）。
+- ⛔⛔ **一条公告就三个属性：`Title`、`Message`、`ActionButton`，别碰 `Content`**（2026-11-05 Nick 第二次纠正，原话
+  「我是叫你用系统的拼法，不是叫你自己拼法……Mastread 里面明明写了能用系统原生」）。
+  曾往 `Content` 里塞自己拼的 `TextBlock`（加粗标题 + 三个空格 + 正文、自己设 `LineHeight`、`Margin`、
+  再按容器宽度算 `Width`），结果出来是"小卡片"不是系统通知条，而且每补一个边距就多一个要维护的数。
+  **严重性配色、图标列、正文换行、上下内边距、深浅主题，模板全管了**，自己拼等于把系统排版拆掉重做。
+  写法照 WinUI Gallery 示例：
+  `<InfoBar IsOpen="True" Title="…" Message="…"><InfoBar.ActionButton><HyperlinkButton Content="…" NavigateUri="…"/></InfoBar.ActionButton></InfoBar>`。
 - **ActionButton 用 `HyperlinkButton` + `NavigateUri`**，跟 WinUI Gallery 示例一致。
   ⛔ 别换成普通 Button 再自己接 Click 去 `LaunchUriAsync` —— 那是把控件自带的导航拆了重装。
 

@@ -41,6 +41,12 @@ public static class ThemeBrush
         ["SystemFillColorCaution"] = (0xFF9D5D00, 0xFFFCE100),
         ["SystemFillColorCritical"] = (0xFFC42B1C, 0xFFFF99A4),
         ["SystemFillColorAttention"] = (0xFF005FB8, 0xFF60CDFF),
+        // 语义色的**背景**配套（2026-11-04 加）：这是系统调好的实色，⛔ 不是"语义色 + 透明度"。
+        // 用来做小标签 / InfoBar 那种底色 —— 叠透明度会跟着窗口背景跑，Mica 上会发脏。
+        ["SystemFillColorSuccessBackground"] = (0xFFDFF6DD, 0xFF393D1B),
+        ["SystemFillColorCautionBackground"] = (0xFFFFF4CE, 0xFF433519),
+        ["SystemFillColorCriticalBackground"] = (0xFFFDE7E9, 0xFF442726),
+        ["SystemFillColorAttentionBackground"] = (0x80F6F6F6, 0x08FFFFFF),
     };
 
     /// <summary>元素所在那棵树是深色吗。</summary>

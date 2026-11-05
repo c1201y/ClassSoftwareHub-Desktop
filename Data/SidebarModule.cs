@@ -108,7 +108,11 @@ public static class SidebarModules
         new() { Id = "timer", Name = "课堂计时", ShortName = "计时", LongName = "课堂计时", Glyph = "\uE81C", Kind = SidebarModuleKinds.Palette },
         new() { Id = "stopwatch", Name = "秒表计时", ShortName = "秒表", LongName = "秒表计时", Glyph = "\uE916", Kind = SidebarModuleKinds.Palette },
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", LongName = "全屏时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
-        new() { Id = "image-color", Name = "图片取色", ShortName = "取色", LongName = "图片取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Page, Page = typeof(Pages.Tools.ImageColorToolPage) },
+        // 图片取色（2026-11-04 改）：这里开的是**小浮窗**（ImageColorWindow），
+        // 不是把主界面那整页拉出来 —— 讲课中途从课件截图里取个配色，不该盖住课件。
+        // 整页入口仍在「内置工具 → 图片取色」，那才是给它留的位置。
+        // ⚠️ 浮窗承载的就是那页本体（embedded: true），取色算法只有一份，别另写。
+        new() { Id = "image-color", Name = "图片取色", ShortName = "取色", LongName = "图片取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.ImageColorWindow), Note = "弹出小浮窗做取色：拖入图片即提取柔和配色（种子色 + 7 档明暗），单击色块复制色值" },
         // 查单词（需求清单第 17 条，2026-11-01）。刻意**不**走 SidebarModulesRevision 自动补入 ——
         // 侧边栏是老师上课时一直挂着的一排按钮，位置很贵，新功能默认塞进去反而添乱。
         // 想要的人去「侧边布局」页自己勾，那里会看到这一项（Kind=Page，跳主窗口的那一页）。

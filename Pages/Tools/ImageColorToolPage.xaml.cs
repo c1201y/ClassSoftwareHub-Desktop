@@ -50,12 +50,71 @@ public sealed partial class ImageColorToolPage : Page
     private readonly List<(string Hex, FontIcon Check)> _checks = new();
     private bool _busy;
 
-    public ImageColorToolPage()
+    /// <summary>是不是被浮窗（<c>Views/ImageColorWindow</c>）承载着（2026-11-04）。</summary>
+    private readonly bool _embedded;
+
+    /// <summary>紧凑模式下的色块高度（整页 60、浮窗里 46，否则一个色块就占掉半屏）。</summary>
+    private double _swatchHeight = 60;
+
+    public ImageColorToolPage() : this(false) { }
+
+    /// <param name="embedded">
+    /// true = 这页是塞进浮窗里的，不是主界面那整页。
+    /// <para>
+    /// 差别只有三处，都跟"同一份内容换个容器"有关：
+    /// ① 隐藏页面自带的大标题（窗口标题栏已经写了名字）；
+    /// ② 外边距与拖入区高度收紧、色块缩小并改成 4 列，免得在小窗里一路滚到底；
+    /// ③ 选图片的对话框挂在**本窗**的句柄上（主窗口这时可能收在托盘里，拿它的句柄会抛异常）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 取色算法一行没动 —— 两个入口共用这一份（Nick 2026-11-04 明确不让抽成独立类）。
+    /// </para>
+    /// </param>
+    public ImageColorToolPage(bool embedded)
     {
         InitializeComponent();
+        _embedded = embedded;
 
         // 两侧留白 / 标题行上的滚轮也转给内容区（见 Core/WheelRelay.cs）
         Core.WheelRelay.Attach(this, ContentScroll);
+
+        if (embedded) Loaded += (_, _) => ApplyCompact();
+    }
+
+    /// <summary>被浮窗承载时，选图对话框要用这扇窗的句柄（0 = 没设，退回主窗口）。</summary>
+    public IntPtr HostWindowHandle { get; set; }
+
+    /// <summary>浮窗听这个：内容从"空"变成"有图"或反过来（窗口据此收放高度）。</summary>
+    public Action<bool>? ContentStateChanged { get; set; }
+
+    /// <summary>只调一次外观（Loaded 之后控件才有实际尺寸，这里不需要尺寸，直接设常量）。</summary>
+    private bool _compactApplied;
+
+    private void ApplyCompact()
+    {
+        if (_compactApplied) return;
+        _compactApplied = true;
+
+        try
+        {
+            HeaderPanel.Visibility = Visibility.Collapsed;
+            BodyGrid.Margin = new Thickness(16, 10, 16, 16);
+
+            // 拖入区：整页 220 是为了"一整块空地好拖"，小窗里那会占掉小半屏
+            DropZone.MinHeight = 130;
+            Preview.MaxWidth = 150;
+            Preview.MaxHeight = 80;
+
+            // 色块：4 列 × 2 行装下 7 档，高度也从 126 收到 96
+            SwatchHost.ItemWidth = 120;
+            SwatchHost.ItemHeight = 96;
+            HslHost.ItemWidth = 108;
+            _swatchHeight = 44;
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Warn("image-color", "浮窗紧凑版式设置失败：" + ex.Message);
+        }
     }
 
 
@@ -80,7 +139,18 @@ public sealed partial class ImageColorToolPage : Page
             foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" })
                 picker.FileTypeFilter.Add(ext);
 
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow!);
+            // ⚠️ 必须用**本页所在的**窗口句柄：主窗口可能收在托盘里、根本没有可见窗口，
+            //    拿 App.MainWindow 的句柄初始化会直接抛异常（浮窗承载时尤其明显）。
+            var hwnd = HostWindowHandle != IntPtr.Zero
+                ? HostWindowHandle
+                : (App.MainWindow is { } main ? WinRT.Interop.WindowNative.GetWindowHandle(main) : IntPtr.Zero);
+
+            if (hwnd == IntPtr.Zero)
+            {
+                ShowError("无法打开文件选择框：请切换到主窗口后重试。");
+                return;
+            }
+
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
             var file = await picker.PickSingleFileAsync();
@@ -241,13 +311,15 @@ public sealed partial class ImageColorToolPage : Page
         HslSection.Visibility = Visibility.Visible;
         ActionRow.Visibility = Visibility.Visible;
         Toast.Text = "";
+
+        ContentStateChanged?.Invoke(true);
     }
 
     private Button BuildSwatch(Variant variant)
     {
         var block = new Border
         {
-            Height = 60,
+            Height = _swatchHeight,
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
             BorderBrush = new SolidColorBrush(ActualTheme == ElementTheme.Dark                        // 浅色底上用黑边、深色底上用白边
@@ -350,6 +422,8 @@ public sealed partial class ImageColorToolPage : Page
         ActionRow.Visibility = Visibility.Collapsed;
         Toast.Text = "";
         HideError();
+
+        ContentStateChanged?.Invoke(false);
     }
 
     private void HideResults()
@@ -358,6 +432,8 @@ public sealed partial class ImageColorToolPage : Page
         PaletteSection.Visibility = Visibility.Collapsed;
         HslSection.Visibility = Visibility.Collapsed;
         ActionRow.Visibility = Visibility.Collapsed;
+
+        ContentStateChanged?.Invoke(false);
     }
 
     private void ShowError(string message)

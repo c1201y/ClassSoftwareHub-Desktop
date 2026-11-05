@@ -32,7 +32,7 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.2.0-insider1.9";
+    public const string ShellVersion = "1.2.0-insider2.0";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
@@ -128,11 +128,21 @@ public static class ShellConfig
     public const string SiteRepoDataDir = "软件数据";
 
     /// <summary>
-    /// 文档库所在仓库（2026-11-02 调整）：文章跟桌面端代码放同一个仓库，不再进站点仓库。
-    /// 原因：文章只给客户端读，放在站点仓库会让每发一篇文章都触发一次整站部署（Pages / FTP / 网盘三路）。
+    /// 文档库所在仓库（2026-11-05 迁出）。
+    ///
+    /// <para>
+    /// 来历：最早放站点仓库 → 2026-11-02 挪到桌面端仓库（避免每发一篇文章都触发整站部署） →
+    /// 2026-11-05 再挪到**独立的内容仓库**。最后一次是为了拿到仓库的管理权：
+    /// 投稿表单、校验工作流、Issue/PR 这些都要 Actions 权限，挂在组织仓库上不好配
+    /// （Nick 原话：这些仓库并不是我的，过 Issue、过 PR、配 Action 都比较难）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 仓库根下仍然是 <c>文档库/</c> 子目录，跟 <c>scripts/validate-docs.mjs</c> 和两个工作流
+    /// 的路径假设保持一致 —— 换仓库只改下面三个常量，客户端与脚本都不用动。
+    /// </para>
     /// </summary>
-    public const string DocsRepoOwner = "c1201y";
-    public const string DocsRepoName = "ClassSoftwareHub-Desktop";
+    public const string DocsRepoOwner = "Tiny-Nick";
+    public const string DocsRepoName = "ClassSoftwareHub-Docs";
     public const string DocsRepoBranch = "main";
 
     /// <summary>

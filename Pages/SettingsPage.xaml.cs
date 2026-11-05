@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ClassSoftwareHub.Desktop.Core;
+using ClassSoftwareHub.Desktop.Data;
 using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Services.License;
 using ClassSoftwareHub.Desktop.Services.Updating;
@@ -1281,6 +1283,145 @@ public sealed partial class SettingsPage : Page
     {
         _cachePage--;
         RefreshCacheList();
+    }
+
+    // ── 侧边栏导航自定义（2026-11-04）─────────────────────────────────────
+
+    /// <summary>
+    /// 勾选哪些页面单独放在导航栏上。
+    ///
+    /// <para>
+    /// 勾/取消**立即生效**（不是点「完成」才生效）：对话框是模态的，导航栏就在它后面，
+    /// 改一项当场能看见结果，比"改完点完成再回头找变化"直观。
+    /// </para>
+    ///
+    /// <para>
+    /// ⛔ 这里是唯一的写入点 —— 状态与判定都在 <see cref="NavLayout"/>，别在这儿另算一套。
+    /// </para>
+    /// </summary>
+    private async void CustomizeNav_Click(object sender, RoutedEventArgs e)
+    {
+        var switches = new List<(NavPlaceable Item, ToggleSwitch Switch)>();
+
+        // ⚠️ 右侧那 16 是留给滚动条的（2026-11-04 Nick 报「滚动条和内容重合了」）：
+        //    WinUI 的滚动条是**浮层**，不占布局宽度 —— 内容铺满时，
+        //    「开 / 关」那两个字会被那根细条直接压在下面。
+        var body = new StackPanel { Spacing = 12, Margin = new Thickness(0, 0, 16, 0) };
+
+        body.Children.Add(new TextBlock
+        {
+            Text = "勾选的页面单独放在导航栏上，取消勾选的收进所属分组。首页、软件下载、Hub AI、"
+                 + "侧边布局、函数图像固定显示；实验性功能的页面始终留在分组内。",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Opacity = 0.7,
+        });
+
+        foreach (var group in new[] { ToolGroup.Classroom, ToolGroup.System })
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = group == ToolGroup.System ? "系统工具" : "课堂工具",
+                FontSize = 13,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Margin = new Thickness(0, 6, 0, 0),
+            });
+
+            var list = new StackPanel { Spacing = 2 };
+
+            foreach (var item in NavLayout.All.Where(x => x.Group == group))
+            {
+                var toggle = new ToggleSwitch
+                {
+                    IsOn = NavLayout.IsTopLevel(item.Tag),
+                    Tag = item.Tag,
+                    MinWidth = 0,
+                };
+
+                // 先设好初值再挂事件 —— 否则构造期那一次赋值会当成用户操作写进设置
+                toggle.Toggled += NavSwitch_Toggled;
+
+                var row = new Grid { ColumnSpacing = 12 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                row.Children.Add(new TextBlock
+                {
+                    Text = item.Name,
+                    FontSize = 13.5,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+
+                Grid.SetColumn(toggle, 1);
+                row.Children.Add(toggle);
+
+                list.Children.Add(row);
+                switches.Add((item, toggle));
+            }
+
+            body.Children.Add(list);
+        }
+
+        var scroller = new ScrollViewer
+        {
+            Content = body,
+            // 436 = 原来的内容宽 420 + 右侧留给滚动条的 16，对话框宽度看起来跟以前一样
+            Width = 436,
+            MaxHeight = 460,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "自定义导航栏",
+            Content = scroller,
+            SecondaryButtonText = "恢复默认",
+            CloseButtonText = "完成",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        // 打开的一瞬间焦点落到第一个开关上，ScrollViewer 顺手把它滚进视野 ——
+        // 结果对话框一出现就停在中段，顶部的说明和「教室喊话」「查阅单词」全被滚上去了
+        // （2026-11-04 截图发现）。等这一轮布局跑完再滚回顶部。
+        dialog.Opened += (_, _) =>
+        {
+            DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () => scroller.ChangeView(null, 0, null, disableAnimation: true));
+        };
+
+        // 恢复默认：抹掉两份差异记录，再把开关拨回默认位置（拨动本身会走同一个 Toggled 处理）
+        dialog.SecondaryButtonClick += (_, args) =>
+        {
+            args.Cancel = true;      // 不关窗 —— 让用户逐项看见都弹回去了
+
+            App.Settings.Current.NavTopLevel = Array.Empty<string>();
+            App.Settings.Current.NavSecondLevel = Array.Empty<string>();
+            App.Settings.Save();
+            App.MainWindow?.Shell.ReloadNavLayout();
+
+            foreach (var (item, toggle) in switches)
+            {
+                if (toggle.IsOn != item.DefaultTopLevel) toggle.IsOn = item.DefaultTopLevel;
+            }
+        };
+
+        await dialog.ShowAsync();
+
+        // 关窗后对齐一次：个别项可能因为"拨回了原值"没触发 Toggled，导航与设置要保证一致
+        App.MainWindow?.Shell.ReloadNavLayout();
+    }
+
+    private void NavSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleSwitch { Tag: string tag } toggle) return;
+
+        NavLayout.SetTopLevel(tag, toggle.IsOn);
+        App.Settings.Save();
+        App.MainWindow?.Shell.ReloadNavLayout();
     }
 
     private void CacheNext_Click(object sender, RoutedEventArgs args)

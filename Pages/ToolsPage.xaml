@@ -22,8 +22,10 @@
          ⛔ 中间列底部间距：最后一行是「常用工具窗口」页脚卡片（非自滚元素）→ 写 44，
             否则页脚直接怼到窗口下边框。 -->
     <Page.Resources>
-        <!-- 首页「快速开始」那张卡：左右两列共用同一个模板 -->
-        <DataTemplate x:Key="NavCardTemplate" x:DataType="data:ToolDef">
+        <!-- 首页「快速开始」那张卡：左右两列共用同一个模板。
+             ⚠️ 绑定的是 NavPlaceable 而不再是 ToolDef（2026-11-04）：本页现在还要显示
+                「被用户收进二级的查阅单词 / 文档库」，它们不是 ToolDef 但字段一一对应。 -->
+        <DataTemplate x:Key="NavCardTemplate" x:DataType="data:NavPlaceable">
             <Border Style="{StaticResource CshNavCardStyle}"
                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                     Tapped="Card_Tapped">
@@ -90,6 +92,12 @@
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                 </Grid>
+
+                <!-- 空状态（2026-11-04）：用户把这一组的项全提到一级之后，两列都是空的。
+                     不用 InfoBar：这里不是提示错误，只是说明"东西都搬上去了"。 -->
+                <TextBlock x:Name="EmptyHint" Grid.Row="1" Visibility="Collapsed" Margin="0,4,0,0"
+                           FontSize="12.5" Opacity="0.65" TextWrapping="Wrap"
+                           Text="这一组的项目都已经放到导航栏上了，这里没有可显示的条目。" />
 
                 <!-- ===== 常用工具窗口：开关就放这儿，跟首页「体验网页版」那张卡一个意思 ===== -->
                 <Border x:Name="PaletteCard" Grid.Row="2" CornerRadius="4" Padding="20,16" Margin="0,20,0,0"

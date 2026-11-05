@@ -11,6 +11,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -47,6 +48,9 @@ public sealed partial class WelcomePage : Page
 
             Populate();
             RefreshUpdateCard();
+
+            // 公告：本页是常驻实例，Loaded 会反复触发；间隔与去重都在 NoticeFeed 内部管，这里直接叫就行
+            _ = LoadNoticesAsync();
         };
 
         // 快捷入口始终一行：窗口一变宽就重算格宽（见 FitQuickRow）
@@ -125,6 +129,91 @@ public sealed partial class WelcomePage : Page
     ///
     /// 待装标记的自检清理逻辑与旧 InfoBar 完全一致：装上新版本再进来、或包被清理了 → 顺手清档，不摆死卡片。
     /// </summary>
+    // ────────────────────────── 公告（2026-11-05）──────────────────────────
+
+    /// <summary>
+    /// 拉首页公告铺到 <see cref="NoticeHost"/>。数据来源见 <see cref="Services.NoticeFeed"/>。
+    ///
+    /// <para>
+    /// ⚠️ 故意先等 1.2 秒：公告要联网，首屏不该等网络。晚一点出现用户察觉不到，
+    ///    让首页卡一下才是真问题（跟上面更新卡那段"零额外网络开销"是同一个道理）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 全程吞异常：拉不到就当没有公告。这条通道是附加信息，出问题绝不能打扰用户。
+    /// </para>
+    /// </summary>
+    private async Task LoadNoticesAsync()
+    {
+        try
+        {
+            await Task.Delay(1200);
+            var items = await Services.NoticeFeed.LoadAsync(ShellConfig.ShellVersion);
+            RenderNotices(items);
+        }
+        catch (Exception ex)
+        {
+            // 公告失败静默，不影响首页任何功能 —— 但要留痕，否则"没显示"永远查不出来
+            AppLog.Warn("notice", "分发展示失败：" + ex.GetType().Name + " " + ex.Message);
+        }
+    }
+
+    /// <summary>把公告铺成一条条 InfoBar。没有"关过就不再显示"这回事 —— 见 IsClosable 那段注释。</summary>
+    private void RenderNotices(IReadOnlyList<NoticeItem> items)
+    {
+        if (NoticeHost is null) return;
+
+        NoticeHost.Children.Clear();
+        foreach (var item in items)
+            NoticeHost.Children.Add(BuildNoticeBar(item));
+    }
+
+    /// <summary>
+    /// 一条公告 = 一个原生 <see cref="InfoBar"/>，就三个属性：<c>Title</c>、<c>Message</c>、<c>ActionButton</c>。
+    ///
+    /// <para>
+    /// ⛔ **不要再往 <c>Content</c> 里塞自己拼的 TextBlock**（2026-11-05 Nick 明确纠正过一次）：
+    /// 严重性配色、图标列、正文换行、上下内边距、深浅主题，模板本来就全管了。
+    /// 自己拼一遍等于把系统的排版拆掉重做 —— 出来是"小卡片"不是系统通知条，而且每改一处都要自己补宽度、补行距、补边距。
+    /// 写法照 WinUI Gallery 的示例：
+    /// <c>&lt;InfoBar IsOpen="True" Title="Title" Message="…"&gt;&lt;InfoBar.ActionButton&gt;&lt;HyperlinkButton …/&gt;&lt;/InfoBar.ActionButton&gt;&lt;/InfoBar&gt;</c>。
+    /// </para>
+    /// </summary>
+    private InfoBar BuildNoticeBar(NoticeItem item) => new()
+    {
+        IsOpen = true,
+        // ⛔ 不提供关闭按钮（2026-11-05 Nick 定）。公告靠 endsAt 到点自动消失，
+        //    或者直接从仓库的 json 里删掉 —— 那是"对所有人失效"，是维护者的动作。
+        IsClosable = false,
+        Severity = item.Level switch
+        {
+            "success" => InfoBarSeverity.Success,
+            "warning" => InfoBarSeverity.Warning,
+            "error" => InfoBarSeverity.Error,
+            _ => InfoBarSeverity.Informational,
+        },
+        Title = item.Title,
+        Message = item.Body,
+        ActionButton = BuildNoticeAction(item),
+    };
+
+    /// <summary>
+    /// 公告带链接时的那颗按钮，用 <see cref="HyperlinkButton"/> + <see cref="HyperlinkButton.NavigateUri"/>。
+    ///
+    /// ⚠️ 别换成普通 Button 再自己接 Click 去 LaunchUriAsync —— 那是把控件自带的导航能力拆了重装。
+    ///    跟 WinUI Gallery 的示例保持一致：<c>&lt;HyperlinkButton Content="…" NavigateUri="…"/&gt;</c>。
+    /// </summary>
+    private HyperlinkButton? BuildNoticeAction(NoticeItem item)
+    {
+        if (item.Link.Length == 0) return null;
+        if (!Uri.TryCreate(item.Link, UriKind.Absolute, out var uri)) return null;
+
+        return new HyperlinkButton
+        {
+            Content = item.LinkText.Length > 0 ? item.LinkText : "查看详情",
+            NavigateUri = uri,
+        };
+    }
+
     private void RefreshUpdateCard()
     {
         var s = App.Settings.Current;

@@ -201,7 +201,7 @@
                   ⚠️ 因此它不参与工具的动态子项与载体选择，tag 与 NavigateTagCore 的 case 单独写。
                   ⚠️ 出现顺序：紧挨「侧边布局」之下、两个工具分组之上 —— 实验性功能永远保持最后一位。
                 -->
-                <NavigationViewItem Content="教室喊话" Tag="announce">
+                <NavigationViewItem x:Name="AnnounceNav" Content="教室喊话" Tag="announce">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE720;" />
                     </NavigationViewItem.Icon>
@@ -221,12 +221,12 @@
                      并且自动走 ToolCarrier 的载体选择（有 Web 版且本机跑得起来 → 宿主页，否则原生页）。
                      给它单写 case 反而会绕过载体选择，退回 2026-10-25 修过的那个坑。
                 -->
-                <NavigationViewItem Content="函数图像" Tag="function-plot">
+                <NavigationViewItem x:Name="FunctionPlotNav" Content="函数图像" Tag="function-plot">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D2;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="查阅单词" Tag="dictionary">
+                <NavigationViewItem x:Name="DictionaryNav" Content="查阅单词" Tag="dictionary">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8F1;" />
                     </NavigationViewItem.Icon>
@@ -235,7 +235,7 @@
                   文档库（需求 1:15）：与「查阅单词」同属"查资料"这一类的常驻页，
                   所以紧挨着放。文章放在站点仓库里，桌面端只缓存清单与读过的正文。
                 -->
-                <NavigationViewItem Content="文档库" Tag="docs">
+                <NavigationViewItem x:Name="DocsNav" Content="文档库" Tag="docs">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8A5;" />
                     </NavigationViewItem.Icon>

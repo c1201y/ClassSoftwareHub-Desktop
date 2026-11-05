@@ -54,6 +54,20 @@ public sealed class AppSettings
     /// </summary>
     public bool TrayHideHintShown { get; set; }
 
+    /// <summary>
+    /// 导航栏 New / Beta 角标的计时起点：**本版本第一次运行**的时间（UTC，ISO 8601）。
+    /// <para>
+    /// 为什么要有：角标是"刚装上新版本"那段时间的提示，装完十几天还不撤，
+    /// 用户就把它当装饰看了，这条信息等于废掉（2026-11-04 Nick 定：装完 15 天后自动消失）。
+    /// 版本号一变就重新起算，所以升级后新功能还能再提示一轮。
+    /// </para>
+    /// <para>⚠️ 这是存档格式：改字段名等于让所有人重新计时一次，别动。</para>
+    /// </summary>
+    public string BadgeSinceVersion { get; set; } = "";
+
+    /// <summary>见 <see cref="BadgeSinceVersion"/>；跟它成对出现，一个是版本、一个是时间。</summary>
+    public string BadgeSinceUtc { get; set; } = "";
+
     /// <summary>工具浮窗是否始终置顶，默认开。</summary>
     public bool PaletteOnTop { get; set; } = true;
 
@@ -341,6 +355,20 @@ public sealed class AppSettings
     /// ⚠️ 有它才能保证「用户主动删掉的模块不会被下次启动又塞回来」。
     /// </summary>
     public int SidebarModulesRevision { get; set; }
+
+    /// <summary>
+    /// 导航栏里被用户**额外提到一级**的项（tag：页面 tag 或工具 Id）。
+    ///
+    /// <para>
+    /// ⚠️ 与 <see cref="NavSecondLevel"/> 一起只存「与默认不同」的那部分，默认状态下两个都是空数组
+    /// —— 这样以后往工具清单里加新工具，老用户升级后仍然按默认位置看到它，不会被一份旧快照挡住。
+    /// 判定与读写全在 <c>Data/NavLayout.cs</c>，别在别处另算一套。
+    /// </para>
+    /// </summary>
+    public string[] NavTopLevel { get; set; } = Array.Empty<string>();
+
+    /// <summary>导航栏里被用户**收进二级分组**的项（目前是教室喊话 / 查阅单词 / 文档库）。</summary>
+    public string[] NavSecondLevel { get; set; } = Array.Empty<string>();
 
     // ⚠️ 这里原本还有 11 项虚拟键盘设置（VirtualKeyboardEnabled / 布局 / 缩放 / 悬浮坐标……）。
     //    该功能 2026-10-09 整体下线，字段一并删掉 —— 老存档里的这些键会被 JsonSerializer
