@@ -466,6 +466,24 @@ public sealed partial class MainWindow : Window
         // 再叠一条"下载完成，已保存到下载文件夹"只会把用户带偏（他要去的地方是任务页的「安装」）
         if (task.Kind == DownloadKind.Update) return;
 
+        // 清理任务根本没有落盘文件，走下面那条分支会报「已保存到 <某个目录>」——
+        // 那个目录还是上次下载的落点（2026-11-06 Nick 截图：AppData 清完了，
+        // 通知却写「下载完成 / 已保存到 D:\Microsoft Edge 下载」）。清理有自己的一套文案。
+        if (task.Kind == DownloadKind.Cleanup)
+        {
+            if (task.State == DownloadState.Completed)
+            {
+                ShowBalloon("清理完成", $"{task.Title}\n已释放 {AppLog.Size(task.Bytes)}。",
+                    () => { ShowFromTray(); Shell.NavigateTo("downloads"); });
+            }
+            else if (task.State == DownloadState.Failed)
+            {
+                ShowBalloon("清理未完成", $"{task.Title}：{task.Error}",
+                    () => { ShowFromTray(); Shell.NavigateTo("downloads"); });
+            }
+            return;
+        }
+
         if (task.State == DownloadState.Completed)
         {
             // 落点以**实际写入的路径**为准：用户可能这一条点了「下载到其他文件夹…」，
@@ -1700,7 +1718,7 @@ public sealed partial class MainWindow : Window
                         RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
                 XamlRoot = root,
                 Title = "当前已是最新版本",
-                Content = $"当前：dv{ShellConfig.ShellVersion}\n通道：{Services.Updating.UpdateChannels.ToDisplay(channel)}",
+                Content = $"当前：dv{ShellConfig.DisplayVersion}\n通道：{Services.Updating.UpdateChannels.ToDisplay(channel)}",
                 CloseButtonText = "确定",
             };
             await dialog.ShowAsync();

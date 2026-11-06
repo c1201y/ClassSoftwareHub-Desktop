@@ -268,7 +268,7 @@ public sealed partial class WelcomePage : Page
         // ③ 已是最新
         ChangelogCardTitle.Text = "查看更新内容";
         ChangelogCardSubtitle.Text =
-            $"当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion} · 已是最新版本";
+            $"当前版本 {ShellConfig.VersionPrefix}{ShellConfig.DisplayVersion} · 已是最新版本";
         UpdateInstallButton.Visibility = Visibility.Collapsed;
         QuickUpdateButton.Visibility = Visibility.Collapsed;
         ChangelogChevron.Visibility = Visibility.Visible;
@@ -350,7 +350,7 @@ public sealed partial class WelcomePage : Page
         //    连带这里的 ui.AppTitle / title 取值一起清掉 —— 别再补回来。
         // 只显示软件自己的版本（前缀 VersionPrefix + ShellVersion，如 dv1.1.0-insider1.0 或正式版 dv1.1.0）。
         // ⚠️ 别再往这里挂"网站版本"——软件是独立发布物，不摆成网站版本的附属品（2026-09-26 删）。
-        ShellVersionText.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
+        ShellVersionText.Text = ShellConfig.VersionPrefix + ShellConfig.DisplayVersion;
 
         RefreshCollectedCount();
 

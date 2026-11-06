@@ -9,7 +9,15 @@ namespace ClassSoftwareHub.Desktop.Services.License;
 /// <param name="Token">服务端签发的授权令牌，原样带在 <c>X-CSH-Lic</c> 头里。</param>
 /// <param name="ExpiresAt">到期时间（Unix 秒，0 = 长期）。</param>
 /// <param name="Device">签发时用的设备码。**换了设备码这份就作废**。</param>
-public sealed record LicenseTicket(string Token, long ExpiresAt, string Device)
+/// <param name="ActivatedAt">
+/// 本机首次激活这个令牌的时间（Unix 秒，0 = 旧存档没有记录）。
+/// <para>
+/// 为什么客户端自己记：服务端只下发 <c>expiresAt</c>，令牌里没有签发时间，
+/// 拿"到期日减一年"反推会因为闰年和服务端算法而不准。界面要显示的是**激活时间**而不是剩余天数
+/// （2026-11-06 Nick 定），所以这个值在本地落盘。
+/// </para>
+/// </param>
+public sealed record LicenseTicket(string Token, long ExpiresAt, string Device, long ActivatedAt = 0)
 {
     /// <summary>过期了没有。0 表示长期有效。</summary>
     public bool IsExpired => ExpiresAt > 0
@@ -18,6 +26,11 @@ public sealed record LicenseTicket(string Token, long ExpiresAt, string Device)
     /// <summary>到期时间，0 给 null。</summary>
     public DateTimeOffset? ExpiresAtLocal => ExpiresAt > 0
         ? DateTimeOffset.FromUnixTimeSeconds(ExpiresAt).ToLocalTime()
+        : null;
+
+    /// <summary>激活时间，0（旧存档）给 null。</summary>
+    public DateTimeOffset? ActivatedAtLocal => ActivatedAt > 0
+        ? DateTimeOffset.FromUnixTimeSeconds(ActivatedAt).ToLocalTime()
         : null;
 }
 
@@ -88,10 +101,24 @@ public static class LicenseStore
         {
             try
             {
+                var trimmed = token.Trim();
+
+                // 同一个令牌再次下发（刷新、重连）时保留原来的激活时间；
+                // 换了令牌（更换激活码）才算一次新的激活。2026-11-06
+                var activatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var previous = ReadRaw();
+                if (previous is not null
+                    && string.Equals(previous.Token, trimmed, StringComparison.Ordinal)
+                    && previous.ActivatedAt > 0)
+                {
+                    activatedAt = previous.ActivatedAt;
+                }
+
                 var ticket = new LicenseTicket(
-                    token.Trim(),
+                    trimmed,
                     expiresAt,
-                    string.IsNullOrWhiteSpace(device) ? DeviceFingerprint.Value : device.Trim());
+                    string.IsNullOrWhiteSpace(device) ? DeviceFingerprint.Value : device.Trim(),
+                    activatedAt);
 
                 Directory.CreateDirectory(AppPaths.DataDir);
 

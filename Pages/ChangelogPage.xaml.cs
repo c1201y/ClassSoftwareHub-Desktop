@@ -161,7 +161,7 @@ public sealed partial class ChangelogPage : Page
         var repo = $"{ShellConfig.UpdateRepoOwner}/{ShellConfig.UpdateRepoName}";
 
         // 原来这里是一张占掉 15% 屏高的大卡，只写版本号和两句说明 —— 压成一行副标题
-        HeaderMeta.Text = $"当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion}　·　{channel}"
+        HeaderMeta.Text = $"当前版本 {ShellConfig.VersionPrefix}{ShellConfig.DisplayVersion}　·　{channel}"
                           + $"　·　发布说明读取自 {repo}"
                           + (ShellConfig.IsInsider ? "。当前为内测构建，可能尚未发布至仓库。" : "。");
 
@@ -208,7 +208,7 @@ public sealed partial class ChangelogPage : Page
                 string.Equals(r.Version, ShellConfig.ShellVersion, StringComparison.OrdinalIgnoreCase));
             _currentPublishedNote = hasCurrent
                 ? ""
-                : $" · 当前版本 {ShellConfig.VersionPrefix}{ShellConfig.ShellVersion} 尚未发布至仓库";
+                : $" · 当前版本 {ShellConfig.VersionPrefix}{ShellConfig.DisplayVersion} 尚未发布至仓库";
 
             ApplyFilter(scrollToTop: false);
         }

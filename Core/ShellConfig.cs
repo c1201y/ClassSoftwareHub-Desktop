@@ -32,11 +32,27 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.2.0-insider1.10";
+    public const string ShellVersion = "1.2.0-insider1.11";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
         ShellVersion.Contains("insider", System.StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// **给用户看的**版本号：内部的 <c>-insider1.11</c> 显示成 <c>-Pr1.11</c>（2026-11-06 Nick 定）。
+    ///
+    /// <para>
+    /// 为什么两套：发布通道、tag、安装包文件名、更新比较全都沿用 <c>insider</c> 那套机制，
+    /// 另起一个 <c>Pr</c> 前缀要改动版本比较、通道判定、发版脚本，代价远大于收益（他的原话是"省得麻烦"）。
+    /// 所以只在**界面上**换个叫法，内部一律不动。
+    /// </para>
+    /// <para>
+    /// ⛔ 只在显示处用它。<c>CheckAsync</c>、<c>UpdatePendingTag</c>、公告按版本取文件、
+    /// 角标计时这些**逻辑**必须用 <see cref="ShellVersion"/>，否则跟仓库里的 tag 对不上。
+    /// </para>
+    /// </summary>
+    public static string DisplayVersion =>
+        ShellVersion.Replace("-insider", "-Pr", System.StringComparison.OrdinalIgnoreCase);
 
     /// <summary>桌面版的版本号前缀（Nick 指定：dv）。</summary>
     public const string VersionPrefix = "dv";

@@ -121,7 +121,7 @@ public sealed partial class OobeWelcomeIntro : UserControl
     {
         InitializeComponent();
 
-        VersionLine.Text = $"Desktop({(SystemInfo.IsWin11 ? "Win11" : "Win10")}) {ShellConfig.ShellVersion}";
+        VersionLine.Text = $"Desktop({(SystemInfo.IsWin11 ? "Win11" : "Win10")}) {ShellConfig.DisplayVersion}";
         LoadLogo();
 
         Loaded += (_, _) =>

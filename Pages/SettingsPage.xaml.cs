@@ -67,7 +67,13 @@ public sealed partial class SettingsPage : Page
     /// <summary>
     /// 刷新「授权状态」这一张卡。
     /// <para>
-    /// 三种情况，文案都只说用户需要知道的：官方版不用管、激活了看什么时候到期、没激活去输码。
+    /// 三种情况，文案只写用户需要知道的（2026-11-06 Nick 定）：
+    /// <list type="bullet">
+    ///   <item>官方版本 —— 直接说能用了，**不显示「输入激活码」按钮**（官方包本来就不需要激活，
+    ///         摆一个按钮反而让用户以为还要额外操作）；</item>
+    ///   <item>激活码激活 —— 显示**激活时间**，不显示剩余天数、也不显示到期日；</item>
+    ///   <item>没激活 —— 提示去输码。</item>
+    /// </list>
     /// ⛔ 不写令牌 / 密钥 / 签名 / 服务端判定这类词（界面给用户看服务，不给用户看技术）。
     /// </para>
     /// </summary>
@@ -80,16 +86,19 @@ public sealed partial class SettingsPage : Page
             if (ticket is null && BuildIdentity.IsOfficial)
             {
                 LicenseStatus.Text = "官方版本，在线服务可直接使用。";
-                LicenseActionButton.Content = "输入激活码";
+                LicenseActionButton.Visibility = Visibility.Collapsed;
                 return;
             }
 
+            LicenseActionButton.Visibility = Visibility.Visible;
+
             if (ticket is not null)
             {
-                var until = ticket.ExpiresAtLocal;
-                LicenseStatus.Text = until is null
-                    ? "已激活，长期有效。"
-                    : $"已激活，有效期至 {until:yyyy-MM-dd}。";
+                // 只报激活时间。到期日与剩余天数都不显示 —— 用户要看的是"什么时候激活的"。
+                var activated = ticket.ActivatedAtLocal;
+                LicenseStatus.Text = activated is null
+                    ? "已激活。"
+                    : $"已激活，激活时间 {activated:yyyy-MM-dd}。";
                 LicenseActionButton.Content = "更换激活码";
                 return;
             }
@@ -267,7 +276,7 @@ public sealed partial class SettingsPage : Page
         CacheKeepCombo.SelectedIndex = Math.Clamp(s.CacheKeepCount, 1, 10) - 1;
         // 日志保留天数：3/7/15/30/永不（Tag 存天数，0 = 永不删除）；存档里出现别的值一律落回「7 天」
         LogKeepCombo.SelectedIndex = LogKeepIndex(s.LogKeepDays);
-        UpdateCurrent.Text = $"当前版本：{ShellConfig.VersionPrefix}{ShellConfig.ShellVersion}· 更新源：{UpdateService.CreateDefault().Source.DisplayName}";
+        UpdateCurrent.Text = $"当前版本：{ShellConfig.VersionPrefix}{ShellConfig.DisplayVersion}· 更新源：{UpdateService.CreateDefault().Source.DisplayName}";
 
         RefreshContentInfo();
             BuildAboutHeader();
@@ -340,7 +349,7 @@ public sealed partial class SettingsPage : Page
         ContentIssues.Visibility = c.Issues.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         AboutApp.Text = ShellConfig.AppName;
-        AboutVersion.Text = ShellConfig.VersionPrefix + ShellConfig.ShellVersion;
+        AboutVersion.Text = ShellConfig.VersionPrefix + ShellConfig.DisplayVersion;
 
         // 站点版本**以编译进程序的常量为准**，不读任何联网文本：
         // 以前读内容包的 app.version，而那份 text/ 不联网更新、装机即冻结，一直显示装机那天那版（实测停在 v2.3.2）。
