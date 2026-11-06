@@ -4,6 +4,6 @@
     "level": "warning",
     "title": "更新提示",
     "body": "出于服务器安全考虑，自 12 月 2 日起，服务器将启用新后端逻辑验证，届时旧版后端将不可启用。请用户更新至版本 dv1.2.0-insider1.9 版本以上，获得更好体验",
-    "dismissible": true
+    "dismissible": false
   }
 ]
