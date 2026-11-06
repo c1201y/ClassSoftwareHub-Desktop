@@ -354,6 +354,14 @@ MSBUILDDISABLENODEREUSE=1 dotnet build ClassSoftwareHub.Desktop.csproj -c Debug
 ```
 
 - **MSB3021 / MSB3027 = exe 被正在跑的实例锁住**，不是代码错：先关应用再编。
+- ✅ **构建产物不在仓库里，在 `E:\ClassSoftwareHub-Build\`**（2026-11-06 Nick 定：「OneDrive 就放源代码就行了」）：
+  由根目录 `Directory.Build.props` 统一改 `BaseOutputPath` / `BaseIntermediateOutputPath`，
+  按项目名分子目录。所以 `bin`、`obj` 在仓库里**根本不会出现**，找 exe 要去 E 盘
+  `E:\ClassSoftwareHub-Build\bin\<项目名>\<配置>\net10.0-windows10.0.26100.0\win-x64\`。
+  ⚠️ 必须在 `Directory.Build.props` 里改而不是 csproj：`BaseIntermediateOutputPath` 只有在那层才来得及生效。
+  ⚠️ E 盘不存在时自动退回默认位置（条件写在 props 里），换机器不会因此编译失败。
+  ⚠️ `dist\`（publish 输出与安装包）仍在仓库内 —— 发版脚本、`.iss`、更新文档全按这个路径写死，
+  挪了要改五六处，且它只在发版时产生。
 - **版本号四处必须一字不差**：`Core/ShellConfig.cs` 的 `ShellVersion`、`.csproj` 的 `Version` / `InformationalVersion`、`installer/*.iss` 的 `DesktopVersion`、git tag（tag 带 `dv` 前缀，`.iss` 里不带）。
 - **发布前必须删 `dist\app\content`**，且要在 `dotnet publish` **之前** —— `csproj` 里的 `VerifyNoBundledContent` 是硬闸，产物里还有 content 会直接让 publish 报错。
 - ⛔ **预览迭代号按自然数累加，不是小数**：`1.2.0-insider1.9` 的下一个是 **`1.2.0-insider1.10`**，
@@ -384,7 +392,7 @@ MSBUILDDISABLENODEREUSE=1 dotnet build ClassSoftwareHub.Desktop.csproj -c Debug
 ### 10.1 本地起一版看界面（以后一律用这条）
 
 ```powershell
-Start-Process explorer.exe -ArgumentList '"<仓库>\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\ClassSoftwareHub.exe"'
+Start-Process explorer.exe -ArgumentList '"E:\ClassSoftwareHub-Build\bin\ClassSoftwareHub.Desktop\Debug\net10.0-windows10.0.26100.0\win-x64\ClassSoftwareHub.exe"'
 ```
 
 - **为什么要绕 explorer**：直接 `Start-Process <exe>`、`cmd /c start`、或把 exe 当命令执行，进程都挂在当前终端 / 工具会话下面 —— 会话一收，整条进程树跟着被杀，界面根本来不及看。交给常驻外壳之后，父进程变成 `explorer.exe`，会话回收碰不到它，只有用户自己关窗口才会退出。

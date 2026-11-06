@@ -10,9 +10,13 @@ Visual Studio 2022 或更新（要 .NET 10 SDK + Windows App SDK 组件）。
 # 调试构建
 dotnet build ClassSoftwareHub.Desktop.csproj -c Debug
 
-# 运行（exe 在 bin\Debug\net10.0-windows10.0.26100.0\win-x64\）
+# 运行（默认在 bin\Debug\net10.0-windows10.0.26100.0\win-x64\）
 .\bin\Debug\net10.0-windows10.0.26100.0\win-x64\ClassSoftwareHub.exe
 ```
+
+> `Directory.Build.props` 会把 `bin` / `obj` 挪出仓库，**仅当本机存在 `E:\` 时生效**
+> （维护者的机器上放在 `E:\ClassSoftwareHub-Build\bin\<项目名>\<配置>\…`，避免仓库所在的 OneDrive 反复同步 GB 级产物）。
+> 没有 E 盘时走默认位置，就是上面那条路径，不用改任何东西。
 
 ## 打安装包
 

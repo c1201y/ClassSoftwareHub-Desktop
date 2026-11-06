@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    构建产物不放 OneDrive（2026-11-06 Nick 定：「OneDrive 就放源代码就行了」）。
+
+    为什么：本项目放在 OneDrive\文档 下，一次编译就是 1 GB 以上的 bin/obj，
+    云同步既占配额、又把编译拖慢。挪到本地盘之后，OneDrive 里只剩源码。
+
+    ⚠️ 用 Directory.Build.props 而不是改 csproj：
+       这一层在 Microsoft.Common.props **之前**导入，`BaseIntermediateOutputPath` 只有在这里设才生效
+       （写进 csproj 就晚了，obj 已经在项目目录里建好）。
+    ⚠️ 按项目名分子目录：解决方案里可能有多个项目，共用一个 obj 会互相覆盖中间文件。
+
+    E 盘不存在时（换机器 / 盘符变了）自动退回默认位置，不会因为这条配置编译失败。
+  -->
+  <PropertyGroup Condition="Exists('E:\')">
+    <CshBuildRoot>E:\ClassSoftwareHub-Build\</CshBuildRoot>
+    <BaseOutputPath>$(CshBuildRoot)bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(CshBuildRoot)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+</Project>
