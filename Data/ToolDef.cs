@@ -176,6 +176,57 @@ public static class ToolCatalog
             Glyph = "\uE7EF", Page = typeof(ClassSoftwareHub.Desktop.Pages.SystemRepairPage)
         },
         // ⚠️ 「系统功能」「系统优化」2026-10-31 起改挂「实验性功能」（Nick 要求先跑一段），
-        //    入口在 Pages/ExperimentalPage.xaml.cs 的 All 里，⛔ 别再加回这里 —— 否则导航里会出现两个入口。
+        //    2026-11-07 又随下面这批一起转正搬回这里 —— 两次都只改表，导航与索引自动跟着变。
+
+        // ── 2026-11-07 从「实验性功能」转正搬来（Nick：这五个不必再挂实验性） ──
+        // ⚠️ 搬法与 2026-10-29 那三个一致：整条移进本表，导航子项与索引页卡片由这里生成，
+        //    ExperimentalFeatureCatalog 里对应的条目已删，页面标题旁的「实验性功能」标记随之自动消失。
+        // ⚠️ Id 必须与原 tag 一字不差：page= 启动参数、Hub AI 动作清单（AppUri.ForPage）、
+        //    OOBE 完成页跳转、崩溃日志里的 CurrentTag 全都按它认。
+        new ToolDef
+        {
+            // PowerPoint 触控优化（2026-11-01，需求 2）：放映时轻点翻页。
+            // ⚠️ 它**不在**「系统工具」子项里显示 —— 默认就占一级导航，位置在 Data/NavLayout.Pages。
+            //    写进本表是为了：搜索能搜到、工具索引页在它被收进分组时能出卡片、`--tool=ppttouch` 可用。
+            //    ⛔ 别改成 Standalone：那个是"永远在一级、不参与自定义"，而这一项 Nick 要求可自定义。
+            Id = "ppttouch", Name = "PowerPoint 触控优化",
+            Group = ToolGroup.System,
+            Desc = "放映时轻点屏幕翻到下一页，上下滑动切换页面，长按弹出放映菜单。",
+            Glyph = "\uE786", Page = typeof(ClassSoftwareHub.Desktop.Pages.PptTouchPage)
+        },
+        new ToolDef
+        {
+            // 虚拟内存（2026-10-31，需求 19）：搬系统的「虚拟内存」对话框。
+            // ⚠️ 单独一页不并进「系统功能」：它改的是逐个驱动器的初始/最大值，形态完全不同，
+            //    而且改完必须重启，风险等级也不一样。
+            Id = "pagefile", Name = "虚拟内存",
+            Group = ToolGroup.System,
+            Desc = "逐个驱动器设置分页文件大小，重启后生效。",
+            Glyph = "\uEDA2", Page = typeof(ClassSoftwareHub.Desktop.Pages.PageFilePage)
+        },
+        new ToolDef
+        {
+            // 幽灵文件清理（2026-11-03）：文件删了、图标还在、双击提示找不到路径的那一类。
+            Id = "ghostfile", Name = "幽灵文件清理",
+            Group = ToolGroup.System,
+            Desc = "清理删不掉、双击提示找不到路径的残留条目。",
+            Glyph = "\uE7C4", Page = typeof(ClassSoftwareHub.Desktop.Pages.GhostFilePage)
+        },
+        new ToolDef
+        {
+            // 系统功能（2026-10-31，需求 20 重做）：13 项 HKLM / powercfg 设置，排队后一次提权写入。
+            Id = "sysfeatures", Name = "系统功能",
+            Group = ToolGroup.System,
+            Desc = "休眠、快速启动、电源计划等系统开关，排队后一次授权写入。",
+            Glyph = "\uE7E8", Page = typeof(ClassSoftwareHub.Desktop.Pages.SystemFeaturesPage)
+        },
+        new ToolDef
+        {
+            // 系统优化（2026-10-31，需求 20）：改的是整机系统设置，选中后一次授权统一应用。
+            Id = "systemtweaks", Name = "系统优化",
+            Group = ToolGroup.System,
+            Desc = "任务栏、资源管理器这些整机设置，选中后一次授权统一应用。",
+            Glyph = "\uE713", Page = typeof(ClassSoftwareHub.Desktop.Pages.SystemTweaksPage)
+        },
     };
 }

@@ -98,15 +98,29 @@ public static class NavLayout
             Desc = "电脑优化与使用技巧的图文教程，支持按标题、简介与标签检索。",
             DefaultTopLevel = true,
         },
+        new()
+        {
+            // PowerPoint 触控优化（2026-11-07 Nick：从实验性功能转正，**默认放在一级导航**）。
+            // ⚠️ 它同时也是 ToolCatalog 里的一条（Id 相同）：这里管「放哪」，那张表管「用什么页面」。
+            //    两边都写是刻意的 —— 不提一级时它就是「系统工具」里的一张卡片与子项。
+            // ⚠️ 因此 NavLayout.Tools 的筛选里要排掉它，否则二级会多出一份同样的项（见 Tools 的注释）。
+            Tag = "ppttouch", Name = "PowerPoint 触控优化", Group = ToolGroup.System,
+            Glyph = "\uE786",
+            Desc = "放映时轻点屏幕翻到下一页，上下滑动切换页面，长按弹出放映菜单。",
+            DefaultTopLevel = true,
+        },
     };
 
     /// <summary>
-    /// 工具项：<see cref="ToolCatalog.All"/> 里除去已经单独占了一级位置的那些（函数图像）。
+    /// 工具项：<see cref="ToolCatalog.All"/> 里除去已经单独占了一级位置的那些（函数图像、PowerPoint 触控优化）。
     /// ⚠️ 每次都从 ToolCatalog 现取，不再另存一份清单 —— 工具清单只有一份，抄第二份必然漂移。
+    /// ⚠️ 还要排掉 <see cref="Pages"/> 里已经登记过的那几条：PowerPoint 触控优化在两张表里都有
+    ///    （ToolCatalog 管页面、这里管位置），不排掉的话它会同时作为「一级项」和「二级子项」出现两次。
     /// </summary>
     public static IReadOnlyList<NavPlaceable> Tools { get; } =
         ToolCatalog.All
             .Where(t => !t.Standalone)
+            .Where(t => !Pages.Any(p => Same(p.Tag, t.Id)))
             .Select(t => new NavPlaceable
             {
                 Tag = t.Id,

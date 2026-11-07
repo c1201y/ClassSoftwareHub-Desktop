@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -192,6 +193,9 @@ public static class PptTouch
     private static long _startTick;
     private static double _scale;
 
+    /// <summary>按下时确认过的放映窗口句柄。抬起时只跟它比对，省掉一整轮窗口校验。</summary>
+    private static IntPtr _slideshowHwnd;
+
     /// <summary>钩子是否已装上（页面用它显示运行状态）。</summary>
     public static bool IsActive => _active;
 
@@ -316,7 +320,8 @@ public static class PptTouch
         // （装失败时线程会自己退出，这里也就不会再等满 1 秒）
         for (var i = 0; i < 100 && thread.IsAlive && !_active; i++) Thread.Sleep(10);
 
-
+        // 钩子挂上之后再起「指针类型」轮询线程：没钩子就不需要判断工具模式
+        if (_active) PptPointerState.Start();
 
     }
 
@@ -335,6 +340,7 @@ public static class PptTouch
         _threadId = 0;
         _tracking = false;
 
+        PptPointerState.Stop();
 
     }
 
@@ -569,7 +575,12 @@ public static class PptTouch
                 // 菜单开着：点在菜单外面就收起来，并吞掉这一下（原生右键菜单也是只收不点）。
                 if (PptMenu.IsBlocking && SwallowOutsideMenuClick(msg, info)) return 1;
 
+                // 这次回调花了多久？低级钩子回调卡住的是整条系统输入链，
+                // 所以任何超过 3ms 的处理都值得记一笔（2026-11-07 查「单击有延迟」时加的）
+                var started = Stopwatch.GetTimestamp();
                 HandleMouse(msg, info);
+                var costMs = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
+                if (costMs >= 3.0) LogAsync($"钩子回调耗时 {costMs:0.0}ms（msg=0x{msg:X}）");
             }
             catch (Exception ex)
             {
@@ -703,18 +714,30 @@ public static class PptTouch
                 return;
             }
 
+            // 笔 / 橡皮 / 激光笔等工具模式下，整段触摸都不碰 —— 用户是在幻灯片上书写，
+            // 画一笔纵向线条的位移远超滑动阈值，轻点/滑动/长按三条判定全都会误伤
+            // （2026-11-07 Nick：「批注等功能时上滑下滑也会触发翻页」）。
+            // 状态由 PptPointerState 的后台线程从 Office COM 里读，这里只读缓存，不做跨进程调用。
+            if (PptPointerState.IsToolMode)
+            {
+                _tracking = false;
+                DiagToolMode();
+                return;
+            }
+
             _tracking = true;
             _startX = info.pt.x;
             _startY = info.pt.y;
             _startTick = Environment.TickCount64;
             _scale = scale;
+            _slideshowHwnd = fgHwnd;   // 抬起时只比对这个句柄，不再走一遍完整校验
             return;
         }
 
         // ── 抬起 ──
         if (!_tracking)
         {
-            AppLog.Info("ppttouch", "抬起被丢弃：这次按下没有进入跟踪（按下时前台不是放映窗口）");
+            LogAsync("抬起被丢弃：这次按下没有进入跟踪（按下时前台不是放映窗口）");
             return;
         }
 
@@ -724,12 +747,15 @@ public static class PptTouch
         var dy = info.pt.y - _startY;
         var elapsed = Environment.TickCount64 - _startTick;
 
-        // 抬起那一刻放映已经退出（按 Esc / 切窗口）就别再动作
-        if (!IsSlideshowForeground(out var endHwnd, out _))
+        // 抬起那一刻前台还是不是同一个放映窗口？只比对句柄。
+        // ⚠️ 这里原本又走一遍 IsSlideshowForeground（GetClassName + GetWindowThreadProcessId +
+        //    OpenProcess + QueryFullProcessImageName + GetDpiForWindow）——放映期间窗口不会换，
+        //    这些全是白花的时间，而且都在低级鼠标钩子回调里，直接推高「点一下要等一下」的手感
+        //    （2026-11-07 Nick 反馈单击有延迟）。
+        var endHwnd = Native.GetForegroundWindow();
+        if (endHwnd != _slideshowHwnd)
         {
-            var cls = new StringBuilder(64);
-            Native.GetClassName(endHwnd, cls, cls.Capacity);
-            AppLog.Info("ppttouch", $"抬起被丢弃：放映已退出，前台是「{cls}」");
+            DiagLeftSlideshow(endHwnd);
             return;
         }
 
@@ -744,8 +770,7 @@ public static class PptTouch
         {
             SendTapAt(_startX, _startY);
             Interlocked.Increment(ref _taps);
-            AppLog.Info("ppttouch",
-                $"轻点：({_startX},{_startY})　{elapsed}ms　位移 {Math.Sqrt(movedSq):0.#}px");
+            LogAsync($"轻点：({_startX},{_startY})　{elapsed}ms　位移 {Math.Sqrt(movedSq):0.#}px");
             return;
         }
 
@@ -758,8 +783,7 @@ public static class PptTouch
             var next = dy < 0;
             SendKey(next ? Native.VK_NEXT : Native.VK_PRIOR);
             Interlocked.Increment(ref _taps);
-            AppLog.Info("ppttouch",
-                $"滑动翻{(next ? "下一页" : "上一页")}：({_startX},{_startY})→({info.pt.x},{info.pt.y})　{elapsed}ms");
+            LogAsync($"滑动翻{(next ? "下一页" : "上一页")}：({_startX},{_startY})→({info.pt.x},{info.pt.y})　{elapsed}ms");
             return;
         }
 
@@ -772,7 +796,7 @@ public static class PptTouch
             var longLimit = (int)Math.Ceiling(LongPressMaxDip * _scale);
             if (movedSq <= (long)longLimit * longLimit)
             {
-                AppLog.Info("ppttouch", $"长按 {elapsed}ms，在 ({_startX},{_startY}) 弹出菜单");
+                LogAsync($"长按 {elapsed}ms，在 ({_startX},{_startY}) 弹出菜单");
                 PptMenu.ShowAt(_startX, _startY);
                 return;
             }
@@ -889,8 +913,40 @@ public static class PptTouch
     /// </summary>
     private static void SendKey(ushort vk) => SendCombo(vk);
 
-    private static void DiagNotSlideshow(IntPtr hwnd)
+    /// <summary>
+    /// 钩子回调里写日志必须走这里：<see cref="AppLog.Write"/> 是同步的（CreateDirectory +
+    /// File.AppendAllText + 全局锁），在低级鼠标钩子回调里等于给每一次点击加一道磁盘 IO，
+    /// 还会跟别的模块抢锁。丢给线程池，钩子立刻返回。
+    /// </summary>
+    private static void LogAsync(string message) =>
+        ThreadPool.QueueUserWorkItem(static m => AppLog.Info("ppttouch", (string)m!), message);
+
+    /// <summary>抬起时前台已经不是按下时那个放映窗口了（Esc 退出 / 切到别的程序）。</summary>
+    private static void DiagLeftSlideshow(IntPtr hwnd)
     {
+        var now = Environment.TickCount64;
+        if (now - _lastDiagTick < 30_000) return;
+        _lastDiagTick = now;
+
+        var cls = new StringBuilder(64);
+        Native.GetClassName(hwnd, cls, cls.Capacity);
+        LogAsync($"抬起被丢弃：前台已不是放映窗口（现在是「{cls}」）");
+    }
+
+    /// <summary>
+    /// 当前处于笔 / 橡皮 / 激光笔这类工具模式时，手指是在画线或打光点，不是翻页。
+    /// 2026-11-07 Nick 反馈：用批注写字时一划就翻页 —— 手势本身没错，是缺少「现在是什么工具」这个前提。
+    /// </summary>
+    private static void DiagToolMode()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastDiagTick < 30_000) return;
+        _lastDiagTick = now;
+
+        AppLog.Info("ppttouch", $"工具模式（指针类型 {PptPointerState.Current}），本次触摸不介入手势");
+    }
+
+    private static void DiagNotSlideshow(IntPtr hwnd)    {
         var now = Environment.TickCount64;
         if (now - _lastDiagTick < 30_000) return;
         _lastDiagTick = now;
@@ -940,10 +996,25 @@ public static class PptTouch
         return true;
     }
 
+    private static uint _cachedPptPid;
+    private static bool _cachedPptResult;
+
     private static bool IsPowerPointProcess(uint pid)
     {
         if (pid == 0) return false;
 
+        // 按 pid 缓存：放映期间 PowerPoint 的进程不会变，而这里是先 OpenProcess 再跨进程取
+        // 镜像全路径 —— 钩子回调里第二贵的一步（2026-11-07，配合单击延迟一起收拾）
+        if (pid == _cachedPptPid) return _cachedPptResult;
+
+        var result = QueryIsPowerPointProcess(pid);
+        _cachedPptPid = pid;
+        _cachedPptResult = result;
+        return result;
+    }
+
+    private static bool QueryIsPowerPointProcess(uint pid)
+    {
         var handle = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
         if (handle == IntPtr.Zero) return false;
 

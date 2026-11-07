@@ -236,19 +236,44 @@ public sealed partial class ShellPage : UserControl
     private static readonly Dictionary<string, (string Text, bool Warning)> NavBadges =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["ghostfile"] = ("New", false),
+            // ── 2026-11-07：正式版首发，把 dv1.1.3 之后新增的入口全部标一遍 ──
+            // 口径：New = 这一版第一次见；Beta = 确定要做、还在打磨。
+            // ⚠️ 这张表是拿 dv1.1.3（2026-10-15 正式版）的导航逐项比对出来的
+            //    （`git show dv1.1.3:Pages/ShellPage.xaml` + 逐个页面 `git cat-file -e dv1.1.3:<路径>`）。
+            //    **1.1.3 就已经有的不标**：图片取色 / 随机抽号 / 课堂计时器 / 全屏时钟 / 编码哈希 /
+            //    自动关机 / 白板专杀 / AppData 管理 / 本机核实 / 程序专杀 / 应用卸载 /
+            //    侧边布局 / 任务进行 / 反馈中心 / 更新日志 / 设置。
+            // ⚠️ 「课堂工具 / 系统工具」两个分组父项也不标 —— 那是分组结构的变化，不是功能。
+
+            // Beta：能力边界还没跑满，先让人有预期
+            ["hubai"] = ("Beta", true),          // 对话、内联动作、模型配置都还在迭代
+            ["ppttouch"] = ("Beta", true),       // 触屏行为跟设备与 PowerPoint 版本有关
+            ["ghostfile"] = ("Beta", true),      // 删除不可逆，且部分成因只能刷新视图、清不掉条目
+
+            // New：这一版第一次出现
             ["dictionary"] = ("New", false),
             ["docs"] = ("New", false),
-            ["ppttouch"] = ("Beta", true),
+            ["function-plot"] = ("New", false),
+            ["announce"] = ("New", false),
+            ["disk-map"] = ("New", false),
+            ["equation"] = ("New", false),
+            ["chemistry"] = ("New", false),
+            ["repair"] = ("New", false),
+            ["startup"] = ("New", false),
+            ["pagefile"] = ("New", false),
+            ["sysfeatures"] = ("New", false),
+            ["systemtweaks"] = ("New", false),
         };
 
     /// <summary>
     /// 导航角标挂多久（天）：**本版本第一次运行**起算。改这个数就行。
     /// <para>
-    /// 15 天是 Nick 2026-11-04 定的口径 —— 装完头两周足够注意到，再长就变装饰。
+    /// 2026-11-07 Nick 定：**3 天**。这一版是转正式版后的第一次大更新，从 1.1.3 升上来的用户
+    /// 一口气多了十来个入口 —— 提示要看得见，但不该常驻成装饰，3 天正好。
+    /// （上一版是 15 天，2026-11-04 定的；那条已被这次取代，别再改回去。）
     /// </para>
     /// </summary>
-    private const int BadgeLifetimeDays = 15;
+    private const int BadgeLifetimeDays = 3;
 
     /// <summary>本版本还在角标有效期内（构造时算一次，一次运行中不会变）。</summary>
     private bool _badgesFresh;
@@ -754,23 +779,9 @@ public sealed partial class ShellPage : UserControl
             case "logs":
                 ContentFrame.Navigate(typeof(LogViewerPage));
                 return;
-            case "systemtweaks":
-                ContentFrame.Navigate(typeof(SystemTweaksPage));
-                return;
-            case "sysfeatures":
-                ContentFrame.Navigate(typeof(SystemFeaturesPage));
-                return;
-            case "pagefile":
-                ContentFrame.Navigate(typeof(PageFilePage));
-                return;
-            case "ppttouch":
-                // PowerPoint 触控优化（2026-11-01，需求 2）：实验性功能分组下
-                ContentFrame.Navigate(typeof(PptTouchPage));
-                return;
-            case "ghostfile":
-                // 幽灵文件清理（2026-11-03）：实验性功能分组下
-                ContentFrame.Navigate(typeof(GhostFilePage));
-                return;
+            // ⚠️ 系统优化 / 系统功能 / 虚拟内存 / PowerPoint 触控优化 / 幽灵文件清理 2026-11-07 从
+            //    「实验性功能」转正搬进 ToolCatalog 的 System 组，五个 case 已删 —— 走上面按 Id 反查那条路。
+            //    Id 与原 tag 一字不差，所以 page= 启动参数、OOBE 完成页跳转、Hub AI 的动作清单都不用改。
             case "dictionary":
                 // 查单词（需求清单第 17 条）：纯原生页，词源调度在 Services/Dictionary 里，
                 // 不经 ToolCarrier —— 它不是可替换的网页小工具，也不需要 WebView2。

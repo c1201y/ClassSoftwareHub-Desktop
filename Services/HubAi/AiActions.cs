@@ -47,6 +47,17 @@ public static class AiActionCatalog
         new("open-appearance", "打开外观设置", "\uE790", AiActionKind.Navigate, AppUri.ForSettings("appearance")),
         new("open-appdata", "打开 AppData 管理", "\uE8B7", AiActionKind.Navigate, AppUri.ForTool("appdata")),
         new("open-sysfeatures", "打开系统功能", "\uE713", AiActionKind.Navigate, AppUri.ForPage("sysfeatures")),
+
+        // ── 工具页（2026-11-07 补）：用户问「怎么开某个功能」时得有地方可送。
+        //    原来只有 6 个动作，问到 PPT 触控、查单词、文档库这类页面，模型只能空口说路径，
+        //    甚至声称「下面有按钮」却拿不出按钮（Nick 反馈的就是这个）。 ──
+        new("open-ppttouch", "打开 PowerPoint 触控优化", "\uE786", AiActionKind.Navigate, AppUri.ForPage("ppttouch")),
+        new("open-dictionary", "打开查阅单词", "\uE8D2", AiActionKind.Navigate, AppUri.ForPage("dictionary")),
+        new("open-doclib", "打开文档库", "\uE8A5", AiActionKind.Navigate, AppUri.ForPage("docs")),
+        new("open-machinecheck", "打开机器体检", "\uE9D9", AiActionKind.Navigate, AppUri.ForPage("machinecheck")),
+        new("open-uninstaller", "打开应用卸载", "\uE74D", AiActionKind.Navigate, AppUri.ForPage("uninstaller")),
+        new("open-startup", "打开开机启动项", "\uE7E8", AiActionKind.Navigate, AppUri.ForPage("startup")),
+        new("open-hubai-settings", "打开模型配置", "\uE713", AiActionKind.Navigate, AppUri.ForPage("hubai-settings")),
     };
 
     public static AiAction? Find(string? id) =>
@@ -80,7 +91,10 @@ public static class AiActionCatalog
              + "用户的问题涉及下面这些操作、并且确实要动手时调用；只是随口问问、没有要动手就不要调用。\n"
              + string.Join("\n", lines) + "\n"
              + "只放与当前问题直接相关的 1~3 个，最多 4 个。按钮点了才生效，本身不改任何东西。\n"
-             + "⛔ 只能从上面这些 id 里挑，不要自己编 id，也不要在正文里重复教用户怎么点。";
+             + "⛔ 只能从上面这些 id 里挑，不要自己编 id，也不要在正文里重复教用户怎么点。\n"
+             + "⛔⛔ 只要正文里出现「点下面的按钮」「下面的入口」「点这里」这类说法，就必须在同一次回答里调用本工具；"
+             + "清单里没有合适的 id 时，不要声称有按钮，改为直接写清入口在哪一页，让用户自己去找"
+             + "（2026-11-07：模型写了「可以点下面的按钮直接切换」，底下却一个按钮都没有）。";
     }
 
     private static JsonElement BuildSchema()

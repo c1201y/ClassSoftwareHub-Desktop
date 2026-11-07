@@ -66,9 +66,45 @@ public sealed partial class HubAiPage : Page
     /// </summary>
     public static string? PendingQuestion;
 
+    // ── 彩蛋（2026-11-07）───────────────────────────────────────────────
+    //
+    // 连点标题 6 次，Hub AI 变 Hui AI。
+    // 来历：Nick 剪宣传视频时把 HubAI 误打成了 HuiAI，索性做成彩蛋。
+    // ⛔ 这是玩笑，不要写进更新文档、不要加设置项、不要推广到别的页面；
+    //    离开本页即复原（见 OnNavigatedTo 开头）。
+    private const string NormalTitle = "Hub AI";
+    private const string EggTitle = "Hui AI";
+    private const int EggClickCount = 6;
+
+    /// <summary>两次点击间隔超过它就从零重数 —— 慢悠悠点六下不算。</summary>
+    private const int EggClickWindowMs = 600;
+
+    private int _eggClicks;
+    private long _eggLastTick;
+
+    private void Title_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        // 已经变过就不再计数，免得继续点又翻回去
+        if (TitleText.Text == EggTitle) return;
+
+        var now = Environment.TickCount64;
+        if (now - _eggLastTick > EggClickWindowMs) _eggClicks = 0;
+        _eggLastTick = now;
+
+        if (++_eggClicks < EggClickCount) return;
+
+        _eggClicks = 0;
+        TitleText.Text = EggTitle;
+    }
+
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+
+        // 彩蛋复原：每次进入本页都回到正题。Nick 的原话是「重新刷新页面它会变成 HubAI」，
+        // 所以切走再回来就还原，彩蛋只在当次停留里成立。
+        TitleText.Text = NormalTitle;
+        _eggClicks = 0;
 
         // ⛔⛔ 只在**首次**导航时初始化。切走再回来时 OnNavigatedTo 会再跑一遍，
         //    如果又去重建 ItemsSource，SelectedItem 变化会在**下一拍**才触发 SelectionChanged，
@@ -709,9 +745,14 @@ public sealed partial class HubAiPage : Page
     {
         var on = App.Settings.Current.HubAiEnabled;
 
-        // 配置好模型之后就不该再挂"尚未配置"的横幅了
-        var configured = !string.IsNullOrWhiteSpace(App.Settings.Current.HubAiBaseUrl)
-                         && !string.IsNullOrWhiteSpace(App.Settings.Current.HubAiModel);
+        // 配置好模型之后就不该再挂"尚未配置"的横幅了。
+        // ⚠️ 判据是「有没有一条真能用的模型」，不是「旧字段填过没有」：
+        //    旧字段只说明填过地址和模型名，不代表密钥存在。没有密钥时横幅必须还挂着，
+        //    否则用户会以为那是可以立刻用的内置模型（2026-11-07 Nick 反馈）。
+        var activeModel = AiModelStore.Active;
+        var configured = activeModel is not null
+                         && (activeModel.ProviderId == "local"
+                             || SecretStore.Has(activeModel.EffectiveSecretId));
 
         DisabledPanel.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
 
@@ -1581,11 +1622,22 @@ public sealed partial class HubAiPage : Page
             return;
         }
 
-        var cfg = model.ToConfig(SecretStore.Load(model.EffectiveSecretId));
+        // 密钥可能根本不存在（旧版本允许留空就保存），Load 会抛 —— 先兜住再判
+        var secret = "";
+        try { secret = SecretStore.Load(model.EffectiveSecretId); }
+        catch { secret = ""; }
+
+        var cfg = model.ToConfig(secret);
 
         if (!cfg.IsUsable)
         {
             AddNotice("当前模型的配置不完整。请到「设置 → Hub AI → 模型服务」填写服务地址与模型名称。");
+            return;
+        }
+
+        if (secret.Length == 0 && model.ProviderId != "local")
+        {
+            AddNotice($"「{model.Name}」还没有配置 API Key，暂时无法对话。请到「设置 → Hub AI → 模型服务」补上密钥。");
             return;
         }
 

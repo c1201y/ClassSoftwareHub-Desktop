@@ -97,8 +97,11 @@
                         <FontIcon Glyph="&#xE700;" FontSize="15" />
                     </Button>
 
-                    <TextBlock Grid.Column="1" Text="Hub AI" FontSize="26" FontWeight="Bold"
-                               VerticalAlignment="Center" Margin="8,0,0,0" />
+                    <!-- 标题可点：连点 6 次触发彩蛋（见 Title_Tapped）。Padding 只是把命中区撑大一点，
+                         与 Margin 相加仍是 8，视觉位置不变 -->
+                    <TextBlock x:Name="TitleText" Grid.Column="1" Text="Hub AI" FontSize="26" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="4,0,0,0" Padding="4,1"
+                               Tapped="Title_Tapped" />
 
                 </Grid>
 

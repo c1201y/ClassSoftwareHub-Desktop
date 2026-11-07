@@ -90,8 +90,40 @@ public sealed partial class SoftwarePage : Page
     {
         if (grid.ItemsPanelRoot is not ItemsWrapGrid panel) return;
 
-        var available = grid.ActualWidth - grid.Padding.Left - grid.Padding.Right;
+        // 面板自身宽度变了也要重算 —— 滚动条显隐、内边距调整这类变化不会改 grid.ActualWidth，
+        // 只订阅 grid.SizeChanged 会漏掉，于是停在"少排一列"的状态上（2026-11-07 实测就是这个）
+        if (panel.Tag is null)
+        {
+            panel.Tag = "fit-watch";
+            panel.SizeChanged += (_, _) => FitOne(grid, minWidth, height);
+        }
+
+        // ⚠️ 宽度取 ItemsHost 自己的，⛔ 不要用 grid.ActualWidth：
+        //    后者比真正能排布的区域宽十几像素（垂直滚动条与容器内边距），
+        //    按它算出的槽宽会让最后一列差一点点排不下，面板于是少排一列，
+        //    右边留出整整一列空白。
+        //    2026-11-07 磁贴视图实测：卡片槽 511、只排 2 列、右侧空 506（正好一列）。
+        var available = panel.ActualWidth;
+        if (available < 1)
+        {
+            // 首帧 ItemsHost 还没量出来，先退回容器宽度凑一帧；随后在低优先级队列里重算一次，
+            // 换成面板的真实宽度（只重试一次，靠 Tag 打标记 —— 面板始终量不出来时不能无限排队）
+            available = grid.ActualWidth - grid.Padding.Left - grid.Padding.Right;
+            if (grid.Tag is null)
+            {
+                grid.Tag = "fit-retry";
+                grid.DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    grid.Tag = null;
+                    FitOne(grid, minWidth, height);
+                });
+            }
+        }
         if (available <= minWidth) return;   // 还没量出来 / 窗口太窄 → 保持模板里的初值
+
+        // 面板偶尔会比容器还宽（测量尚未稳定）。取两者较小的，⛔ 别按虚高的宽度排布
+        var container = grid.ActualWidth - grid.Padding.Left - grid.Padding.Right;
+        if (container > 1 && container < available) available = container;
 
         var columns = Math.Max(1, (int)Math.Floor((available + CardGap) / (minWidth + CardGap)));
 
@@ -99,7 +131,8 @@ public sealed partial class SoftwarePage : Page
         // ⚠️ 不能用 (available - (columns-1)*gap)/columns 算卡片宽再加 gap：
         //    那样 N 列总共要 N×(卡宽+gap) 宽度，比可用宽度多算了最后一个 gap，
         //    面板判定"放不下"就会少排一列（2026-10-24 实测：1297 宽只排了 5 列，右边空一整列）。
-        var slot = Math.Floor(available / columns);
+        // 再减半像素：浮点累积误差下 columns×slot 可能正好等于 available，边界判定会翻车。
+        var slot = Math.Floor(available / columns) - 0.5;
 
         // 除下来比最小宽还窄（窗口宽度正好卡在临界）→ 退回"最小宽 + 间距"，
         // 让面板自己决定换行，别硬塞成一张细长卡片

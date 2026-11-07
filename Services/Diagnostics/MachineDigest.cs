@@ -99,14 +99,18 @@ public static class MachineDigest
         if (s.InstalledAppCount > 0)
         {
             sb.Append("已安装软件：").Append(s.InstalledAppCount).Append(" 款");
-            sb.AppendLine(includeInstalledApps ? "" : "（清单未发送）");
+            sb.AppendLine(includeInstalledApps ? "" : "（清单未发送，⛔ 不要据此判断某个软件有没有安装）");
         }
 
         // ⚠️ 只有显式允许时才列软件名。默认不发 —— 清单能推出使用者身份与喜好，
         //    而这份文本要离开本机。
         if (includeInstalledApps && s.InstalledAppSample.Count > 0)
         {
-            sb.Append("已安装软件样本（不完整）：")
+            // ⛔ 必须说清「这只是样本」：2026-11-07 模型对着一份截断的样本，
+            //    给出了「本机没有安装 PowerPoint，也没有 WPS」这种斩钉截铁的结论 —— 实际装了。
+            sb.Append("已安装软件样本（共 ").Append(s.InstalledAppCount).Append(" 款，下面只列 ")
+              .Append(Math.Min(AppSampleLimit, s.InstalledAppSample.Count))
+              .AppendLine(" 项；没列出来的不代表没装，⛔ 不要据此断言某个软件没安装）：")
               .AppendLine(string.Join("、", s.InstalledAppSample.Take(AppSampleLimit)));
         }
 

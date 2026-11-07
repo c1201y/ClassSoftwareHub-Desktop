@@ -108,6 +108,13 @@ public static class AiModelStore
         // 从来没配过（连地址都是空的）就不造条目
         if (string.IsNullOrWhiteSpace(settings.HubAiBaseUrl)) return;
 
+        // ⚠️ 只有地址还不够：**云端服务商必须有密钥**才能凭空造这一条，否则造出来就是个空壳。
+        //    2026-11-07 Nick 报的现象正是它：把最后一条模型删掉之后，旧字段里的地址还留着，
+        //    下一次进设置页（`Active` → 本方法）又被"迁移"回一条「DeepSeek · DeepSeek-V4.1-Flash」，
+        //    没有密钥、点了也发不出请求 —— 用户会以为那是自带的模型。
+        //    本地模型与自定义端点本来就可以不要密钥，这两种照旧迁移。
+        if (RequiresApiKey(settings.HubAiProvider) && !SecretStore.Has("default")) return;
+
         var provider = AiProviders.ById(settings.HubAiProvider);
 
         // ⚠️ 顺手修掉早期的错误模型 ID：`deepseek-v4-flash` 只是兼容别名，
@@ -137,6 +144,16 @@ public static class AiModelStore
 
         AppLog.Step("hubai", $"已把原有模型配置迁移为列表第一项：{entry.Name}");
     }
+
+    /// <summary>
+    /// 这个服务商是不是必须有密钥才能用。
+    /// <para>
+    /// ⚠️ 只有「本地模型」和「自定义」可以空着 —— 前者直连 127.0.0.1，后者可能是内网自建服务。
+    ///    其余几家都是云端付费接口，没有密钥等于一条废配置。
+    /// </para>
+    /// </summary>
+    private static bool RequiresApiKey(string? providerId)
+        => providerId is not ("local" or AiProviders.CustomId);
 
     /// <summary>
     /// 修正早期条目里的错误模型 ID 与名字。
@@ -209,6 +226,18 @@ public static class AiModelStore
             var next = App.Settings.Current.HubAiModels.FirstOrDefault();
             App.Settings.Current.HubAiActiveModelId = next?.Id;
             if (next is not null) ApplyToLegacyFields(next);
+        }
+
+        // ⚠️ 删空之后要把旧字段里的镜像一并抹掉（2026-11-07）。
+        //    旧字段（HubAiProvider/BaseUrl/Model）是给老代码读的镜像，`EnsureMigrated` 又拿
+        //    「BaseUrl 非空」判断"这是从旧版升级上来的"。留着这组值，下一次进设置页就会被当成
+        //    待迁移的老配置，凭空造回一条没有密钥的空壳（Nick 报的「删掉模型后又冒出一个
+        //    DeepSeek V4.1 Flash」）。清掉地址即断掉这条路，界面回到「还没有配置任何模型」。
+        if (App.Settings.Current.HubAiModels.Count == 0)
+        {
+            App.Settings.Current.HubAiActiveModelId = null;
+            App.Settings.Current.HubAiBaseUrl = "";
+            App.Settings.Current.HubAiModel = "";
         }
 
         App.Settings.Save();

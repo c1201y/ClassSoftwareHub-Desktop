@@ -68,53 +68,13 @@ public static class ExperimentalFeatureCatalog
             Glyph = "\uE945", Tag = "startup"
         },
 
-        // 系统优化（2026-10-31，需求 20）。⚠️ 改的是整机系统设置，猜错一个键就变成
-        //    "某功能突然不按预期"，先跑一段再说转正。
-        new ExperimentalFeature
-        {
-            Id = "systemtweaks", Name = "系统优化",
-            Desc = "任务栏、资源管理器这些整机设置，选中后一次授权统一应用",
-            Glyph = "\uE713", Tag = "systemtweaks"
-        },
-
-        // 系统功能（2026-10-31，需求 20 重做）：13 项 HKLM / powercfg 设置，排队后一次提权写入。
-        new ExperimentalFeature
-        {
-            Id = "sysfeatures", Name = "系统功能",
-            Desc = "休眠、快速启动、电源计划等系统开关，排队后一次授权写入",
-            Glyph = "\uE7E8", Tag = "sysfeatures"
-        },
-
-        // PowerPoint 触控优化（2026-11-01，需求 2）：放映时轻点翻页。
-        // ⚠️ 为啥塞实验性：它挂的是全局鼠标钩子、补的是真实点击，行为跟触屏驱动/PPT 版本有关，
-        //    先跑一段看看再决定转正。
-        new ExperimentalFeature
-        {
-            Id = "ppttouch", Name = "PowerPoint 触控优化",
-            Desc = "放映时轻点屏幕翻到下一页，视频与按钮照常响应",
-            Glyph = "\uE786", Tag = "ppttouch"
-        },
-
-        // 虚拟内存（2026-10-31，需求 19）：搬系统的「虚拟内存」对话框。
-        // ⚠️ 单独一页不并进「系统功能」：它改的是逐个驱动器的初始/最大值，形态完全不同，
-        //    而且改完必须重启，风险等级也不一样。
-        new ExperimentalFeature
-        {
-            Id = "pagefile", Name = "虚拟内存",
-            Desc = "逐个驱动器设置分页文件大小，重启后生效",
-            Glyph = "\uEDA2", Tag = "pagefile"
-        },
-
-        // 幽灵文件清理（2026-11-03）：文件删了、图标还在、双击提示找不到路径的那一类。
-        // ⚠️ 为啥塞实验性：删除是**永久**的（这些怪名字进不了回收站），一旦误删没法还原。
-        //    另外"幽灵"有多种成因，其中资源管理器显示缓存那一路本程序只能刷新视图，清不掉条目 ——
-        //    先跑一段，确认口径不会让用户误以为"所有删不掉的文件它都能处理"。
-        new ExperimentalFeature
-        {
-            Id = "ghostfile", Name = "幽灵文件清理",
-            Desc = "清理删不掉、双击提示找不到路径的残留条目",
-            Glyph = "\uE7C4", Tag = "ghostfile"
-        },
+        // ── 2026-11-07 从本表移出（Nick：这五个不必再挂实验性） ──
+        // 系统优化 systemtweaks / 系统功能 sysfeatures / PowerPoint 触控优化 ppttouch /
+        // 虚拟内存 pagefile / 幽灵文件清理 ghostfile
+        // ⚠️ 搬到了 <see cref="ToolCatalog"/> 的 System 组（与 2026-10-29 那三个同一套搬法），
+        //    导航子项、工具索引页卡片、搜索索引都由那张表生成。
+        // ⚠️ 页面上的「实验性功能」标记不用动 —— <c>Controls/ExperimentalBadge</c> 查不到就自动收起。
+        // ⚠️ 其中 ppttouch 默认占一级导航，位置在 <see cref="NavLayout.Pages"/>（可被用户收进分组）。
     };
 
     /// <summary>

@@ -32,14 +32,15 @@ public static class ShellConfig
     ///
     /// ⚠️ 基数不随便抬（否则旧包会被强制顶掉）。
     /// </summary>
-    public const string ShellVersion = "1.2.0-insider1.11";
+    public const string ShellVersion = "1.2.0";
 
     /// <summary>当前是不是预览（内测）构建 —— 版本号里带 <c>insider</c> 即为真。</summary>
     public static bool IsInsider =>
         ShellVersion.Contains("insider", System.StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// **给用户看的**版本号：内部的 <c>-insider1.11</c> 显示成 <c>-Pr1.11</c>（2026-11-06 Nick 定）。
+    /// **给用户看的**版本号：内部预览版的 <c>-insider</c> 显示成 <c>-Pr</c>（2026-11-06 Nick 定）。
+    /// 正式版不带该后缀，此处原样返回。
     ///
     /// <para>
     /// 为什么两套：发布通道、tag、安装包文件名、更新比较全都沿用 <c>insider</c> 那套机制，

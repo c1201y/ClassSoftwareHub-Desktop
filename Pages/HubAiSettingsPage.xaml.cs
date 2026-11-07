@@ -168,7 +168,9 @@ public sealed partial class HubAiSettingsPage : Page
 
             if (!isActive)
             {
-                var use = new Button { Content = "使用" };
+                // 没密钥的模型不给「使用」：点了也用不了，还会让人以为已经在用它
+                var use = new Button { Content = "使用", IsEnabled = hasKey };
+                if (!hasKey) ToolTipService.SetToolTip(use, "这条模型还没有配置密钥，暂时无法使用");
                 use.Click += (_, _) =>
                 {
                     AiModelStore.Activate(entryId);
@@ -247,7 +249,35 @@ public sealed partial class HubAiSettingsPage : Page
         providerCombo.Items.Add(new ComboBoxItem { Content = "本地模型（Ollama / LM Studio）", Tag = "local" });
         providerCombo.Items.Add(new ComboBoxItem { Content = "自定义（兼容 OpenAI 协议）", Tag = "custom" });
 
-        var keyBox = new PasswordBox { Header = "API Key", PlaceholderText = "粘贴服务商提供的密钥" };
+        // ⛔ 已配置过密钥的模型，不能再摆一个空白的密码框：密钥用 DPAPI 加密存在本机、
+        //    本来就不可查看，空白框只会让用户以为「这条模型没配密钥」
+        //    （2026-11-07 Nick 反馈的原话就是这个）。改成显式写「已配置」，另给一个「更换密钥」入口。
+        var hasSavedKey = existing is not null && SecretStore.Has(existing.EffectiveSecretId);
+        var keyEditing = false;
+
+        var keyTitle = new TextBlock { Text = "API Key", FontSize = 12, Opacity = 0.8 };
+
+        var keyBox = new PasswordBox { PlaceholderText = "粘贴服务商提供的密钥" };
+
+        var keyStateText = new TextBlock
+        {
+            Text = "已配置。密钥加密保存在本机，不可查看。",
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.75,
+        };
+
+        var changeKeyButton = new Button { Content = "更换密钥" };
+
+        var keyConfiguredRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        keyConfiguredRow.Children.Add(changeKeyButton);
+        keyConfiguredRow.Children.Add(keyStateText);
+
+        var keyPanel = new StackPanel { Spacing = 6 };
+        keyPanel.Children.Add(keyTitle);
+        keyPanel.Children.Add(keyConfiguredRow);
+        keyPanel.Children.Add(keyBox);
 
         var modelCombo = new ComboBox
         {
@@ -305,7 +335,7 @@ public sealed partial class HubAiSettingsPage : Page
 
         var panel = new StackPanel { Spacing = 14, MinWidth = 400 };
         panel.Children.Add(providerCombo);
-        panel.Children.Add(keyBox);
+        panel.Children.Add(keyPanel);
         panel.Children.Add(modelCombo);
         panel.Children.Add(urlBox);
         panel.Children.Add(advanced);
@@ -333,10 +363,19 @@ public sealed partial class HubAiSettingsPage : Page
             var isCustom = providerId == "custom";
 
             // 本地模型不校验密钥；自定义才需要手填地址
-            keyBox.Visibility = isLocal ? Visibility.Collapsed : Visibility.Visible;
+            keyPanel.Visibility = isLocal ? Visibility.Collapsed : Visibility.Visible;
             urlBox.Visibility = isLocal || isCustom ? Visibility.Visible : Visibility.Collapsed;
 
-            keyBox.PlaceholderText = isLocal ? "本地模型通常不需要密钥" : "粘贴服务商提供的密钥";
+            // 同一家供应商、密钥已经存过、用户也没点「更换密钥」→ 显示「已配置」而不是空白框。
+            // 换了供应商就必须重填：密钥是按厂商签发的，不能拿 A 家的去测 B 家。
+            var configured = !isLocal
+                             && existing is not null
+                             && existing.ProviderId == providerId
+                             && hasSavedKey
+                             && !keyEditing;
+
+            keyConfiguredRow.Visibility = configured ? Visibility.Visible : Visibility.Collapsed;
+            keyBox.Visibility = configured ? Visibility.Collapsed : Visibility.Visible;
 
             modelCombo.Items.Clear();
             foreach (var model in provider.Models)
@@ -358,6 +397,13 @@ public sealed partial class HubAiSettingsPage : Page
         }
 
         providerCombo.SelectionChanged += (_, _) => SyncProvider();
+
+        changeKeyButton.Click += (_, _) =>
+        {
+            keyEditing = true;
+            SyncProvider();
+            keyBox.Focus(FocusState.Programmatic);
+        };
 
         // 回填：先把选项摆好，再让 filling=false，避免回填过程触发"切换供应商"的副作用
         var initialProvider = existing?.ProviderId ?? "deepseek";
@@ -397,6 +443,13 @@ public sealed partial class HubAiSettingsPage : Page
 
             var key = keyBox.Password?.Trim() ?? "";
 
+            // 「已配置」状态下输入框是空的，测试时要用本机存着的那把，而不是拿空串去撞
+            if (key.Length == 0 && existing is not null && existing.ProviderId == providerId)
+            {
+                try { key = SecretStore.Load(existing.EffectiveSecretId); }
+                catch { key = ""; }
+            }
+
             if (baseUrl.Length == 0 || model.Length == 0)
             {
                 statusText.Text = "请先填写服务地址与模型名称。";
@@ -420,6 +473,31 @@ public sealed partial class HubAiSettingsPage : Page
             {
                 testButton.IsEnabled = true;
             }
+        };
+
+        // ⛔ 没填密钥不许保存。以前允许留空，于是列表里能躺着一条「看着配好了、实际用不了」的模型，
+        //    用户会以为那是应用自带的（2026-11-07 Nick 反馈）。拦在对话框里面，
+        //    不要等对话框关掉再拿 InfoBar 报错 —— 那样用户还得重新打开填一遍。
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            if (providerCombo.SelectedItem is not ComboBoxItem { Tag: string providerId })
+            {
+                args.Cancel = true;
+                return;
+            }
+
+            if (providerId == "local") return;   // 本地模型不要密钥
+
+            var typed = keyBox.Password?.Trim() ?? "";
+            var reuse = existing is not null
+                        && existing.ProviderId == providerId
+                        && SecretStore.Has(existing.EffectiveSecretId);
+
+            if (typed.Length > 0 || reuse) return;
+
+            args.Cancel = true;
+            statusText.Text = "还差一步：填写 API Key，否则这条模型保存后无法使用。";
+            keyBox.Focus(FocusState.Programmatic);
         };
 
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
@@ -460,8 +538,14 @@ public sealed partial class HubAiSettingsPage : Page
         var key = keyBox.Password?.Trim() ?? "";
         if (key.Length > 0) SecretStore.Save(key, entry.EffectiveSecretId);
 
-        // 新加的第一条自动设为当前
-        if (!editing) AiModelStore.Activate(entry.Id);
+        // 这条保存之后到底能不能用？本地模型不看密钥，其余要有「这次填的」或「原本存着的」
+        var usable = saveProviderId == "local"
+                     || key.Length > 0
+                     || (existing is not null && existing.ProviderId == saveProviderId
+                         && SecretStore.Has(existing.EffectiveSecretId));
+
+        // 新加的第一条自动设为当前；没有密钥的**不抢**这个位置，否则用户以为它已经在用了
+        if (!editing && usable) AiModelStore.Activate(entry.Id);
 
         RenderModelList();
         ShowResult(true, editing ? "模型已更新。" : "模型已添加。");
