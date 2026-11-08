@@ -57,8 +57,29 @@ public static class DocReading
 
                 case DocListBlock list:
                     foreach (var item in list.Items)
-                        text.Append(' ', item.Level * 2).Append(item.Marker).Append(' ')
-                            .AppendLine(Plain(item.Runs));
+                    {
+                        text.Append(' ', item.Level * 2);
+
+                        // 任务列表的 Marker 是空的（界面上画勾选框），转文字时要还原成 - [ ] / - [x]
+                        if (item.Checked is bool done)
+                            text.Append(done ? "- [x] " : "- [ ] ");
+                        else
+                            text.Append(item.Marker).Append(' ');
+
+                        text.AppendLine(Plain(item.Runs));
+                    }
+                    text.AppendLine();
+                    break;
+
+                case DocTableBlock table:
+                    // 交回 Markdown 表格形式：模型对这种结构最熟，也不会丢掉列与列的对应关系
+                    foreach (var row in table.Rows)
+                    {
+                        text.Append("| ");
+                        foreach (var cell in row.Cells)
+                            text.Append(Plain(cell.Runs)).Append(" | ");
+                        text.AppendLine();
+                    }
                     text.AppendLine();
                     break;
 

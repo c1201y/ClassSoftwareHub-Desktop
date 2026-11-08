@@ -21,7 +21,7 @@ namespace ClassSoftwareHub.Desktop.Controls;
 
 /// <summary>
 /// 文档正文渲染（需求 15）。把 <see cref="DocContent"/> 变成原生控件：
-/// 标题 / 段落 / 列表 / 引用 / 代码块 / 图片，PDF 则逐页渲染成图片。
+/// 标题 / 段落 / 列表（含任务列表）/ 引用 / 代码块 / 表格 / 图片，PDF 则逐页渲染成图片。
 ///
 /// <para>
 /// ⛔ 不引第三方 Markdown / Word / PDF 库：Markdown 与 docx 自己解析（见同名解析器），
@@ -130,6 +130,10 @@ public sealed class DocView : UserControl
                     _host.Children.Add(BuildCode(code));
                     break;
 
+                case DocTableBlock table:
+                    AddTable(table);
+                    break;
+
                 case DocImageBlock image:
                     AddImage(image);
                     break;
@@ -209,16 +213,28 @@ public sealed class DocView : UserControl
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var marker = new TextBlock
-            {
-                Text = item.Marker,
-                FontSize = 15,
-                LineHeight = 27,
-                MinWidth = 14,
-                Margin = new Thickness(0, 0, 8, 0),
-                VerticalAlignment = VerticalAlignment.Top,
-                Opacity = 0.7,
-            };
+            // 任务列表项画勾选框，普通项画符号。两者都钉在第一行的高度上，
+            // 否则多行内容会把这个符号顶到整块的垂直中间去。
+            FrameworkElement marker = item.Checked is bool done
+                ? new FontIcon
+                {
+                    Glyph = done ? "\uE73A" : "\uE739",
+                    FontSize = 14,
+                    MinWidth = 14,
+                    Margin = new Thickness(0, 5, 8, 0),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Opacity = done ? 0.85 : 0.5,
+                }
+                : new TextBlock
+                {
+                    Text = item.Marker,
+                    FontSize = 15,
+                    LineHeight = 27,
+                    MinWidth = 14,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Opacity = 0.7,
+                };
 
             var content = BuildText(item.Runs, bottomMargin: 0);
 
@@ -250,6 +266,41 @@ public sealed class DocView : UserControl
 
     private static Border BuildCode(DocCodeBlock code)
     {
+        var stack = new StackPanel();
+
+        // 语言标记（```powershell 这种）。不参与语法高亮，只是让读者知道该在哪儿执行
+        if (code.Language is { Length: > 0 } language)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = language,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 11.5,
+                Opacity = 0.5,
+                Margin = new Thickness(0, 0, 0, 6),
+                IsTextSelectionEnabled = true,
+            });
+        }
+
+        // ⛔ 不要 Wrap：命令行按宽度折行之后，读者复制出来会多出换行，照着敲就错了。
+        // 长命令改为在本块内部横向滚动，外层页面仍是纵向滚动，两个方向不冲突。
+        stack.Children.Add(new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollMode = ScrollMode.Enabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollMode = ScrollMode.Disabled,
+            Content = new TextBlock
+            {
+                Text = code.Text,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 13,
+                LineHeight = 20,
+                TextWrapping = TextWrapping.NoWrap,
+                IsTextSelectionEnabled = true,
+            },
+        });
+
         return new Border
         {
             Background = Res("CardBackgroundFillColorDefaultBrush"),
@@ -259,16 +310,145 @@ public sealed class DocView : UserControl
             Padding = new Thickness(14, 10, 14, 12),
             Margin = new Thickness(0, 4, 0, 14),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Child = new TextBlock
+            Child = stack,
+        };
+    }
+
+    // ── 表格 ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 表格：一张 Grid 打底，每个单元格是一圈右下描边的 Border，外层再套一圈整框。
+    ///
+    /// <para>
+    /// 列宽按各列内容长度分权重（全角算 2、半角算 1），夹在 1~3 之间：
+    /// 等分会让短列浪费宽度、长列挤成竖排；纯按内容分又会让一列吃掉整张表。
+    /// 正文区最大 960 宽且外层不允许横向滚动，所以列宽只有这一条路可选。
+    /// </para>
+    /// </summary>
+    private void AddTable(DocTableBlock table)
+    {
+        if (table.Rows.Count == 0) return;
+
+        var columns = 0;
+        foreach (var row in table.Rows) columns = Math.Max(columns, row.Cells.Count);
+        if (columns == 0) return;
+
+        var grid = new Grid();
+
+        var weights = ColumnWeights(table.Rows, columns);
+        for (var c = 0; c < columns; c++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition
             {
-                Text = code.Text,
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 13,
-                LineHeight = 20,
-                TextWrapping = TextWrapping.Wrap,
-                IsTextSelectionEnabled = true,
+                Width = new GridLength(weights[c], GridUnitType.Star),
+            });
+
+        for (var r = 0; r < table.Rows.Count; r++)
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        for (var r = 0; r < table.Rows.Count; r++)
+        {
+            var isHeader = r == 0;
+            for (var c = 0; c < columns; c++)
+            {
+                var runs = c < table.Rows[r].Cells.Count
+                    ? table.Rows[r].Cells[c].Runs
+                    : Array.Empty<DocRun>();
+
+                var align = c < table.Alignments.Count ? table.Alignments[c] : DocAlign.Left;
+                var cell = BuildCell(runs, align, isHeader);
+
+                // 只画右、下两条，最后一行/列不画：相邻单元格共用一条线，
+                // 每格都画整框的话交界处会变成 2px 的双线。
+                cell.BorderThickness = new Thickness(
+                    0,
+                    0,
+                    c == columns - 1 ? 0 : 1,
+                    r == table.Rows.Count - 1 ? 0 : 1);
+
+                Grid.SetRow(cell, r);
+                Grid.SetColumn(cell, c);
+                grid.Children.Add(cell);
+            }
+        }
+
+        _host.Children.Add(new Border
+        {
+            BorderBrush = Res("CardStrokeColorDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Margin = new Thickness(0, 6, 0, 16),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Child = grid,
+        });
+    }
+
+    private static Border BuildCell(
+        IReadOnlyList<DocRun> runs, DocAlign align, bool header)
+    {
+        var text = new RichTextBlock
+        {
+            FontSize = 14,
+            LineHeight = 22,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+            FontWeight = header ? FontWeights.SemiBold : FontWeights.Normal,
+            TextAlignment = align switch
+            {
+                DocAlign.Center => TextAlignment.Center,
+                DocAlign.Right => TextAlignment.Right,
+                _ => TextAlignment.Left,
             },
         };
+
+        var paragraph = new Paragraph();
+
+        // ⛔ 表头加粗要显式落在 Paragraph 上：只设 RichTextBlock.FontWeight 时，
+        // 段落内部的行默认样式会把它盖掉，表现为「表头不加粗」。
+        if (header) paragraph.FontWeight = FontWeights.SemiBold;
+
+        AppendRuns(paragraph.Inlines, runs);
+        text.Blocks.Add(paragraph);
+
+        return new Border
+        {
+            Padding = new Thickness(12, 9, 12, 10),
+            Background = header ? Res("SubtleFillColorSecondaryBrush") : null,
+            Child = text,
+        };
+    }
+
+    private static double[] ColumnWeights(
+        IReadOnlyList<DocTableRow> rows, int columns)
+    {
+        var longest = new double[columns];
+        for (var c = 0; c < columns; c++) longest[c] = 1;
+
+        foreach (var row in rows)
+        {
+            for (var c = 0; c < columns && c < row.Cells.Count; c++)
+            {
+                var width = 0;
+                foreach (var run in row.Cells[c].Runs) width += DisplayWidth(run.Text);
+                longest[c] = Math.Max(longest[c], width);
+            }
+        }
+
+        var weights = new double[columns];
+        for (var c = 0; c < columns; c++)
+        {
+            // 12 个半角字符约等于一份基准宽度；上下限防止极端内容把比例拉爆
+            weights[c] = Math.Clamp(longest[c] / 12.0, 1.0, 3.0);
+        }
+
+        return weights;
+    }
+
+    /// <summary>粗略估算显示宽度：全角按 2，半角按 1。</summary>
+    private static int DisplayWidth(string text)
+    {
+        var width = 0;
+        foreach (var ch in text) width += ch >= 0x2E80 ? 2 : 1;
+        return width;
     }
 
     // ── 图片 ─────────────────────────────────────────────────────
@@ -422,6 +602,7 @@ public sealed class DocView : UserControl
         if (style.Bold) run.FontWeight = FontWeights.SemiBold;
         if (style.Italic) run.FontStyle = Windows.UI.Text.FontStyle.Italic;
         if (style.Code) run.FontFamily = new FontFamily("Consolas");
+        if (style.Strike) run.TextDecorations = Windows.UI.Text.TextDecorations.Strikethrough;
     }
 
     private static TextBlock Notice(string text) => new()

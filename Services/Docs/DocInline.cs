@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace ClassSoftwareHub.Desktop.Services.Docs;
 
 /// <summary>
-/// 行内解析：<c>**粗体**</c>、<c>*斜体*</c>、`` `代码` ``、<c>[文字](链接)</c>、<c>&lt;链接&gt;</c>，
+/// 行内解析：<c>**粗体**</c>、<c>*斜体*</c>、<c>~~删除线~~</c>、`` `代码` ``、<c>[文字](链接)</c>、<c>&lt;链接&gt;</c>，
 /// 以及"裸链接自动变成链接"（<c>https://</c> / <c>csh://</c> / <c>ms-settings:</c>）。
 ///
 /// <para>
@@ -28,7 +28,8 @@ internal static class DocInline
 
     /// <summary>把一段行内文本拆成 run。</summary>
     /// <param name="link">外层链接（递归时带上，段落里的子文本都继承它）。</param>
-    public static List<DocRun> Parse(string? text, string? link = null, bool bold = false, bool italic = false)
+    public static List<DocRun> Parse(
+        string? text, string? link = null, bool bold = false, bool italic = false, bool strike = false)
     {
         var runs = new List<DocRun>();
         var plain = new StringBuilder();
@@ -37,7 +38,7 @@ internal static class DocInline
         void Flush()
         {
             if (plain.Length == 0) return;
-            AppendPlain(runs, plain.ToString(), link, bold, italic);
+            AppendPlain(runs, plain.ToString(), link, bold, italic, strike);
             plain.Clear();
         }
 
@@ -81,9 +82,22 @@ internal static class DocInline
             if (ch == '[' && TryReadLink(source, i, out var label, out var url, out var afterLink))
             {
                 Flush();
-                runs.AddRange(Parse(label, url, bold, italic));
+                runs.AddRange(Parse(label, url, bold, italic, strike));
                 i = afterLink;
                 continue;
+            }
+
+            // 删除线：~~…~~
+            if (ch == '~' && i + 1 < source.Length && source[i + 1] == '~')
+            {
+                var end = source.IndexOf("~~", i + 2, StringComparison.Ordinal);
+                if (end > i + 2)
+                {
+                    Flush();
+                    runs.AddRange(Parse(source[(i + 2)..end], link, bold, italic, true));
+                    i = end + 2;
+                    continue;
+                }
             }
 
             // 加粗：**…** / __…__
@@ -94,7 +108,7 @@ internal static class DocInline
                 if (end > i + 2)
                 {
                     Flush();
-                    runs.AddRange(Parse(source[(i + 2)..end], link, true, italic));
+                    runs.AddRange(Parse(source[(i + 2)..end], link, true, italic, strike));
                     i = end + 2;
                     continue;
                 }
@@ -108,7 +122,7 @@ internal static class DocInline
                 if (end > i + 1 && !char.IsWhiteSpace(source[i + 1]) && !char.IsWhiteSpace(source[end - 1]))
                 {
                     Flush();
-                    runs.AddRange(Parse(source[(i + 1)..end], link, bold, true));
+                    runs.AddRange(Parse(source[(i + 1)..end], link, bold, true, strike));
                     i = end + 1;
                     continue;
                 }
@@ -141,13 +155,13 @@ internal static class DocInline
 
     /// <summary>裸链接识别（txt 和 Markdown 里的普通文字都走它）。</summary>
     private static void AppendPlain(
-        List<DocRun> runs, string text, string? link, bool bold, bool italic)
+        List<DocRun> runs, string text, string? link, bool bold, bool italic, bool strike = false)
     {
         if (text.Length == 0) return;
 
         if (link is not null)
         {
-            runs.Add(new DocRun(text, link, bold, italic));
+            runs.Add(new DocRun(text, link, bold, italic, Strike: strike));
             return;
         }
 
@@ -158,12 +172,14 @@ internal static class DocInline
             if (url.Length == 0) continue;
 
             var start = match.Index;
-            if (start > cursor) runs.Add(new DocRun(text[cursor..start], null, bold, italic));
-            runs.Add(new DocRun(url, url, bold, italic));
+            if (start > cursor)
+                runs.Add(new DocRun(text[cursor..start], null, bold, italic, Strike: strike));
+            runs.Add(new DocRun(url, url, bold, italic, Strike: strike));
             cursor = start + url.Length;
         }
 
-        if (cursor < text.Length) runs.Add(new DocRun(text[cursor..], null, bold, italic));
+        if (cursor < text.Length)
+            runs.Add(new DocRun(text[cursor..], null, bold, italic, Strike: strike));
     }
 
     /// <summary>
