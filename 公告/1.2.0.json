@@ -1,9 +1,8 @@
 [
   {
     "id": "serverbuggy",
-    "level": "error",
-    "title": "自建加速服务通道失效",
-    "body": "自建加速服务通道等网络服务失效，全国不可用，恢复时间未知，急用者可以先使用steam++（watt toolkit）为GitHub下载加速",
+    "level": "success",
+    "title": "GitHub下载已恢复，如果愿意使用 GitHub 下载源的，可以使用 Steam++（watt toolkit）加速。",
     "link":"https://apps.microsoft.com/detail/9mtcfhs560ng?hl=zh-CN&gl=CN"
   }
 ]
