@@ -1,8 +1,8 @@
 [
   {
     "id": "serverbuggy",
-    "level": "success",
+    "info": "success",
     "title": "GitHub下载已恢复，如果愿意使用 GitHub 下载源的，可以使用 Steam++（watt toolkit）加速。",
-    "link":"https://apps.microsoft.com/detail/9mtcfhs560ng?hl=zh-CN&gl=CN"
+    "linkText":"https://apps.microsoft.com/detail/9mtcfhs560ng?hl=zh-CN&gl=CN"
   }
 ]
