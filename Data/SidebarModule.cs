@@ -18,21 +18,17 @@ public static class SidebarModuleKinds
     /// 每个工具在侧边栏里是**各自独立的一项**（Nick 10-18 定：不要合并成一个「学科」入口）。
     /// </summary>
     public const string Window = "window";
-    /// <summary>讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。</summary>
-    public const string Action = "action";
-
     /// <summary>
-    /// 开关型动作（2026-11-08 加，目前只有「PowerPoint 触控」）：每按一下切换一次开 / 关，
-    /// 按钮上用**强调色底**表示正在运行。
+    /// 讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。
     /// <para>
-    /// 为什么要单独一类而不是复用 <see cref="Action"/>：开关有"当前状态"这个维度，
-    /// 侧边栏渲染时要按状态上色，切换后还要把状态刷回去。混在动作里就得每个动作都判一次 id。
-    /// </para>
-    /// <para>
-    /// 具体读写哪一项由 <c>Services/SidebarToggles</c> 按 id 分派 —— 那边加开关不用改侧边栏。
+    /// ⚠️ 少数几项不是"一按就干完"，而是**先弹一个二级菜单**让用户挑（目前是「安全选项」与
+    /// 「快捷入口」）。它们同样记作 Action，只是 id 在 <c>ToolSidebarWindow.Tool_Click</c> 里
+    /// 单独分派 —— 刻意不为此加一个 Kind：二级菜单跟"按一下就干活"在清单、排序、
+    /// 侧边布局页里完全是同一套行为，只差点击那一瞬间。
     /// </para>
     /// </summary>
-    public const string Toggle = "toggle";
+    public const string Action = "action";
+
     /// <summary>
     /// 单滑块浮窗（音量 / 屏幕亮度）：不外跳，在边条**挨着的那一侧**弹一栏浮窗。
     ///
@@ -107,7 +103,6 @@ public sealed class SidebarModule
         SidebarModuleKinds.Page => "打开主窗口中的该页面",
         SidebarModuleKinds.Window => "在独立窗口中打开，不必拉出主界面",
         SidebarModuleKinds.Action => "单击即执行，不切换窗口、不抢占焦点",
-        SidebarModuleKinds.Toggle => "单击切换开启与关闭，按钮高亮表示正在运行",
         SidebarModuleKinds.Panel => "在侧边栏旁显示面板，不切换窗口、不占用主界面",
         _ => "显示浮窗，不占用主界面"
     };
@@ -160,16 +155,19 @@ public static class SidebarModules
 
         // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
 
-        // 常用系统入口四件套（2026-11-08 Nick 要）：文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑。
-        // 都放在动作组**最前面** —— 这四件事上课时随手就要用，比下面那几颗更常用。
-        // ⚠️ 「锁定电脑」原本只在「安全选项」的弹出菜单里（那条是 Ctrl+Alt+Del 界面的平移），
-        //    但锁屏是最高频的一个，Nick 要一颗直接按的，所以单列（动作 id 仍复用 TeachingActions 的 lock）。
-        new() { Id = "explorer", Name = "文件资源管理器", ShortName = "文件", LongName = "资源管理", Glyph = "\uE8B7", Kind = SidebarModuleKinds.Action, Note = "打开文件资源管理器，等同按 Win+E" },
-        new() { Id = "run", Name = "运行", ShortName = "运行", LongName = "运行命令", Glyph = "\uE756", Kind = SidebarModuleKinds.Action, Note = "打开「运行」对话框，等同按 Win+R；可输入 ms-settings:、cmd、devmgmt.msc 等" },
-        // ⚠️ 屏幕键盘是系统自带的 osk.exe，不是应用自己画的 —— 它本身就带 UIAccess，
-        //    在锁屏界面之外的地方都能用；本程序只负责把它叫起来。
-        new() { Id = "osk", Name = "屏幕键盘", ShortName = "键盘", LongName = "屏幕键盘", Glyph = "\uE765", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 自带的屏幕键盘（触摸设备上替代实体键盘输入）" },
-        new() { Id = "lock", Name = "锁定电脑", ShortName = "锁屏", LongName = "锁定电脑", Glyph = "\uE72E", Kind = SidebarModuleKinds.Action, Note = "立即锁定屏幕，等同按 Win+L；解锁需输入当前账户的密码或 PIN" },
+        // 「快捷入口」（2026-11-08 Nick 要）：文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑
+        // 四件事加上 PowerPoint 触控的两个开关，**合成一项、单击弹二级菜单**。
+        //
+        // 为什么不是五个独立按钮（初版就是那么做的，Nick 当天否掉）：
+        //   · 侧边栏是讲课中途一直挂着的一排，位置很贵 —— 多五颗会把原有的工具挤走；
+        //   · 这五件都是"偶尔用一下"，不是每分钟都按，占一级位置不划算；
+        //   · 「安全选项」早就是"弹菜单挑一项"的形态，同一套手势用户不用重新学。
+        // 菜单本体在 <c>Views/ToolSidebarWindow.ShowQuickFlyout</c>（原生 Flyout + 原生控件）。
+        //
+        // ⚠️ 它的 Kind 就是 Action，没有单独一类 —— 清单、排序、侧边布局页都按普通动作处理，
+        //    只有点击那一下走弹菜单分支（按 id 分派，与「安全选项」同一个做法）。
+        // ⚠️ 放动作组**最前面**：上课时随手就要用，比任务管理器那批更常用。
+        new() { Id = "quickmenu", Name = "快捷入口", ShortName = "快捷", LongName = "快捷入口", Glyph = "\uE71D", Kind = SidebarModuleKinds.Action, Note = "单击弹出菜单：文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑，以及 PowerPoint 触控的开关（触控手势、长按菜单）" },
 
         // 系统快捷三件套（2026-10-11 Nick 要）：任务管理器 / 安全选项 / 剪贴板历史。
         // 都插在动作组最前面（跟 rev1 递音量同一个位置约定），紧挨着工具组下沿，好找。
@@ -211,17 +209,12 @@ public static class SidebarModules
         // ⚠️ 安全闸在 EasiNoteGuard 里：**有可见窗口的一律放过**（老师正开着白板讲课就不动它）。
         new() { Id = "killseewo", Name = "结束希沃白板", ShortName = "杀希沃", LongName = "结束希沃", Glyph = "\uEA99", Kind = SidebarModuleKinds.Action, Note = "立刻结束希沃白板5 后台滞留的残留进程（等同「白板专杀」页上的「立即结束」）。有可见窗口的一律放过，不会打断正在讲课的白板。按时间点自动清理那套在「实验性功能 → 白板专杀」里设置" },
 
-        // 「PowerPoint 触控」开关（2026-11-08 Nick 要）：一颗**随时关掉**的保险。
+        // 「PowerPoint 触控」的两个开关不在侧边栏上单列，收在「快捷入口」的二级菜单里（见上面那条注释）。
         //
         // 来由：这功能改的是全局输入行为（放映时轻点翻页、长按弹菜单），靠触屏实测才能验证，
-        // 现在还谈不上广泛验证过。真在课堂上出岔子（比如轻点被误判成翻页、或某个一体机的
-        // 触摸报文不按常规来），老师得能在**不离开放映、不开设置页**的前提下立刻关掉它 ——
-        // 打开「PPT 触控优化」页去关，那一步在讲课中途太远了。
-        //
-        // ⚠️ 放动作组**最末尾**：它是"出问题才去按"的按钮，不该占常用位置。
-        // ⚠️ 状态由 SidebarToggles 统一读写（写入的是 ppt-touch.json 的 Enabled，
-        //    与设置页那个开关是**同一份**状态，两边随时互相看得到）。
-        new() { Id = "ppttouch", Name = "PowerPoint 触控", ShortName = "PPT", LongName = "PPT 触控", Glyph = "\uE786", Kind = SidebarModuleKinds.Toggle, Note = "开启或关闭放映时的触控手势（轻点翻页、上下滑换页、长按弹菜单）。按钮高亮表示正在运行；同一个开关也在「PowerPoint 触控优化」页里" },
+        // 现在还谈不上广泛验证过。真在课堂上出岔子，老师得能在**不离开放映、不开设置页**的
+        // 前提下立刻关掉 —— 打开「PPT 触控优化」页去关，那一步在讲课中途太远了。
+        // 二级菜单里给的是两项：触控手势总开关（停止整个功能）与长按菜单（只关掉长按弹菜单）。
 
         // 「最小化全部窗口」已删（2026-09-25）：「回到桌面」在 Windows 上做的事跟它一模一样（都是把窗口全收起来、再按一次还原），
         // 两个按钮一个效果，留着只会让人问「有区别吗」。要恢复就把这行抄回去。

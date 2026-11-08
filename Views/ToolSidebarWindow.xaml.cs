@@ -247,20 +247,14 @@ public sealed partial class ToolSidebarWindow : Window
     /// <summary>展开面板里的工具按钮（按「侧边布局」的模块清单动态生成，见 BuildToolButtons）。</summary>
     private readonly List<Button> _toolButtons = new();
 
-    /// <summary>
-    /// 开关型模块的底色胶囊（2026-11-08）：id → 那层 Border。
-    /// <para>
-    /// 开着时把它刷成强调色 15% 底，关掉时刷回透明。**底色画在 Border 上而不是 Button.Background**：
-    /// 按钮自己的背景会被 PointerOver 等视觉状态接管，鼠标一移过去高亮就没了 —— 那样就看不出开着。
-    /// </para>
-    /// </summary>
-    private readonly Dictionary<string, Border> _toggleChips = new();
-
     /// <summary>当前那个"要先问一句"的原生 Flyout（一次只有一个）。</summary>
     private Flyout? _confirmFlyout;
 
     /// <summary>「安全选项」那颗键弹出来的菜单浮层（锁定 / 切换用户 / 注销）。</summary>
     private Flyout? _securityFlyout;
+
+    /// <summary>「快捷入口」那颗键弹出来的菜单浮层（四个系统入口 + 两个触控开关）。</summary>
+    private Flyout? _quickFlyout;
 
     /// <summary>「收起」键的那个图标（内容会按贴边重建，所以要留住当前这个实例才好换箭头方向）。</summary>
     private FontIcon? _foldIcon;
@@ -516,7 +510,7 @@ public sealed partial class ToolSidebarWindow : Window
     ///   再点别处边条再也不缩回去」就是这个）。所以凡是在"压制中弹过浮层"的地方，
     /// 收尾都必须显式调一次它。
     ///
-    /// ⚠️ 自己会判"还有没有别的浮层挂着"（<c>_confirmFlyout</c> / <c>_securityFlyout</c>）——
+    /// ⚠️ 自己会判"还有没有别的浮层挂着"（<c>_confirmFlyout</c> / <c>_securityFlyout</c> / <c>_quickFlyout</c>）——
     ///    点「注销」会先关安全菜单、紧接着弹确认面板，那种时候不能把边条收走
     ///    （一收，确认面板的锚点按钮就跟着没了）。
     /// 钉了常驻（SidebarPinned）的不收 —— 用户明确要它留着。
@@ -528,7 +522,7 @@ public sealed partial class ToolSidebarWindow : Window
             try
             {
                 if (!w._visible || !w._expanded) continue;
-                if (w._confirmFlyout is not null || w._securityFlyout is not null) continue;  // 还有浮层挂着，别收
+                if (w._confirmFlyout is not null || w._securityFlyout is not null || w._quickFlyout is not null) continue;  // 还有浮层挂着，别收
                 if (App.Settings.Current.SidebarPinned) continue;
                 w.Collapse();
             }
@@ -886,9 +880,6 @@ public sealed partial class ToolSidebarWindow : Window
         //    肉眼就是"闪一下，然后再滑"。滑入动画自己会用**一次** MoveAndResize
         //    把"起点位置 + 展开尺寸"同时设下去（2026-09-26 优化）。
         SlideInFromEdge();
-        // 开关型模块的底色按**当前真实状态**重刷：设置页里也能改同一个开关，
-        // 用户在那改完回到边条，按钮不能还停在旧状态上（每次展开刷一遍最省事）。
-        RefreshToggleStates();
         Touch();
     }
 
@@ -1200,7 +1191,6 @@ public sealed partial class ToolSidebarWindow : Window
         ToolStack.RowDefinitions.Clear();
         ToolStack.ColumnDefinitions.Clear();
         _toolButtons.Clear();
-        _toggleChips.Clear();
 
         var modules = new List<SidebarModule>();
         foreach (var id in App.Settings.Current.SidebarModuleIds ?? Array.Empty<string>())
@@ -1259,24 +1249,7 @@ public sealed partial class ToolSidebarWindow : Window
             };
             ToolTipService.SetToolTip(btn, m.Note ?? m.Name);
 
-            if (m.Kind == SidebarModuleKinds.Toggle && SidebarToggles.IsSupported(m.Id))
-            {
-                // 开关型（2026-11-08）：内容裹一层圆角底色，开着时刷成强调色。
-                // ⚠️ 底色必须画在这一层 Border 上 —— Button.Background 会被 PointerOver 等
-                //    视觉状态接管，鼠标一移上去高亮就没了，那就等于看不出它正开着。
-                var chip = new Border
-                {
-                    CornerRadius = new CornerRadius(6),
-                    Padding = new Thickness(4, 2, 4, 2),
-                    Background = new SolidColorBrush(Colors.Transparent),
-                    Child = content
-                };
-                btn.Content = chip;
-                btn.Click += Toggle_Click;
-                _toggleChips[m.Id] = chip;
-                PaintToggleChip(m.Id, SidebarToggles.IsOn(m.Id));
-            }
-            else if (m.Kind == SidebarModuleKinds.Action && TeachingActions.IsHold(m.Id))
+            if (m.Kind == SidebarModuleKinds.Action && TeachingActions.IsHold(m.Id))
             {
                 // 按住型（放大镜）：按下开始 → 松手结束。按住期间别让侧边栏自动收起，
                 // 否则按钮被一起收走、指针捕获也会断，放大镜就"按两下才亮"了。
@@ -1333,62 +1306,6 @@ public sealed partial class ToolSidebarWindow : Window
         return m.LongName.Length > 0 ? m.LongName : m.ShortName;
     }
 
-    // ── 开关型模块（2026-11-08）─────────────────────────────────
-
-    /// <summary>
-    /// 按状态刷那颗开关的底色：开着 = 强调色 15% 底，关着 = 透明。
-    /// <para>
-    /// 15% 是照导航栏 New / Beta 角标的口径来的（那边也是语义色压到 <c>0x26</c>），
-    /// 深浅主题都能自己适配，不必另配两套色。
-    /// </para>
-    /// </summary>
-    private void PaintToggleChip(string id, bool on)
-    {
-        if (!_toggleChips.TryGetValue(id, out var chip)) return;
-
-        if (!on)
-        {
-            chip.Background = new SolidColorBrush(Colors.Transparent);
-            return;
-        }
-
-        // ⚠️ 传 Root（那层 Grid）而不是 this：ToolSidebarWindow 是 Window，不是 FrameworkElement，
-        //    ThemeBrush 靠元素的 ActualTheme 决定取浅色还是深色那套。
-        var accent = ThemeBrush.Accent(Root).Color;
-        chip.Background = new SolidColorBrush(
-            Microsoft.UI.ColorHelper.FromArgb(0x26, accent.R, accent.G, accent.B));
-    }
-
-    /// <summary>展开面板时按真实状态重刷一遍（设置页也能改同一个开关，别让侧边栏显示错）。</summary>
-    private void RefreshToggleStates()
-    {
-        foreach (var id in _toggleChips.Keys.ToList())
-            PaintToggleChip(id, SidebarToggles.IsOn(id));
-    }
-
-    /// <summary>
-    /// 开关型模块被按下：翻转 → 按**实际结果**刷底色。
-    ///
-    /// <para>
-    /// ⚠️ 这里不给浮层提示：底色就是状态本身，按下去当场能看见变化；
-    /// 再弹一句「已开启」在讲课中途反而是干扰。失败时 <see cref="SidebarToggles.Toggle"/>
-    /// 会把原状态还回来，所以按钮不会显示成"开了但没开"。
-    /// </para>
-    /// </summary>
-    private void Toggle_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button b || b.Tag is not string id) return;
-
-        try
-        {
-            PaintToggleChip(id, SidebarToggles.Toggle(id));
-        }
-        catch (Exception ex)
-        {
-            Log($"切换开关失败（{id}）: {ex.Message}");
-        }
-    }
-
     private void Tool_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button b || b.Tag is not string id) return;
@@ -1400,11 +1317,20 @@ public sealed partial class ToolSidebarWindow : Window
             // 讲台动作：按一下就干活（放大镜是"按住"型，走的是按下/松手那条路，不走这里）
             if (m.Kind == SidebarModuleKinds.Action)
             {
-                // 「安全选项」不是"按一下就干完"的动作 —— 它要先弹个小菜单让用户挑
-                // （锁定 / 切换用户 / 注销，就是 Ctrl+Alt+Del 界面上那几项）。
+                // 有两项不是"按一下就干完"，而是先弹个二级菜单让用户挑：
+                //   · 「安全选项」—— 锁定 / 切换用户 / 注销（Ctrl+Alt+Del 界面上那几项）；
+                //   · 「快捷入口」—— 文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑 + PowerPoint 触控的两个开关。
+                // ⚠️ 它们跟普通动作在清单、排序、侧边布局页里完全一样，只有这一瞬间区别对待，
+                //    所以不为它们另立一个 Kind（见 SidebarModuleKinds.Action 上的注释）。
                 if (m.Id == "security")
                 {
                     ShowSecurityFlyout(b);
+                    return;
+                }
+
+                if (m.Id == "quickmenu")
+                {
+                    ShowQuickFlyout(b);
                     return;
                 }
 
@@ -1702,6 +1628,181 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
+    // ── 「快捷入口」菜单（四个系统入口 + PowerPoint 触控的两个开关）──────────
+    //
+    // 形态与「安全选项」完全一致：原生 Flyout + 原生 Button / ToggleSwitch，一个字都不自己画。
+    //
+    // 为什么不用 MenuFlyout：下半截要放两个 ToggleSwitch（各带一行说明），
+    // 而 MenuFlyoutItem 只能装单行文字 + 图标 —— 要塞开关就得整个换掉它的模板，那就成自己画控件了。
+    //
+    // ⚠️ 两个开关的状态**一律现读**（见 PptTouchSwitch），与「PPT 触控优化」页共用同一份配置：
+    //    在页面上改过再回来按这颗键，菜单里显示的就是改过之后的状态。
+
+    private void ShowQuickFlyout(Button anchor)
+    {
+        try
+        {
+            HideQuickFlyout();
+            HideSecurityFlyout();
+            HideConfirmFlyout();
+
+            var panel = new StackPanel { Width = 256, Spacing = 1 };
+
+            void Header(string text) => panel.Children.Add(new TextBlock
+            {
+                Text = text,
+                FontSize = 12,
+                Opacity = 0.7,
+                Margin = new Thickness(12, 8, 12, 6),
+            });
+
+            // 一行菜单项：图标 + 文字，透明底、无边框、内容靠左 —— 看着就是系统菜单项
+            void Item(string glyph, string text, Action act)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+                row.Children.Add(new FontIcon
+                {
+                    Glyph = glyph,
+                    FontSize = 16,
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                row.Children.Add(new TextBlock
+                {
+                    Text = text,
+                    FontSize = 14,
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+
+                var item = new Button
+                {
+                    Content = row,
+                    MinHeight = 40,
+                    Padding = new Thickness(12, 6, 12, 6),
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                };
+                item.Click += (_, _) =>
+                {
+                    // ⚠️ 先收菜单再干活：菜单挂着的时候边条是压住自动收起的，
+                    //    而「运行」「文件资源管理器」都要把焦点交出去。
+                    HideQuickFlyout();
+                    try { act(); }
+                    catch (Exception ex) { Log("快捷入口执行失败: " + ex.Message); }
+                };
+                panel.Children.Add(item);
+            }
+
+            // 一行开关：左边两行字（名称 + 说明），右边原生 ToggleSwitch。
+            // ⚠️ ToggleSwitch 默认 MinWidth 154，放进 256 宽的菜单里会把文字挤没 —— 必须压成 0。
+            void SwitchRow(string title, string note, bool initial, Func<bool, bool> apply)
+            {
+                var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+                text.Children.Add(new TextBlock { Text = title, FontSize = 14 });
+                text.Children.Add(new TextBlock
+                {
+                    Text = note,
+                    FontSize = 11,
+                    Opacity = 0.7,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+
+                var toggle = new ToggleSwitch
+                {
+                    IsOn = initial,
+                    MinWidth = 0,
+                    OnContent = "",
+                    OffContent = "",
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+
+                // 铺初值会触发一次 Toggled（回声），铺完再放行；
+                // 拨动后按**实际结果**回写 —— 失败时 PptTouchSwitch 会把真状态还回来。
+                var ready = false;
+                toggle.Toggled += (_, _) =>
+                {
+                    if (!ready) return;
+
+                    var actual = apply(toggle.IsOn);
+                    if (actual == toggle.IsOn) return;
+
+                    ready = false;
+                    toggle.IsOn = actual;
+                    ready = true;
+                };
+                ready = true;
+
+                var row = new Grid { Margin = new Thickness(12, 4, 12, 6), ColumnSpacing = 12 };
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                Grid.SetColumn(text, 0);
+                Grid.SetColumn(toggle, 1);
+                row.Children.Add(text);
+                row.Children.Add(toggle);
+                panel.Children.Add(row);
+            }
+
+            Header("快捷入口");
+            Item("\uE8B7", "文件资源管理器", () => TeachingActions.Run("explorer"));
+            Item("\uE756", "运行", () => TeachingActions.Run("run"));
+            Item("\uE765", "屏幕键盘", () => TeachingActions.Run("osk"));
+            Item("\uE72E", "锁定电脑", () => TeachingActions.Run("lock"));
+
+            panel.Children.Add(new Border
+            {
+                Height = 1,
+                Margin = new Thickness(8, 8, 8, 4),
+                Background = ThemeBrush.Get(Root, "ControlStrokeColorDefault"),
+            });
+
+            Header("PowerPoint 触控");
+            SwitchRow("触控手势", "放映时轻点翻页、上下滑换页", PptTouchSwitch.GestureOn(), PptTouchSwitch.SetGesture);
+            SwitchRow("长按菜单", "长按弹出本程序菜单，替代系统右键菜单", PptTouchSwitch.MenuOn(), PptTouchSwitch.SetMenu);
+
+            var flyout = new Flyout
+            {
+                ShouldConstrainToRootBounds = false,     // ⚠️ 必须 false，否则被剪在边条窗口里
+                Placement = ConfirmPlacement(),
+                Content = panel,
+            };
+            flyout.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_quickFlyout, flyout)) _quickFlyout = null;
+
+                // 菜单收掉 = 用户不再操作了 → 恢复自动收起，并补收一次边条
+                // （被压住的这段时间它自己那次"失焦收起"已经错过了；原因见 CollapseAfterPopupsClosed）。
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_confirmFlyout is not null) return;     // 后面还跟着确认面板 → 由它收尾
+                    SuppressAutoCollapse = false;
+                    CollapseAfterPopupsClosed();
+                });
+            };
+
+            SuppressAutoCollapse = true;                // 菜单挂着的时候边条不许自己收
+            _quickFlyout = flyout;
+            flyout.ShowAt(anchor, new FlyoutShowOptions { Placement = flyout.Placement });
+            Log("快捷入口：菜单已弹出");
+        }
+        catch (Exception ex)
+        {
+            Log("快捷入口菜单弹出失败: " + ex.Message);
+            SuppressAutoCollapse = false;
+        }
+    }
+
+    private void HideQuickFlyout()
+    {
+        try
+        {
+            var f = _quickFlyout;
+            _quickFlyout = null;
+            f?.Hide();
+        }
+        catch { }
+    }
+
     // ── 「安全选项」菜单（锁定 / 切换用户 / 注销）──────────────
     //
     // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起它
@@ -1714,6 +1815,7 @@ public sealed partial class ToolSidebarWindow : Window
         try
         {
             HideSecurityFlyout();
+            HideQuickFlyout();
             HideConfirmFlyout();
 
             var panel = new StackPanel { Width = 216, Spacing = 1 };

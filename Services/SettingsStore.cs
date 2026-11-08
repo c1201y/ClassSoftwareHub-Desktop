@@ -984,48 +984,79 @@ public sealed class SettingsStore
 
         if (Current.SidebarModulesRevision < 12)
         {
-            // revision 12（2026-11-08）：Nick 要的五颗按钮。
-            //   · 文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑 —— 四颗常用系统入口，
-            //     按 rev5 的位置约定插在**动作组最前面**（比任务管理器那批还常用）；
-            //   · PowerPoint 触控开关 —— 追加到**整列最末尾**：它是"出问题才去按"的保险，
-            //     不该占常用位置。
-            try
-            {
-                var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
-
-                // 动作组锚点：Action 与 Toggle 都算动作类（Toggle 也是按一下就干活）。
-                // ⚠️ 必须两个 kind 都认：只认 Action 的话，万一用户的动作组里先出现的是
-                //    Toggle，锚点就落到后面去了，四颗按钮会插在开关之后。
-                bool IsActionish(string id)
-                {
-                    var kind = Data.SidebarModules.Find(id)?.Kind;
-                    return kind == Data.SidebarModuleKinds.Action
-                        || kind == Data.SidebarModuleKinds.Toggle;
-                }
-
-                var at = list.FindIndex(IsActionish);
-                foreach (var id in new[] { "explorer", "run", "osk", "lock" })
-                {
-                    if (list.Contains(id)) continue;            // 用户自己已经加过了，别插重复
-                    if (at < 0) { list.Add(id); at = list.Count; }
-                    else { list.Insert(at, id); at++; }
-                }
-
-                if (!list.Contains("ppttouch")) list.Add("ppttouch");
-
-                Current.SidebarModuleIds = list.ToArray();
-            }
-            catch (Exception ex)
-            {
-                Log($"补侧边栏新模块失败: {ex.Message}");
-            }
+            // revision 12（2026-11-08）：侧边栏加一颗「快捷入口」，单击弹出二级菜单。
+            //
+            // 这一天的最初稿是**五颗独立按钮**（文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑 /
+            // PowerPoint 触控开关），Nick 当天否掉：侧边栏位置很贵，这五件事都只是偶尔用一下，
+            // 合成一项、点开弹菜单更合适；触控那两个开关也一并收进菜单里。
+            // 所以这一版要把那一稿补进去的 id **收回来**，换成单独一项 quickmenu。
+            //
+            // ⚠️ 幂等：没跑过那一稿的存档里本来就没有那五个 id，删不掉也不报错。
+            MigrateQuickEntry();
 
             Current.SidebarModulesRevision = 12;
             changed = true;
         }
 
+        if (Current.SidebarModulesRevision < 13)
+        {
+            // revision 13（2026-11-08）：**兜底**，逻辑与 rev12 完全相同（幂等）。
+            //
+            // 来由：rev12 落地到本机调试版时，存档里的版本号已经记成 12，而当时补进去的是那五颗
+            // 按钮。它们现在不在模块清单里，SidebarModules.Find 找不到、「侧边布局」页里也不会
+            // 再出现 —— 属于谁也管不着的死条目，用户想删都无从下手。
+            // rev11 的通用清理只在 rev11 那一次跑，救不了这类存档，所以要单独走一遍。
+            MigrateQuickEntry();
+
+            Current.SidebarModulesRevision = 13;
+            changed = true;
+        }
+
         // 标记必须落盘，否则下次启动又会"补"一遍，用户删了也白删
         if (changed) Save();
+    }
+
+    /// <summary>
+    /// 把侧边栏清单里那一稿的五颗按钮（explorer / run / osk / lock / ppttouch）收成单独一项
+    /// <c>quickmenu</c>（2026-11-08，rev12 与 rev13 共用，**幂等**）。
+    ///
+    /// <para>
+    /// 落点：原来那五颗里第一颗出现的位置 —— 用户已经排好的顺序不打乱；
+    /// 一颗都没有（没跑过那一稿）就按动作组的惯例插在最前面。
+    /// </para>
+    /// </summary>
+    private void MigrateQuickEntry()
+    {
+        try
+        {
+            var list = (Current.SidebarModuleIds ?? Array.Empty<string>()).ToList();
+            string[] legacy = { "explorer", "run", "osk", "lock", "ppttouch" };
+
+            var at = list.FindIndex(id => Array.IndexOf(legacy, id) >= 0);
+            var removed = list.RemoveAll(id => Array.IndexOf(legacy, id) >= 0);
+
+            if (!list.Contains("quickmenu"))
+            {
+                if (at < 0)
+                {
+                    at = list.FindIndex(id => Data.SidebarModules.Find(id)?.Kind == Data.SidebarModuleKinds.Action);
+                }
+
+                if (at < 0) list.Add("quickmenu");
+                else list.Insert(at, "quickmenu");
+            }
+
+            if (removed > 0 || !(Current.SidebarModuleIds ?? Array.Empty<string>()).Contains("quickmenu"))
+            {
+                Log($"侧边栏清单已并入「快捷入口」（收掉 {removed} 颗旧按钮）");
+            }
+
+            Current.SidebarModuleIds = list.ToArray();
+        }
+        catch (Exception ex)
+        {
+            Log($"并入侧边栏「快捷入口」失败: {ex.Message}");
+        }
     }
 
     /// <summary>
