@@ -253,8 +253,8 @@ public sealed partial class ToolSidebarWindow : Window
     /// <summary>「安全选项」那颗键弹出来的菜单浮层（锁定 / 切换用户 / 注销）。</summary>
     private Flyout? _securityFlyout;
 
-    /// <summary>「快捷入口」那颗键弹出来的菜单浮层（四个系统入口 + 两个触控开关）。</summary>
-    private Flyout? _quickFlyout;
+    /// <summary>「PPT 触控」那颗键弹出来的菜单浮层（触控手势 / 长按菜单 两个开关）。</summary>
+    private Flyout? _pptFlyout;
 
     /// <summary>「收起」键的那个图标（内容会按贴边重建，所以要留住当前这个实例才好换箭头方向）。</summary>
     private FontIcon? _foldIcon;
@@ -510,7 +510,7 @@ public sealed partial class ToolSidebarWindow : Window
     ///   再点别处边条再也不缩回去」就是这个）。所以凡是在"压制中弹过浮层"的地方，
     /// 收尾都必须显式调一次它。
     ///
-    /// ⚠️ 自己会判"还有没有别的浮层挂着"（<c>_confirmFlyout</c> / <c>_securityFlyout</c> / <c>_quickFlyout</c>）——
+    /// ⚠️ 自己会判"还有没有别的浮层挂着"（<c>_confirmFlyout</c> / <c>_securityFlyout</c> / <c>_pptFlyout</c>）——
     ///    点「注销」会先关安全菜单、紧接着弹确认面板，那种时候不能把边条收走
     ///    （一收，确认面板的锚点按钮就跟着没了）。
     /// 钉了常驻（SidebarPinned）的不收 —— 用户明确要它留着。
@@ -522,7 +522,7 @@ public sealed partial class ToolSidebarWindow : Window
             try
             {
                 if (!w._visible || !w._expanded) continue;
-                if (w._confirmFlyout is not null || w._securityFlyout is not null || w._quickFlyout is not null) continue;  // 还有浮层挂着，别收
+                if (w._confirmFlyout is not null || w._securityFlyout is not null || w._pptFlyout is not null) continue;  // 还有浮层挂着，别收
                 if (App.Settings.Current.SidebarPinned) continue;
                 w.Collapse();
             }
@@ -1319,7 +1319,8 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 // 有两项不是"按一下就干完"，而是先弹个二级菜单让用户挑：
                 //   · 「安全选项」—— 锁定 / 切换用户 / 注销（Ctrl+Alt+Del 界面上那几项）；
-                //   · 「快捷入口」—— 文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑 + PowerPoint 触控的两个开关。
+                //   · 「PPT 触控」—— 触控手势 / 长按菜单 两个开关（一个按钮表达不了两个状态，
+                //     而且这两个都是"出问题才去拨"的，收进菜单里看得见当前状态）。
                 // ⚠️ 它们跟普通动作在清单、排序、侧边布局页里完全一样，只有这一瞬间区别对待，
                 //    所以不为它们另立一个 Kind（见 SidebarModuleKinds.Action 上的注释）。
                 if (m.Id == "security")
@@ -1328,9 +1329,9 @@ public sealed partial class ToolSidebarWindow : Window
                     return;
                 }
 
-                if (m.Id == "quickmenu")
+                if (m.Id == "ppttouch")
                 {
-                    ShowQuickFlyout(b);
+                    ShowPptTouchFlyout(b);
                     return;
                 }
 
@@ -1628,25 +1629,25 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
-    // ── 「快捷入口」菜单（四个系统入口 + PowerPoint 触控的两个开关）──────────
+    // ── 「PPT 触控」菜单（两个开关：触控手势 / 长按菜单）──────────
     //
-    // 形态与「安全选项」完全一致：原生 Flyout + 原生 Button / ToggleSwitch，一个字都不自己画。
+    // 形态与「安全选项」一致：原生 Flyout + 原生 ToggleSwitch，一个字都不自己画。
     //
-    // 为什么不用 MenuFlyout：下半截要放两个 ToggleSwitch（各带一行说明），
-    // 而 MenuFlyoutItem 只能装单行文字 + 图标 —— 要塞开关就得整个换掉它的模板，那就成自己画控件了。
+    // ⚠️ 为什么不用 MenuFlyout：这里要放两个 ToggleSwitch（各带一行说明），
+    //    而 MenuFlyoutItem 只能装单行文字 + 图标 —— 要塞开关就得整个换掉它的模板，那就成自己画控件了。
     //
     // ⚠️ 两个开关的状态**一律现读**（见 PptTouchSwitch），与「PPT 触控优化」页共用同一份配置：
-    //    在页面上改过再回来按这颗键，菜单里显示的就是改过之后的状态。
+    //    在页面上改过再回来点这颗键，菜单里显示的就是改过之后的状态。
 
-    private void ShowQuickFlyout(Button anchor)
+    private void ShowPptTouchFlyout(Button anchor)
     {
         try
         {
-            HideQuickFlyout();
+            HidePptTouchFlyout();
             HideSecurityFlyout();
             HideConfirmFlyout();
 
-            var panel = new StackPanel { Width = 256, Spacing = 1 };
+            var panel = new StackPanel { Width = 248, Spacing = 1 };
 
             void Header(string text) => panel.Children.Add(new TextBlock
             {
@@ -1656,46 +1657,8 @@ public sealed partial class ToolSidebarWindow : Window
                 Margin = new Thickness(12, 8, 12, 6),
             });
 
-            // 一行菜单项：图标 + 文字，透明底、无边框、内容靠左 —— 看着就是系统菜单项
-            void Item(string glyph, string text, Action act)
-            {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-                row.Children.Add(new FontIcon
-                {
-                    Glyph = glyph,
-                    FontSize = 16,
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-                row.Children.Add(new TextBlock
-                {
-                    Text = text,
-                    FontSize = 14,
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-
-                var item = new Button
-                {
-                    Content = row,
-                    MinHeight = 40,
-                    Padding = new Thickness(12, 6, 12, 6),
-                    Background = new SolidColorBrush(Colors.Transparent),
-                    BorderThickness = new Thickness(0),
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                };
-                item.Click += (_, _) =>
-                {
-                    // ⚠️ 先收菜单再干活：菜单挂着的时候边条是压住自动收起的，
-                    //    而「运行」「文件资源管理器」都要把焦点交出去。
-                    HideQuickFlyout();
-                    try { act(); }
-                    catch (Exception ex) { Log("快捷入口执行失败: " + ex.Message); }
-                };
-                panel.Children.Add(item);
-            }
-
             // 一行开关：左边两行字（名称 + 说明），右边原生 ToggleSwitch。
-            // ⚠️ ToggleSwitch 默认 MinWidth 154，放进 256 宽的菜单里会把文字挤没 —— 必须压成 0。
+            // ⚠️ ToggleSwitch 默认 MinWidth 154，放进 248 宽的菜单里会把文字挤没 —— 必须压成 0。
             void SwitchRow(string title, string note, bool initial, Func<bool, bool> apply)
             {
                 var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
@@ -1743,19 +1706,6 @@ public sealed partial class ToolSidebarWindow : Window
                 panel.Children.Add(row);
             }
 
-            Header("快捷入口");
-            Item("\uE8B7", "文件资源管理器", () => TeachingActions.Run("explorer"));
-            Item("\uE756", "运行", () => TeachingActions.Run("run"));
-            Item("\uE765", "屏幕键盘", () => TeachingActions.Run("osk"));
-            Item("\uE72E", "锁定电脑", () => TeachingActions.Run("lock"));
-
-            panel.Children.Add(new Border
-            {
-                Height = 1,
-                Margin = new Thickness(8, 8, 8, 4),
-                Background = ThemeBrush.Get(Root, "ControlStrokeColorDefault"),
-            });
-
             Header("PowerPoint 触控");
             SwitchRow("触控手势", "放映时轻点翻页、上下滑换页", PptTouchSwitch.GestureOn(), PptTouchSwitch.SetGesture);
             SwitchRow("长按菜单", "长按弹出本程序菜单，替代系统右键菜单", PptTouchSwitch.MenuOn(), PptTouchSwitch.SetMenu);
@@ -1768,7 +1718,7 @@ public sealed partial class ToolSidebarWindow : Window
             };
             flyout.Closed += (_, _) =>
             {
-                if (ReferenceEquals(_quickFlyout, flyout)) _quickFlyout = null;
+                if (ReferenceEquals(_pptFlyout, flyout)) _pptFlyout = null;
 
                 // 菜单收掉 = 用户不再操作了 → 恢复自动收起，并补收一次边条
                 // （被压住的这段时间它自己那次"失焦收起"已经错过了；原因见 CollapseAfterPopupsClosed）。
@@ -1781,23 +1731,23 @@ public sealed partial class ToolSidebarWindow : Window
             };
 
             SuppressAutoCollapse = true;                // 菜单挂着的时候边条不许自己收
-            _quickFlyout = flyout;
+            _pptFlyout = flyout;
             flyout.ShowAt(anchor, new FlyoutShowOptions { Placement = flyout.Placement });
-            Log("快捷入口：菜单已弹出");
+            Log("PPT 触控：菜单已弹出");
         }
         catch (Exception ex)
         {
-            Log("快捷入口菜单弹出失败: " + ex.Message);
+            Log("PPT 触控菜单弹出失败: " + ex.Message);
             SuppressAutoCollapse = false;
         }
     }
 
-    private void HideQuickFlyout()
+    private void HidePptTouchFlyout()
     {
         try
         {
-            var f = _quickFlyout;
-            _quickFlyout = null;
+            var f = _pptFlyout;
+            _pptFlyout = null;
             f?.Hide();
         }
         catch { }
@@ -1815,7 +1765,7 @@ public sealed partial class ToolSidebarWindow : Window
         try
         {
             HideSecurityFlyout();
-            HideQuickFlyout();
+            HidePptTouchFlyout();
             HideConfirmFlyout();
 
             var panel = new StackPanel { Width = 216, Spacing = 1 };

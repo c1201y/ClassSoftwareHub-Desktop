@@ -4,7 +4,7 @@ using ClassSoftwareHub.Desktop.Core;
 namespace ClassSoftwareHub.Desktop.Services;
 
 /// <summary>
-/// 侧边栏「快捷入口」二级菜单里那两个 PowerPoint 触控开关的读写。
+/// 侧边栏「PPT 触控」二级菜单里那两个开关的读写。
 ///
 /// <para>
 /// 读写的就是 <see cref="PptTouchConfig"/> 本身（<c>ppt-touch.json</c>），与「PowerPoint 触控优化」
@@ -64,7 +64,7 @@ internal static class PptTouchSwitch
             if (on) PptTouch.Start();
             else PptTouch.Stop();
 
-            AppLog.Info("sidebar", $"快捷菜单切换触控手势：{(on ? "开启" : "关闭")}");
+            AppLog.Info("sidebar", $"侧边栏切换触控手势：{(on ? "开启" : "关闭")}");
             return on;
         }
         catch (Exception ex)
@@ -86,7 +86,7 @@ internal static class PptTouchSwitch
             // 钩子回调里不读配置文件（一次磁盘 IO 就够拖出钩子超时），要走这一步把缓存刷掉。
             PptTouch.ApplyConfig();
 
-            AppLog.Info("sidebar", $"快捷菜单切换长按菜单：{(on ? "开启" : "关闭")}");
+            AppLog.Info("sidebar", $"侧边栏切换长按菜单：{(on ? "开启" : "关闭")}");
             return on;
         }
         catch (Exception ex)
