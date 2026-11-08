@@ -247,6 +247,15 @@ public sealed partial class ToolSidebarWindow : Window
     /// <summary>展开面板里的工具按钮（按「侧边布局」的模块清单动态生成，见 BuildToolButtons）。</summary>
     private readonly List<Button> _toolButtons = new();
 
+    /// <summary>
+    /// 开关型模块的底色胶囊（2026-11-08）：id → 那层 Border。
+    /// <para>
+    /// 开着时把它刷成强调色 15% 底，关掉时刷回透明。**底色画在 Border 上而不是 Button.Background**：
+    /// 按钮自己的背景会被 PointerOver 等视觉状态接管，鼠标一移过去高亮就没了 —— 那样就看不出开着。
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<string, Border> _toggleChips = new();
+
     /// <summary>当前那个"要先问一句"的原生 Flyout（一次只有一个）。</summary>
     private Flyout? _confirmFlyout;
 
@@ -877,6 +886,9 @@ public sealed partial class ToolSidebarWindow : Window
         //    肉眼就是"闪一下，然后再滑"。滑入动画自己会用**一次** MoveAndResize
         //    把"起点位置 + 展开尺寸"同时设下去（2026-09-26 优化）。
         SlideInFromEdge();
+        // 开关型模块的底色按**当前真实状态**重刷：设置页里也能改同一个开关，
+        // 用户在那改完回到边条，按钮不能还停在旧状态上（每次展开刷一遍最省事）。
+        RefreshToggleStates();
         Touch();
     }
 
@@ -1188,6 +1200,7 @@ public sealed partial class ToolSidebarWindow : Window
         ToolStack.RowDefinitions.Clear();
         ToolStack.ColumnDefinitions.Clear();
         _toolButtons.Clear();
+        _toggleChips.Clear();
 
         var modules = new List<SidebarModule>();
         foreach (var id in App.Settings.Current.SidebarModuleIds ?? Array.Empty<string>())
@@ -1246,7 +1259,24 @@ public sealed partial class ToolSidebarWindow : Window
             };
             ToolTipService.SetToolTip(btn, m.Note ?? m.Name);
 
-            if (m.Kind == SidebarModuleKinds.Action && TeachingActions.IsHold(m.Id))
+            if (m.Kind == SidebarModuleKinds.Toggle && SidebarToggles.IsSupported(m.Id))
+            {
+                // 开关型（2026-11-08）：内容裹一层圆角底色，开着时刷成强调色。
+                // ⚠️ 底色必须画在这一层 Border 上 —— Button.Background 会被 PointerOver 等
+                //    视觉状态接管，鼠标一移上去高亮就没了，那就等于看不出它正开着。
+                var chip = new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(4, 2, 4, 2),
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    Child = content
+                };
+                btn.Content = chip;
+                btn.Click += Toggle_Click;
+                _toggleChips[m.Id] = chip;
+                PaintToggleChip(m.Id, SidebarToggles.IsOn(m.Id));
+            }
+            else if (m.Kind == SidebarModuleKinds.Action && TeachingActions.IsHold(m.Id))
             {
                 // 按住型（放大镜）：按下开始 → 松手结束。按住期间别让侧边栏自动收起，
                 // 否则按钮被一起收走、指针捕获也会断，放大镜就"按两下才亮"了。
@@ -1301,6 +1331,62 @@ public sealed partial class ToolSidebarWindow : Window
     {
         if (!App.Settings.Current.SidebarLongLabels) return m.ShortName;
         return m.LongName.Length > 0 ? m.LongName : m.ShortName;
+    }
+
+    // ── 开关型模块（2026-11-08）─────────────────────────────────
+
+    /// <summary>
+    /// 按状态刷那颗开关的底色：开着 = 强调色 15% 底，关着 = 透明。
+    /// <para>
+    /// 15% 是照导航栏 New / Beta 角标的口径来的（那边也是语义色压到 <c>0x26</c>），
+    /// 深浅主题都能自己适配，不必另配两套色。
+    /// </para>
+    /// </summary>
+    private void PaintToggleChip(string id, bool on)
+    {
+        if (!_toggleChips.TryGetValue(id, out var chip)) return;
+
+        if (!on)
+        {
+            chip.Background = new SolidColorBrush(Colors.Transparent);
+            return;
+        }
+
+        // ⚠️ 传 Root（那层 Grid）而不是 this：ToolSidebarWindow 是 Window，不是 FrameworkElement，
+        //    ThemeBrush 靠元素的 ActualTheme 决定取浅色还是深色那套。
+        var accent = ThemeBrush.Accent(Root).Color;
+        chip.Background = new SolidColorBrush(
+            Microsoft.UI.ColorHelper.FromArgb(0x26, accent.R, accent.G, accent.B));
+    }
+
+    /// <summary>展开面板时按真实状态重刷一遍（设置页也能改同一个开关，别让侧边栏显示错）。</summary>
+    private void RefreshToggleStates()
+    {
+        foreach (var id in _toggleChips.Keys.ToList())
+            PaintToggleChip(id, SidebarToggles.IsOn(id));
+    }
+
+    /// <summary>
+    /// 开关型模块被按下：翻转 → 按**实际结果**刷底色。
+    ///
+    /// <para>
+    /// ⚠️ 这里不给浮层提示：底色就是状态本身，按下去当场能看见变化；
+    /// 再弹一句「已开启」在讲课中途反而是干扰。失败时 <see cref="SidebarToggles.Toggle"/>
+    /// 会把原状态还回来，所以按钮不会显示成"开了但没开"。
+    /// </para>
+    /// </summary>
+    private void Toggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button b || b.Tag is not string id) return;
+
+        try
+        {
+            PaintToggleChip(id, SidebarToggles.Toggle(id));
+        }
+        catch (Exception ex)
+        {
+            Log($"切换开关失败（{id}）: {ex.Message}");
+        }
     }
 
     private void Tool_Click(object sender, RoutedEventArgs e)

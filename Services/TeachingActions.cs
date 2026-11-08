@@ -32,10 +32,17 @@ public static class TeachingActions
         {
             switch (id)
             {
+                // 常用系统入口四件套（2026-11-08）：文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑。
+                // 前三件要做的事都很轻，唯独「运行」是模拟按键（系统没给 API），见各自注释。
+                case "explorer": return OpenExplorer();
+                case "run": RunDialog(); break;
+                case "osk": return OpenOnScreenKeyboard();
+                // 锁定电脑（Win+L）：与「安全选项」弹出菜单里那一项是同一个实现
+                case "lock": LockScreen(); break;
+
                 // 系统快捷三件套（2026-10-11）：任务管理器 / 剪贴板历史 / 安全选项里的那几项
                 case "taskmgr": OpenTaskManager(); break;
                 case "clipboard": ClipboardHistory(); break;
-                case "lock": LockScreen(); break;
                 case "switchuser": SwitchUser(); break;
                 case "logout": return PrepareLogout();
                 case "mag": ToggleSystemMagnifier(); break;
@@ -181,6 +188,121 @@ public static class TeachingActions
         catch (Exception ex)
         {
             Log("任务管理器失败: " + ex.Message);
+        }
+    }
+
+    // ── 常用系统入口四件套（2026-11-08）────────────────────────────
+
+    /// <summary>
+    /// 文件资源管理器（等同 Win+E）。
+    ///
+    /// <para>
+    /// 直接起 <c>explorer.exe</c>，**不**模拟 Win+E：模拟键会被学校机器上的安全策略拦，
+    /// 而且不少一体机把 Win+E 劫持成厂商自己的文件管家，直接起进程打开的一定是系统的那个。
+    /// shell 已经跑着的时候，explorer.exe 会把请求转给它，不会再起一个壳。
+    /// </para>
+    /// </summary>
+    private static string? OpenExplorer()
+    {
+        try
+        {
+            var exe = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            if (!System.IO.File.Exists(exe))
+            {
+                Log("资源管理器：找不到 " + exe);
+                return "找不到文件资源管理器，详见日志";
+            }
+
+            _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+            Log("资源管理器：已调起");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Log("资源管理器失败: " + ex.Message);
+            return "打开文件资源管理器失败，详见日志";
+        }
+    }
+
+    /// <summary>
+    /// 「运行」对话框（等同 Win+R）—— 系统没给 API，只能模拟按键。
+    ///
+    /// <para>
+    /// 与剪贴板历史同一条路子：先把焦点还回用户刚才那个窗口，隔一拍再发键。
+    /// 运行框本身会拿到焦点；它关掉之后焦点自然落回原窗口，侧边栏不会留着抢焦点。
+    /// </para>
+    /// </summary>
+    private static void RunDialog()
+    {
+        RefocusPrevious();
+
+        var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (queue is null)
+        {
+            SendWinChord(VkR);
+            return;
+        }
+
+        var timer = queue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(150);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            try
+            {
+                timer.Stop();
+                var sent = SendWinChord(VkR);
+                Log($"运行对话框：SendInput 插入 {sent} 个事件" + (sent == 0 ? $"（被拦了？err={Marshal.GetLastWin32Error()}）" : ""));
+            }
+            catch { }
+        };
+        timer.Start();
+    }
+
+    /// <summary>
+    /// 屏幕键盘，调系统自带的 <c>osk.exe</c>。
+    ///
+    /// <para>
+    /// ⚠️ 路径取 <c>SpecialFolder.System</c>（64 位下就是 System32）。⛔ 别按位数自己拼
+    /// SysWOW64 —— 那里没有 osk.exe，32 位宿主上会直接找不到文件。
+    /// </para>
+    /// <para>
+    /// 已经在跑就把它带到前台，而不是再起一个：触摸设备上多点两下会堆出好几个键盘窗口，
+    /// 盖住半个屏幕还关不干净。
+    /// </para>
+    /// </summary>
+    private static string? OpenOnScreenKeyboard()
+    {
+        try
+        {
+            foreach (var existing in System.Diagnostics.Process.GetProcessesByName("osk"))
+            {
+                if (existing.MainWindowHandle != IntPtr.Zero)
+                {
+                    SetForegroundWindow(existing.MainWindowHandle);
+                    Log("屏幕键盘：已在前台，未重复启动");
+                    return null;
+                }
+            }
+
+            var exe = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), "osk.exe");
+            if (!System.IO.File.Exists(exe))
+            {
+                Log("屏幕键盘：找不到 " + exe);
+                return "这台电脑上找不到系统自带的屏幕键盘";
+            }
+
+            _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+            Log("屏幕键盘：已调起");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            // 常见原因：系统策略禁止启动 osk，或触摸键盘服务被裁剪过的精简版系统
+            Log("屏幕键盘失败: " + ex.Message);
+            return "屏幕键盘启动失败，详见日志";
         }
     }
 
@@ -711,6 +833,7 @@ public static class TeachingActions
     private const ushort VkMenu = 0x12;      // Alt
     private const ushort VkL = 0x4C;
     private const ushort VkV = 0x56;         // V（Win+V = 剪贴板历史）
+    private const ushort VkR = 0x52;         // R（Win+R = 运行对话框）
     private const uint EWX_LOGOFF = 0x00000000;
     private const uint InputKeyboard = 1;
     private const uint KeyEventKeyUp = 0x0002;
