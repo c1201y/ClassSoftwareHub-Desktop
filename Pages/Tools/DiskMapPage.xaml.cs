@@ -21,15 +21,25 @@ namespace ClassSoftwareHub.Desktop.Pages.Tools;
 /// ⛔ 扫描一律在后台线程跑，并且**可取消** —— 全盘几十万文件，扫到一半又不想等了是很正常的操作。
 /// ⛔ 树图上的方块最多画 90 个，其余并成「其他」：再多既点不中也刷不动。
 /// </para>
+/// <para>
+/// ⭐ 下钻不再重新扫描（2026-11-08 改）：一次扫描就把整棵目录树数完留在内存里，
+/// 点方块、点面包屑、返回上一级全是查树，0 读取。
+/// 原来的做法是每进一层就把那个子树重新数一遍 —— 越往下越慢，因为每层都在重扫。
+/// </para>
 /// </summary>
 public sealed partial class DiskMapPage : Page
 {
     /// <summary>一次最多画多少块（超过就并成「其他」）。</summary>
     private const int MaxTiles = 90;
 
+    /// <summary>树图上的一块。目录带节点（可继续下钻），文件与「其他」没有。</summary>
+    private sealed record TileItem(DiskEntry Entry, DiskNode? Node);
+
     private CancellationTokenSource? _cts;
-    private DiskScanResult? _result;
-    private string _currentPath = "";
+    private DiskNode? _root;        // 本次扫描的树根
+    private DiskNode? _current;     // 当前停留的目录
+    private List<TileItem> _items = new();
+    private string _scanPath = "";
     private bool _initialized;
 
     public DiskMapPage()
@@ -103,7 +113,7 @@ public sealed partial class DiskMapPage : Page
     }
 
     // ══════════════════════════════════════════════════════
-    //  扫描
+    //  扫描（只在这里读磁盘）
     // ══════════════════════════════════════════════════════
 
     private async Task ScanAsync(string path)
@@ -113,15 +123,16 @@ public sealed partial class DiskMapPage : Page
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
 
-        _currentPath = path;
-        UpdateCrumb();
-
+        _scanPath = path;
+        SetBusy(true);
         BusyRing.IsActive = true;
         ScanButton.Content = "取消";
         StatusText.Text = "正在统计…（大目录可能要十几秒）";
         EmptyText.Visibility = Visibility.Collapsed;
         MapCanvas.Children.Clear();
         TopList.Children.Clear();
+        CrumbBar.Children.Clear();
+        _items = new List<TileItem>();
 
         try
         {
@@ -139,8 +150,16 @@ public sealed partial class DiskMapPage : Page
 
             if (token.IsCancellationRequested) return;
 
-            _result = result;
-            Render(result);
+            _root = result.RootNode;
+            if (_root is null)
+            {
+                StatusText.Text = "这个位置没有可统计的内容。";
+                return;
+            }
+
+            _current = _root;
+            UpdateCrumb();
+            RenderNode(_root, result);
         }
         catch (OperationCanceledException)
         {
@@ -155,6 +174,7 @@ public sealed partial class DiskMapPage : Page
         }
         finally
         {
+            SetBusy(false);
             BusyRing.IsActive = false;
             ScanButton.Content = "重新扫描";
         }
@@ -184,7 +204,7 @@ public sealed partial class DiskMapPage : Page
             return;
         }
 
-        if (_currentPath.Length > 0) _ = ScanAsync(_currentPath);
+        if (_scanPath.Length > 0) _ = ScanAsync(_scanPath);
     }
 
     private async void Pick_Click(object sender, RoutedEventArgs e)
@@ -213,42 +233,78 @@ public sealed partial class DiskMapPage : Page
     }
 
     // ══════════════════════════════════════════════════════
+    //  下钻（只查树，不读磁盘）
+    // ══════════════════════════════════════════════════════
+
+    /// <summary>进入下一层。数据已在树里，纯内存操作。</summary>
+    private void NavigateTo(DiskNode node)
+    {
+        _current = node;
+        _scanPath = node.FullPath;
+        UpdateCrumb();
+        RenderNode(node);
+    }
+
+    // ══════════════════════════════════════════════════════
     //  渲染
     // ══════════════════════════════════════════════════════
 
-    private void Render(DiskScanResult result)
+    /// <param name="scanned">刚扫描完时传结果（用来显示耗时与跳过数），下钻时传 null。</param>
+    private void RenderNode(DiskNode node, DiskScanResult? scanned = null)
     {
-        var totalText = DiskUsage.FormatBytes(result.TotalBytes);
-        var skipped = result.SkippedDirectories > 0
-            ? $"，{result.SkippedDirectories} 个目录无权限已跳过"
-            : "";
+        if (scanned is not null)
+        {
+            var skipped = scanned.SkippedDirectories > 0
+                ? $"，{scanned.SkippedDirectories} 个目录无权限已跳过"
+                : "";
+            var cut = scanned.Truncated ? "，已按时间上限停止统计" : "";
 
-        StatusText.Text = $"{totalText}　·　{result.FileCount:N0} 个文件　·　{result.Elapsed.TotalSeconds:0.0} 秒{skipped}";
+            StatusText.Text =
+                $"{DiskUsage.FormatBytes(scanned.TotalBytes)}　·　{scanned.FileCount:N0} 个文件" +
+                $"　·　{scanned.Elapsed.TotalSeconds:0.0} 秒{skipped}{cut}";
+        }
+        else
+        {
+            StatusText.Text =
+                $"{DiskUsage.FormatBytes(node.Bytes)}　·　{node.FileCount:N0} 个文件　·　本次统计的结果，未重新读取";
+        }
 
-        if (result.Children.Count == 0)
+        // 目录项要能点进下一层，所以先按路径把节点对回来，避免每次都翻一遍 Children
+        var byPath = new Dictionary<string, DiskNode>(StringComparer.OrdinalIgnoreCase);
+        foreach (var child in node.Children) byPath[child.FullPath] = child;
+
+        _items = DiskUsage.ToEntries(node)
+            .Select(entry => new TileItem(
+                entry,
+                entry.IsDirectory && byPath.TryGetValue(entry.FullPath, out var child) ? child : null))
+            .ToList();
+
+        if (_items.Count == 0)
         {
             EmptyText.Text = "这个位置没有可统计的内容（空目录，或全部没有访问权限）。";
             EmptyText.Visibility = Visibility.Visible;
             MapCanvas.Children.Clear();
+            TopList.Children.Clear();
             return;
         }
 
         EmptyText.Visibility = Visibility.Collapsed;
-        RenderTopList(result);
-        DrawTreemap(result);
+        RenderTopList(node);
+        DrawTreemap();
     }
 
-    private void DrawTreemap(DiskScanResult result)
+    private void DrawTreemap()
     {
         MapCanvas.Children.Clear();
 
         var width = MapCanvas.ActualWidth;
         var height = MapCanvas.ActualHeight;
         if (width < 20 || height < 20) return;
+        if (_items.Count == 0) return;
 
         // 超过 MaxTiles 就并成「其他」：再多既点不中也刷不动
-        var items = result.Children.ToList();
-        var others = new List<DiskEntry>();
+        var items = _items.ToList();
+        var others = new List<TileItem>();
 
         if (items.Count > MaxTiles)
         {
@@ -256,9 +312,9 @@ public sealed partial class DiskMapPage : Page
             items = items.Take(MaxTiles - 1).ToList();
         }
 
-        var weights = items.Select(i => (double)i.Bytes).ToList();
+        var weights = items.Select(i => (double)i.Entry.Bytes).ToList();
         if (others.Count > 0)
-            weights.Add(others.Sum(o => (double)o.Bytes));
+            weights.Add(others.Sum(o => (double)o.Entry.Bytes));
 
         var tiles = TreemapLayout.Squarify(weights, 0, 0, width - 4, height - 4);
 
@@ -268,16 +324,17 @@ public sealed partial class DiskMapPage : Page
             if (tile.Width < 3 || tile.Height < 3) continue;
 
             var isOther = i == items.Count;
-            var entry = isOther ? null : items[i];
+            var item = isOther ? null : items[i];
 
-            var border = BuildTile(tile, entry, isOther, others);
+            var border = BuildTile(tile, item, isOther, others);
             MapCanvas.Children.Add(border);
         }
     }
 
-    private Border BuildTile(TreemapLayout.Tile tile, DiskEntry? entry, bool isOther, List<DiskEntry> others)
+    private Border BuildTile(TreemapLayout.Tile tile, TileItem? item, bool isOther, List<TileItem> others)
     {
-        var color = TileColor(Math.Abs((entry?.FullPath ?? "其他").GetHashCode()) % 360);
+        var seed = item?.Entry.FullPath ?? "其他";
+        var color = TileColor(Math.Abs(seed.GetHashCode()) % 360);
 
         var border = new Border
         {
@@ -290,8 +347,9 @@ public sealed partial class DiskMapPage : Page
         Canvas.SetLeft(border, tile.X + 1);
         Canvas.SetTop(border, tile.Y + 1);
 
+        var entry = item?.Entry;
         var name = isOther ? $"其他 {others.Count} 项" : entry!.Name;
-        var bytes = isOther ? others.Sum(o => o.Bytes) : entry!.Bytes;
+        var bytes = isOther ? others.Sum(o => o.Entry.Bytes) : entry!.Bytes;
 
         // 方块太小就只上色，不塞文字（塞了也是被裁一半的残字）
         if (tile.Width > 62 && tile.Height > 30)
@@ -325,14 +383,14 @@ public sealed partial class DiskMapPage : Page
         ToolTipService.SetToolTip(border, isOther
             ? $"其余 {others.Count} 项，合计 {DiskUsage.FormatBytes(bytes)}"
             : $"{entry!.FullPath}\r\n{DiskUsage.FormatBytes(bytes)}　{entry.FileCount:N0} 个文件" +
-              (entry.IsDirectory ? "\r\n单击进入下一层" : ""));
+              (item?.Node is not null ? "\r\n单击进入下一层" : ""));
 
-        if (entry is { IsDirectory: true })
+        if (item?.Node is { } node)
         {
-            border.PointerPressed += (sender, args) =>
+            border.PointerPressed += (_, args) =>
             {
                 args.Handled = true;
-                _ = ScanAsync(entry.FullPath);
+                NavigateTo(node);
             };
 
             border.PointerEntered += (_, _) => border.Opacity = 0.82;
@@ -369,14 +427,14 @@ public sealed partial class DiskMapPage : Page
             (byte)Math.Round((b + m) * 255));
     }
 
-    private void RenderTopList(DiskScanResult result)
+    private void RenderTopList(DiskNode node)
     {
         TopList.Children.Clear();
-        if (result.TotalBytes <= 0) return;
+        if (node.Bytes <= 0) return;
 
-        foreach (var entry in result.Children.Take(5))
+        foreach (var entry in _items.Take(5))
         {
-            var percent = entry.Bytes * 100.0 / result.TotalBytes;
+            var percent = entry.Entry.Bytes * 100.0 / node.Bytes;
 
             var row = new Grid { ColumnSpacing = 12 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -384,7 +442,7 @@ public sealed partial class DiskMapPage : Page
 
             row.Children.Add(new TextBlock
             {
-                Text = entry.Name,
+                Text = entry.Entry.Name,
                 FontSize = 12.5,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Opacity = 0.85,
@@ -392,7 +450,7 @@ public sealed partial class DiskMapPage : Page
 
             var right = new TextBlock
             {
-                Text = $"{DiskUsage.FormatBytes(entry.Bytes)}　{percent:0.0}%",
+                Text = $"{DiskUsage.FormatBytes(entry.Entry.Bytes)}　{percent:0.0}%",
                 FontSize = 12,
                 Opacity = 0.55,
             };
@@ -411,10 +469,10 @@ public sealed partial class DiskMapPage : Page
     {
         CrumbBar.Children.Clear();
 
-        if (_currentPath.Length == 0) return;
+        if (_scanPath.Length == 0) return;
 
-        var root = Path.GetPathRoot(_currentPath) ?? _currentPath;
-        var rest = _currentPath.Length > root.Length ? _currentPath[root.Length..] : "";
+        var root = Path.GetPathRoot(_scanPath) ?? _scanPath;
+        var rest = _scanPath.Length > root.Length ? _scanPath[root.Length..] : "";
         var parts = rest.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
 
         var accumulated = root;
@@ -450,7 +508,18 @@ public sealed partial class DiskMapPage : Page
         {
             button.Click += (sender, args) =>
             {
-                if (((Button)sender).Tag is string target) _ = ScanAsync(target);
+                if (((Button)sender).Tag is not string target) return;
+
+                // 优先在已有树里找：上钻同样是 0 读取
+                var node = _root is null ? null : DiskUsage.Find(_root, target);
+                if (node is not null)
+                {
+                    NavigateTo(node);
+                    return;
+                }
+
+                // 树里没有（扫描被截断、或中途换过根），只能真扫
+                _ = ScanAsync(target);
             };
         }
 
@@ -468,6 +537,13 @@ public sealed partial class DiskMapPage : Page
     private void MapCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         // 窗口尺寸变了要重画：树图是按像素铺的，不重排就会留白或溢出
-        if (_result is not null && !BusyRing.IsActive) DrawTreemap(_result);
+        if (_items.Count > 0 && !BusyRing.IsActive) DrawTreemap();
+    }
+
+    /// <summary>扫描期间把下钻入口挡住，避免在旧树与新结果之间来回跳。</summary>
+    private void SetBusy(bool busy)
+    {
+        CrumbBar.IsHitTestVisible = !busy;
+        MapCanvas.IsHitTestVisible = !busy;
     }
 }
