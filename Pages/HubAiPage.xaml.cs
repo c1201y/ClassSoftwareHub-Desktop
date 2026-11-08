@@ -66,9 +66,9 @@ public sealed partial class HubAiPage : Page
     /// </summary>
     public static string? PendingQuestion;
 
-    // ── 彩蛋（2026-11-07）───────────────────────────────────────────────
-    // 要写进更新文档、不要加设置项、不要推广到别的页面；
-    // 离开本页即复原（见 OnNavigatedTo 开头）。
+    // ── Surprise！（2026-11-07）───────────────────────────────────────────────
+    // 不写更新文档、不加设置项、不推广到别的页面；
+    // 离页复原
     private const string NormalTitle = "Hub AI";
     private const string EggTitle = "Hui AI";
     private const int EggClickCount = 6;
@@ -98,7 +98,7 @@ public sealed partial class HubAiPage : Page
     {
         base.OnNavigatedTo(e);
 
-        // 彩蛋复原：每次进入本页都回到正题。Nick 的原话是「重新刷新页面它会变成 HubAI」，
+        // 复原：每次进入本页都回到正题。
         // 所以切走再回来就还原，彩蛋只在当次停留里成立。
         TitleText.Text = NormalTitle;
         _eggClicks = 0;
