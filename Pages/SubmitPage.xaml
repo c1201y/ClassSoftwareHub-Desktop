@@ -160,6 +160,15 @@
 
                             <TextBox x:Name="WebsiteBox" Header="官网地址（选填）" PlaceholderText="https://…" />
                             <TextBox x:Name="GithubBox" Header="GitHub 仓库（选填）" PlaceholderText="https://github.com/…" />
+
+                            <!-- 开发者与开源协议（2026-11-08 补，对齐网页版 submit.author / submit.license）：
+                                 两项都选填，详情页「详细信息」里是有值才显示、没值整行不出现，
+                                 所以查不到作者的商业软件留空即可，⛔ 不要填「未知」「未标注」这类占位。 -->
+                            <TextBox x:Name="AuthorBox" Header="开发者（选填）"
+                                     PlaceholderText="个人或团队名称，如 某某工作室" />
+                            <TextBox x:Name="LicenseBox" Header="开源协议（选填）"
+                                     PlaceholderText="如 MIT、GPL-3.0；未开源可留空" />
+
                             <TextBox x:Name="NoticeBox" Header="提示条（选填）"
                                      PlaceholderText="显示在下载区上方的蓝色提示，适合「更新频繁、直链易失效」的软件" />
                             <TextBox x:Name="StoreBox" Header="应用商店地址（选填）"

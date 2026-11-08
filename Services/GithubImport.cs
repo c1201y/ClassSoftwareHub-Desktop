@@ -371,7 +371,15 @@ public static class GithubImport
         }
         if (info.OwnerAvatar.Length == 0) info.OwnerAvatar = $"https://github.com/{owner}.png";
         if (raw.TryGetProperty("license", out var licenseNode) && licenseNode.ValueKind == JsonValueKind.Object)
-            info.License = Str(licenseNode, "spdx_id").Length > 0 ? Str(licenseNode, "spdx_id") : Str(licenseNode, "name");
+        {
+            var spdx = Str(licenseNode, "spdx_id");
+            var licenseName = Str(licenseNode, "name");
+
+            // 仓库里放了 LICENSE 文件、但 GitHub 认不出是哪一种协议时会回 spdx_id = "NOASSERTION"。
+            // 那不是协议名，填进表单就会在详情页显示一行看不出意思的英文，
+            // 所以按「没有协议」处理（⛔ 也不退成「未标注」这类占位）。
+            info.License = spdx == "NOASSERTION" ? "" : (spdx.Length > 0 ? spdx : licenseName);
+        }
 
         // ── 版本信息（拿不到不算失败，退化成「只填仓库信息」）──
         var releases = new List<JsonElement>();

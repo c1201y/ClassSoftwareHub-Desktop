@@ -573,6 +573,16 @@ public sealed partial class SubmitPage : Page
 
         Put("官网地址", WebsiteBox.Text, repo.Homepage, text => WebsiteBox.Text = text);
         Put("GitHub 仓库", GithubBox.Text, repo.HtmlUrl, text => GithubBox.Text = text);
+
+        // ── 开发者与开源协议（2026-11-08 补，与网页版 submit.author / submit.license 同口径）──
+        // 协议：接口给的是 SPDX 标识（如 MIT / GPL-3.0），比用户手填准确，直接回填。
+        Put("开源协议", LicenseBox.Text, repo.License, text => LicenseBox.Text = text);
+        // 开发者：GitHub 接口没有「作者」这个概念，只能拿仓库所有者顶。fork 出来的仓库这里
+        // 会是 fork 者本人，所以填上之后要明说一句让人核对，⛔ 不能当成已经核实过。
+        Put("开发者", AuthorBox.Text, repo.Owner, text => AuthorBox.Text = text);
+        if (filled.Contains("开发者"))
+            warnings.Add($"开发者已按仓库所有者填为 {repo.Owner}，若实际作者不同请手动修改。");
+
         if (repo.Homepage.Contains("apps.microsoft.com"))
             Put("应用商店地址", StoreBox.Text, repo.Homepage, text => StoreBox.Text = text);
         // 用的是预发布版：写一条提示条，详情页会在下载区上方提示
@@ -770,6 +780,9 @@ public sealed partial class SubmitPage : Page
             ["platforms"] = SelectedPlatforms(),
             ["website"] = WebsiteBox.Text.Trim(),
             ["github"] = GithubBox.Text.Trim(),
+            // 选填，详情页「详细信息」里有值才显示这两行（与网页版提交字段同名同义）
+            ["author"] = AuthorBox.Text.Trim(),
+            ["license"] = LicenseBox.Text.Trim(),
             ["notice"] = NoticeBox.Text.Trim(),
             ["store"] = StoreBox.Text.Trim(),
             ["downloads"] = downloads,
@@ -999,6 +1012,9 @@ public sealed partial class SubmitPage : Page
         }
         WebsiteBox.Text = Text("website");
         GithubBox.Text = Text("github");
+        // 老草稿没有这两个字段 → 恢复成空白，与「没填过」等价
+        AuthorBox.Text = Text("author");
+        LicenseBox.Text = Text("license");
         NoticeBox.Text = Text("notice");
         StoreBox.Text = Text("store");
         SortBox.Text = Text("sort");
