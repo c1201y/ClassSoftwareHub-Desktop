@@ -67,11 +67,8 @@ public sealed partial class HubAiPage : Page
     public static string? PendingQuestion;
 
     // ── 彩蛋（2026-11-07）───────────────────────────────────────────────
-    //
-    // 连点标题 6 次，Hub AI 变 Hui AI。
-    // 来历：Nick 剪宣传视频时把 HubAI 误打成了 HuiAI，索性做成彩蛋。
-    // ⛔ 这是玩笑，不要写进更新文档、不要加设置项、不要推广到别的页面；
-    //    离开本页即复原（见 OnNavigatedTo 开头）。
+    // 要写进更新文档、不要加设置项、不要推广到别的页面；
+    // 离开本页即复原（见 OnNavigatedTo 开头）。
     private const string NormalTitle = "Hub AI";
     private const string EggTitle = "Hui AI";
     private const int EggClickCount = 6;
