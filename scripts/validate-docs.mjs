@@ -265,7 +265,9 @@ function checkMarkdownBody(info, files) {
     }
   }
 
-  const articleLinkPattern = /csh:\/\/article\/([^)\s"'<>]+)/g;
+  // ⚠️ 排除反引号：正文里常有 `csh://article/xxx` 这种行内代码示例，
+  //    不排除的话标识尾巴会带上一个反引号，误报「文章不存在」（2026-11-10 排序时踩到）。
+  const articleLinkPattern = /csh:\/\/article\/([^)\s"'<>`]+)/g;
   for (const match of text.matchAll(articleLinkPattern)) {
     let target = match[1];
     try { target = decodeURIComponent(target); } catch { /* 保持原样 */ }

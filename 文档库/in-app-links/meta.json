@@ -1,0 +1,11 @@
+{
+  "title": "文档里的应用内跳转链接",
+  "author": "椰汁",
+  "contact": "GitHub @c1201y",
+  "summary": "在正文里引用应用内的页面、工具、设置分组与其它文章，点击即可直达。",
+  "tags": ["文档库", "链接", "写作"],
+  "type": "markdown",
+  "file": "article.md",
+  "date": "2026-11-10",
+  "order": 5
+}
