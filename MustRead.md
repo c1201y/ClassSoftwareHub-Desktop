@@ -314,7 +314,12 @@
   步骤表与前进/后退在 `OobeSession`，取值在 `OobeDraft`（页面只改草稿，写盘只有 `ApplySettings` 一处）。
   ⛔ 别把页面逻辑写回窗口（第一版正是窗口里堆六个 StackPanel，第二版已整体替换）。
   ⛔ 别加「跳过」：Nick 2026-10-31 定，跳过会让"选了浅色、进主界面还是深色"。
-  调向导：`pwsh tools\oobe.ps1`（`--oobe-preview`，仅 DEBUG，不读写 `OobeState`、不改本机设置）。
+  调向导：`pwsh tools\oobe.ps1`（2026-11-09 起一条脚本管两种构建，见 `tools\oobe.ps1` 文件头说明）。
+  - 调试版：走 `--oobe-preview`，`bin\Debug` 下的产物自动识别（或 `-Build` 编译）；不读写 `OobeState`、不改本机设置。
+  - 已安装的正式版：Release 里没有那个参数，脚本改为临时把 `OobeState` 置 `Pending`，应用按「上次没走完」弹向导；
+    应用退出后把 `settings.json` **原样还原**，体验前后本机设置一致。备份在 `%TEMP%\ClassSoftwareHub-OobeReplay`，
+    异常中断留下备份时，下次运行会询问是否先还原；也可单独跑 `-Restore`。
+  - ⛔ 两条路都要先结束正在运行的实例：单实例 Mutex 会让第二个进程只唤醒旧窗口然后自己退出。
 
 
 ---
