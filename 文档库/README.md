@@ -45,6 +45,8 @@
 | `ms-settings:<页面>` | Windows 设置，例如 `ms-settings:storagesense` |
 | `https://…` | 浏览器打开 |
 
+可用的标识清单（页面、工具、设置分组、文章）见 [文档里的应用内跳转链接](in-app-links/article.md)；新增页面或工具后，清单要跟着更新。
+
 ## 投稿
 
 通过 [文档投稿](https://github.com/c1201y/ClassSoftwareHub-Desktop/issues/new?template=doc-submission.yml) 填写标题、文章 id、署名、简介与正文。提交后会自动整理成上面的目录结构、跑一遍校验，并开一个草稿 PR；维护者核对内容后合并，客户端下次同步即可看到。
