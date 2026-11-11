@@ -1,11 +1,11 @@
 # MustRead —— 改这个仓库之前必须先知道的
 
-> 用途：把散在 262 个文件、2003 处 `⛔` / `⚠️` 注释里的硬约束收敛成一份**决策版**。
+> 用途：把散在全库 `⛔` / `⚠️` 注释里的硬约束收敛成一份**决策版**。
 > 这里只写「必须遵守什么、违反会怎样」，不写实现细节。
 > 更细的踩坑史（每条后面挂文件与日期）见 `.workbuddy/memory/PITFALLS.md`；
 > 改到具体模块时，仍要读那个文件头部的原文注释 —— 这里只是索引。
-> 
-> 最近一次校订：2026-10-31（全库通读 `dv1.2.0-insider1.8`；同日补 §1.0「界面第一原则」）。
+>
+> 最近一次校订：2026-11-11（并入 11-08 至 11-10 的侧边栏返工、文档库格式、发版与脚本要素）。
 
 ---
 
@@ -15,7 +15,7 @@
 | ---- | ------------------------------------------------------------- |
 | 类型   | WinUI 3 桌面应用（单 exe，无后端）                                       |
 | 目标框架 | `net10.0-windows10.0.26100.0`，**最低支持 10.0.17763**（Win10 1809） |
-| 规模   | 233 个 `.cs` + 67 个 `.xaml`，约 97,200 行                         |
+| 规模   | 303 个 `.cs` + 92 个 `.xaml`，约 120,600 行                         |
 | 定位   | 教室 / 机房场景：软件下载、课堂工具、系统维护、AI 只读顾问                              |
 
 **两条会决定架构的前提：**
@@ -167,6 +167,26 @@
 - ⛔ **仍然不要靠"挂着不撤"来传达新功能**：15 天是上限不是目标。功能已经不新了就把那一行删掉，
   发版时顺手看一眼这张表 —— 满屏 New/Beta 用户就当装饰看了，这条信息也就废了。
 
+### 1.6 侧边栏模块（`Data/SidebarModule.cs` 是唯一清单，2026-11-08 定稿）
+
+- **加模块只改一处**：往 `SidebarModules.All` 加一条，导航与「侧边布局」页自动跟着变。
+  老用户的存档由 `SettingsStore.EnsureNewSidebarModules` 的 revision 补入，当前是 **rev13**。
+- **Kind 只有五种**：`Palette`（置顶小浮窗）、`Page`（拉出主界面并跳到那一页）、`Window`（单开一扇轻量窗）、
+  `Action`（按一下就干活）、`Panel`（贴边弹一栏，音量与亮度）。
+  ⛔ **没有「开关型模块」这一类**：同日试过 `Toggle` 型按钮、隔天就撤掉了。要给开关就做一个 `Action` 按钮，
+  单击弹二级菜单、菜单里放原生 `ToggleSwitch`，照 `ToolSidebarWindow.ShowPptTouchFlyout` / `ShowSecurityFlyout` 写。
+  弹菜单的项**不为它单立 Kind**，只在 `Tool_Click` 里按 id 分派。
+- ⛔ **「某件事的开关」才做成菜单，别把几件事合成一项**。2026-11-08 有一稿把文件资源管理器、运行、
+  屏幕键盘、锁定电脑与 PPT 触控合成一项「快捷入口」，被 Nick 当天否掉，原话：
+  「我说的是 PowerPoint 触控，不是把所有的东西都融合在一起。」
+  最终形态是**四颗独立按钮 + PPT 触控一颗弹菜单**（菜单里两个开关：触控手势、长按菜单）。
+- **`MenuFlyoutItem` 装不下 `ToggleSwitch`**（只能单行文字 + 图标），要放开关就用 `Flyout` + `StackPanel`。
+  `ToggleSwitch` 默认 `MinWidth = 154`，放进菜单必须 `MinWidth = 0`，并把 `OnContent` / `OffContent` 置空。
+- **改 revision 要先问「谁已经跑过旧逻辑」**：rev12 一度补进那五颗按钮，当天改回后存档里已经记成 12，
+  只改 rev12 那批用户救不回来，于是另加 rev13 做幂等兜底。⛔ 迁移逻辑一次改不到位就补一个号，别指望重跑。
+- **弹菜单期间必须压住自动收起**：`SuppressAutoCollapse = true`，菜单 `Closed` 里恢复并补收一次
+  （`CollapseAfterPopupsClosed`）。漏了就是「菜单关掉之后边条赖着不收」。
+
 ---
 
 ## 2. 交互与文案：最容易返工的几条
@@ -259,6 +279,19 @@
 「请点击这里收看 ClassSoftwareHub 群友的逆天发言！」—— 看见不合规也**不要改**，
 先问一句是不是他定的。
 
+### 2.3 README 与对外说明的版式（2026-11-11 定）
+
+仓库 README 与站点仓库、Win7 移植版保持同一套骨架：居中图标（180×180）、标题、副标题、徽章、
+一段定位说明、三条互链（网站 / 网页版源码 / Win7 移植版），然后 `## 功能` 按组列出
+「**加粗小标题**：一句说明」，再接 `## 安装` / `## 系统要求` / `## 更新` / `## 反馈` / `## 其他内容`。
+
+- ⛔ **不写技术栈与开发流程**：Nick 原话「他们 readme 主要讲的是开发细节，我们不需要讲，
+  我们要讲的是软件的基本的功能之类的」。编译与发版只在末尾留一行指向 `BUILDING.md`；
+  徽章也只放 Stars / Release / 许可证 / 系统版本，不放 .NET / WinUI 这类技术项。
+- 功能条目照 `Data/ToolDef.cs` 的 `Desc` 与各页面的实际能力写，⛔ 别凭印象编。
+- 语言同 §2：书面语、无第二人称、无破折号、无感叹号。
+- 两个仓库的 README 已有先例可抄：`c1201y/ClassSoftwareHub-windows7` 与 `c1201y/ClassSoftwareHub`。
+
 ---
 
 ## 3. XAML 编译器：三种必崩组合（`WMC9999`，**没有行号**）
@@ -321,6 +354,38 @@
     异常中断留下备份时，下次运行会询问是否先还原；也可单独跑 `-Restore`。
   - ⛔ 两条路都要先结束正在运行的实例：单实例 Mutex 会让第二个进程只唤醒旧窗口然后自己退出。
 
+### 6.1 文档库与文章（`文档库/` 与 `Services/Docs/`）
+
+- **文章目录**：`文档库/<id>/`，一篇一个文件夹，`meta.json` + 正文（md / txt / docx / pdf）。
+  id 只能是小写字母、数字与横杠。客户端按需从 GitHub 拉取后缓存到本机，⛔ 不随站点发布。
+- **Markdown 支持的范围**：标题、列表（含任务列表）、引用、代码块、表格、分隔线、图片；
+  行内支持粗体、斜体、删除线、行内代码与链接。表格、任务列表、删除线是 2026-11-08 补的。
+- ⛔ **改解析要同时改四处**：`Services/Docs/DocBlock.cs`（中间表示）、`MarkdownDocParser.cs`（解析）、
+  `Controls/DocView.cs`（渲染）、`DocReading.cs`（给 AI 读文档时的纯文本转换）。
+  漏最后一处就是「界面能看、AI 读不到」，不报错。
+- ⛔ **表格必须先看下一行是不是 `|---|` 分隔行**：只看竖线会把正文里的 `A | B` 吞成一行表格（当年就出过这问题）。
+  分隔行本身不渲染。
+- **投稿走 Issue 表单**（`.github/workflows/doc-submission.yml` → 草稿 PR → 人工核对合并）。
+  `scripts/validate-docs.mjs` 按客户端读取口径校验目录名、`meta.json`、正文扩展名、图片与 `csh://article/` 链接，
+  ⛔ 别去掉这道校验，它是「仓库里看着正常、客户端读不出来」的唯一拦截点。
+- **应用内跳转的标识清单在 `文档库/in-app-links/article.md`**：22 个页面 tag、18 个工具 id、9 组设置分组、
+  全部文章 id，逐条对过源码。**加页面、加工具后要回来同步这一篇**，否则文章与实际脱节。
+  清单来源：`ShellPage.NavigateTagCore` 的 `case`、`Data/ToolDef.cs` 的 `Id`、`SettingsPage.ActivateSection`。
+
+### 6.2 软件清单的数据契约：加字段要改四处
+
+投稿到上架之间有四道白名单，**任何一处没加，字段就在那一跳被静默丢弃**，不报错、日志里也没有：
+
+| 环节 | 位置 |
+| --- | --- |
+| 桌面端提交 | `Pages/SubmitPage.xaml.cs` 的 `BuildPayload` |
+| 投稿接口 | 站点仓库 `submit-worker/worker.js` 的 `fileContent`（`/api/submit` 按 `SUBMISSION_META_KEYS` 重建草稿） |
+| 站点读取 | 站点仓库 `src/gallery/data/index.ts` 的 `PICK` |
+| 桌端读取 | `Data/SoftwareApp.cs`（字段与 `PICK` 一一对应） |
+
+2026-11-08 加「开发者」「开源协议」时就是这么漏的：客户端填了、接口没接，草稿里没有这两项。
+⚠️ **worker 源码在仓库里只是备份**，改完必须重新部署到 Cloudflare 才生效，否则线上跑的还是旧逻辑。
+
 
 ---
 
@@ -352,6 +417,9 @@
 - **首屏绝不联网**：`UpdateNotice` 只存结果、不发起检查。
 - **切页路径上不做内存回收**：`MemoryTrimmer` 由 `IsIdle` 闸门控制，只有窗口不可见（收进托盘 / 最小化）才真回收。
 - **换 `ItemsSource` 为新的 `List` 会让 `GridView` 重建全部容器**（含图标）⇒ 用状态指纹跳过（`SoftwarePage`）。
+- **磁盘空间只扫一次**：`Services/DiskUsage.cs` 扫一遍建出整棵 `DiskNode` 树，之后下钻只是渲染
+  （`DiskMapPage.NavigateTo`）。⛔ 别在进入目录时再 `ScanAsync` —— 2026-11-08 修的就是这个，
+  每进一层扫一遍，机器上要等十几秒。单节点文件上限 `MaxFilesPerNode = 2000`，超出的并入 `TrimmedFileBytes/Count`。
 - 大图标按 `DecodePixelHeight` 解码，别整张全尺寸解。
 
 ---
@@ -364,6 +432,19 @@ MSBUILDDISABLENODEREUSE=1 dotnet build ClassSoftwareHub.Desktop.csproj -c Debug
 ```
 
 - **MSB3021 / MSB3027 = exe 被正在跑的实例锁住**，不是代码错：先关应用再编。
+- ⛔ **别用 `dotnet build -t:Compile` 判断「C# 改对了吗」**：它不触发 XAML 生成，obj 一干净就满地
+  `CS0103: 不存在名称 InitializeComponent` 与 `CS5001 没有 Main`；偶尔能过只是吃了 obj 里的旧生成物。
+  要绕开被占用的 exe 就换输出目录做**完整构建**：`dotnet build ... -p:OutputPath=E:/ClassSoftwareHub-Verify/bin/`。
+  ⚠️ 换过输出目录之后 obj 会绑到那边，换回默认路径前先删 `E:\ClassSoftwareHub-Build\obj\ClassSoftwareHub.Desktop`。
+- **官方包必须带构建签名**（2026-11-04 起）：后端按签名区分官方包与自编译版，缺了会**静默降级**成
+  「要求输激活码」，不报错。用 `tools/build-stamp.mjs` 生成、`-p:CshBuildStampB64=` 传给 publish。
+  构建号 = 版本 + 提交短 SHA，⛔ **版本号先提交再签名**，否则签名绑到上一个提交、与随后打的 tag 对不上。
+  本机没有 `CSH_BUILD_SECRET` 时的找回法（2026-11-07 / 11-08 两次实测）：从 `~/.workbuddy/projects/**/*.jsonl`
+  正则捞候选，用已发布包里 `CshBuildStamp` 的构建号反算 HMAC 比对，唯一命中即有效密钥。
+  ⛔ 密钥只在内存里，不落盘、不回显、不进任何文件。
+- **写 `.ps1` 必须恰好一个 UTF-8 BOM**（2026-11-09 连踩两次）：`Write` 工具写出的文件已自带 BOM，
+  再用 `utf-8-sig` 写一遍会得到**双 BOM**，PowerShell 5.1 报「意外的属性 CmdletBinding / 意外的标记 param」；
+  去掉 BOM 又会让中文按 GBK 解码、几十处语法错。写完用 `Parser::ParseFile` 验一遍再跑。
 - ✅ **构建产物不在仓库里，在 `E:\ClassSoftwareHub-Build\`**（2026-11-06 Nick 定：「OneDrive 就放源代码就行了」）：
   由根目录 `Directory.Build.props` 统一改 `BaseOutputPath` / `BaseIntermediateOutputPath`，
   按项目名分子目录。所以 `bin`、`obj` 在仓库里**根本不会出现**，找 exe 要去 E 盘
@@ -423,7 +504,10 @@ MSBUILDDISABLENODEREUSE=1 dotnet build ClassSoftwareHub.Desktop.csproj -c Debug
 - **版本号四处别漏**：首行配图的 URL、配图的 alt 文字、一级标题、文件名。这四处不一致是最容易出的错
   （本轮 alt 文字和文件名就都还挂在旧号上）。
 - 预览版仍然**只写「更新日志」一段**，不写「新功能」段（见 `csh-release` 技能）。
-- ⭐ **「新功能」这一栏只写"上一个正式版就有的东西"发生了什么变化**（2026-11-07 定，Nick 原话：
+- ⭐ **两版间隔很短时，正式版正文补一栏「上一版主要变化」**（2026-11-08 的 `dv1.2.1` 定）：
+  把上一个正式版正文里的「新功能」整段搬过来，开头一句「已更新至 dv1.2.0 的用户可略过本节」。
+  理由是两个版本只隔一天，不少用户还停在更早的版本上，只写增量等于让他们错过上一版的全部新功能。
+- ⭐ **「修复」只对「上一个正式版里已经存在的功能」成立**（2026-11-07 定，Nick 原话：
   「就比如教室喊话被防火墙拦截后，不提示已发出，这根本就是 dv1.1.3 没有的东西，它是我们测试过程中的一个小插曲，
   根本不是修复 dv1.1.3 的」）。判断办法：**这个功能在旧正式版里存在吗？**
   - 存在过（软件下载、设置页、日志）→ 它的改动、修复可以写。
@@ -457,6 +541,8 @@ Start-Process explorer.exe -ArgumentList '"E:\ClassSoftwareHub-Build\bin\ClassSo
 
 - `公告/all.json` → 所有版本；`公告/1.2.0.json` → 只给 1.2.0 这个发行版（`1.2.0-insider1.9` 也读它）。
   预览版的完整号（`1.2.0-insider1.9.json`）优先于主版本文件，只有确实只想给某一个预览构建看时才建。
+- ⛔ **文件名必须与 `ShellConfig.ShellVersion` 精确一致**：写成 `1.2.01` / `1.3.1` 之类一律**不生效、也不报错**，
+  排查时只会怀疑代码。发版后要发公告，先新建一份与版本号同名的文件（2026-11-08 两次踩在文件名上）。
 - 代码：`Services/NoticeFeed.cs`（拉取 + 线路回退 + 缓存）、`Data/Notice.cs`（解析）、
   `WelcomePage.RefreshNoticesAsync`（渲染成 InfoBar）。
 - ⛔ **这是单向拉静态文件，不是云控**：不上报、不统计、不做 A/B。一旦掺进上报，它就要后端配合，
@@ -496,16 +582,18 @@ Start-Process explorer.exe -ArgumentList '"E:\ClassSoftwareHub-Build\bin\ClassSo
 规模约 5–8% 属于「该简单却绕了」，大头是功能体量。按收益排序：
 
 1. 函数图像**两套实现**（原生页 1,396 行 vs 网页版 451 KB、已推进 21 轮）—— 原生只剩「没装 WebView2」兜底。要么删，要么明确冻结。
-2. 侧边栏自绘拖拽引擎约 1,330 行 —— 收益最大、风险也最大（手感会变），**放最后**。
+2. 侧边栏自绘拖拽引擎约 1,330 行（`ToolSidebarWindow.xaml.cs` 整窗 3,142 行）—— 收益最大、风险也最大（手感会变），**放最后**。
 3. 深浅色判断散落 31 处 / 14 个文件 —— `ThemeHost.ThemeFor(external)` 已可收敛，老代码没回头改。
-4. `SettingsStore` 996 行 / 89 个设置字段 —— 合并成一次幂等迁移可省约 60 行。
+4. `SettingsStore` 1,149 行 / 98 个设置字段 —— 合并成一次幂等基线可省约 60 行。
 5. 打开工具的路有 4 条 —— 约定是「按 Id 反查工具表、别写 case」，case 仍留着。
 6. 首页 8 张卡片逐张手写 —— 改 `ItemsRepeater` + 数据表可省约 200 行。
+7. 文档库 `in-app-links` 的标识清单是手抄的 —— 加页面 / 工具要人工同步，可考虑由 `ToolCatalog` 与 `NavigateTagCore` 生成。
 
 ---
 
 ## 12. 待订正 / 待确认
 
-- `Pages/ShellPage.xaml:314` 的注释仍写着「口径：只做系统级（HKLM）」，而 `TweakDef` / `TweakCatalog` 已统一成「界面类全 HKCU、只有休眠 / 快速启动 / 分页文件走 HKLM」。三条注释改了两条，导航这条漏了。
 - 系统优化页的「应用更改」按钮**尚未在真机上点过一次**（会写 HKLM 并弹 UAC），留给维护者自行验证。
+- `tools/oobe.ps1` 的**正式版路径**只做到静态验证（语法、定位、字段注入、备份还原逐字节一致）；
+  「装好的应用弹出向导」与「托盘退出后自动还原」还需要在真机上走一遍（2026-11-09）。
 - 会话 id 用秒级时间戳，同一秒内新建两个会话会撞文件名（低危，修法：加两位随机后缀）。
