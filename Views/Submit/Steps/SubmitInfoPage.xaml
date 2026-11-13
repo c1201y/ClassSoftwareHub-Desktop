@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Submit.Steps.SubmitInfoPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:submit="using:ClassSoftwareHub.Desktop.Views.Submit">
+
+    <!-- 第 2 步：软件信息。必填项都在这页，填完即可继续。 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,28,24,24">
+            <StackPanel Width="600" HorizontalAlignment="Center" Spacing="14">
+
+                <StackPanel Spacing="4" Margin="0,0,0,2">
+                    <TextBlock Text="软件信息" FontSize="24" FontWeight="SemiBold" />
+                    <TextBlock FontSize="13" Opacity="0.65" TextWrapping="Wrap"
+                               Text="带 * 为必填。软件 ID 会随名称自动生成，可手动修改。" />
+                </StackPanel>
+
+                <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="False" Severity="Error" Title="还需补充" />
+
+                <TextBox x:Name="NameBox" Header="软件名称 *" PlaceholderText="如 7-Zip"
+                         Text="{x:Bind Draft.Name, Mode=TwoWay}" TextChanged="NameBox_TextChanged" />
+
+                <StackPanel Spacing="4">
+                    <TextBox x:Name="IdBox" Header="软件 ID *" PlaceholderText="小写字母 / 数字 / 短横线"
+                             TextChanged="IdBox_TextChanged" />
+                    <TextBlock x:Name="IdHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="56" Height="56" CornerRadius="8" VerticalAlignment="Bottom"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                        <Grid>
+                            <FontIcon Glyph="&#xE7C3;" FontSize="20" Opacity="0.35"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image x:Name="IconPreview" Stretch="UniformToFill" Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="IconBox" Header="图标链接（选填，256×256 方图最佳）"
+                                     PlaceholderText="https://…/icon.png"
+                                     Text="{x:Bind Draft.Icon, Mode=TwoWay}"
+                                     TextChanged="IconBox_TextChanged" />
+                            <Button x:Name="IconUploadButton" Grid.Column="1" Content="上传图片" MinWidth="96"
+                                    VerticalAlignment="Bottom" Click="IconUpload_Click" />
+                        </Grid>
+                        <ProgressBar x:Name="IconBar" Height="4" Maximum="1" Visibility="Collapsed" />
+                        <TextBlock x:Name="IconHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </Grid>
+
+                <ComboBox x:Name="CategoryCombo" Header="分类 *" HorizontalAlignment="Stretch"
+                          PlaceholderText="选择分类" SelectionChanged="Category_Changed" />
+
+                <TextBox Header="一句话简介 *" PlaceholderText="一句话简介，显示在首页卡片上"
+                         Text="{x:Bind Draft.Tagline, Mode=TwoWay}" TextChanged="Field_Changed" />
+
+                <TextBox Header="详细介绍 *" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="120"
+                         PlaceholderText="用途与使用注意事项（可换行）"
+                         Text="{x:Bind Draft.Description, Mode=TwoWay}" TextChanged="Field_Changed" />
+
+                <TextBox Header="联系方式 *" PlaceholderText="如 QQ / 邮箱 / 站内留言方式"
+                         Description="本地加密后提交，仅管理员可解密查看"
+                         Text="{x:Bind Draft.Contact, Mode=TwoWay}" TextChanged="Field_Changed" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -25,10 +25,10 @@
          预览版末段跟着 insider 迭代号走（insider1.5 → 1.2.0.5），
          **转正式版时末段回落 0**（1.2.0 → 1.2.0.0）。
          界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
-    <Version>1.2.1</Version>
-    <AssemblyVersion>1.2.1.0</AssemblyVersion>
+    <Version>1.2.2</Version>
+    <AssemblyVersion>1.2.2.0</AssemblyVersion>
     <FileVersion>1.2.1.0</FileVersion>
-    <InformationalVersion>1.2.1</InformationalVersion>
+    <InformationalVersion>1.2.2</InformationalVersion>
     <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
          否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -82,9 +82,16 @@
          释义取中文、音标换成标准 IPA 符号。生成脚本的思路见 .workbuddy/memory/2026-11-01.md。
          ⚠️ 这是个 2 MB 的纯文本，删了「查单词」就只剩在线源；别当临时文件清掉。 -->
     <EmbeddedResource Include="Assets\Dict\dict-core.tsv" />
+    <!-- 提交向导的汉字转拼音表（2026-11-12）：6,763 个 GB2312 常用字，54 KB，
+         用来把软件名自动生成软件 ID（「网易云音乐」→ wangyiyunyinyue）。
+         源数据 pinyin-data（ISC 协议），生成方式见 Assets\Pinyin\README.md。 -->
+    <EmbeddedResource Include="Assets\Pinyin\pinyin.tsv" />
     <!-- 首页横幅：每个功能版本换一张（文件名跟着版本走，换图时这里和 Pages/WelcomePage.xaml.cs
          的 LoadBanner() 一起改）。⚠️ 文件名一律 ASCII。 -->
     <EmbeddedResource Include="Assets\dv1.2.png" />
+    <!-- 「关于」页顶部横幅（2026-11-13 Nick 给的 1828×746 原图，缩到 1440×588、转 JPG 压到 114 KB）。
+         ⚠️ 文件名一律 ASCII；换图时这里与 Pages/AboutPage.xaml.cs 的 LoadBanner() 一起改。 -->
+    <EmbeddedResource Include="Assets\About\about-banner.jpg" />
     <!-- OOBE「外观」三张预览图（2026-10-31 Nick 给的 1920x1080 原图，这里缩到 480x270）。
          黑白 → 跟随系统、白 → 浅色、黑 → 深色。⚠️ 文件名一律 ASCII。 -->
     <EmbeddedResource Include="Assets\Oobe\appearance-system.png" />

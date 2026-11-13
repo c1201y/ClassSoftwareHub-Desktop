@@ -121,7 +121,9 @@
 - **可自定义位置的项**（教室喊话 / 查阅单词 / 文档库 / PowerPoint 触控优化 / 各工具）由 `Data/NavLayout.cs` 摆位，
   ⛔ 不在 XAML 写死；用户可在「设置 → 自定义导航栏」把常驻项收进分组、把工具拎到一级。
   一级顺序规则：教室类在前、系统类在后，统一排在「课堂工具」之上；教室喊话单独固定在「函数图像」之上。
-- 下半区：任务进行 / 反馈中心 / 更新日志 / 设置
+- 下半区：任务进行 / **关于** / 设置
+  - 「关于」（2026-11-13）收拢了应用信息、反馈中心与更新日志的入口、回声洞、授权、条款与声明；
+    反馈中心 / 更新日志**页面仍在**，只是不再各占一颗导航项（`case "feedback"` / `case "changelog"` 保留，链接还指着它们）
 - 工具子项由 `ToolCatalog.All` **动态生成**，⛔ 不在 XAML 手写；工具清单只有一份
 - `Frame.CacheSize = 2`（0 会切页顿、12 会攒一堆页面，两个都被否过）
 - Hub AI 那一项**永远常驻**，不受总闸控制（Nick 2026-10-28：要留作展示位）
@@ -378,13 +380,38 @@
 
 | 环节 | 位置 |
 | --- | --- |
-| 桌面端提交 | `Pages/SubmitPage.xaml.cs` 的 `BuildPayload` |
+| 桌面端提交 | `Views/Submit/SubmitDraft.cs` 的 `BuildPayload`（旧页 `Pages/SubmitPage.xaml.cs` 已冻结，只在改旧页时才动） |
 | 投稿接口 | 站点仓库 `submit-worker/worker.js` 的 `fileContent`（`/api/submit` 按 `SUBMISSION_META_KEYS` 重建草稿） |
 | 站点读取 | 站点仓库 `src/gallery/data/index.ts` 的 `PICK` |
 | 桌端读取 | `Data/SoftwareApp.cs`（字段与 `PICK` 一一对应） |
 
 2026-11-08 加「开发者」「开源协议」时就是这么漏的：客户端填了、接口没接，草稿里没有这两项。
 ⚠️ **worker 源码在仓库里只是备份**，改完必须重新部署到 Cloudflare 才生效，否则线上跑的还是旧逻辑。
+
+### 6.3 投稿向导（2026-11-12 重做；旧提交页冻结）
+
+投稿界面在 `Views/Submit/`：窗口 `SubmitWizardWindow`（标题条 + 一个 Frame + 底部导航条），
+步骤表与前进/后退在 `SubmitSession`，内容在 `SubmitDraft`（**唯一数据源**），五步页面在 `Steps/`。
+
+| 步骤 | 页面 | 内容 |
+| --- | --- | --- |
+| 1 | `SubmitStartPage` | 从 GitHub 读取（可选，读不到不影响继续） |
+| 2 | `SubmitInfoPage` | 名称、ID、图标、分类、一句话简介、详细介绍、联系方式 |
+| 3 | `SubmitPackagePage` | 适用系统、版本、体积、下载项（其余字段收进「更多选项」） |
+| 4 | `SubmitExtraPage` | 官网、仓库、开发者、协议、提示条、商店、排序（全选填） |
+| 5 | `SubmitReviewPage` | 摘要、缺失项定位、提交、连不上时的四条兜底 |
+
+- 三处 UI 入口（软件下载页按钮、首页卡片、全站搜索）都开窗口；`Pages/SubmitPage` **隐藏保留**，
+  只服务 `csh://page/submit` 与 `--page=submit`。⛔ 别删 `NavigateTagCore` 的 `case "submit"`，
+  也别把 UI 入口接回页面。旧页冻结，不再加功能。
+- 软件 ID 由名称自动生成：`Services/SoftwareSlug` + `Core/PinyinTable`，拼音表在
+  `Assets/Pinyin/pinyin.tsv`（6,763 个常用字 + 853 条多音字词，内嵌资源）。撞车自动加 `-2`；
+  用户手改过 ID 之后（`SubmitDraft.IdEdited`）不再跟随名称。
+- 关窗即存草稿（`%LOCALAPPDATA%\ClassSoftwareHub\submit-draft-v2.json`，与旧页的 `submit-draft.json` 分开）。
+  联系方式在草稿里也只存密文，恢复后需重填。
+- payload 字段与网页版一字不差，`BuildPayload` 已挪进 `SubmitDraft`；加字段仍要改 §6.2 那四处。
+- ⛔ 别把 OOBE 的语义抄过来：投稿可随时关窗、不写任何设置、提交成功后停在结果页不自动关窗。
+- ⛔ 页面之间不互相读控件：校验跟着每一步走（`ISubmitStep.Validate`），缺失项在核对页可点击跳回。
 
 
 ---
@@ -417,6 +444,13 @@
 - **首屏绝不联网**：`UpdateNotice` 只存结果、不发起检查。
 - **切页路径上不做内存回收**：`MemoryTrimmer` 由 `IsIdle` 闸门控制，只有窗口不可见（收进托盘 / 最小化）才真回收。
 - **换 `ItemsSource` 为新的 `List` 会让 `GridView` 重建全部容器**（含图标）⇒ 用状态指纹跳过（`SoftwarePage`）。
+- **WebView2 的生命周期要自己管**（2026-11-13）：它的渲染进程是**独立进程**，`MemoryTrimmer` 的
+  `GC.Collect` / `EmptyWorkingSet` 一点都碰不到它（实测一个激活中的页面 ~100 MB）。
+  `ToolHostPage` 的控件由代码创建、离开一次性工具即 `Close()`；「数学实验室」先降到
+  `MemoryUsageTargetLevel.Low`（100 → 25 MB 左右），`WebViewMemory.IdleCloseMs`（10 分钟）内没重入再关。
+  ⛔ 别把 `WebView2` 写死在 XAML 里 —— `Close()` 过的控件不能复用，写死就再也建不回来。
+  ⚠️ `TrySuspendAsync` 在本项目里稳定失败（控件已脱离视觉树，`Visibility` 传不到底层控制器），
+  只当锦上添花，别指望它；真正兜底的是定时关闭。
 - **磁盘空间只扫一次**：`Services/DiskUsage.cs` 扫一遍建出整棵 `DiskNode` 树，之后下钻只是渲染
   （`DiskMapPage.NavigateTo`）。⛔ 别在进入目录时再 `ScanAsync` —— 2026-11-08 修的就是这个，
   每进一层扫一遍，机器上要等十几秒。单节点文件上限 `MaxFilesPerNode = 2000`，超出的并入 `TrimmedFileBytes/Count`。
@@ -588,6 +622,8 @@ Start-Process explorer.exe -ArgumentList '"E:\ClassSoftwareHub-Build\bin\ClassSo
 5. 打开工具的路有 4 条 —— 约定是「按 Id 反查工具表、别写 case」，case 仍留着。
 6. 首页 8 张卡片逐张手写 —— 改 `ItemsRepeater` + 数据表可省约 200 行。
 7. 文档库 `in-app-links` 的标识清单是手抄的 —— 加页面 / 工具要人工同步，可考虑由 `ToolCatalog` 与 `NavigateTagCore` 生成。
+8. 旧提交页 `Pages/SubmitPage`（1,139 行）自 2026-11-12 起冻结，只作 `csh://page/submit` 的落地页。
+   删之前先确认没有外部文档与用户书签引到那个地址；⚠️ 它与新向导各有一份 payload 组装逻辑，改字段时容易只改一边。
 
 ---
 

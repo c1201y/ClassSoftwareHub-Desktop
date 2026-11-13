@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.Submit.SubmitWizardWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      投稿向导（2026-11-12 重做）。
+
+      结构照 OOBE 的 WelcomeWindow：窗口只有「标题条 + 一个 Frame + 底部导航条」，
+      步骤表与前进/后退在 SubmitSession 里，每一步是一个独立页面（Steps/ 下）。
+
+      ⚠️ 与 OOBE 的三处差别（别照搬那边的语义）：
+        1. 关窗 = 存草稿，不是「结束并应用设置」；
+        2. 非模态，主窗口不隐藏（用户常要对照清单确认 ID 有没有撞车）；
+        3. 提交成功停在结果页，不自动关窗，可继续提交下一个。
+    -->
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBarHost" Grid.Row="0" Padding="16,0,140,0" Background="Transparent">
+            <TextBlock Text="提交软件" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+            <TextBlock x:Name="StepText" HorizontalAlignment="Right" VerticalAlignment="Center"
+                       FontSize="12" Opacity="0.6" />
+        </Grid>
+
+        <Frame x:Name="StepFrame" Grid.Row="1" />
+
+        <!--
+          底部导航条钉在窗口上、不跟页面滚动走：五个步骤的「上一步 / 下一步」始终在同一位置。
+          左侧那行小字说明关窗不会丢内容 —— 用户不敢关窗，多半是怕白填。
+        -->
+        <Grid Grid.Row="2" Margin="24,8,24,16" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="FooterHint" VerticalAlignment="Center" FontSize="12" Opacity="0.55"
+                       TextTrimming="CharacterEllipsis" Text="关闭窗口会自动保存草稿" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="BackNavButton" Content="上一步" MinWidth="96" Visibility="Collapsed"
+                        Click="NavBack_Click" />
+                <Button x:Name="NextNavButton" Content="下一步" MinWidth="110"
+                        Style="{StaticResource AccentButtonStyle}" Click="NavNext_Click" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

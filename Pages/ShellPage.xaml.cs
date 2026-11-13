@@ -591,7 +591,14 @@ public sealed partial class ShellPage : UserControl
     /// <summary>外部（首页卡片等）跳转导航用：先高亮导航项，再切页面。</summary>
     public void NavigateTo(string tag)
     {
-        SelectTag(tag);
+        // 2026-11-13：反馈中心 / 更新日志不再各占一颗底部导航项，入口收进「关于」页。
+        // 但这两个 tag 仍被首页快捷入口、全站搜索、csh:// 链接指着 —— 点亮「关于」那一颗，
+        // 别让用户看到"打开了更新日志、导航栏却停在首页"。
+        SelectTag(tag switch
+        {
+            "feedback" or "feedback-form" or "changelog" => "about",
+            _ => tag,
+        });
         NavigateTag(tag);
     }
 
@@ -740,10 +747,15 @@ public sealed partial class ShellPage : UserControl
                 ContentFrame.Navigate(typeof(Tools.AnnouncePage));
                 return;
             case "submit":
-                // 2026-10-30：导航项已移除，但这个 case 必须留着 —— 入口还有三处：
-                // 软件下载页顶部按钮、首页「提交软件」卡片、命令行 --page=submit。
-                // 删了它们会一起掉进 default 直接回首页，而且不报错。
+                // 2026-10-30：导航项已移除，但这个 case 必须留着 —— 它是**路由**，不是入口。
+                // 2026-11-12 起界面入口（软件下载页按钮、首页卡片、全站搜索）都改开投稿向导窗口，
+                // 只有 csh://page/submit 与 --page=submit 还走这里，打开的是旧提交页（隐藏保留）。
+                // 删了这个 case，那些直达链接会静默落回首页。
                 ContentFrame.Navigate(typeof(SubmitPage));
+                return;
+            case "about":
+                // 2026-11-13：底部那颗「关于」（反馈中心 / 更新日志 / 回声洞 / 授权 / 条款都收进去了）
+                ContentFrame.Navigate(typeof(AboutPage));
                 return;
             case "feedback":
                 ContentFrame.Navigate(typeof(FeedbackPage));
@@ -1080,6 +1092,12 @@ public sealed partial class ShellPage : UserControl
                 break;
 
             default:
+                // 搜到「提交软件」时开向导窗口，不跳旧页面（页面入口已在 2026-11-12 统一）
+                if (hit.Target == "submit")
+                {
+                    ClassSoftwareHub.Desktop.Views.Submit.SubmitWizardWindow.Show();
+                    break;
+                }
                 NavigateTo(hit.Target);
                 break;
         }

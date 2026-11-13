@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Submit.Steps.SubmitPackagePage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:submit="using:ClassSoftwareHub.Desktop.Views.Submit">
+
+    <!--
+      第 3 步：安装包与系统。
+
+      下载项一张卡默认只露「平台 + 直链 / 上传」，体积、备注、下载方式、校验值收进「更多选项」。
+      ⛔ 别再把六个框一次性铺开 —— 多数投稿人一条链接就完事，先看到六个框会直接劝退。
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,28,24,24">
+            <StackPanel Width="600" HorizontalAlignment="Center" Spacing="14">
+
+                <StackPanel Spacing="4" Margin="0,0,0,2">
+                    <TextBlock Text="安装包与系统" FontSize="24" FontWeight="SemiBold" />
+                    <TextBlock FontSize="13" Opacity="0.65" TextWrapping="Wrap"
+                               Text="填写文件直链，或把文件上传到本站存储。单文件上限 2.5 GB。" />
+                </StackPanel>
+
+                <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="False" Severity="Error" Title="还需补充" />
+
+                <StackPanel Spacing="6">
+                    <TextBlock FontSize="14" Text="适用系统 *" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="PlatformChecks" Orientation="Horizontal" Spacing="14" />
+                    </ScrollViewer>
+                    <TextBlock FontSize="12" Opacity="0.6"
+                               Text="列表页的系统筛选只认这里勾选的项。" />
+                </StackPanel>
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Header="版本号" PlaceholderText="如 24.09" Text="{x:Bind Draft.Version, Mode=TwoWay}"
+                             TextChanged="Field_Changed" />
+                    <TextBox Grid.Column="1" Header="体积" PlaceholderText="如 1.6 MB"
+                             Text="{x:Bind Draft.Size, Mode=TwoWay}" TextChanged="Field_Changed" />
+                </Grid>
+
+                <TextBox Header="系统说明（选填）" PlaceholderText="如 Windows 10/11（x86 / x64 / ARM64）"
+                         Text="{x:Bind Draft.System, Mode=TwoWay}" TextChanged="Field_Changed" />
+
+                <StackPanel Spacing="8" Margin="0,6,0,0">
+                    <TextBlock Text="下载项" FontSize="16" FontWeight="SemiBold" />
+
+                    <ItemsControl ItemsSource="{x:Bind Draft.Downloads, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="submit:DownloadDraft">
+                                <Border Margin="0,0,0,10" Padding="16" CornerRadius="8" BorderThickness="1"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    <StackPanel Spacing="10">
+
+                                        <Grid>
+                                            <TextBlock Text="{x:Bind NumberText, Mode=OneWay}"
+                                                       FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <Button Content="删除" HorizontalAlignment="Right" Padding="10,0"
+                                                    FontSize="13" Click="RemoveDownload_Click" Tag="{x:Bind}" />
+                                        </Grid>
+
+                                        <TextBox Header="平台（如 Windows x64 安装版）"
+                                                 PlaceholderText="Windows x64 安装版"
+                                                 Text="{x:Bind Platform, Mode=TwoWay}" />
+
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Header="下载直链 *" PlaceholderText="https://…/setup.exe"
+                                                     Text="{x:Bind Url, Mode=TwoWay}"
+                                                     IsReadOnly="{x:Bind IsUrlLocked, Mode=OneWay}" />
+                                            <Button Grid.Column="1" Content="上传" MinWidth="90"
+                                                    VerticalAlignment="Bottom" Click="Upload_Click"
+                                                    Tag="{x:Bind}" />
+                                        </Grid>
+
+                                        <ProgressBar Height="4" Maximum="1"
+                                                     Value="{x:Bind UploadProgress, Mode=OneWay}"
+                                                     Visibility="{x:Bind UploadVisibility, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind UploadHint, Mode=OneWay}" FontSize="12"
+                                                   Opacity="0.6" TextWrapping="Wrap"
+                                                   Visibility="{x:Bind UploadVisibility, Mode=OneWay}" />
+
+                                        <Expander Header="更多选项" HorizontalAlignment="Stretch"
+                                                  HorizontalContentAlignment="Stretch">
+                                            <StackPanel Spacing="10">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox Header="体积" PlaceholderText="如 1.6 MB"
+                                                             Text="{x:Bind Size, Mode=TwoWay}" />
+                                                    <TextBox Grid.Column="1" Header="备注"
+                                                             PlaceholderText="如 便携版 / 需要管理员权限"
+                                                             Text="{x:Bind Note, Mode=TwoWay}" />
+                                                </Grid>
+
+                                                <ComboBox Header="下载方式" HorizontalAlignment="Stretch"
+                                                          SelectedIndex="{x:Bind KindIndex, Mode=TwoWay}">
+                                                    <ComboBoxItem Content="自动识别（按链接判断）" />
+                                                    <ComboBoxItem Content="官网直链 / 直接下载" />
+                                                    <ComboBoxItem Content="网页跳转" />
+                                                    <ComboBoxItem Content="应用商店" />
+                                                </ComboBox>
+
+                                                <TextBox Header="校验值（选填）"
+                                                         PlaceholderText="纯十六进制，位数自动识别"
+                                                         Text="{x:Bind Hash, Mode=TwoWay}" />
+                                            </StackPanel>
+                                        </Expander>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Button x:Name="AddDownloadButton" Content="添加下载项" HorizontalAlignment="Left"
+                            Click="AddDownload_Click" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

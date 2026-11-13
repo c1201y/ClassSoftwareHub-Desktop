@@ -3,15 +3,22 @@
     x:Class="ClassSoftwareHub.Desktop.Pages.ToolHostPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    NavigationCacheMode="Disabled">
+    NavigationCacheMode="Required">
 
     <!--
       工具宿主页（2026-10-23）：整页只有一个 WebView2，负责把本地工具包（HTML）跑起来。
       ⛔ 全应用**只应该有一个**这样的宿主在跑：每个 WebView2 都是一组浏览器子进程，
          一页一个会立刻吃掉几百 MB。
       ⚠️ 背景色要跟网页一致，否则加载那一下会闪白。
+
+      2026-11-13 两处改动（用户反馈内存占用偏大）：
+        · 控件**不再写死在 XAML 里** —— 改由代码 new 出来放进这个 Grid。
+          原因：离开工具页要真的关掉它（WebView2.Close），而关掉的控件不能复用，
+          写死在 XAML 里就再也建不回来了。
+        · NavigationCacheMode 改成 Required —— 「数学实验室」离开时只挂起、10 分钟没回来才关，
+          页面对象得先活着，挂起的控件才有地方待（见 Services/WebViewMemory.cs）。
     -->
     <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-        <WebView2 x:Name="Web" />
+        <Grid x:Name="Host" />
     </Grid>
 </Page>

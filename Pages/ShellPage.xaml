@@ -290,18 +290,19 @@
                      删了首页卡片和命令行的 page=submit 参数都会掉进 default 直接回首页。
                 -->
                 <!--
-                  反馈中心：和「提交软件」是一对（都是"往维护者那边送东西"），所以紧挨着放。
-                  E939 是「人 + 对话泡」，微软反馈中心用的就是这个字形（已用字形渲染法确认存在）。
+                  反馈中心 / 更新日志：2026-11-13 起**不再各占一颗底部导航项**（Nick：整合成「关于」一页）。
+                  两个页面本身没动，入口改成「关于 → 遇到问题？」里的两张卡片；
+                  NavigateTagCore 里的 case "feedback" / "changelog" 仍然保留 —— 那是路由，
+                  首页快捷入口、csh://page/feedback 这类链接还指着它们。
                 -->
-                <NavigationViewItem Content="反馈中心" Tag="feedback">
+                <!--
+                  「关于」：ClassIsland 那一页的骨架（横幅 + 一列可展开的分组卡），
+                  里面装着应用信息、反馈 / 更新日志入口、回声洞、授权、条款与声明。
+                  E946 是信息圆圈，与「设置」的齿轮分得开。
+                -->
+                <NavigationViewItem Content="关于" Tag="about">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE939;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <!-- 更新日志：E81C 是时钟/历史，跟「设置」的齿轮分得开 -->
-                <NavigationViewItem Content="更新日志" Tag="changelog">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE81C;" />
+                        <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="设置" Tag="settings">

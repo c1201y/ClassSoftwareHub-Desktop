@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Submit.Steps.SubmitExtraPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 第 4 步：补充信息。整页可留空，主线只有四步。 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,28,24,24">
+            <StackPanel Width="600" HorizontalAlignment="Center" Spacing="14">
+
+                <StackPanel Spacing="4" Margin="0,0,0,2">
+                    <TextBlock Text="补充信息" FontSize="24" FontWeight="SemiBold" />
+                    <TextBlock FontSize="13" Opacity="0.65" TextWrapping="Wrap"
+                               Text="以下内容全部选填，可直接进入下一步。" />
+                </StackPanel>
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Header="官网地址（选填）" PlaceholderText="https://…"
+                             Text="{x:Bind Draft.Website, Mode=TwoWay}" />
+                    <TextBox Grid.Column="1" Header="GitHub 仓库（选填）"
+                             PlaceholderText="https://github.com/…"
+                             Text="{x:Bind Draft.Github, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Header="开发者（选填）" PlaceholderText="个人或团队名称"
+                             Text="{x:Bind Draft.Author, Mode=TwoWay}" />
+                    <TextBox Grid.Column="1" Header="开源协议（选填）" PlaceholderText="如 MIT、GPL-3.0"
+                             Text="{x:Bind Draft.License, Mode=TwoWay}" />
+                </Grid>
+
+                <TextBox Header="提示条（选填）"
+                         PlaceholderText="显示在下载区上方的提示，适合更新频繁、直链易失效的软件"
+                         TextWrapping="Wrap"
+                         Text="{x:Bind Draft.Notice, Mode=TwoWay}" />
+
+                <TextBox Header="应用商店地址（选填）"
+                         PlaceholderText="填写后会额外显示一张「商店下载」卡片"
+                         Text="{x:Bind Draft.Store, Mode=TwoWay}" />
+
+                <TextBox Header="排序值（选填）" PlaceholderText="数字越小越靠前，留空排最后"
+                         InputScope="Number" Width="200" HorizontalAlignment="Left"
+                         Text="{x:Bind Draft.Sort, Mode=TwoWay}" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

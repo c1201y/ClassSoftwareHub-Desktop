@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="ClassSoftwareHub.Desktop.Pages.SettingsPage"
     NavigationCacheMode="Enabled"
@@ -508,71 +508,6 @@
 
                 </StackPanel>
 
-                <!-- ================= 回声洞 ================= -->
-                <!-- 2026-10-03 三次改版（Nick）：**单独一块、单独一个「回声洞」标题**（不并进「软件内容」）；
-                     标题与下面展开项的名字重复没关系，他明确说「冲突了也没事」。
-                     形态对齐 ClassIsland 的「关于 → 回声洞」：一个 SettingsExpander，
-                     展开区里**只有一张卡片**，里面**只有字条本身**（Controls/EchoCaveCard，
-                     标准正文字号、自己不带边框、不写任何状态文字 —— 上一版"卡片套卡片"就是这么来的）；
-                     「投稿」按钮在卡片右侧（SettingsCard 的 Content 位 = 系统右对齐），
-                     点开是个 Flyout：一个输入框 + 一个提交按钮，不跳浏览器；回执也留在这个弹层里。 -->
-                <TextBlock Text="回声洞" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
-                <StackPanel Spacing="4">
-                    <StackPanel.ChildrenTransitions>
-                        <TransitionCollection>
-                            <RepositionThemeTransition />
-                        </TransitionCollection>
-                    </StackPanel.ChildrenTransitions>
-
-                    <controls:SettingsExpander x:Name="EchoCaveExpander" Header="回声洞"
-                                               Description="请点击这里收看 ClassSoftwareHub 群友的逆天发言！"
-                                               IsExpanded="False">
-                        <controls:SettingsExpander.HeaderIcon>
-                            <FontIcon Glyph="&#xE8BD;" />
-                        </controls:SettingsExpander.HeaderIcon>
-                        <controls:SettingsExpander.Items>
-
-                            <!-- 展开区唯一的一张卡片：整卡可点＝换一条（ClassIsland 的做法，
-                                 悬停底色铺满整行，正文自己不带框）；右边一颗「投稿」 -->
-                            <controls:SettingsCard IsClickEnabled="True" Click="EchoCave_Click"
-                                                   IsActionIconVisible="False"
-                                                   ToolTipService.ToolTip="点击换一条">
-                                <controls:SettingsCard.Header>
-                                    <ui:EchoCaveCard x:Name="EchoCave" />
-                                </controls:SettingsCard.Header>
-                                <Button Content="投稿" VerticalAlignment="Center">
-                                    <Button.Flyout>
-                                        <Flyout x:Name="EchoSubmitFlyout" Placement="Bottom">
-                                            <StackPanel Width="320" Spacing="10">
-                                                <TextBlock Text="投稿到回声洞"
-                                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                                <TextBox x:Name="EchoSubmitBox"
-                                                         PlaceholderText="写一句让人笑出声的话"
-                                                         AcceptsReturn="True" TextWrapping="Wrap"
-                                                         MinHeight="76" MaxLength="200" />
-                                                <TextBlock x:Name="EchoSubmitStatus" TextWrapping="Wrap"
-                                                           Visibility="Collapsed"
-                                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                <HyperlinkButton x:Name="EchoSubmitFallback"
-                                                                 Content="改用 GitHub 网页投稿"
-                                                                 Padding="0" MinWidth="0" Visibility="Collapsed"
-                                                                 Click="SubmitEchoCaveFallback_Click" />
-                                                <Button x:Name="EchoSubmitButton" Content="提交"
-                                                        HorizontalAlignment="Right"
-                                                        Style="{ThemeResource AccentButtonStyle}"
-                                                        Click="SubmitEchoCave_Click" />
-                                            </StackPanel>
-                                        </Flyout>
-                                    </Button.Flyout>
-                                </Button>
-                            </controls:SettingsCard>
-
-                        </controls:SettingsExpander.Items>
-                    </controls:SettingsExpander>
-
-                </StackPanel>
-
                 <!-- ================= 更新 ================= -->
                 <TextBlock x:Name="UpdateSectionHeader" Text="更新" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
@@ -756,68 +691,6 @@
 
                         </controls:SettingsExpander.Items>
                     </controls:SettingsExpander>
-
-                </StackPanel>
-
-                <!-- ================= 授权 ================= -->
-                <!--
-                  2026-11-04 加，对应后端《防滥用接入指南》§2。
-                  官方流水线打出来的包自带构建签名，服务端验过之后会下发令牌，用户什么都不用做；
-                  自己编译的版本没有签名，只能靠激活码。所以这一块对绝大多数用户是"看一眼就走"的。
-                  ⚠️ 状态文案里不写令牌、密钥、签名这类词，也不解释服务端怎么判定 ——
-                     用户只需要知道"能不能用、到期没到期、去哪激活"。
-                -->
-                <TextBlock x:Name="LicenseSectionHeader" Text="授权" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
-                <StackPanel Spacing="4">
-                    <controls:SettingsCard Header="授权状态">
-                        <controls:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE72E;" />
-                        </controls:SettingsCard.HeaderIcon>
-                        <controls:SettingsCard.Description>
-                            <TextBlock x:Name="LicenseStatus" TextWrapping="Wrap"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </controls:SettingsCard.Description>
-                        <Button x:Name="LicenseActionButton" Content="输入激活码" Click="LicenseAction_Click" />
-                    </controls:SettingsCard>
-                </StackPanel>
-
-                <!-- ================= 条款与声明 ================= -->
-                <!--
-                  2026-10-11：网站新增了三份条款（《用户协议》《隐私政策》《免责声明》），
-                  桌面端同步 —— 这里是入口，点开是原生阅读窗（Views/LegalWindow）。
-
-                  ⚠️ 三份内容与站点**同源**：站点仓库根目录 `法律文本.ts`（站点「条款」页
-                     #/agreement 与站点设置页「关于」区都用它）⇒ 本仓库 Core/LegalText.cs，
-                     由 tools/sync-legal.mjs 生成；安装程序里那一页（installer/Legal.rtf）
-                     也是同一次生成出来的。要改条款请改站点那份 TS，别改这三处。
-                  ⚠️ 卡片的 Header / Description 在代码里按同一份数据刷（RefreshLegalCards），
-                     ⛔ 别在 XAML 里写死文档名与版本号 —— 站点改了条款，这里要跟着变。
-                  ⚠️ 右侧**不要**自己放箭头：IsClickEnabled=True 时 SettingsCard 自带 Chevron。
-                -->
-                <TextBlock Text="条款与声明" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
-                <StackPanel Spacing="4">
-
-                    <controls:SettingsCard x:Name="LegalAgreementCard" Header="用户协议"
-                                           IsClickEnabled="True" Click="OpenLegal_Click" Tag="agreement">
-                        <controls:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE8A5;" />
-                        </controls:SettingsCard.HeaderIcon>
-                    </controls:SettingsCard>
-
-                    <controls:SettingsCard x:Name="LegalPrivacyCard" Header="隐私政策"
-                                           IsClickEnabled="True" Click="OpenLegal_Click" Tag="privacy">
-                        <controls:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE72E;" />
-                        </controls:SettingsCard.HeaderIcon>
-                    </controls:SettingsCard>
-
-                    <controls:SettingsCard x:Name="LegalDisclaimerCard" Header="免责声明"
-                                           IsClickEnabled="True" Click="OpenLegal_Click" Tag="disclaimer">
-                        <controls:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE7BA;" />
-                        </controls:SettingsCard.HeaderIcon>
-                    </controls:SettingsCard>
 
                 </StackPanel>
 

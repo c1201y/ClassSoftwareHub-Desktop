@@ -1109,7 +1109,8 @@ public sealed partial class WelcomePage : Page
                 App.MainWindow?.Shell.NavigateToExperimental();
                 break;
             case "submit":
-                App.MainWindow?.Shell.NavigateTo("submit");
+                // 2026-11-12 起走投稿向导窗口；旧页面留作 csh://page/submit 的路由
+                ClassSoftwareHub.Desktop.Views.Submit.SubmitWizardWindow.Show();
                 break;
             case "feedback":
                 App.MainWindow?.Shell.NavigateTo("feedback");

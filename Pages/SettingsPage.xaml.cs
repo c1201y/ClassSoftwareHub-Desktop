@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -58,69 +58,7 @@ public sealed partial class SettingsPage : Page
         // 主题一切（浅色 ⇄ 深色）就把 SVG 快捷图标重染成对应颜色
         ActualThemeChanged += (_, _) => ApplyQuickLinkIcons();
 
-        // 授权状态每次进页面都重读：可能是别处（授权提示框）刚激活完
-        Loaded += (_, _) => RefreshLicense();
     }
-
-    // ── 授权 ─────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// 刷新「授权状态」这一张卡。
-    /// <para>
-    /// 三种情况，文案只写用户需要知道的（2026-11-06 Nick 定）：
-    /// <list type="bullet">
-    ///   <item>官方版本 —— 直接说能用了，**不显示「输入激活码」按钮**（官方包本来就不需要激活，
-    ///         摆一个按钮反而让用户以为还要额外操作）；</item>
-    ///   <item>激活码激活 —— 显示**激活时间**，不显示剩余天数、也不显示到期日；</item>
-    ///   <item>没激活 —— 提示去输码。</item>
-    /// </list>
-    /// ⛔ 不写令牌 / 密钥 / 签名 / 服务端判定这类词（界面给用户看服务，不给用户看技术）。
-    /// </para>
-    /// </summary>
-    private void RefreshLicense()
-    {
-        try
-        {
-            var ticket = LicenseStore.Current;
-
-            if (ticket is null && BuildIdentity.IsOfficial)
-            {
-                LicenseStatus.Text = "官方版本，在线服务可直接使用。";
-                LicenseActionButton.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            LicenseActionButton.Visibility = Visibility.Visible;
-
-            if (ticket is not null)
-            {
-                // 只报激活时间。到期日与剩余天数都不显示 —— 用户要看的是"什么时候激活的"。
-                var activated = ticket.ActivatedAtLocal;
-                LicenseStatus.Text = activated is null
-                    ? "已激活。"
-                    : $"已激活，激活时间 {activated:yyyy-MM-dd}。";
-                LicenseActionButton.Content = "更换激活码";
-                return;
-            }
-
-            LicenseStatus.Text = "未激活。输入激活码后可使用投稿、反馈、喊话等在线服务。";
-            LicenseActionButton.Content = "输入激活码";
-        }
-        catch (Exception ex)
-        {
-            AppLog.Exception("license", ex, "刷新授权状态");
-            LicenseStatus.Text = "无法读取本机的授权状态。";
-        }
-    }
-
-    private async void LicenseAction_Click(object sender, RoutedEventArgs e)
-    {
-        // 对话框本体在 Views/LicenseDialog：请求被闸门挡下来时弹的是同一个，
-        // 两处的长相和行为必须一致，⛔ 别在这里再抄一份。
-        await Views.LicenseDialog.ShowAsync(XamlRoot);
-        RefreshLicense();
-    }
-
 
     /// <summary>给带 SVG 的快捷入口按当前主题色染图标；主题一切就重染（浅色/深色自适应）。</summary>
     private void ApplyQuickLinkIcons()
@@ -159,7 +97,6 @@ public sealed partial class SettingsPage : Page
             "logs" or "log" => LogExpander,
             "content" => ContentCard,
             "update" or "updates" or "version" => UpdateSectionHeader,
-            "license" or "auth" => LicenseSectionHeader,
             "about" => AboutVersion,
             _ => null,
         };
@@ -289,12 +226,7 @@ public sealed partial class SettingsPage : Page
         HistoryExpander.IsExpanded = false;
         InstallerExpander.IsExpanded = false;
         CacheExpander.IsExpanded = false;
-        LogExpander.IsExpanded = false;
-        CollapseEchoCave();
 
-        // ⚠️ SettingsExpander 起手是摊开的（模板铺好那一刻内层 Expander 默认 IsExpanded=true，
-        //    经 TwoWay 反推回外层）——所以除了下面那一拍，模板一挂上就再压一次，压掉"闪一下"。
-        EchoCaveExpander.Loaded += (_, _) => CollapseEchoCave();
 
         // 打开设置页固定从顶部开始：卡片高度会被设置值二次刷新，ScrollViewer 的锚点跟着漂，
         // 实测会直接停到「常用工具」那一段（2026-09-28）。
@@ -309,8 +241,6 @@ public sealed partial class SettingsPage : Page
             // 折叠区在导航后 200ms（早已过布局）再压一次，防"首帧摊开"。
             HistoryExpander.IsExpanded = false;
             InstallerExpander.IsExpanded = false;
-            LogExpander.IsExpanded = false;
-            CollapseEchoCave();
         };
         _settleTimer.Start();
     }
@@ -356,8 +286,6 @@ public sealed partial class SettingsPage : Page
         // 详见 ShellConfig.SiteVersionDisplay 的注释。
         AboutSiteVersion.Text = $"站点版本：{ShellConfig.SiteVersionDisplay}";
 
-        // 条款与声明：三张卡片的标题 / 说明也走同一份数据（站点改了条款，这里跟着变）
-        RefreshLegalCards();
     }
 
     private void UpdateMinimizeAvailability()
@@ -497,94 +425,6 @@ public sealed partial class SettingsPage : Page
 
     /// <summary>设置 → 诊断 → 日志查看（Nick 2026-10-02：正式入口，不再放实验性分组）。
     /// 走 ContentFrame 真导航 —— NavView 的后退键能回到设置页（设置页有缓存，回来状态还在）。</summary>
-    /// <summary>回声洞那张卡片整卡可点＝换一条（悬停底色铺满整行，正文自己不带框）。</summary>
-    private void EchoCave_Click(object sender, RoutedEventArgs e) => EchoCave.ShowNext();
-
-    /// <summary>
-    /// 把回声洞折叠区收起来（设置页一打开必须是折叠的样子，2026-10-03 Nick 指定）。
-    /// ⚠️ 外层 <c>SettingsExpander.IsExpanded</c> 与模板里那个内层 <see cref="Expander"/> 都要压 ——
-    ///    内层才是真身（模板里绑的是 TwoWay，它起手展开会把 true 反推回外层），只压外层会被顶回来。
-    /// ⛔ 别删。实测口径：收起后外层/内层 ActualHeight 都是 70（只剩表头行），摊开 125~165（随内容长短）。
-    /// </summary>
-    private void CollapseEchoCave()
-    {
-        // 光设 false 在这个控件上不够稳：MUX 的 Expander 只在 IsExpanded **发生变化**时才驱动
-        // VisualState。所以先拨到 true 再拨回 false，强制它把"折叠"真的跑一遍。
-        // 两次赋值在同一个 dispatcher 拍里完成、中间不渲染，肉眼看不到闪。
-        if (!EchoCaveExpander.IsExpanded) EchoCaveExpander.IsExpanded = true;
-        EchoCaveExpander.IsExpanded = false;
-
-        var inner = FindDescendant<Expander>(EchoCaveExpander);
-        if (inner is not null)
-        {
-            if (!inner.IsExpanded) inner.IsExpanded = true;
-            inner.IsExpanded = false;
-        }
-    }
-
-    /// <summary>深度优先找一个后裔元素（模板里的内层控件用；找不到返回 null）。</summary>
-    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
-    {
-        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
-            if (child is T hit) return hit;
-            var deeper = FindDescendant<T>(child);
-            if (deeper is not null) return deeper;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// 「投稿」弹层里的提交：走「提交软件」同一套自建服务（令牌在服务端）。
-    /// 回执**就留在弹层里**（2026-10-03 Nick：卡面那一行状态字删掉了，永远不再显示）——
-    /// 成功时给一句回执、停一下自己收起，失败时留着让用户看。
-    /// </summary>
-    private async void SubmitEchoCave_Click(object sender, RoutedEventArgs e)
-    {
-        var text = EchoSubmitBox.Text.Trim();
-        if (text.Length == 0)
-        {
-            ShowEchoSubmitStatus("还没写内容。");
-            return;
-        }
-
-        EchoSubmitButton.IsEnabled = false;
-        EchoSubmitButton.Content = "正在提交";
-        ShowEchoSubmitStatus("正在提交…");
-
-        var (ok, message) = await Services.EchoCaveService.SubmitAsync(text);
-
-        EchoSubmitButton.IsEnabled = true;
-        EchoSubmitButton.Content = "提交";
-        ShowEchoSubmitStatus(message);
-        // 服务端还没接上（或网络被挡）时给条退路：去 GitHub 网页投。成功时不给，免得画蛇添足。
-        EchoSubmitFallback.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
-
-        if (ok)
-        {
-            EchoSubmitBox.Text = "";
-
-            // 回执看一眼够了就自己收（成功才收；失败留着，还能点兜底链接）。
-            // 用文本比对作令牌：中途又提交过一次的话，这句旧回执不该再把弹层收掉。
-            await Task.Delay(1800);
-            if (EchoSubmitStatus.Text == message) EchoSubmitFlyout.Hide();
-        }
-    }
-
-    private async void SubmitEchoCaveFallback_Click(object sender, RoutedEventArgs e)
-    {
-        if (await EchoCave.OpenSubmitPage()) EchoSubmitFlyout.Hide();
-        else ShowEchoSubmitStatus("无法打开浏览器，请手动访问 GitHub 投稿。");
-    }
-
-    private void ShowEchoSubmitStatus(string message)
-    {
-        EchoSubmitStatus.Text = message;
-        EchoSubmitStatus.Visibility = Visibility.Visible;
-    }
-
     private void OpenLogViewer_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(LogViewerPage));
@@ -594,48 +434,6 @@ public sealed partial class SettingsPage : Page
     private void OpenHubAiSettings_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(HubAiSettingsPage));
-    }
-
-    // ══════════ 条款与声明（用户协议 / 隐私政策 / 免责声明）══════════
-    //
-    // 真源：站点仓库根目录 `法律文本.ts`。
-    // 路径：站点 `public/legal.json` ⇒ Services/LegalTextSource（在线 → 缓存 → 内置）。
-    // 内置那份 Core/LegalText.cs 仍由 tools/sync-legal.mjs 生成，现在的角色只是**兜底**
-    // （安装程序那一页 installer/Legal.rtf 也还是同一次生成出来的，安装时不可能联网）。
-    //
-    // ⚠️ 2026-11-01 改：以前这里读 Core/LegalText.cs 常量，等于「改一次条款就要发一次版」。
-    //    现在读 LegalTextSource，站点改完提交即生效，旧版本客户端也能看到新条款。
-    // ⇒ 卡片文字**不许在 XAML 写死**，一律按这份数据刷。
-
-    /// <summary>按当前生效的条款数据刷三张卡片的标题与说明（每份文档的版本 / 生效日期也在里面）。</summary>
-    private void RefreshLegalCards()
-    {
-        try
-        {
-            Bind(LegalAgreementCard, "agreement", "使用本站（网站与桌面客户端）前请完整阅读");
-            Bind(LegalPrivacyCard, "privacy", "本站怎么处理你的信息、哪些存在本机");
-            Bind(LegalDisclaimerCard, "disclaimer", "软件来源、下载安装风险与责任范围");
-
-            void Bind(CommunityToolkit.WinUI.Controls.SettingsCard card, string key, string blurb)
-            {
-                var doc = Services.LegalTextSource.Find(key);
-                if (doc is null) return;
-                card.Header = doc.Title;
-                card.Description = $"{blurb} · {doc.VersionLine}";
-                card.Tag = doc.Key;                       // 以数据为准（XAML 里也写了，防手误不一致）
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warning("legal", "条款卡片刷新失败：" + ex.Message);
-        }
-    }
-
-    /// <summary>三张卡片共用一个处理：按 Tag 上的 key 打开阅读窗对应那一档。</summary>
-    private void OpenLegal_Click(object sender, RoutedEventArgs e)
-    {
-        var key = (sender as FrameworkElement)?.Tag as string;
-        Views.LegalWindow.Show(key);
     }
 
     // ══════════ GitHub 下载体验优化（下载路径的全局默认；设置 → 软件内容）══════════

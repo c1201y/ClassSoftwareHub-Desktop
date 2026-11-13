@@ -568,10 +568,11 @@ public sealed partial class SoftwarePage : Page
     private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
 
     /// <summary>
-    /// 「提交软件」入口（2026-10-30 从导航栏挪来）。
-    /// 走 <c>Shell.NavigateTo</c> 让导航栏的选中态跟着走，别用 ContentFrame.Navigate。
+    /// 「提交软件」入口。
+    /// 2026-11-12 起改开投稿向导窗口（非模态，可与清单对照）；旧提交页仍可通过
+    /// <c>csh://page/submit</c> 或命令行 <c>--page=submit</c> 打开，作为路由保留。
     /// </summary>
     private void SubmitEntry_Click(object sender, RoutedEventArgs e)
-        => App.MainWindow?.Shell.NavigateTo("submit");
+        => ClassSoftwareHub.Desktop.Views.Submit.SubmitWizardWindow.Show();
 
 }

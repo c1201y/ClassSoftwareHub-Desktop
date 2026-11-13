@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Views.Submit.Steps.SubmitStartPage"
+    NavigationCacheMode="Required"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 第 1 步：起点。读取是可选的，跳过不影响后续填写。 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24,28,24,24">
+            <StackPanel Width="600" HorizontalAlignment="Center" Spacing="12">
+
+                <StackPanel Spacing="4" Margin="0,0,0,6">
+                    <TextBlock Text="从 GitHub 读取" FontSize="24" FontWeight="SemiBold" />
+                    <TextBlock FontSize="13" Opacity="0.65" TextWrapping="Wrap"
+                               Text="有公开仓库可以先读名称、简介与安装包，没有就点「开始填写」手动填。" />
+                </StackPanel>
+
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="RepoBox" Header="仓库地址"
+                             PlaceholderText="github.com/owner/repo 或 owner/repo" />
+                    <Button x:Name="ImportButton" Grid.Column="1" Content="读取" MinWidth="100"
+                            VerticalAlignment="Bottom" Style="{StaticResource AccentButtonStyle}"
+                            Click="Import_Click" />
+                </Grid>
+
+                <CheckBox x:Name="PrereleaseBox" Content="优先取最新预发布版（Beta / Alpha）" />
+                <CheckBox x:Name="OverwriteBox" Content="覆盖已填写的内容" />
+                <TextBlock Margin="28,-8,0,0" FontSize="12" Opacity="0.55" TextWrapping="Wrap"
+                           Text="默认只补空白项，已填写的内容保留。" />
+
+                <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="False" Severity="Error" Title="读取失败" />
+                <InfoBar x:Name="OkBar" IsOpen="False" IsClosable="False" Severity="Success" Title="读取完成" />
+
+                <Border x:Name="Report" Visibility="Collapsed" CornerRadius="4" Padding="12"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                    <StackPanel x:Name="ReportHost" Spacing="6" />
+                </Border>
+
+                <TextBlock Margin="0,10,0,0" FontSize="12" Opacity="0.55" TextWrapping="Wrap"
+                           Text="读取失败不影响手动填写；点右下角「开始填写」即可进入下一步。" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

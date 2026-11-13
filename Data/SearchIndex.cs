@@ -295,8 +295,11 @@ public static class SearchIndex
                 Keywords = "feedback 反馈 报错 出错 问题 bug 建议 意见 issue 修正 失效" },
         new() { Tag = "changelog", Title = "更新日志", Desc = "查看各版本的更新内容", Glyph = "\uE81C", TopLevel = true,
                 Keywords = "changelog 更新日志 版本 更新内容 新功能" },
-        new() { Tag = "settings", Title = "设置", Desc = "主题、材质、侧边栏、关于", Glyph = "\uE713", TopLevel = true,
-                Keywords = "settings 设置 主题 外观 深色 浅色 材质 关于 更新" },
+        // 2026-11-13：底部那颗「关于」——反馈/日志/回声洞/授权/条款的入口都收在这一页
+        new() { Tag = "about", Title = "关于", Desc = "版本、反馈与更新日志、回声洞、授权、条款", Glyph = "\uE946", TopLevel = true,
+                Keywords = "about 关于 版本 版权 许可 license 授权 激活 激活码 条款 隐私政策 用户协议 免责声明 回声洞 反馈 更新日志 作者" },
+        new() { Tag = "settings", Title = "设置", Desc = "主题、材质、侧边栏、下载位置", Glyph = "\uE713", TopLevel = true,
+                Keywords = "settings 设置 主题 外观 深色 浅色 材质 更新 缓存 日志" },
 
         new() { Tag = "machinecheck", Title = "本机核实", Desc = "拿本机已装软件跟清单对一遍", Glyph = "\uE7F4",
                 Keywords = "machinecheck 本机 核实 检测 装机 检查 已装" },

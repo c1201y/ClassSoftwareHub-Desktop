@@ -1893,6 +1893,13 @@ public sealed partial class MainWindow : Window
     private string _sheetUrl = "";
 
     /// <summary>
+    /// 浮层收起时把 WebView2 挂起（2026-11-13）。
+    /// 这个控件是常驻的：关掉的 WebView2 不能复用，所以这里只挂起不关闭 ——
+    /// 挂起后 Chromium 会把渲染进程的堆与缓存压到最低，下次打开 <see cref="WebViewMemory.Resume"/> 原样恢复。
+    /// </summary>
+    private bool _sheetSuspended;
+
+    /// <summary>
     /// 在应用内浮层里打开一个网页（http/https）。缺 WebView2 时退化成「去安装 / 用浏览器打开」。
     /// </summary>
     public async void ShowWebSheet(string? url, string? title = null)
@@ -1923,6 +1930,14 @@ public sealed partial class MainWindow : Window
         }
 
         WebSheetRing.IsActive = true;
+
+        // 上次收起时挂起过 → 先解冻再显示，否则打开的是一个冻住的页面
+        if (_sheetSuspended)
+        {
+            WebViewMemory.Resume(SheetWeb, "网页浮层");
+            _sheetSuspended = false;
+        }
+
         WebSheet.Visibility = Visibility.Visible;
         PlaySheetAnimation(show: true);
 
@@ -2001,9 +2016,25 @@ public sealed partial class MainWindow : Window
         story.Children.Add(fade);
         story.Children.Add(slide);
         if (!show)
-            story.Completed += (_, _) => WebSheet.Visibility = Visibility.Collapsed;
+        {
+            story.Completed += (_, _) =>
+            {
+                // 先彻底藏起来，再挂起 —— TrySuspend 要求控件此刻不可见（顺序反了会抛）
+                WebSheet.Visibility = Visibility.Collapsed;
+                SuspendWebSheet();
+            };
+        }
 
         story.Begin();
+    }
+
+    /// <summary>收起之后挂起网页内核，把它的内存还给系统（见 <see cref="WebViewMemory"/>）。</summary>
+    private async void SuspendWebSheet()
+    {
+        if (_sheetSuspended || !_sheetReady || SheetWeb?.CoreWebView2 is null) return;
+
+        try { _sheetSuspended = await WebViewMemory.SuspendAsync(SheetWeb, "网页浮层"); }
+        catch { _sheetSuspended = false; }
     }
 
     private void CloseWebSheet() => PlaySheetAnimation(show: false);

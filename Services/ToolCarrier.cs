@@ -89,6 +89,20 @@ public static class ToolCarrier
         WebViewRuntimeService.IsRuntimeInstalled() && EntryOf(webToolId) is not null;
 
     /// <summary>
+    /// 离开工具页之后**先挂起、过一会儿才关**的工具（2026-11-13 Nick 定）。
+    /// <para>
+    /// 目前只有「数学实验室」（<c>function-plot</c>）：2.4 MB 的脚本加上画布状态，
+    /// 重进有可感延迟，所以离开时只挂起（<c>TrySuspendAsync</c>），
+    /// <see cref="WebViewMemory.IdleCloseMs"/> 之内回来就原地恢复；超时才真的关掉子进程。
+    /// </para>
+    /// <para>
+    /// 其余工具（都是一次性查阅类）离开即关 —— 它们的渲染进程比重新加载贵。
+    /// </para>
+    /// </summary>
+    public static bool KeepsAlive(string? webToolId) =>
+        string.Equals(webToolId, "function-plot", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// 决定这个工具走哪条路。Web 可用就返回导航参数，否则返回 null（调用方走原生页）。
     /// </summary>
     public static ToolHostRequest? RequestFor(string? webToolId, Type nativePage, object? nativeParameter)
