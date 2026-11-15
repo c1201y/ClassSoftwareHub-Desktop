@@ -6,13 +6,13 @@ using Windows.Storage.Streams;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
-
-
-
+/// <summary>
+/// 截图自动落盘：存到「设置 → 常用工具」里那个目录（**默认桌面**），文件名 `截图_yyyyMMdd_HHmmss.png`。
+/// 撞名自动加序号，不覆盖旧图；闯了什么错都只写日志，绝不往外抛（截图本身不能因为存盘失败就没了）。
+/// </summary>
 public static class ShotSaver
 {
-    
+    /// <summary>设置里那个目录；没设 / 不在了 → 系统桌面。</summary>
     public static string Dir()
     {
         try
@@ -20,13 +20,13 @@ public static class ShotSaver
             var d = App.Settings.Current.ShotSaveDir;
             if (!string.IsNullOrWhiteSpace(d) && Directory.Exists(d)) return d;
         }
-        catch {  }
+        catch { /* 读设置失败就走桌面 */ }
 
         try { return Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); }
         catch { return ""; }
     }
 
-    
+    /// <summary>显示用：设置里的目录（不管存不存在）。</summary>
     public static string DirSetting()
     {
         try
@@ -38,7 +38,7 @@ public static class ShotSaver
         return Dir();
     }
 
-    
+    /// <summary>存 PNG（自动防撞名）。返回落盘路径；失败 null。</summary>
     public static string? Save(byte[] png, DateTime? at = null)
     {
         try
@@ -63,7 +63,7 @@ public static class ShotSaver
         }
     }
 
-    
+    /// <summary>把 ScreenCapture 给的 BMP 字节转成 PNG 字节（落盘的一般是 PNG）。</summary>
     public static async Task<byte[]?> BmpToPngAsync(byte[] bmp)
     {
         try
@@ -97,7 +97,7 @@ public static class ShotSaver
         }
     }
 
-    
+    /// <summary>截一块（ScreenFrame + 裁剪区）直接存成 PNG。返回落盘路径；失败 null。</summary>
     public static async Task<string?> SaveFrameAsync(ScreenFrame frame, int cx, int cy, int cw, int ch)
     {
         try

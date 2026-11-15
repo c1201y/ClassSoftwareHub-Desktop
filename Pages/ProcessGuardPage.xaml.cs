@@ -9,23 +9,23 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 「程序专杀」页（实验性功能，tag = <c>procguard</c>）。
+///
+/// 与「白板专杀」是**两个独立功能**（Nick 2026-09-28 明确要求不合并）：
+/// 白板专杀盯死白板5 家族，本页盯用户在页面上自行指定的任意进程。
+///
+/// 逻辑全在 <see cref="ProcessGuard"/>（扫进程 / 判窗口 / 结束 / 定时），
+/// 这里只管界面，外加一个 <see cref="_ready"/> 闸门挡住构造期的假事件。
+/// </summary>
 public sealed partial class ProcessGuardPage : Page
 {
     private ProcessGuardConfig _cfg = new();
 
-    
-    
-    
-    
+    /// <summary>
+    /// ⚠️ 构造期给 ToggleSwitch 设初值会**触发 Toggled**，那一刻 _cfg 还没铺好，
+    ///    回写就把存档冲成默认值了。所以铺完初值再放行（跟白板专杀页同一个套路）。
+    /// </summary>
     private bool _ready;
 
     public ProcessGuardPage()
@@ -33,7 +33,7 @@ public sealed partial class ProcessGuardPage : Page
         InitializeComponent();
 
         _cfg = ProcessGuardConfig.Load();
-        EnableSwitch.IsOn = _cfg.Enabled;                  
+        EnableSwitch.IsOn = _cfg.Enabled;                  // ⚠️ 别写进 XAML
 
         RefreshRules();
         RefreshProcs();
@@ -42,7 +42,7 @@ public sealed partial class ProcessGuardPage : Page
         _ready = true;
     }
 
-    
+    // ── 总开关 ──────────────────────────────────────────────
 
     private void EnableSwitch_Toggled(object sender, RoutedEventArgs e)
     {
@@ -66,7 +66,7 @@ public sealed partial class ProcessGuardPage : Page
                 : "已关闭。添加程序并设定时间点后，可在此开启自动执行。");
     }
 
-    
+    // ── 添加规则 ─────────────────────────────────────────────
 
     private void AddRule_Click(object sender, RoutedEventArgs e)
     {
@@ -95,7 +95,7 @@ public sealed partial class ProcessGuardPage : Page
         AddHint.Text = $"已添加 {name}。请在下方为它设定结束时间。";
     }
 
-    
+    // ── 规则列表 ─────────────────────────────────────────────
 
     private void RefreshRules()
     {
@@ -117,12 +117,12 @@ public sealed partial class ProcessGuardPage : Page
             RulesHost.Children.Add(BuildRuleCard(rule));
     }
 
-    
+    /// <summary>一条规则 = 一张内嵌卡片（进程名 / 启用 / 删除 / 时间点 / 使用中跳过）。</summary>
     private Border BuildRuleCard(ProcessGuardRule rule)
     {
         var body = new StackPanel { Spacing = 8 };
 
-        
+        // ── 第 1 行：进程名 + 启用 + 删除 ──
         var head = new Grid { ColumnSpacing = 10 };
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -174,7 +174,7 @@ public sealed partial class ProcessGuardPage : Page
         head.Children.Add(enable);
         head.Children.Add(del);
 
-        
+        // ── 第 2 行：加时间点 ──
         var pickRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         var pick = new TimePicker
         {
@@ -193,7 +193,7 @@ public sealed partial class ProcessGuardPage : Page
             if (!rule.Times.Contains(hhmm))
             {
                 rule.Times.Add(hhmm);
-                rule.Times.Sort(StringComparer.Ordinal);      
+                rule.Times.Sort(StringComparer.Ordinal);      // 按时间先后排
                 _cfg.Save();
                 RefreshRules();
                 UpdateHint();
@@ -209,7 +209,7 @@ public sealed partial class ProcessGuardPage : Page
         pickRow.Children.Add(pick);
         pickRow.Children.Add(addTime);
 
-        
+        // ── 第 3 行：已有时间点 ──
         var chips = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         if (rule.Times.Count == 0)
         {
@@ -244,7 +244,7 @@ public sealed partial class ProcessGuardPage : Page
             }
         }
 
-        
+        // ── 第 4 行：正在使用时是否跳过 ──
         var skipRow = new StackPanel { Spacing = 2 };
         var skip = new ToggleSwitch
         {
@@ -283,11 +283,11 @@ public sealed partial class ProcessGuardPage : Page
         };
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 按资源键取当前主题的画刷。
+    /// ⚠️ 这类主题色键**写不进 XAML 的代码构造**，只能在运行时查表（跟带状态徽章的卡片同一个原因）。
+    ///    取不到就退回透明色，绝不因为一个画刷把整页拖崩。
+    /// </summary>
     private static Brush ThemeBrush(string key, Windows.UI.Color fallback)
     {
         try
@@ -298,7 +298,7 @@ public sealed partial class ProcessGuardPage : Page
         return new SolidColorBrush(fallback);
     }
 
-    
+    // ── 手动执行 ─────────────────────────────────────────────
 
     private void Check_Click(object sender, RoutedEventArgs e) =>
         Show(ProcessGuard.RunOnce(_cfg, dryRun: true), "仅检测");
@@ -307,7 +307,7 @@ public sealed partial class ProcessGuardPage : Page
     {
         var r = ProcessGuard.RunOnce(_cfg, dryRun: false);
 
-        
+        // 手动执行也留一条日志 —— 以后翻 procguard.log 能分清"到点自己跑的"和"手动点的"
         ProcessGuard.Log($"手动结束：{r.Summary}"
             + (r.KilledNames.Count > 0 ? " 结束=" + string.Join("、", r.KilledNames) : "")
             + (r.Errors.Count > 0 ? " 失败=" + string.Join("；", r.Errors) : ""));
@@ -331,7 +331,7 @@ public sealed partial class ProcessGuardPage : Page
         RefreshProcs();
     }
 
-    
+    // ── 当前命中进程 ─────────────────────────────────────────
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshProcs();
 

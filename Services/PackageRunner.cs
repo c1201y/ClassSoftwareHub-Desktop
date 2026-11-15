@@ -8,31 +8,31 @@ using System.Threading.Tasks;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
+/// <summary>解压收尾：产物目录在哪。</summary>
 public sealed record ExtractResult(string Directory);
 
-
+/// <summary>安装收尾：有没有起来、源安装包删没删、有没有话要带给用户。</summary>
 public sealed record InstallResult(bool Started, bool SourceDeleted, string Message = "");
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 下载完之后"再走一步"的两个动作：解压压缩包、启动安装程序。
+///
+/// ⛔ 不引第三方压缩库（SharpCompress 之类），两个通道就够了：
+///   · <b>.zip</b> → BCL 的 <see cref="ZipFile"/>，逐条目解压，能报进度，也能自己拦 Zip Slip；
+///   · <b>其余格式</b>（7z / tar / tar.gz / tar.xz / bz2 / zst / rar…）→ 系统自带的
+///     <c>%SystemRoot%\System32\tar.exe</c>（bsdtar + libarchive，Windows 10 1803 起就有）。
+///
+/// 覆盖度是量过的：站点 61 个压缩包里 .zip 占 52（85%），其余是 3 个 .tar.xz、3 个 .tar.gz、
+/// 2 个 .7z、1 个 .rar —— 前四类两个通道都能吃下；.rar 只有 1 个，且能否解开取决于系统
+/// libarchive 版本（Windows 11 可以，Windows 10 不行），解不开就如实报错，不装作支持。
+/// </summary>
 public static class PackageRunner
 {
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 解压到哪儿：与压缩包**同级**的同名文件夹（<c>D:\下载\foo.zip</c> → <c>D:\下载\foo\</c>）。
+    /// 同名目录已存在且非空时顺延 <c>foo (2)</c>、<c>foo (3)</c> —— 绝不往一个已经有东西的目录里倒。
+    /// <c>.tar.gz</c> 这类复合后缀连剥两层，免得解出个 <c>foo.tar</c> 文件夹。
+    /// </summary>
     public static string TargetDirFor(string archivePath)
     {
         var parent = Path.GetDirectoryName(archivePath);
@@ -54,10 +54,10 @@ public static class PackageRunner
         catch { return false; }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 解压到 <see cref="TargetDirFor"/>。失败时把半截产物清掉 —— 留着一堆解了一半的文件，
+    /// 用户既看不出哪些是完整的，也没法「重来一遍」。
+    /// </summary>
     public static async Task<ExtractResult> ExtractAsync(
         string archivePath, IProgress<double>? progress = null, CancellationToken ct = default)
     {
@@ -84,7 +84,7 @@ public static class PackageRunner
         }
     }
 
-    
+    // ── .zip：BCL ────────────────────────────────────────────────────
 
     private static void ExtractZip(string zipPath, string target, IProgress<double>? progress, CancellationToken ct)
     {
@@ -93,7 +93,7 @@ public static class PackageRunner
         long total = 0;
         foreach (var entry in zip.Entries) total += Math.Max(0, entry.Length);
 
-        
+        // 防 Zip Slip：条目名里带 ..\ 或绝对路径时，拼出来的落点会跑到目标目录外面
         var root = Path.GetFullPath(target) + Path.DirectorySeparatorChar;
 
         long done = 0;
@@ -109,7 +109,7 @@ public static class PackageRunner
             if (!outPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
                 throw new IOException($"压缩包内含越界路径，已中止解压：{entry.FullName}");
 
-            
+            // 目录条目（名字以分隔符结尾）
             if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\'))
             {
                 Directory.CreateDirectory(outPath);
@@ -125,7 +125,7 @@ public static class PackageRunner
             if (total > 0)
             {
                 var pct = Math.Min(1.0, (double)done / total);
-                
+                // 条目多的时候逐条报会刷爆 UI 线程（Progress<T> 每次都 Post），按 1% 节流
                 if (pct - reported >= 0.01 || pct >= 1.0)
                 {
                     reported = pct;
@@ -135,7 +135,7 @@ public static class PackageRunner
         }
     }
 
-    
+    // ── 其余格式：系统 bsdtar ────────────────────────────────────────
 
     private static async Task ExtractWithSystemTarAsync(string archivePath, string target, CancellationToken ct)
     {
@@ -151,7 +151,7 @@ public static class PackageRunner
             RedirectStandardError = true,
             RedirectStandardOutput = true,
         };
-        
+        // ArgumentList 会自己处理引号与空格 —— 中文路径、带空格的路径都不会被拆开
         psi.ArgumentList.Add("-xf");
         psi.ArgumentList.Add(archivePath);
         psi.ArgumentList.Add("-C");
@@ -176,15 +176,15 @@ public static class PackageRunner
             : $"系统解压组件返回代码 {process.ExitCode}。");
     }
 
-    
+    // ── 安装 ────────────────────────────────────────────────────────
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 启动安装程序（UAC 由系统自己弹，不归我们管）。
+    ///
+    /// <paramref name="deleteAfter"/> 为真时**等安装程序自己退出**再删安装包 ——
+    /// 早删会删到安装程序正在读的文件，只能等它走完。等待期间应用被关掉 ⇒ 等待中断，
+    /// 安装包留在原处（少删一次而已，不会损坏任何东西）。
+    /// </summary>
     public static async Task<InstallResult> InstallAsync(
         string installerPath, bool deleteAfter, CancellationToken ct = default)
     {
@@ -198,7 +198,7 @@ public static class PackageRunner
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            
+            // 1223 = 用户在 UAC 上点了「否」
             return new InstallResult(false, false, "已取消授权，安装未开始。");
         }
 
@@ -213,7 +213,7 @@ public static class PackageRunner
 
         using (process)
         {
-            
+            // 上限 24 小时纯粹是防僵尸；正常情况就是等用户装完
             using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
             wait.CancelAfter(TimeSpan.FromHours(24));
             try
@@ -226,23 +226,23 @@ public static class PackageRunner
             }
         }
 
-        await Task.Delay(800, CancellationToken.None);   
+        await Task.Delay(800, CancellationToken.None);   // 句柄未必立刻放开，稍等一下再删
         var deleted = await TryDeleteAsync(installerPath, CancellationToken.None);
         return new InstallResult(true, deleted, deleted ? "" : "安装包仍被占用，未能删除。");
     }
 
-    
+    // ── 编排：对一条已完成的任务执行「安装 / 解压」────────────────────
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 按任务自己的类型执行那一步（安装 / 解压），把过程写回卡片、按开关删源文件、按开关打开产物目录。
+    ///
+    /// ⚠️ 任务页那颗按钮和「下载完成」弹窗都走这里 —— 两边各写一套的话，
+    ///    进度文案、失败说法、删除时机迟早各说各的。
+    /// ⚠️ 两个开关都**在方法内部读存档**，不由调用方传：弹窗允许用户当场改勾选，
+    ///    传参就得保证两边都把最新值传进来，读存档没这个隐患。
+    /// ⚠️ 必须在 UI 线程调（<see cref="DownloadTask.SetWork"/> 会刷绑定；
+    ///    <see cref="Progress{T}"/> 也只有在 UI 线程建才捕获得到同步上下文）。
+    /// </summary>
     public static async Task RunAsync(DownloadTask task)
     {
         if (task.Path is not { Length: > 0 } path) return;
@@ -294,7 +294,7 @@ public static class PackageRunner
             Core.AppLog.Done("package",
                 $"解压完成「{task.Title}」→ {extracted.Directory} · 自动删除={autoDelete} · 已删除={deleted}");
 
-            
+            // 解压本来就是为了去那个目录拿东西，所以默认直接把它打开（可在任务页取消勾选）
             if (autoOpen)
             {
                 App.MainWindow?.RevealFile(extracted.Directory);
@@ -308,9 +308,9 @@ public static class PackageRunner
         }
     }
 
-    
+    // ── 小工具 ──────────────────────────────────────────────────────
 
-    
+    /// <summary>删一个文件，被占用就重试几次（安装程序/压缩工具常常晚一步才松手）。</summary>
     public static async Task<bool> TryDeleteAsync(string path, CancellationToken ct = default)
     {
         for (var attempt = 0; attempt < 5; attempt++)
@@ -318,12 +318,12 @@ public static class PackageRunner
             try
             {
                 if (!File.Exists(path)) return true;
-                File.SetAttributes(path, FileAttributes.Normal);   
+                File.SetAttributes(path, FileAttributes.Normal);   // 只读属性会让 Delete 直接抛
                 File.Delete(path);
                 return !File.Exists(path);
             }
-            catch (IOException) {  }
-            catch (UnauthorizedAccessException) {  }
+            catch (IOException) { /* 被占用：等一下再试 */ }
+            catch (UnauthorizedAccessException) { /* 同上 */ }
 
             if (attempt < 4)
             {
@@ -334,7 +334,7 @@ public static class PackageRunner
         try { return !File.Exists(path); } catch { return false; }
     }
 
-    
+    /// <summary>只删空目录树（解压失败后的清理；有东西就说明不是我们建的，别动）。</summary>
     private static void TryRemoveDirectory(string dir)
     {
         try

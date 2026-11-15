@@ -10,19 +10,19 @@ using Windows.Storage.Pickers;
 
 namespace ClassSoftwareHub.Desktop.Views.Submit.Steps;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 第 2 步：软件信息。
+///
+/// <para>
+/// 这里只有一处「会自己变」的字段 —— 软件 ID：名称每变一次，就按拼音 / 英文重新生成，
+/// 直到用户亲手改过 ID（<see cref="SubmitDraft.IdEdited"/>）为止。
+/// </para>
+///
+/// <para>
+/// ⛔ ID 输入框刻意**不做双向绑定**：自动生成要写回文本框，绑定回写又会触发 TextChanged，
+/// 一不留神就把「自动生成」记成「用户手改」，从此不再跟随名称。这里统一走 <c>_syncing</c> 守卫。
+/// </para>
+/// </summary>
 public sealed partial class SubmitInfoPage : Page, ISubmitStep
 {
     private readonly SubmitDraft? _draft;
@@ -32,7 +32,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
 
     public SubmitInfoPage()
     {
-        
+        // x:Bind 在 InitializeComponent 里就求值，草稿必须先就位
         _draft = SubmitSession.Current?.Draft ?? SubmitDraft.CreateEmpty();
         InitializeComponent();
 
@@ -43,7 +43,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        
+        // 页面被 Frame 缓存：从第 1 步读取回来、或「再提交一个」清空后，都要把界面拉回草稿
         SyncFromDraft();
     }
 
@@ -74,13 +74,13 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         }
         _syncing = false;
 
-        
+        // 回到本页时把上一次的提示收掉，别让「请填写软件名称」挂在已填好的字段上方
         ErrorBar.IsOpen = false;
         UpdateIdHint();
         UpdateIconPreview();
     }
 
-    
+    /// <summary>任一字段改动就收起错误提示 —— 提示是「还缺什么」，补上了就该消失。</summary>
     private void Field_Changed(object sender, TextChangedEventArgs e) => ClearError();
 
     private void ClearError()
@@ -88,13 +88,13 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         if (ErrorBar is not null) ErrorBar.IsOpen = false;
     }
 
-    
+    // ── 名称 → ID ────────────────────────────────────────────────────────
 
     private void NameBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_syncing || _draft is null) return;
 
-        
+        // 初始化阶段控件还没全建好就触发过一次 TextChanged，⛔ 不能假定 IdBox / IdHint 已存在
         if (IdBox is null || IdHint is null) return;
 
         ClearError();
@@ -160,7 +160,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         ClearError();
     }
 
-    
+    // ── 图标预览与上传 ───────────────────────────────────────────────────
 
     private void IconBox_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -186,7 +186,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         }
         catch
         {
-            
+            // 链接不是合法地址：保留占位图标，不在这一处拦着用户
             IconPreview.Visibility = Visibility.Collapsed;
         }
     }
@@ -200,7 +200,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         if (picked is null) return;
 
         long size = 0;
-        try { size = (long)(await picked.GetBasicPropertiesAsync()).Size; } catch {  }
+        try { size = (long)(await picked.GetBasicPropertiesAsync()).Size; } catch { /* 拿不到大小就照常往下走 */ }
 
         if (size > OssUpload.IconInputMaxBytes)
         {
@@ -210,7 +210,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
             return;
         }
 
-        
+        // 缩不了（不是图片 / 编解码器不认 / 压完更大）就用原文件 —— 压缩只是优化，不是门槛
         var shrunken = await IconResize.ShrinkToTempAsync(picked.Path);
         try
         {
@@ -220,7 +220,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         {
             if (shrunken is not null)
             {
-                try { File.Delete(shrunken); } catch {  }
+                try { File.Delete(shrunken); } catch { /* 删不掉就留给系统清临时目录 */ }
             }
         }
     }
@@ -276,7 +276,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         }
     }
 
-    
+    /// <summary>弹系统选文件框；owner 必须是向导窗口，否则会挂到主窗口上、被挡在后面。</summary>
     private static async Task<StorageFile?> PickFileAsync(
         string commitText,
         System.Collections.Generic.IReadOnlyList<string> filters,
@@ -304,7 +304,7 @@ public sealed partial class SubmitInfoPage : Page, ISubmitStep
         _ => bytes + " B",
     };
 
-    
+    // ── 导航壳接口 ───────────────────────────────────────────────────────
 
     public string? Validate() => _draft?.ValidateInfo();
 

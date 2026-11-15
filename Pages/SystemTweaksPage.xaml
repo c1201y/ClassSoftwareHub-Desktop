@@ -7,16 +7,16 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    
+    <!--
+      系统优化（需求清单第 20 条，2026-10-31；对齐 Dism++「系统优化」的能力）。
+      口径：这些项的真实落点就在当前用户（HKCU），改完即时生效、**不需要管理员**；
+      「新用户」那一列不做（学校不常建账户）；安全 / 服务 / 更新策略那几类不抄。
+      ⛔ 只有真正机器级的项（休眠、快速启动、分页文件）才需要提权，走另一个页面（系统功能）。
 
-
-
-
-
-
-
-
-
+      骨架**逐字照抄** Pages/AutoShutdownPage.xaml：ScrollViewer > Grid Margin 24,36,24,44 > 三列 > StackPanel MaxWidth 960。
+      每一行也逐字照抄它那张「自动执行」卡的写法（SettingsCard + 说明用 TextBlock + ToggleSwitch MinWidth=0）。
+      ⛔ 不改骨架、不换容器、不套模板 —— Nick 2026-10-31：「能抄就抄，能看就看，别猜」。
+    -->
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <Grid Margin="24,36,24,44">
@@ -39,11 +39,11 @@
                             <ui:ExperimentalBadge FeatureId="systemtweaks" />
                         </StackPanel>
 
-                        
-
-
-
-
+                        <!--
+                            Hub AI 入口（2026-10-31，与「软件下载」「AppData 管理」「应用卸载」一致）：
+                            这一项到底改了哪个注册表值、对教学有没有影响，问一句比翻说明快。
+                            浮层是公共控件 Controls/HubAiFlyout，别在这一页另写一套。
+                        -->
                         <Button x:Name="HubAiEntry" Grid.Column="1" Padding="12,6" Click="HubAiEntry_Click"
                                 VerticalAlignment="Center" ToolTipService.ToolTip="打开 Hub AI 顾问">
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -53,19 +53,19 @@
                         </Button>
                     </Grid>
 
-                    
-
-
-
+                    <!--
+                        InfoBar 平时不占位：IsOpen=False 之外还要收 Visibility，
+                        否则它那 8px 外边距会在页头与第一组之间再撑一道空档（2026-10-31 截图里那段空白）。
+                    -->
                     <InfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" Visibility="Collapsed"
                              Severity="Informational" Message="" Margin="0,0,0,8"
                              Closed="NoticeBar_Closed" />
 
-                    
-
-
-
-
+                    <!--
+                        待应用入口：**只有「有改动、且底部提示被用户收起来」时**才出现。
+                        2026-10-31 按 Nick 要求：原来顶部那条常驻的应用横幅整条删掉，应用只从底部提示里发起，
+                        页面平时保持干净；提示被点掉后，这个小按钮就是回到提示的入口。
+                    -->
                     <Button x:Name="PendingButton" Visibility="Collapsed" Click="PendingButton_Click"
                             Margin="0,0,0,10" HorizontalAlignment="Left" />
 
@@ -329,11 +329,11 @@
                 </StackPanel>
             </Grid>
         </ScrollViewer>
-        
-
-
-
-
+        <!--
+            应用提示：非目标式 TeachingTip，固定在窗口右下角浮出。
+            ⚠️ 必须挂在 ScrollViewer **外面**（页面根 Grid 的第二个子元素），否则会随内容一起滚走，
+               用户拨完开关还得滚回顶部才看得到它 —— 那就等于没解决。
+        -->
         <TeachingTip x:Name="ApplyTip"
                      PreferredPlacement="BottomRight"
                      IsLightDismissEnabled="False"
@@ -344,23 +344,23 @@
                      CloseButtonClick="ApplyTip_CloseClick"
                      Closed="ApplyTip_Closed">
             <TeachingTip.Content>
-                
+                <!--
+                    任务列表：列出这次要写进去的每一项，可逐项取消。
+                    ⚠️ 用 ItemsControl + 代码里逐项构造（跟本页下拉框选项一个套路）：
+                       ⛔ 不用 ItemsRepeater / ListView + 模板 —— 这套组合在这份 XamlCompiler 上出过事
+                       （2026-10-30 把 ItemsRepeater 塞进 SettingsExpander.Items，一进页面进程就被杀）。
 
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
+                    ⛔ 这里**不许写宽度**（2026-10-31 连错两次）：
+                       写大了（比如 Width=340）会超出 TeachingTip 的内容区，行里的「取消」被裁得只剩一条边；
+                       写 ItemsControl.MinWidth 也一样。
+                    正确做法是让 ScrollViewer 吃满内容区：不设 Width，只把水平滚动关掉
+                       （Disabled 才会把 viewport 宽度传给子项；否则子项拿到的是"无限宽"，TextBlock 不换行）。
+                       这样行内 * 列能算出真实可用宽度，文本自己换行，按钮永远留在里面。
+                -->
+                <!--
+                    外边距是给"内容"与"副标题 / 底部按钮"之间留气口用的：
+                    2026-10-31 第一版没留，清单贴着副标题、又贴着按钮，看着很挤。
+                -->
                 <ScrollViewer MaxHeight="260" Margin="0,8,0,14"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
@@ -369,7 +369,7 @@
             </TeachingTip.Content>
         </TeachingTip>
 
-        
+        <!-- 提问浮层：与其它页面同一个控件，显示与否跟着「设置 → 启用 Hub AI」总闸走 -->
         <ui:HubAiFlyout x:Name="AiFlyout" />
     </Grid>
 </Page>

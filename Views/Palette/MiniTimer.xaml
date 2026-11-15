@@ -4,15 +4,15 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    
+    <!--
+      浮窗版课堂计时器：自定义时长（时:分:秒 三列一体）+ 大号倒计时 + 开始/全屏/重置。
 
-
-
-
-
-
-
-
+      2026-10-03（Nick 二次定版）：
+        · **预设按钮整排删除**（1分/3分/…/1时 都是多余的例子）。
+        · 时长选择 = 时 / 分 / 秒 **三列一体的下拉框** —— 原生 TimePicker 没有秒位（这是控件硬限制，
+          不是谁写漏了），秒不能"塞回 TimePicker"，所以三个系统 ComboBox 拼成一体，外观统一。
+        · 底部三个按钮：开始（强调色）/ 全屏（投影用）/ 重置，跟秒表页同一排法。
+    -->
     <Grid RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -28,7 +28,7 @@
         <ProgressBar x:Name="Bar" Grid.Row="1" Minimum="0" Maximum="100" Value="0" Height="4"
                      CornerRadius="2" />
 
-        
+        <!-- 自定义时长：时 : 分 : 秒（三列一体） -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="4"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
             <ComboBox x:Name="HourBox" Width="72" HorizontalContentAlignment="Center"

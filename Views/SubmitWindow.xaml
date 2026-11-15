@@ -6,7 +6,7 @@
     xmlns:controls="using:Microsoft.UI.Xaml.Controls">
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        
+        <!-- 只有这一个页面用网页版：提交软件（表单逻辑不重写） -->
         <WebView2 x:Name="Web" Opacity="0" />
 
         <StackPanel x:Name="LoadingPanel" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -22,7 +22,7 @@
                        TextAlignment="Center" HorizontalAlignment="Center" />
             <Button Content="重试" HorizontalAlignment="Center" Click="Retry_Click"
                     Style="{StaticResource AccentButtonStyle}" />
-            
+            <!-- 兜底：WebView2 缺失 / 站点打不开时，至少还能去浏览器提交 -->
             <Button Content="在浏览器中打开提交页" HorizontalAlignment="Center" Click="Browser_Click" />
         </StackPanel>
     </Grid>

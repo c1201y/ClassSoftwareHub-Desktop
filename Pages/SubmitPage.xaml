@@ -5,11 +5,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    
-
-
-
-
+    <!--
+      和其余页面同一套版式：外层三列 Grid 把内容（含标题）一起钉在中间 960 宽。
+      ⚠️ 标题必须在 960 列**里面** —— 曾经它横跨整宽、卡片居中，
+         宽窗口下标题贴最左、卡片在中间，两套左缘对不齐。
+    -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -25,7 +25,7 @@
                                Text="先存为草稿，审核通过后上架。带 * 为必填。" />
                 </StackPanel>
 
-                    
+                    <!-- ═══ 从 GitHub 一键读取 ═══ -->
                     <Border CornerRadius="4" Padding="20" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -63,7 +63,7 @@
                         </StackPanel>
                     </Border>
 
-                    
+                    <!-- ═══ 基本信息 ═══ -->
                     <Border CornerRadius="4" Padding="20" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -88,8 +88,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                
-
+                                <!-- 图标可以填现成的链接，也可以选本地图片传上来（2026-10-06 对齐网页版）。
+                                     按钮排法照「从 GitHub 读取」那行：框占满、按钮贴在框右侧。 -->
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -129,7 +129,7 @@
                         </StackPanel>
                     </Border>
 
-                    
+                    <!-- ═══ 补充信息 ═══ -->
                     <Border CornerRadius="4" Padding="20" BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -145,9 +145,9 @@
                                 <TextBox x:Name="SizeBox" Grid.Column="1" Header="体积" PlaceholderText="如 1.6 MB" />
                             </Grid>
 
-                            
-
-
+                            <!-- 适用系统（2026-10-24 对齐网页版 submit.platforms）：
+                                 这里勾的会写进 JSON 的 platforms[]，**列表页的系统筛选只认它**。
+                                 下面那行自由文本只负责「Windows 10/11（x64）」这类给人看的说明，二者都要。 -->
                             <StackPanel Spacing="6">
                                 <TextBlock>
                                     <Run Text="适用系统" /><Run Text=" *" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
@@ -161,9 +161,9 @@
                             <TextBox x:Name="WebsiteBox" Header="官网地址（选填）" PlaceholderText="https://…" />
                             <TextBox x:Name="GithubBox" Header="GitHub 仓库（选填）" PlaceholderText="https://github.com/…" />
 
-                            
-
-
+                            <!-- 开发者与开源协议（2026-11-08 补，对齐网页版 submit.author / submit.license）：
+                                 两项都选填，详情页「详细信息」里是有值才显示、没值整行不出现，
+                                 所以查不到作者的商业软件留空即可，⛔ 不要填「未知」「未标注」这类占位。 -->
                             <TextBox x:Name="AuthorBox" Header="开发者（选填）"
                                      PlaceholderText="个人或团队名称，如 某某工作室" />
                             <TextBox x:Name="LicenseBox" Header="开源协议（选填）"
@@ -178,7 +178,7 @@
                         </StackPanel>
                     </Border>
 
-                    
+                    <!-- ═══ 下载项 ═══ -->
                     <TextBlock Text="下载项" FontSize="18" FontWeight="Bold" Margin="0,6,0,0" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                Text="需填文件直链，不是官网下载页。" />
@@ -188,7 +188,7 @@
                     <Button x:Name="AddDownloadButton" Content="+ 添加下载项" Click="AddDownload_Click"
                             HorizontalAlignment="Left" />
 
-                    
+                    <!-- ═══ 提交 ═══ -->
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,6,0,0">
                         <Button x:Name="RestoreDraftButton" Content="恢复上次未提交的内容"
                                 Click="RestoreDraft_Click" Visibility="Collapsed" />
@@ -198,7 +198,7 @@
 
                     <InfoBar x:Name="ResultBar" IsOpen="False" IsClosable="False" />
 
-                    
+                    <!-- 连不上提交服务时的兜底 -->
                     <StackPanel x:Name="FallbackPanel" Spacing="10" Visibility="Collapsed">
                         <InfoBar x:Name="FallbackBar" IsOpen="True" IsClosable="False" Severity="Warning"
                                  Title="无法连接提交服务"

@@ -7,23 +7,23 @@
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    
+    <!-- 卡片容器样式（关掉 GridViewItem 自带的焦点框/悬停底色）在 App.xaml 里：CshCardItemStyle -->
 
-    
+    <!--
+      和首页 / 软件下载 / 设置同一套版式：三列 Grid 把内容钉在中间 960 宽（导航展开收起都不动）。
+      ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
 
-
-
-
-
-
-
-    
-
-
-
-
-    
-
+      版式取舍（2026-09-26 Nick 反馈"一大块区域只有一小条能滚"）：
+      统计从"独立大卡片"压成一行工具栏、筛选并到同一行、列表改 3 列卡片网格 ——
+      可视条目从一屏约 4 条提到 12 条，纵向空间几乎全留给列表。
+    -->
+    <!-- 根 Grid 不带 Margin：间距放进中间列，让 GridView 拿到整页高度约束，
+         否则内容一超出就「底部截断且滚不动」（与软件下载页同病，2026-10-03 统一）。
+         ⛔ 中间列底部间距分两种写法（2026-10-03 定）：最后一行是自滚容器（`*` + 自带
+            Padding 底部 44）→ 写 0；最后一行是页脚 / 卡片等非自滚元素 → 写 44。
+         本页最后一行是「重新检测 / 打开软件下载」页脚卡片 → 写 44，否则怼到窗口下边框。 -->
+    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
+         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，卡片区纹丝不动（与首页手感不一致）。 -->
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -39,8 +39,8 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            
-
+            <!-- 标题 + 实验性标记：本页结论**明显不准**，必须在第一眼就讲清楚，
+                 免得被当成装机验收依据（页面只藏在「实验性功能」下面还不够，进来也得看见） -->
             <StackPanel Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="本机核实" FontSize="28" FontWeight="Bold" />
@@ -50,7 +50,7 @@
                            Text="对照软件清单核实安装情况，标出未安装与需升级的软件。" />
             </StackPanel>
 
-            
+            <!-- 工具栏：左边统计，右边筛选（合成一行，把纵向空间让给列表） -->
             <Border Grid.Row="1" CornerRadius="4" Padding="18,12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -92,7 +92,7 @@
                 </Grid>
             </Border>
 
-            
+            <!-- 列表：3 列卡片网格（302 + 16 间距 = 正好 960，和「软件下载」磁贴同一尺寸） -->
             <Grid Grid.Row="2">
                 <GridView x:Name="ResultGrid" SelectionMode="None" IsItemClickEnabled="True"
                           ItemClick="Result_ItemClick" Padding="0,2,0,44"
@@ -107,8 +107,8 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
-                                    
-
+                                    <!-- 图标：圆角由 Border 的 ImageBrush 裁出来（和「软件下载」同一手法）。
+                                         没图时露一个字形占位，别留一块空白。 -->
                                     <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9"
                                             VerticalAlignment="Top">
                                         <Border.Background>
@@ -143,7 +143,7 @@
                     </GridView.ItemTemplate>
                 </GridView>
 
-                
+                <!-- 检测中 -->
                 <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                     <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
@@ -151,7 +151,7 @@
                                HorizontalAlignment="Center" />
                 </StackPanel>
 
-                
+                <!-- 空状态 -->
                 <StackPanel x:Name="EmptyPanel" Spacing="10" Visibility="Collapsed"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE7F4;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
@@ -160,13 +160,13 @@
                 </StackPanel>
             </Grid>
 
-            
-
-
-
-
-
-
+            <!--
+              底部：重测 + 概览 + 口径说明。
+              2026-10-03：整块**装进一张卡片**（原来是裸排版）。两个原因：
+                ① 本页已改成"内容铺满整页高"（见上方注释），页脚会直接贴到窗口底边 ——
+                   裸文本贴边会顶死，套上 CshCardStyle 后自带 16,12 内边距，文字离边有余量；
+                ② 「实验性功能」「内置工具」的页脚本来就是卡片，这里与它们对齐，全站页脚同一个语言。
+            -->
             <Border Grid.Row="3" Style="{StaticResource CshCardStyle}">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="10">

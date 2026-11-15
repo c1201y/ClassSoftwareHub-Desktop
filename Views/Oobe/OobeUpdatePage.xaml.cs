@@ -8,10 +8,10 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-
-
-
-
+/// <summary>
+/// 第 3 步：检查更新。进页面自动查一次，结果摆给用户；「立即更新」走主界面同一套
+/// <see cref="UpdateFlow.RunAsync"/>，什么都不点直接「下一步」＝ 跳过。
+/// </summary>
 public sealed partial class OobeUpdatePage : Page
 {
     private readonly UpdateService _service = UpdateService.CreateDefault();
@@ -24,7 +24,7 @@ public sealed partial class OobeUpdatePage : Page
     {
         InitializeComponent();
 
-        
+        // 页面标了 NavigationCacheMode=Required：来回翻只查第一次，不重复打网络
         Loaded += (_, _) =>
         {
             if (_checked) return;
@@ -36,7 +36,7 @@ public sealed partial class OobeUpdatePage : Page
 
     private void CancelPending()
     {
-        try { _cts?.Cancel(); } catch {  }
+        try { _cts?.Cancel(); } catch { /* 已经取消 / 释放过 */ }
     }
 
     private async void Retry_Click(object sender, RoutedEventArgs e) => await CheckAsync();
@@ -62,7 +62,7 @@ public sealed partial class OobeUpdatePage : Page
         }
         catch (OperationCanceledException)
         {
-            
+            // 用户翻走了 / 重新检查打断了上一次 —— 什么都不用做
         }
         catch (Exception ex)
         {
@@ -83,7 +83,7 @@ public sealed partial class OobeUpdatePage : Page
         {
             _release = release;
 
-            ResultIcon.Glyph = "\uE896";                 
+            ResultIcon.Glyph = "\uE896";                 // 下载
             ResultTitle.Text = $"发现新版本 {release.Tag}";
 
             var detail = $"当前版本 {ShellConfig.ShellVersion}";
@@ -97,7 +97,7 @@ public sealed partial class OobeUpdatePage : Page
             return;
         }
 
-        ResultIcon.Glyph = "\uE73E";                     
+        ResultIcon.Glyph = "\uE73E";                     // 对勾
         ResultTitle.Text = "已是最新版本";
         ResultDetail.Text = result.Message.Length > 0
             ? $"当前 {ShellConfig.ShellVersion}。{result.Message}"
@@ -109,7 +109,7 @@ public sealed partial class OobeUpdatePage : Page
     {
         CheckingPanel.Visibility = Visibility.Collapsed;
         ResultPanel.Visibility = Visibility.Visible;
-        ResultIcon.Glyph = "\uE7BA";                     
+        ResultIcon.Glyph = "\uE7BA";                     // 警告
         ResultTitle.Text = "无法检查更新";
         ResultDetail.Text = "无法连接更新服务。";
         ActionRow.Visibility = Visibility.Collapsed;

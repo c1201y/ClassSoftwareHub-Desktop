@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -13,47 +13,47 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    
-
+    <!-- ⚠️ 必须开：不开的话 $(AssemblyName).pri（XAML 资源清单）不会进 publish 输出，
+         装完启动会 "Cannot locate resource from 'ms-appx:///MainWindow.xaml'" 直接闪退（无窗口） -->
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    
-
-
-
-
-
-    <Version>1.2.3-Insider1.0</Version>
-    <AssemblyVersion>1.2.3.0</AssemblyVersion>
-    <FileVersion>1.2.3.0</FileVersion>
-    <InformationalVersion>1.2.3-Insider1.0</InformationalVersion>
-    
-
+    <!-- 版本号规则见 Core/ShellConfig.cs 里 ShellVersion 的注释
+         （dv + 主.功能.补丁 + -insider架构.迭代），改版本时这里和 ShellConfig 一起改。
+         ⚠️ AssemblyVersion / FileVersion 只接受「四段纯数字」，塞不进 -insider 后缀：
+         预览版末段跟着 insider 迭代号走（insider1.5 → 1.2.0.5），
+         **转正式版时末段回落 0**（1.2.0 → 1.2.0.0）。
+         界面上显示的完整版本号以 ShellConfig.ShellVersion 为准，这里只是给文件属性和 NuGet 元数据看。 -->
+    <Version>1.2.2</Version>
+    <AssemblyVersion>1.2.2.0</AssemblyVersion>
+    <FileVersion>1.2.2.0</FileVersion>
+    <InformationalVersion>1.2.2</InformationalVersion>
+    <!-- 关掉「自动往 InformationalVersion 后面追加 +git提交哈希」——
+         否则 exe 属性里会显示成 1.1.0-insider1.0+ed05db5…，版本号就不干净了（没有任何代码读它，纯显示问题） -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>ClassSoftwareHub</Product>
     <AssemblyTitle>ClassSoftwareHub</AssemblyTitle>
     <Company>ClassSoftwareHub</Company>
   </PropertyGroup>
 
-  
+  <!--
+    ===== 官方构建签名（2026-11-04，对应后端《防滥用接入指南》§2.3）=====
+    打包流水线传 -p:CshBuildStampB64=<base64("v1|buildId|sig|issuedAt")>，
+    这里把它落成程序集元数据，运行时由 Core/BuildIdentity.cs 读回来当 X-CSH-Sig 用。
 
-
-
-
-
-
-
-
-
+    ⚠️ 不传这个参数 = 社区版（没有签名），服务端会按"需要激活"处理 —— 本地开发默认就是这一支，
+       不需要任何额外设置就能编译。
+    ⛔ 签名值只从命令行/CI Secret 进来，**不要**把 base64 串写进这个文件：
+       仓库是公开的，写进来等于把签名交出去。
+  -->
   <ItemGroup Condition="'$(CshBuildStampB64)' != ''">
     <AssemblyMetadata Include="CshBuildStamp" Value="$(CshBuildStampB64)" />
   </ItemGroup>
 
-  
-
-
+  <!-- tools/ 下面是发版脚本和**独立的验证工程**（自己一个 csproj，手动 dotnet run 才跑）。
+       ⛔ 必须排除：默认 glob 会把 tools/**/*.cs 也收进产品编译，
+          那个工程里的 Program.cs 是顶层语句、Stubs.cs 又造了一份同名类型 —— 会直接编译不过。 -->
   <ItemGroup>
     <Compile Remove="tools\**" />
     <None Remove="tools\**" />
@@ -66,41 +66,40 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
-    <PackageReference Include="QRCoder" Version="1.4.3" />
-    
+    <!-- 屏幕亮度：笔记本内屏的亮度只能走 WMI（WmiMonitorBrightnessMethods），Windows 自己的亮度滑块也是。dxva2 那套只对外接显示器（DDC/CI）有效。（2026-09-26） -->
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
-  
+  <!-- 内嵌资源：单文件发布时不需要额外散落文件 -->
   <ItemGroup>
     <EmbeddedResource Include="Web\shell-shim.js" />
     <EmbeddedResource Include="Assets\AppIcon-512.png" />
     <EmbeddedResource Include="Assets\StoreLogo.png" />
     <EmbeddedResource Include="Assets\AppIcon.ico" />
     <EmbeddedResource Include="Assets\ToolIcon.ico" />
-    
-
-
-
+    <!-- 查单词的内置词库（2026-11-01）：29,417 个常用词，每行「单词 \t 音标 \t 释义…」，约 2 MB。
+         源数据是 ECDICT（MIT 协议，skywind3000/ECDICT），按词频 / 考试标签 / 柯林斯星级筛出来的常用部分，
+         释义取中文、音标换成标准 IPA 符号。生成脚本的思路见 .workbuddy/memory/2026-11-01.md。
+         ⚠️ 这是个 2 MB 的纯文本，删了「查单词」就只剩在线源；别当临时文件清掉。 -->
     <EmbeddedResource Include="Assets\Dict\dict-core.tsv" />
-    
-
-
+    <!-- 提交向导的汉字转拼音表（2026-11-12）：6,763 个 GB2312 常用字，54 KB，
+         用来把软件名自动生成软件 ID（「网易云音乐」→ wangyiyunyinyue）。
+         源数据 pinyin-data（ISC 协议），生成方式见 Assets\Pinyin\README.md。 -->
     <EmbeddedResource Include="Assets\Pinyin\pinyin.tsv" />
-    
-
+    <!-- 首页横幅：每个功能版本换一张（文件名跟着版本走，换图时这里和 Pages/WelcomePage.xaml.cs
+         的 LoadBanner() 一起改）。⚠️ 文件名一律 ASCII。 -->
     <EmbeddedResource Include="Assets\dv1.2.png" />
-    
-
+    <!-- 「关于」页顶部横幅（2026-11-13 Nick 给的 1828×746 原图，缩到 1440×588、转 JPG 压到 114 KB）。
+         ⚠️ 文件名一律 ASCII；换图时这里与 Pages/AboutPage.xaml.cs 的 LoadBanner() 一起改。 -->
     <EmbeddedResource Include="Assets\About\about-banner.jpg" />
-    
-
+    <!-- OOBE「外观」三张预览图（2026-10-31 Nick 给的 1920x1080 原图，这里缩到 480x270）。
+         黑白 → 跟随系统、白 → 浅色、黑 → 深色。⚠️ 文件名一律 ASCII。 -->
     <EmbeddedResource Include="Assets\Oobe\appearance-system.png" />
     <EmbeddedResource Include="Assets\Oobe\appearance-light.png" />
     <EmbeddedResource Include="Assets\Oobe\appearance-dark.png" />
-    
-
-
+    <!-- OOBE「完成」页三屏的配图（2026-10-31 Nick 给的 1920x1020 应用截图，缩到 960x510；
+         白 = 浅色主题版，深色主题用另一份）。最后一张是设置完成页的大图（dv1.2，转成 JPG 省体积）。
+         ⚠️ 文件名一律 ASCII。 -->
     <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-back-light.png" />
     <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-back-dark.png" />
     <EmbeddedResource Include="Assets\Oobe\oobe-slide-downloads-front-light.png" />
@@ -110,71 +109,71 @@
     <EmbeddedResource Include="Assets\Oobe\oobe-slide-tools-front-light.png" />
     <EmbeddedResource Include="Assets\Oobe\oobe-slide-tools-front-dark.png" />
     <EmbeddedResource Include="Assets\Oobe\oobe-finish-banner.jpg" />
-    
+    <!-- 反馈中心两张卡片的图：跟网页版 src/assets/feedback 是同一套文件（2026-09-26） -->
     <EmbeddedResource Include="Assets\feedback\report.png" />
     <EmbeddedResource Include="Assets\feedback\suggest.png" />
-    
-
-
+    <!-- 「在 Q 群中反馈」图文流程的四张操作截图（2026-09-30）：Nick 在 QQ 群里实拍的四步，
+         依次对应 打开群相册面板 → 新建相册并填入信息 → 进入相册点上传 → 选照片/视频并上传。
+         文件名沿用上面的 ASCII 规矩。 -->
     <EmbeddedResource Include="Assets\feedback\qq-step-album-panel.png" />
     <EmbeddedResource Include="Assets\feedback\qq-step-create-album.png" />
     <EmbeddedResource Include="Assets\feedback\qq-step-upload-button.png" />
     <EmbeddedResource Include="Assets\feedback\qq-step-upload-pick.png" />
-    
-
-
+    <!-- 随机抽号的「示例名单」（2026-09-29）：两张示意截图 + 两份可直接下载的示例文件。
+         ⚠️ 文件名一律用 ASCII —— 中文文件名会被编进 manifest 资源名，匹配时容易出岔子。
+         下载时显示的中文名在代码里指定（FileSavePicker.SuggestedFileName）。 -->
     <EmbeddedResource Include="Assets\roster\sample-excel.png" />
     <EmbeddedResource Include="Assets\roster\sample-txt.png" />
     <EmbeddedResource Include="Assets\roster\roster-sample.txt" />
     <EmbeddedResource Include="Assets\roster\roster-sample.xlsx" />
-    
-
-
+    <!-- 倒计时到点的默认铃声（2026-10-04 Nick）：从他给的屏幕录制里剪出来的音频。
+         ⚠️ 运行时由 Services/TimerAlarm.cs 释放到 cache\ 再交给 MediaPlayer ——
+            单文件发布下旁边没有散落文件可读，只能走内嵌这条路。 -->
     <EmbeddedResource Include="Assets\Audio\timer-alarm.wav" />
-    
-
+    <!-- 教室喊话的默认提示音（2026-10-25，Nick 提供的 wav）。同样释放到 cache\ 再交给 MediaPlayer；
+         用户在接收端自选音效后走 AnnounceSoundPath，不在了自动退回这一份。 -->
     <EmbeddedResource Include="Assets\Audio\announce-alert.wav" />
 
-    
-
-
+    <!-- 教室喊话的字体（2026-10-25 Nick 给的 HarmonyOS Sans SC，随桌面 Fonts 目录一起）。
+         ⚠️ 用 Content + 拷到输出目录，XAML 里以 ms-appx:///Assets/Fonts/xxx.ttf#HarmonyOS Sans SC 引用 ——
+            unpackaged 应用下 ms-appx 指向 exe 所在目录，所以必须真的拷过去。 -->
     <Content Include="Assets\Fonts\HarmonyOS_Sans_SC_Medium.ttf" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Fonts\HarmonyOS_Sans_SC_Bold.ttf" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Fonts\HarmonyOS_Sans_SC_Light.ttf" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\Fonts\HarmonyOS_LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
-    
-
+    <!-- 首页 / 设置页「快捷入口」的 3 个 SVG 图标（项目仓库 / 作者主页 / 加入Q群）。
+         颜色用 __C__ 占位，运行时按主题色（TextFillColorPrimary）注入，浅色/深色自适应。 -->
     <EmbeddedResource Include="Assets\QuickLinks\GITHUB.svg" />
     <EmbeddedResource Include="Assets\QuickLinks\主页.svg" />
     <EmbeddedResource Include="Assets\QuickLinks\QQ.svg" />
   </ItemGroup>
 
-  
-
-
-
-
-
+  <!-- 随应用附带的网页工具包（ClassSoftwareHub-Desktop-MathTool 的构建产物，Nick 2026-10-25）。
+       ⚠️ 不放 DataDir\tools：那个目录会被内容同步整体镜像、清掉仓库里没有的文件。
+       放程序目录下、随安装包发出去；ToolCarrier 额外查这个"随包附带"位置。
+       index.html + vendor（jsxgraph / katex）一起拷进输出，安装包通配会带上。
+       ⚠️ 排除 _superseded-handmade：那是被 MathTool 取代的早期手写版备份（2026-10-25 从
+          DataDir\tools 移过来的，以防需要回退），只留在仓库里，不进安装包。 -->
   <ItemGroup>
     <Content Include="WebTools\**" Exclude="WebTools\_superseded-handmade\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  
+  <!-- ⛔⛔ 安装包**不带**内容包（2026-10-05 Nick 定案"以后统统只有通过网络获取更新的途径"）。
+       桌面版以前会把站点内容包拷进 dist\app\content 随安装包一起发，装机就有清单；
+       现在取消 —— 客户端只从网络取，所以发布产物里不该再有 content。
 
+       为什么写成构建步骤而不是人工检查：`dotnet publish -o dist\app` 是**覆盖式写入、不清目录**，
+       旧产物里的 content 会一直趟在那儿，没人会注意到（还会让装机首启看起来"有清单"，
+       掩盖真正的联网路径到底通不通）。所以这里放一道**硬闸**：发布产物里只要还有 content 就让 publish 失败。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+       ⚠️ 为什么是"报错"而不是"顺手删掉"（2026-10-05 实测两轮，别再走回头路）：
+          MSBuild 的 RemoveDir/Delete 会走 `\\?\C:\…` 长路径形式、Exec 则是拉起 cmd.exe，
+          而本机运行环境对这两者的目录删除一律 `Access denied`（同一目录用普通路径删却正常）。
+          结果是：单个 RemoveDir 会把整个 publish **硬失败**在清理这一步上，加 ContinueOnError 又变成
+          "只警告、根本没删掉"＝等于没做（cmd 的 rmdir 甚至返回退出码 0 却什么都没删，更具欺骗性）。
+          所以放弃"自动清"，改成**宁可挡住发布也不让内容包发出去** —— 清理动作交给发版流程
+          （技能 csh-release 的 publish 之前有一步 rm -rf dist/app/content）。
+       ⚠️ 别把这条当成可以讨论的"优化项"删掉：删了就等于又把内容包发回给用户。 -->
   <Target Name="VerifyNoBundledContent" AfterTargets="Publish"
           Condition="Exists('$(PublishDir)content')">
     <Error Text="发布产物里还有 content 目录（安装包不该带内容包）：$(PublishDir)content。请先删除它再重新 publish —— 例如 rm -rf dist/app/content。" />

@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-
+/// <summary>第 8 步：截图。只改草稿，收尾时连同设置一起落盘。</summary>
 public sealed partial class OobeScreenshotPage : Page
 {
     private bool _loading = true;
@@ -84,7 +84,7 @@ public sealed partial class OobeScreenshotPage : Page
         RefreshDir();
     }
 
-    
+    /// <summary>空目录 = 桌面（与截图保存逻辑同一口径）。</summary>
     private string EffectiveDir()
     {
         var dir = (Draft?.ShotSaveDir ?? "").Trim();

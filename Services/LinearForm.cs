@@ -4,15 +4,15 @@ using System.Linq;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 一次式：常数项 + 各变量的一次项之和。
+///
+/// <para>
+/// 为什么不用通用表达式树：方程求解要的是**精确**系数，一次式用字典存"变量 → 分数"最直接，
+/// 而且能在解析阶段就判定"这式子是不是一次的"—— 二次、乘法、变量相除当场就能报错，
+/// 不会出现"看起来算出来了、其实系数早就不对"的情况。
+/// </para>
+/// </summary>
 public sealed class LinearForm
 {
     public Dictionary<string, Rational> Coeffs { get; } = new(StringComparer.Ordinal);
@@ -65,16 +65,16 @@ public sealed class LinearForm
     }
 }
 
-
+/// <summary>一次式解析失败（含"这不是一次式"）。</summary>
 public sealed class LinearParseException : Exception
 {
     public LinearParseException(string message) : base(message) { }
 }
 
-
-
-
-
+/// <summary>
+/// 一次式解析器。<see cref="Parse"/> 只接受：常数、变量、+ − * /、括号、整数指数 0/1。
+/// 其余一律报错 —— 报错信息是给用户看的，要说清"哪里不行"。
+/// </summary>
 public sealed class LinearFormParser
 {
     private readonly string _s;
@@ -138,7 +138,7 @@ public sealed class LinearFormParser
                 continue;
             }
 
-            
+            // 隐式乘法：2x、3(x+1)、2π
             if (c == '(' || char.IsLetter(c))
             {
                 left = Multiply(left, ParseUnary());
@@ -149,7 +149,7 @@ public sealed class LinearFormParser
         }
     }
 
-    
+    /// <summary>乘：两边都含未知数 ⇒ 二次项，直接拒绝。</summary>
     private static LinearForm Multiply(LinearForm a, LinearForm b)
     {
         if (a.IsConstant && b.IsConstant) return LinearForm.FromConstant(a.Constant * b.Constant);
@@ -216,7 +216,7 @@ public sealed class LinearFormParser
                                   System.Globalization.CultureInfo.InvariantCulture, out var value))
                 throw new LinearParseException($"看不清数字「{text}」。");
 
-            
+            // 小数转精确分数：0.5 ⇒ 1/2，0.25 ⇒ 1/4，不做浮点近似
             return LinearForm.FromConstant(FromDecimal(value));
         }
 
@@ -226,7 +226,7 @@ public sealed class LinearFormParser
             while (_i < _s.Length && (char.IsLetter(_s[_i]) || char.IsDigit(_s[_i]))) _i++;
             var name = _s[start.._i];
 
-            
+            // 函数调用（sin、ln…）不是一次式，交给一元方程的数值求解
             if (Peek() == '(')
                 throw new LinearParseException($"「{name}」是函数，请写成只含 x 的一元方程。");
 
@@ -237,7 +237,7 @@ public sealed class LinearFormParser
         throw new LinearParseException($"认不出字符「{c}」。");
     }
 
-    
+    /// <summary>decimal → 分数：按小数点后位数放大，再约分。</summary>
     private static Rational FromDecimal(decimal value)
     {
         var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);

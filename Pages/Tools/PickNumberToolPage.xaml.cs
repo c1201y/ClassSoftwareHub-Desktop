@@ -8,7 +8,7 @@ using ClassSoftwareHub.Desktop.Data;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;   
+using Microsoft.UI.Xaml.Controls.Primitives;   // FlyoutPlacementMode
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.ApplicationModel.DataTransfer;
@@ -17,12 +17,12 @@ using Windows.UI;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
-
+/// <summary>
+/// 随机抽号（对齐网页版 tools/PickNumberTool.vue）：
+/// 加密随机抽号（Fisher–Yates）+ 滚动动画 + 不重复记录（本地存档）+ 公平性自检（2 万次直方图 + 卡方）+ 随机分组。
+/// 2026-09-27（Nick）：抽取对象可以是号码范围，也可以是导入的班级名单（Excel / txt）。
+/// 2026-09-29（Nick）：名单要能预览、能就地改名、能导出回 Excel / txt —— 见 Views\RosterEditorDialog。
+/// </summary>
 public sealed partial class PickNumberToolPage : Page
 {
     private const int RollTicks = 16;
@@ -35,22 +35,22 @@ public sealed partial class PickNumberToolPage : Page
     private List<int> _pending = new();
     private int _ticks;
     private bool _ready;
-    private bool _updating;   
+    private bool _updating;   // 正在刷提示（里面会把 CountBox.Maximum 往下夹，可能连带夹到 Value，要忽略掉）
 
-    
+    // ── 名单模式（2026-09-27 Nick 提）──
     private readonly List<string> _roster = new();
     private readonly List<string> _usedNames = new();
     private List<string> _pendingNames = new();
-    private string _rosterSource = "";   
-    private int _savedMode;              
-    private string _groupText = "";      
+    private string _rosterSource = "";   // 导入时的文件名，只用来显示
+    private int _savedMode;              // 从存档读出来的模式，铺完控件才生效
+    private string _groupText = "";      // 最近一次分组结果的纯文本（给「复制结果」用）
 
     public PickNumberToolPage()
     {
         InitializeComponent();
 
-        
-        
+        // 两侧留白 / 标题行上的滚轮也转给内容区（见 Core/WheelRelay.cs）：
+        // 抽取 / 分组两个滚动区互斥，指针压在哪个就转给哪个。
         Core.WheelRelay.Attach(this, DrawView, GroupView);
 
         _rollTimer = DispatcherQueue.CreateTimer();
@@ -58,7 +58,7 @@ public sealed partial class PickNumberToolPage : Page
         _rollTimer.IsRepeating = true;
         _rollTimer.Tick += (_, _) => RollTick();
 
-        
+        // 离开页面把抽号滚动停掉
         Unloaded += (_, _) => _rollTimer.Stop();
 
         foreach (var item in GroupModeItems) GroupModeBox.Items.Add(item);
@@ -66,8 +66,8 @@ public sealed partial class PickNumberToolPage : Page
 
         LoadConfig();
 
-        
-        
+        // 抽取对象：两条 Checked 已经挂在 XAML 上（PoolMode_Changed），这里只按存档恢复选中。
+        // ⚠️ IsChecked 不能在 XAML 里写 True —— 见 App.xaml 里 CshModeCardStyle 的注释。
         if (_savedMode == 1) ModeRosterRadio.IsChecked = true;
         else ModeRangeRadio.IsChecked = true;
 
@@ -81,23 +81,23 @@ public sealed partial class PickNumberToolPage : Page
         SyncPoolMode();
         RefreshHints();
 
-        
+        // 功能：抽号 / 随机分组 —— 一次只面对一件事（两件事共用上面的抽取对象设置）
         TaskDrawRadio.IsChecked = true;
         SyncTask();
 
-        
+        // 分组方式一换，「组数」这个标题就得跟着换（按人数时它其实叫「每组人数」）
         GroupModeBox.SelectionChanged += (_, _) => SyncGroupModeHeader();
         SyncGroupModeHeader();
     }
 
-    
+    /// <summary>「按组数」/「按人数」切换时，同步旁边那个数字框的标题与提示。</summary>
     private void SyncGroupModeHeader()
     {
         GroupValueBox.Header = GroupModeBox.SelectedIndex <= 0 ? "组数" : "每组人数";
         RefreshGroupRangeHint();
     }
 
-    
+    /// <summary>分组页那一行小字：说清"要分的到底是哪个池子、有多少人/号"。</summary>
     private void RefreshGroupRangeHint()
     {
         if (UseRoster)
@@ -114,27 +114,27 @@ public sealed partial class PickNumberToolPage : Page
             : "抽取池：请先在上方填写有效的号码范围。";
     }
 
-    
+    /// <summary>把这个工具丢到工具浮窗里跑（浮窗和这一页共用同一个抽号存档）。</summary>
     private void OpenPalette_Click(object sender, RoutedEventArgs e)
         => Views.ToolPaletteWindow.ShowTool("pick-number");
 
-    
+    // ══════════ 功能切换：抽号 / 随机分组 ══════════
     private void TaskMode_Changed(object sender, RoutedEventArgs e) => SyncTask();
 
-    
+    /// <summary>按「功能」卡片切左右两块视图。两块共用上面的「抽取对象」设置。</summary>
     private void SyncTask()
     {
         var draw = TaskDrawRadio.IsChecked == true;
         DrawView.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
         GroupView.Visibility = draw ? Visibility.Collapsed : Visibility.Visible;
 
-        
-        
+        // ⚠️ 只在已经挂进视觉树之后才 ChangeView：构造函数里控件还没进树，
+        //    那时调等于"在布局过程中请求滚动"，WinUI 会判成 Layout cycle。
         var view = draw ? DrawView : GroupView;
         if (view.IsLoaded) view.ChangeView(0, 0, null);
     }
 
-    
+    // ══════════ 抽取对象：号码范围 / 名单 ══════════
     private bool UseRoster => ModeRosterRadio.IsChecked == true;
 
     private void PoolMode_Changed(object sender, RoutedEventArgs e) => OnPoolModeChanged();
@@ -147,28 +147,28 @@ public sealed partial class PickNumberToolPage : Page
         RefreshHints();
     }
 
-    
+    /// <summary>按当前模式收起 / 放出参数行里的那一组输入控件。</summary>
     private void SyncPoolMode()
     {
         var roster = UseRoster;
         RangePanel.Visibility = roster ? Visibility.Collapsed : Visibility.Visible;
         RosterPanel.Visibility = roster ? Visibility.Visible : Visibility.Collapsed;
 
-        
-        
-        
-        
-        
+        // 「抽取数量 / 不重复」两种模式共用（名单模式以前根本没有这个框 —— 它俩锁在 RangePanel 里，
+        // 名单模式一连带被收走了，2026-10-05 Nick 提）。两种模式的摆位不同：
+        //   · 号码模式：并到第一行右边 ⇒ 整条参数带还是一行，跟旧版一样；
+        //   · 名单模式：自己占第二行 ⇒ 名单那一排（标签 + 四个按钮）本来就长，
+        //     同一行再塞数量框，窗口一窄就被裁掉。见 ParamGrid 上的注释。
         Grid.SetRow(BatchPanel, roster ? 1 : 0);
         Grid.SetColumn(BatchPanel, roster ? 0 : 1);
         BatchPanel.Margin = roster ? new Thickness(0, 8, 0, 0) : new Thickness(0);
 
-        
+        // 2026-09-29：勾选框挤在控制行里，文案只能短 —— "抽过的名字不再出现"这种补充说明挪到悬停提示
         ToolTipService.SetToolTip(NoRepeatBox, roster ? "抽过的名字不再出现" : "抽过的不再出现");
         RefreshRosterText();
     }
 
-    
+    /// <summary>名单相关按钮的可用性（名单为空时"查看 / 编辑""清空""导出"都没意义）。</summary>
     private void RefreshRosterText()
     {
         var has = _roster.Count > 0;
@@ -176,13 +176,13 @@ public sealed partial class PickNumberToolPage : Page
         OpenRosterButton.IsEnabled = has;
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 打开「查看 / 编辑名单」弹窗，回来时把改动收下。
+    ///
+    /// 弹窗里是"当场改、当场删"的语义，所以这里只做两件事：把结果写回抽取池、把界面刷一遍。
+    /// ⚠️ 名单变了要顺手清掉「抽号记录」—— 记录里存的是**旧名字**，
+    ///    留着会让"不重复"认不出改名后的人（同一个人被再抽一次）。
+    /// </summary>
     private async void OpenRoster_Click(object sender, RoutedEventArgs e)
     {
         HideError();
@@ -203,24 +203,24 @@ public sealed partial class PickNumberToolPage : Page
         Toast.Text = $"名单已更新，共 {_roster.Count} 人（抽号记录已重置）。";
     }
 
-    
+    // ══════════ 设置 ══════════
     private int From => double.IsNaN(FromBox.Value) ? 0 : (int)Math.Floor(FromBox.Value);
     private int To => double.IsNaN(ToBox.Value) ? 0 : (int)Math.Floor(ToBox.Value);
     private int Lo => Math.Min(From, To);
     private int Hi => Math.Max(From, To);
-    
+    /// <summary>号码范围上限（跟浮窗版一致）。一万个号足够任何班级场景，再大就是误输入了。</summary>
     private const int MaxRange = 9999;
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 池子大小 —— **已经夹到合法区间**，所以任何调用点都拿不到一个荒谬的数。
+    ///
+    /// ⚠️ 为什么必须夹：原来这里直接写 `Hi - Lo + 1`。
+    ///   · 极端输入下（如 To = 2000000000）这个减法会在 int 上溢出变负；
+    ///   · 老师在数字框里粘一个 100000000，`Enumerable.Range(Lo, size).ToList()` 会立刻申请
+    ///     数亿个 int（几 GB）→ 先是界面冻死，再大一点直接 OutOfMemoryException。
+    /// 这里用 long 算再夹到 MaxRange，从根上保证"绝不分配巨型列表"。
+    /// 至于"要告诉老师范围填太大了"，由 <see cref="TryUseRange"/> 负责，不靠这里静默夹取。
+    /// </summary>
     private int PoolSize
     {
         get
@@ -231,7 +231,7 @@ public sealed partial class PickNumberToolPage : Page
         }
     }
 
-    
+    /// <summary>范围是否合法可用；不合法时给出能直接显示给老师的原因。</summary>
     private bool TryUseRange(out int size, out string error)
     {
         var raw = (long)Hi - Lo + 1;
@@ -259,7 +259,7 @@ public sealed partial class PickNumberToolPage : Page
 
     private void OnSettingChanged()
     {
-        if (!_ready || _updating) return;   
+        if (!_ready || _updating) return;   // _updating：刷提示时改 Maximum 会夹取 Value，别让它再回头存一遍
         SaveConfig();
         RefreshHints();
     }
@@ -273,15 +273,15 @@ public sealed partial class PickNumberToolPage : Page
         finally { _updating = false; }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 提示 + 「抽取数量」的上限。
+    ///
+    /// ⚠️ 上限按当前池子走（与浮窗版 MiniPickNumber 同一套规则）：名单模式跟人数、号码模式跟号码范围 ——
+    ///    名单只有 10 人时，框里就不该填得出 11。旧版这个框的 Maximum 在 XAML 里写死 50，
+    ///    名单超过 50 人的班就一次抽不完（2026-10-05 顺带修掉）。
+    /// ⚠️ 改 Maximum 会把超标的 Value 夹进来并触发 ValueChanged，由 <see cref="_updating"/> 挡掉，
+    ///    免得被当成"用户改了设置"再存一遍。
+    /// </summary>
     private void RefreshHintsCore()
     {
         CountBox.Maximum = Math.Max(1, UseRoster ? _roster.Count : PoolSize);
@@ -290,7 +290,7 @@ public sealed partial class PickNumberToolPage : Page
 
         SummaryText.Text = $"本次设置：从 {Lo} ~ {Hi} 中抽取 {WantCount} 个号" + (NoRepeat ? "，抽过的不再出现" : "");
 
-        
+        // 参数行右侧那句状态 —— 就在起止框旁边，不用去别处找
         PoolStatusText.Text = PoolSize > 0 ? PoolStatus(PoolSize, UsedInRange, "个号") : "请填写有效的号码范围（如 1 ~ 50）";
 
         UsedRow.Visibility = _used.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -313,10 +313,10 @@ public sealed partial class PickNumberToolPage : Page
         RefreshGroupRangeHint();
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 参数行右侧那句状态：池子多大、抽掉多少、还剩多少。
+    /// 抽完时直接把"怎么重来"写在这儿 —— 用户看到"剩 0 个"的第一反应就是找按钮。
+    /// </summary>
     private string PoolStatus(int size, int used, string unit)
     {
         if (!NoRepeat) return $"共 {size} {unit}";
@@ -326,7 +326,7 @@ public sealed partial class PickNumberToolPage : Page
             : $"共 {size} {unit} · 已抽 {used} · 剩 {remain}";
     }
 
-    
+    /// <summary>记录行只列前 12 个，剩下的用省略号 —— 五十几个名字铺满两行反而看不清。</summary>
     private static string Head(IEnumerable<string> items)
     {
         var list = items.ToList();
@@ -334,7 +334,7 @@ public sealed partial class PickNumberToolPage : Page
         return list.Count > 12 ? shown + $" 等 {list.Count} 个" : shown;
     }
 
-    
+    // ══════════ 抽号 ══════════
     private static int RandInt(int n) => n <= 1 ? 0 : RandomNumberGenerator.GetInt32(n);
 
     private List<int>? PickOnce(int k)
@@ -418,7 +418,7 @@ public sealed partial class PickNumberToolPage : Page
         _rollTimer.Start();
     }
 
-    
+    /// <summary>Fisher–Yates（和号码模式同一套洗牌，保证公平性一致）。</summary>
     private static void Shuffle<T>(IList<T> list)
     {
         for (var i = list.Count - 1; i > 0; i--)
@@ -452,7 +452,7 @@ public sealed partial class PickNumberToolPage : Page
             return;
         }
 
-        
+        // 滚动中：号码模式刷随机号，名单模式刷随机名字
         if (roster)
         {
             var total = _roster.Count;
@@ -464,10 +464,10 @@ public sealed partial class PickNumberToolPage : Page
         }
     }
 
-    
+    /// <summary>号码结果的基准字号（2026-10-02 结果区改成整页舞台后定的，抽出来的号是这一页的主角）。</summary>
     private const double NumberFontSize = 72;
 
-    
+    /// <summary>名字结果的基准字号：名字比号码长，收一档。</summary>
     private const double NameFontSize = 44;
 
     private void ShowResult(IReadOnlyList<int> numbers, bool rolling)
@@ -481,9 +481,9 @@ public sealed partial class PickNumberToolPage : Page
         ShowTexts(names.ToList(), NameFontSize, rolling);
     }
 
-    
-    
-    
+    /// <summary>
+    /// 结果区渲染：先按这一批内容把卡片槽位铺好，再一格一个"单行自适应"文本框。
+    /// </summary>
     private void ShowTexts(IReadOnlyList<string> texts, double fontSize, bool rolling)
     {
         ResultHost.Children.Clear();
@@ -492,26 +492,26 @@ public sealed partial class PickNumberToolPage : Page
         ResultHint.Visibility = texts.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 结果卡片槽位的尺寸随这一批内容走。
+    ///
+    /// ⛔⛔ 别再写死 180×112（2026-10-05 群反馈的原始 bug）：那时名字那层还写死
+    ///      FontSize=44 ＋ MaxWidth=156 ＋ 强制折行，44px 一个汉字约 44px 宽 ⇒ 156px 只放得下 3 个字，
+    ///      于是「门捷列夫」四个字必然折两行、「学过石油的语文老师」折三行直接顶穿 112 的卡片被裁掉。
+    ///      根子上是"框太小"，不是名单数据有问题。
+    ///
+    /// 现在：宽度按这一批最长的文本估出来（号码只占 0.56 个字宽、汉字占 1 个字宽），
+    /// 再按结果数量限制到"一行放得下几个"的平均宽度；万一还是不够（超长名字／窄窗口），
+    /// 交给 FitBox 里的 Viewbox 等比缩小兜底 —— 总之名字不折行、也不会被裁。
+    /// </summary>
     private void LayoutStage(IReadOnlyList<string> texts, double fontSize)
     {
         if (texts.Count == 0) return;
 
-        
+        // 舞台实际可用宽度；首帧之前拿不到（ActualWidth=0），按 960 页宽减去内外边距估一个。
         var stage = ResultHost.ActualWidth > 0 ? ResultHost.ActualWidth : 872;
 
-        
+        // 一行最多摆几个：结果少的时候给每个留足地方，多了才收。
         var perRow = texts.Count switch
         {
             <= 1 => 1,
@@ -520,26 +520,26 @@ public sealed partial class PickNumberToolPage : Page
             _ => 4,
         };
 
-        var want = texts.Max(t => EstimateWidth(t, fontSize)) + 20;   
-        var room = stage / perRow - 8;                                
+        var want = texts.Max(t => EstimateWidth(t, fontSize)) + 20;   // 左右各留 10 的呼吸位
+        var room = stage / perRow - 8;                                // 平均分到每格的宽度
         ResultHost.ItemWidth = Math.Max(180, Math.Min(want, room));
 
-        
-        
+        // 高度只跟字号走：号码 72px 的行高约 105，加 Viewbox 上下各 6 的呼吸位约 117；
+        // 名字 44px 用不到 112，就保持原来的卡片高度不变。
         ResultHost.ItemHeight = Math.Max(112, fontSize * 1.45 + 12);
     }
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 结果卡里的一格：文本始终单行，放不下就整体等比缩小。
+    /// <c>StretchDirection=DownOnly</c> 是关键 —— 只要放得下就原尺寸显示，
+    /// 免得同一批里短名字被放大、长名字被缩小，几格字号参差不齐。
+    /// ⛔ 别改回 <c>TextWrapping="Wrap"</c>：名字一折行就会顶穿卡片高度被裁（2026-10-05 群反馈）。
+    /// </summary>
     private static Viewbox FitBox(string text, double fontSize, bool rolling)
     {
-        
-        
-        
+        // Typography.NumeralAlignment=Tabular：等宽数字。
+        // 抽号结果是在 Viewbox 里等比缩放的，字体默认比例字宽时 —— 号码 `1` 比 `8` 窄 ⇒ 连**缩放比例**都跟着变，
+        // 滚动换号那几帧数字会忽大忽小、左右乱飘。开了 tnum 每个数字同宽，字号与位置全程稳定。
         var tb = new TextBlock
         {
             Text = text,
@@ -562,7 +562,7 @@ public sealed partial class PickNumberToolPage : Page
         };
     }
 
-    
+    /// <summary>粗略估宽（单位：px）：ASCII 按 0.56 个字宽，其余（汉字等全角）按 1 个字宽。</summary>
     private static double EstimateWidth(string text, double fontSize)
     {
         var em = 0.0;
@@ -579,15 +579,15 @@ public sealed partial class PickNumberToolPage : Page
         Toast.Text = "已重置抽号记录";
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    // ══════════ 公平性自检 ══════════
+    /// <summary>
+    /// 在本机实抽 2 万次，画一张分布直方图 + 卡方结论。
+    ///
+    /// 2026-09-29：从"设置栏里的折叠区"改成"链接 + 浮出面板"。
+    /// 折叠区那一版实测会被挤到可视区下面（AutomationId 还在，但高度被裁成 1px）——
+    /// 对一个从没看过说明书的用户来说，等于这个功能不存在。浮出面板贴在链接上弹，
+    /// 点哪儿看哪儿，也不占设置栏的高度。
+    /// </summary>
     private void FairCheck_Click(object sender, RoutedEventArgs e)
     {
         var size = PoolSize;
@@ -607,7 +607,7 @@ public sealed partial class PickNumberToolPage : Page
         foreach (var c in counts) chi += Math.Pow(c - expect, 2) / expect;
         var max = counts.Max();
 
-        
+        // 图是每次现搭的：桶数跟着号码范围走，没法预先钉在 XAML 上
         var chart = new Grid { VerticalAlignment = VerticalAlignment.Bottom };
         for (var i = 0; i < buckets; i++)
             chart.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -673,13 +673,13 @@ public sealed partial class PickNumberToolPage : Page
         new Flyout { Content = panel, Placement = FlyoutPlacementMode.Top }.ShowAt(FairLink);
     }
 
-    
-    
-    
-    
-    
-    
-    
+    // ══════════ 随机分组 ══════════
+    /// <summary>
+    /// 随机分组：号码池与名单池共用上面的抽取池设置。
+    ///
+    /// ⚠️ 分组**不受**「不重复」记录影响，也不消耗它 —— 每次单击都是对整池独立洗牌，
+    ///    所以可以反复分组、没有次数限制。用户最常问的就是"能分几次"，这句话直接写在页面上了。
+    /// </summary>
     private void Group_Click(object sender, RoutedEventArgs e)
     {
         Toast.Text = "";
@@ -697,13 +697,13 @@ public sealed partial class PickNumberToolPage : Page
         var groups = new List<List<string>>();
         for (var i = 0; i < groupCount; i++) groups.Add(new List<string>());
         for (var i = 0; i < nums.Count; i++) groups[i % groupCount].Add(nums[i].ToString());
-        
+        // 号是整数，得按数值排（直接按字符串排会把 "10" 排到 "9" 前面）
         foreach (var g in groups) g.Sort((a, b) => int.Parse(a).CompareTo(int.Parse(b)));
 
         RenderGroups(groups, "个号");
     }
 
-    
+    /// <summary>名单分组：把导入的名字随机分成 N 组（或每组 N 人）。组内按姓名排序，看起来才整齐。</summary>
     private void GroupRoster()
     {
         var total = _roster.Count;
@@ -720,7 +720,7 @@ public sealed partial class PickNumberToolPage : Page
         var groups = new List<List<string>>();
         for (var g = 0; g < groupCount; g++)
         {
-            
+            // 轮流发牌：第 g 组拿 names[g]、names[g+groupCount]、…（与号码模式同一种发法）
             var members = new List<string>();
             for (var i = g; i < names.Count; i += groupCount) members.Add(names[i]);
             members.Sort(StringComparer.CurrentCulture);
@@ -730,14 +730,14 @@ public sealed partial class PickNumberToolPage : Page
         RenderGroups(groups, "人");
     }
 
-    
+    /// <summary>「组数 / 每组人数」框里的那个数（夹到合法区间，免得在 double 上溢出）。</summary>
     private int GroupValue
         => double.IsNaN(GroupValueBox.Value) ? 1 : Math.Max(1, Math.Min(9999, (int)Math.Floor(GroupValueBox.Value)));
 
-    
-    
-    
-    
+    /// <summary>
+    /// 画分组结果，同时攒一份纯文本给「复制结果」——
+    /// 分完组通常要发到班级群里，复制出来的就是「第 1 组（6 人）：张三、李四…」这种能直接粘贴的格式。
+    /// </summary>
     private void RenderGroups(List<List<string>> groups, string unit)
     {
         GroupHint.Visibility = Visibility.Collapsed;
@@ -797,7 +797,7 @@ public sealed partial class PickNumberToolPage : Page
         Toast.Text = $"已分成 {groups.Count} 组，可反复分组。";
     }
 
-    
+    /// <summary>把分组结果按「第 N 组（x 人）：a、b…」复制到剪贴板，方便直接发群里。</summary>
     private void CopyGroups_Click(object sender, RoutedEventArgs e)
     {
         if (_groupText.Length == 0) return;
@@ -811,8 +811,8 @@ public sealed partial class PickNumberToolPage : Page
         catch { Toast.Text = "复制失败"; }
     }
 
-    
-    
+    // ══════════ 本地存档 + 小工具 ══════════
+    // 存档类型挪到 Data\PickNumberConfig.cs —— 工具页与置顶浮窗共用一份，字段不会再各写各的
 
     private void LoadConfig()
     {
@@ -835,7 +835,7 @@ public sealed partial class PickNumberToolPage : Page
 
     private void SaveConfig()
     {
-        
+        // 两个界面（工具页 / 置顶浮窗）共用同一个存档类型，字段不会再各写各的
         new PickNumberConfig
         {
             From = From,
@@ -850,10 +850,10 @@ public sealed partial class PickNumberToolPage : Page
         }.Save();
     }
 
-    
-    
-    
-    
+    // ══════════ 示例名单 ══════════
+    //
+    // 2026-09-29（Nick 提）：静态示例名单 —— 和「示例名单」对话框里那两张图、两份示例文件是同一批姓名。
+    /// <summary>示例名单里的姓名（10 人）。与 Assets/roster 下的示例文件保持一致。</summary>
     private static readonly string[] SampleNames =
     {
         "张伟", "王伟", "王芳", "李伟", "王秀英", "李秀英", "李娜", "张秀英", "刘伟", "张敏",
@@ -868,12 +868,12 @@ public sealed partial class PickNumberToolPage : Page
         if (dialog.UseSampleRequested) UseSampleRoster();
     }
 
-    
+    /// <summary>把示例的 10 个姓名装进抽取池，并切到名单模式 —— 让用户立刻能试一次。</summary>
     private void UseSampleRoster()
     {
         _roster.Clear();
         _roster.AddRange(SampleNames);
-        _usedNames.Clear();          
+        _usedNames.Clear();          // 名单换了，上一份名单的抽号记录就没意义了（与导入名单同一处理）
         _rosterSource = "示例名单";
 
         if (!UseRoster) ModeRosterRadio.IsChecked = true;
@@ -884,7 +884,7 @@ public sealed partial class PickNumberToolPage : Page
         Toast.Text = $"已载入示例名单（{SampleNames.Length} 人）。可单击「开始抽号」，或切到「随机分组」试一次。";
     }
 
-    
+    // ══════════ 名单导入 / 清空 ══════════
 
     private async void ImportRoster_Click(object sender, RoutedEventArgs e)
     {
@@ -913,10 +913,10 @@ public sealed partial class PickNumberToolPage : Page
 
             _roster.Clear();
             _roster.AddRange(names);
-            _usedNames.Clear();          
+            _usedNames.Clear();          // 名单换了，上一份名单的抽号记录就没意义了
             _rosterSource = file.Name;
 
-            
+            // 导完直接切到名单模式，省得再点一次
             if (!UseRoster) ModeRosterRadio.IsChecked = true;
 
             SaveConfig();

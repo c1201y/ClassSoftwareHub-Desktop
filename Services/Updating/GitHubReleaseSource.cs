@@ -9,12 +9,12 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.Updating;
 
-
-
-
-
-
-
+/// <summary>
+/// GitHub Releases 更新源。
+/// · 正式版 = 「Latest」（非预发布）的 Release
+/// · 预览版 = 打了「Pre-release」的 Release
+/// 只读公开仓库，不需要令牌；带令牌时能拿到更高的接口配额（也顺便避免 60 次/小时的匿名限制）。
+/// </summary>
 public sealed class GitHubReleaseSource : IUpdateSource
 {
     private static readonly HttpClient Http = new(new SocketsHttpHandler
@@ -71,7 +71,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
             if (GetBool(item, "draft")) continue;
 
             var prerelease = GetBool(item, "prerelease");
-            
+            // 正式版通道：只要非预发布；预览版通道：预发布 + 正式版（预览用户也能跟上正式版）
             if (channel == UpdateChannel.Stable && prerelease) continue;
 
             var tag = GetString(item, "tag_name");
@@ -96,9 +96,9 @@ public sealed class GitHubReleaseSource : IUpdateSource
             .ToList();
     }
 
-    
+    // ── 资产挑选 ────────────────────────────────────────────────
 
-    
+    /// <summary>安装包候选名字（以后发版时按这个起名就能被自动识别）。</summary>
     private static readonly string[] InstallerHints = { "setup", "installer", "-install" };
 
     private static readonly string[] InstallerExts = { ".exe", ".msi", ".zip" };
@@ -116,7 +116,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
             if (name.Length == 0 || url.Length == 0) continue;
 
             var size = a.TryGetProperty("size", out var s) && s.TryGetInt64(out var sv) ? sv : 0;
-            var digest = GetString(a, "digest");   
+            var digest = GetString(a, "digest");   // 形如 "sha256:xxxx"（新版 API 才有）
             var sha = digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest[7..] : "";
             all.Add((name, new Uri(url), size, sha));
         }
@@ -139,7 +139,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
             .Where(a => !a.Name.Contains("portable", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        
+        // 优先带 setup/installer 关键词的；没有就退而求其次取最大的
         var prefer = candidates
             .Where(a => InstallerHints.Any(h => a.Name.Contains(h, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(a => a.Size)
@@ -148,16 +148,16 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return prefer.Count > 0 ? prefer : candidates.OrderByDescending(a => a.Size).Take(1);
     }
 
-    
+    /// <summary>找 MD5：同名的 &lt;安装包&gt;.md5，或常见的校验文件里的一行。</summary>
     private static string FindMd5(List<(string Name, Uri Url, long Size, string Sha256)> all, string installerName)
     {
-        
+        // 1) 独立的 checksums.md5 / MD5SUMS 之类：记下 URL，下载后解析（这里先返回 URL，由 UpdateService 解析）
         foreach (var marker in new[] { "checksum", "md5" })
         {
             var file = all.FirstOrDefault(a => a.Name.Contains(marker, StringComparison.OrdinalIgnoreCase));
             if (file.Name is not null) return "asset:" + file.Url;
         }
-        
+        // 2) 同名 sidecar（<安装包>.md5）：同上，交给下载层解析
         var side = all.FirstOrDefault(a =>
             a.Name.Equals(installerName + ".md5", StringComparison.OrdinalIgnoreCase));
         if (side.Name is not null) return "asset:" + side.Url;
@@ -165,7 +165,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return "";
     }
 
-    
+    // ── 小工具 ──────────────────────────────────────────────────
 
     private static string GetString(JsonElement e, string prop) =>
         e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";

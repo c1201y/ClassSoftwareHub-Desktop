@@ -17,25 +17,25 @@ using Windows.UI;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
-
+/// <summary>
+/// 图片取色（对齐网页版 tools/ImageColorTool.vue ＋ gallery/imageColors.ts）。
+/// 上传一张图 → 本机解码缩到最长边 120px → 中位切分法（median cut）取 8 个候选色 →
+/// 打分选出「种子色」→ 夹进柔和区间 → 生成 7 档明暗变体（亮色 3 … 暗色 3）。
+/// 点色块复制 hex，HSL 一格一格点也能复制。图片全程在本机处理，不上传。
+/// </summary>
 public sealed partial class ImageColorToolPage : Page
 {
-    
-    
+    // ── 跟网页版一致的参数（改这里 = 改取色效果）───────────────
+    /// <summary>缩放到的最长边（像素）：太大没必要，还拖慢取色。</summary>
     private const int MaxSide = 120;
-    
+    /// <summary>判定「不透明」的 alpha 阈值：半透明边缘像素往往是脏色，直接跳过。</summary>
     private const int AlphaThreshold = 125;
-    
+    /// <summary>中位切分的目标区域数（候选色个数）。</summary>
     private const int TargetClusters = 8;
-    
+    /// <summary>柔和化区间：亮度 25%–75%，饱和度 30%–85%。</summary>
     private const double BaseLMin = 25, BaseLMax = 75, BaseSMin = 30, BaseSMax = 85;
 
-    
+    /// <summary>7 个变体的亮度偏移（顺序 = 从最亮到最暗）。</summary>
     private static readonly (string Key, string Label, double Delta)[] Variants =
     {
         ("Light3", "亮色 3", 48),
@@ -50,44 +50,44 @@ public sealed partial class ImageColorToolPage : Page
     private readonly List<(string Hex, FontIcon Check)> _checks = new();
     private bool _busy;
 
-    
+    /// <summary>是不是被浮窗（<c>Views/ImageColorWindow</c>）承载着（2026-11-04）。</summary>
     private readonly bool _embedded;
 
-    
+    /// <summary>紧凑模式下的色块高度（整页 60、浮窗里 46，否则一个色块就占掉半屏）。</summary>
     private double _swatchHeight = 60;
 
     public ImageColorToolPage() : this(false) { }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <param name="embedded">
+    /// true = 这页是塞进浮窗里的，不是主界面那整页。
+    /// <para>
+    /// 差别只有三处，都跟"同一份内容换个容器"有关：
+    /// ① 隐藏页面自带的大标题（窗口标题栏已经写了名字）；
+    /// ② 外边距与拖入区高度收紧、色块缩小并改成 4 列，免得在小窗里一路滚到底；
+    /// ③ 选图片的对话框挂在**本窗**的句柄上（主窗口这时可能收在托盘里，拿它的句柄会抛异常）。
+    /// </para>
+    /// <para>
+    /// ⚠️ 取色算法一行没动 —— 两个入口共用这一份（Nick 2026-11-04 明确不让抽成独立类）。
+    /// </para>
+    /// </param>
     public ImageColorToolPage(bool embedded)
     {
         InitializeComponent();
         _embedded = embedded;
 
-        
+        // 两侧留白 / 标题行上的滚轮也转给内容区（见 Core/WheelRelay.cs）
         Core.WheelRelay.Attach(this, ContentScroll);
 
         if (embedded) Loaded += (_, _) => ApplyCompact();
     }
 
-    
+    /// <summary>被浮窗承载时，选图对话框要用这扇窗的句柄（0 = 没设，退回主窗口）。</summary>
     public IntPtr HostWindowHandle { get; set; }
 
-    
+    /// <summary>浮窗听这个：内容从"空"变成"有图"或反过来（窗口据此收放高度）。</summary>
     public Action<bool>? ContentStateChanged { get; set; }
 
-    
+    /// <summary>只调一次外观（Loaded 之后控件才有实际尺寸，这里不需要尺寸，直接设常量）。</summary>
     private bool _compactApplied;
 
     private void ApplyCompact()
@@ -100,12 +100,12 @@ public sealed partial class ImageColorToolPage : Page
             HeaderPanel.Visibility = Visibility.Collapsed;
             BodyGrid.Margin = new Thickness(16, 10, 16, 16);
 
-            
+            // 拖入区：整页 220 是为了"一整块空地好拖"，小窗里那会占掉小半屏
             DropZone.MinHeight = 130;
             Preview.MaxWidth = 150;
             Preview.MaxHeight = 80;
 
-            
+            // 色块：4 列 × 2 行装下 7 档，高度也从 126 收到 96
             SwatchHost.ItemWidth = 120;
             SwatchHost.ItemHeight = 96;
             HslHost.ItemWidth = 108;
@@ -118,7 +118,7 @@ public sealed partial class ImageColorToolPage : Page
     }
 
 
-    
+    // ══════════════════════════ 打开 / 拖入图片 ══════════════════════════
 
     private void Replace_Click(object sender, RoutedEventArgs e) => _ = PickAsync();
 
@@ -139,8 +139,8 @@ public sealed partial class ImageColorToolPage : Page
             foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" })
                 picker.FileTypeFilter.Add(ext);
 
-            
-            
+            // ⚠️ 必须用**本页所在的**窗口句柄：主窗口可能收在托盘里、根本没有可见窗口，
+            //    拿 App.MainWindow 的句柄初始化会直接抛异常（浮窗承载时尤其明显）。
             var hwnd = HostWindowHandle != IntPtr.Zero
                 ? HostWindowHandle
                 : (App.MainWindow is { } main ? WinRT.Interop.WindowNative.GetWindowHandle(main) : IntPtr.Zero);
@@ -197,7 +197,7 @@ public sealed partial class ImageColorToolPage : Page
         }
     }
 
-    
+    // ══════════════════════════ 解码 + 提取 ══════════════════════════
 
     private async Task LoadAsync(StorageFile file)
     {
@@ -240,7 +240,7 @@ public sealed partial class ImageColorToolPage : Page
                 reader.ReadBytes(bytes);
             }
 
-            
+            // 预览图（原图，界面自己缩放）
             stream.Seek(0);
             var image = new BitmapImage();
             await image.SetSourceAsync(stream);
@@ -249,7 +249,7 @@ public sealed partial class ImageColorToolPage : Page
             var pixels = new List<Rgb>(bytes.Length / 4);
             for (var i = 0; i + 3 < bytes.Length; i += 4)
             {
-                if (bytes[i + 3] < AlphaThreshold) continue;      
+                if (bytes[i + 3] < AlphaThreshold) continue;      // 跳过透明/半透明像素
                 pixels.Add(new Rgb(bytes[i + 2], bytes[i + 1], bytes[i]));
             }
 
@@ -284,7 +284,7 @@ public sealed partial class ImageColorToolPage : Page
         }
     }
 
-    
+    // ══════════════════════════ 界面 ══════════════════════════
 
     private void RenderPalette(Palette palette)
     {
@@ -292,7 +292,7 @@ public sealed partial class ImageColorToolPage : Page
 
         EmptyState.Visibility = Visibility.Collapsed;
         LoadedState.Visibility = Visibility.Visible;
-        DropFrame.StrokeDashArray = null;            
+        DropFrame.StrokeDashArray = null;            // 有图之后边框变实线
         DropFrameAccent.StrokeDashArray = null;
 
         SeedChip.Background = new SolidColorBrush(palette.SeedColor);
@@ -322,7 +322,7 @@ public sealed partial class ImageColorToolPage : Page
             Height = _swatchHeight,
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(ActualTheme == ElementTheme.Dark                        
+            BorderBrush = new SolidColorBrush(ActualTheme == ElementTheme.Dark                        // 浅色底上用黑边、深色底上用白边
                 ? Color.FromArgb(0x1F, 255, 255, 255)
                 : Color.FromArgb(0x14, 0, 0, 0)),
             Background = new SolidColorBrush(variant.Color),
@@ -472,7 +472,7 @@ public sealed partial class ImageColorToolPage : Page
         }
     }
 
-    
+    // ══════════════════════════ 取色算法（移植 imageColors.ts）══════════════════════════
 
     private readonly record struct Rgb(int R, int G, int B);
 
@@ -483,7 +483,7 @@ public sealed partial class ImageColorToolPage : Page
     private sealed record Palette(
         string SeedHex, Hsl SeedHsl, Color SeedColor, IReadOnlyList<Variant> Variants);
 
-    
+    /// <summary>主入口：从缩放后的像素里提取柔和配色（跟网页版逐行对齐）。</summary>
     private static Palette? ExtractPalette(List<Rgb> pixels)
     {
         if (pixels.Count == 0) return null;
@@ -491,7 +491,7 @@ public sealed partial class ImageColorToolPage : Page
         var total = pixels.Count;
         var boxes = MedianCut(pixels, TargetClusters);
 
-        
+        // 候选色打分：频率 × 饱和度权重 × 亮度权重 ×「中等饱和度」加分
         var candidates = new List<(Rgb Rgb, Hsl Hsl, double Score)>();
         foreach (var box in boxes)
         {
@@ -501,8 +501,8 @@ public sealed partial class ImageColorToolPage : Page
             var l = hsl.L / 100.0;
             var frequency = box.Count / (double)total;
 
-            var satWeight = s < 0.1 ? 0.15 : 1.0;                       
-            var lightWeight = l < 0.12 || l > 0.88 ? 0.25 : 1.0;        
+            var satWeight = s < 0.1 ? 0.15 : 1.0;                       // 灰扑扑的压到 0.15
+            var lightWeight = l < 0.12 || l > 0.88 ? 0.25 : 1.0;        // 太暗/太亮的压到 0.25
             var midSatBonus = 1 + 0.6 * (1 - Math.Min(1, Math.Abs(s - 0.55) / 0.45));
 
             candidates.Add((rgb, hsl, frequency * satWeight * lightWeight * midSatBonus));
@@ -513,7 +513,7 @@ public sealed partial class ImageColorToolPage : Page
         foreach (var item in candidates)
             if (item.Score > seed.Score) seed = item;
 
-        
+        // 把种子色夹进柔和区间：亮度 25–75，饱和度 30–85
         var baseHsl = new Hsl(
             seed.Hsl.H,
             (int)Clamp(seed.Hsl.S, BaseSMin, BaseSMax),
@@ -523,7 +523,7 @@ public sealed partial class ImageColorToolPage : Page
         foreach (var (key, label, delta) in Variants)
         {
             var l = Clamp(baseHsl.L + delta, 0, 100);
-            
+            // 饱和度随亮度轻微反向调整：越亮越降饱和，越暗略微提饱和
             var s = Clamp(baseHsl.S - delta * 0.4, 0, 100);
             var hsl = new Hsl(baseHsl.H, R(s), R(l));
             var rgb = HslToRgb(hsl.H, hsl.S, hsl.L);
@@ -534,10 +534,10 @@ public sealed partial class ImageColorToolPage : Page
             HexOf(seed.Rgb), seed.Hsl, ToColor(seed.Rgb), variants);
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 中位切分法：反复挑「颜色跨度最大」的区域，按跨度最大的通道排序后从中间切开，
+    /// 直到切出 target 个区域（或再也切不动）。
+    /// </summary>
     private static List<List<Rgb>> MedianCut(List<Rgb> pixels, int target)
     {
         var boxes = new List<List<Rgb>> { pixels };
@@ -599,7 +599,7 @@ public sealed partial class ImageColorToolPage : Page
         return new Rgb(R(r / (double)n), R(g / (double)n), R(b / (double)n));
     }
 
-    
+    /// <summary>RGB(0–255) → HSL(h 0–360, s/l 0–100)</summary>
     private static Hsl RgbToHsl(int r, int g, int b)
     {
         var rn = r / 255.0;
@@ -621,7 +621,7 @@ public sealed partial class ImageColorToolPage : Page
         return new Hsl(R(h), R(s * 100), R(l * 100));
     }
 
-    
+    /// <summary>HSL(h 0–360, s/l 0–100) → RGB(0–255)</summary>
     private static Rgb HslToRgb(double h, double s, double l)
     {
         var hn = ((h % 360) + 360) % 360 / 360.0;
@@ -652,9 +652,9 @@ public sealed partial class ImageColorToolPage : Page
             R(Hue(hn - 1.0 / 3) * 255));
     }
 
-    
+    // ── 小工具 ──────────────────────────────────────────────
 
-    
+    /// <summary>JS 的 Math.round（C# 的 Math.Round 是银行家舍入，对不上）。</summary>
     private static int R(double value) => (int)Math.Floor(value + 0.5);
 
     private static double Clamp(double value, double min, double max) =>

@@ -21,16 +21,16 @@ using Windows.Storage.Pickers;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
+/// <summary>
+/// 软件详情页点「校验」时带过来的请求：官方校验值 + 软件名（只用于提示文案）。
+/// </summary>
 public sealed record HashCheckRequest(string Hash, string AppName);
 
-
-
-
-
-
+/// <summary>
+/// 一条只读哈希结果（算法名 + 值）。
+/// 2026-10-02：四条结果改由 <c>ListView</c> 承载（见 XAML 的 HashRowTemplate），
+/// 于是需要这样一个能被 <c>x:Bind</c> 绑上的数据行 —— 值算完就地刷新，不用再手动找 TextBlock。
+/// </summary>
 public sealed class HashRow : INotifyPropertyChanged
 {
     private string _value = "—";
@@ -54,25 +54,25 @@ public sealed class HashRow : INotifyPropertyChanged
 }
 
 
-
-
-
-
-
-
-
-
+/// <summary>
+/// 编码 / 哈希工具。
+///
+/// 2026-09-29 重构（Nick）：按**用途**拆成两条主线（<c>SelectorBar</c> 两个页签），
+/// 默认停在「文件校验」—— 现实中这个工具绝大多数是被用来核对刚下载的安装包的。
+/// 原来两件事挤在同一屏（左边编解码、右边输出、下面一大块哈希 + 模式单选），
+/// 用户得先判断"我要看哪一块"，再在上下两处结果之间找。
+/// </summary>
 public sealed partial class EncodingToolPage : Page
 {
-    
-    
+    // 算法清单只留一处定义（Core/FileHash.cs）—— 新的「哈希校验」悬浮窗也算同一套值，
+    // 两处各写一份必然分叉（2026-10-30 抽取）。
     private static readonly string[] Algorithms = Core.FileHash.Algorithms;
     private const string EmptyMark = "—";
 
-    
+    /// <summary>「文件校验」页签里的四行哈希（算法名 · 值 · 复制）。</summary>
     private readonly Dictionary<string, HashRow> _fileRows = new();
 
-    
+    /// <summary>「文本编解码」页签里的四行哈希（内容跟输入框实时联动）。</summary>
     private readonly Dictionary<string, HashRow> _textRows = new();
 
     private string _filePath = "";
@@ -83,44 +83,44 @@ public sealed partial class EncodingToolPage : Page
     {
         InitializeComponent();
 
-        
-        
+        // 两侧留白 / 标题行上的滚轮也转给内容区（见 Core/WheelRelay.cs）：
+        // 两个滚动区互斥，指针压在哪个就转给哪个。
         Core.WheelRelay.Attach(this, FileView, TextView);
 
         BuildHashRows(HashPanel, _fileRows);
         BuildHashRows(TextHashPanel, _textRows);
 
-        
-        
-        
+        // 两个用途 RadioButton 的 Checked 挂在 XAML 上（Mode_Changed）；这里只设初始状态。
+        // 默认停在「文件校验」—— 现实中这个工具绝大多数是用来核对刚下载的安装包的。
+        // ⚠️ IsChecked 不能在 XAML 里写 True，必须在代码里赋（见 App.xaml 的 CshModeCardStyle）。
         FileTab.IsChecked = true;
         ShowTab(file: true);
 
         SetFileRowsEmpty(EmptyMark);
         RefreshTextHashes();
 
-        
-        
-        
+        // 离开页面时取消可能还在跑的哈希计算。
+        // ⚠️ 这行原本只写在页内「返回」按钮的点击处理里 —— 统一改用导航栏返回后那个按钮就点不到了，
+        //    所以挪到 Unloaded：导航离开同样会触发，还能覆盖「非导航地被移除」的情况。
         Unloaded += (_, _) => _fileCts?.Cancel();
     }
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 从软件详情页的「校验」键跳进来时，参数里带着那个软件的官方校验值：
+    /// 直接落在**文件校验**页签并预填校验值 —— 用户只要把刚下好的安装包拖进来就出结论，
+    /// 省掉"自己打开工具 → 找到哈希 → 复制 → 粘贴 → 再选文件"这一串。
+    /// 普通从工具列表点进来时参数是 null，一切照旧。
+    /// </summary>
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
         if (e.Parameter is not HashCheckRequest req || string.IsNullOrWhiteSpace(req.Hash)) return;
 
-        FileTab.IsChecked = true;                        
+        FileTab.IsChecked = true;                        // 触发 Mode_Changed → ShowTab(file: true)
         ShowTab(file: true);
         ExpectedBox.Text = req.Hash;
-        
-        
+        // ⚠️ 必须自己再刷一次核对行：程序设 Text 时 TextChanged 不一定回来（实测没回来），
+        //    不刷的话右边是空的，用户看不到"选文件后自动比对"那句引导。
         RefreshMatch();
 
         var who = string.IsNullOrWhiteSpace(req.AppName) ? "该软件" : "「" + req.AppName + "」";
@@ -128,8 +128,8 @@ public sealed partial class EncodingToolPage : Page
         FromAppHint.Visibility = Visibility.Visible;
     }
 
-    
-    
+    // ══════════ 页签 ══════════
+    /// <summary>两张「用途」卡片谁被选中，就显示对应那一块。</summary>
     private void Mode_Changed(object sender, RoutedEventArgs e) => ShowTab(FileTab.IsChecked == true);
 
     private void ShowTab(bool file)
@@ -137,28 +137,28 @@ public sealed partial class EncodingToolPage : Page
         FileView.Visibility = file ? Visibility.Visible : Visibility.Collapsed;
         TextView.Visibility = file ? Visibility.Collapsed : Visibility.Visible;
 
-        
-        
-        
-        
+        // 换页签回到顶部，别把上一个页签的滚动位置带过来。
+        // ⚠️ 只有**已经挂进视觉树**之后才调 ChangeView：构造函数里控件还没进树，
+        //    那时调等于"在布局过程中请求滚动"，WinUI 会判成 Layout cycle（本机实测出现过一次
+        //    LayoutCycleException，见 App.OnUnhandledException 的注释）。
         var view = file ? FileView : TextView;
         if (view.IsLoaded) view.ChangeView(0, 0, null);
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    // ══════════ 哈希行（两个页签各一套，模板共用） ══════════
+    /// <summary>
+    /// 四种算法各一行：算法名（定宽）+ 值（占满，长了折行）+ 复制。
+    /// 2026-09-29 前是"标题一行、值框一行"的两行式，四个算法就是八行，一屏看不全。
+    ///
+    /// ⚠️ 2026-09-29 二次调整（Nick）：「那些哈希值文本框，看起来像是可以编辑的，但实际上只是为了复制」。
+    ///    原来每行的值外面套一个灰底圆角 Border，视觉上跟 TextBox 一模一样 —— 用户会去点它想改。
+    ///    去掉了底框，改用逐行分隔线。
+    ///
+    /// ⚠️ 2026-10-02 三次调整（Nick：「所有块都是方块包方块，像一张填满格子的 Excel」）：
+    ///    逐行分隔线仍然是"手画的表格"，于是整块换成 <c>ListView</c>（行模板见 XAML 的 HashRowTemplate）——
+    ///    悬停底色、圆角、键盘导航全部由系统 ListViewItem 提供，外面那张大卡片也一并删掉。
+    ///    这里只负责把四行数据铺进去；值的刷新靠 <see cref="HashRow"/> 的属性通知，不用再手动找控件。
+    /// </summary>
     private static void BuildHashRows(ListView host, Dictionary<string, HashRow> table)
     {
         var items = new ObservableCollection<HashRow>();
@@ -171,7 +171,7 @@ public sealed partial class EncodingToolPage : Page
         host.ItemsSource = items;
     }
 
-    
+    /// <summary>行模板里的「复制」键：DataContext 就是那一行。</summary>
     private void CopyHashRow_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is HashRow row) Copy(row.Value, row.Name);
@@ -179,11 +179,11 @@ public sealed partial class EncodingToolPage : Page
 
     private Brush Res(string key) => Services.ThemeBrush.Get(this, key);
 
-    
+    // ══════════ 文件模式 ══════════
 
     private void PickFile_Click(object sender, RoutedEventArgs e) => ChooseFile();
 
-    
+    /// <summary>拖放区整块也可以点 —— 少一层"我到底该点哪个按钮"的犹豫。</summary>
     private void DropZone_Tapped(object sender, TappedRoutedEventArgs e) => ChooseFile();
 
     private async void ChooseFile()
@@ -192,8 +192,8 @@ public sealed partial class EncodingToolPage : Page
         {
             var picker = new FileOpenPicker { ViewMode = PickerViewMode.List, SuggestedStartLocation = PickerLocationId.Downloads };
             picker.FileTypeFilter.Add("*");
-            
-            
+            // ⚠️ 用**本页所在窗口**的句柄，别写死主窗口：这一页将来若被装进独立浮窗 / 工具窗，
+            //    主窗口可能收在托盘里，拿它的句柄初始化会让文件对话框挂在一个看不见的窗口上。
             Core.WindowHandle.BindPicker(picker, this);
             var file = await picker.PickSingleFileAsync();
             if (file is null) return;
@@ -219,7 +219,7 @@ public sealed partial class EncodingToolPage : Page
         RefreshMatch();
     }
 
-    
+    // 文件条上的两行默认文案（同 XAML 里的初始值）—— 清空文件时回到这个状态
     private const string IdleHint = "把文件拖到这里，或单击选择";
     private const string IdleSubHint = "支持任意文件类型，大文件流式读取";
 
@@ -274,7 +274,7 @@ public sealed partial class EncodingToolPage : Page
             ApplyFileHashes(hashes);
             SourceText.Text = $"{info.Name}（{SizeText(info.Length)}）· {info.FullName}";
         }
-        catch (OperationCanceledException) {  }
+        catch (OperationCanceledException) { /* 换文件了，旧计算作废 */ }
         catch (Exception ex)
         {
             SourceText.Text = "计算哈希失败：" + ex.Message;
@@ -297,7 +297,7 @@ public sealed partial class EncodingToolPage : Page
          : bytes >= 1L << 10 ? $"{bytes / (double)(1L << 10):0.#} KB"
          : $"{bytes} B";
 
-    
+    // ══════════ 哈希显示 + 核对 ══════════
     private void ApplyFileHashes(Dictionary<string, string> hashes)
     {
         foreach (var name in Algorithms)
@@ -309,7 +309,7 @@ public sealed partial class EncodingToolPage : Page
         foreach (var name in Algorithms) _fileRows[name].Value = placeholder;
     }
 
-    
+    // ══════════ 文本（编解码 + 实时哈希） ══════════
     private void Input_TextChanged(object sender, TextChangedEventArgs e) => RefreshTextHashes();
 
     private void Output_TextChanged(object sender, TextChangedEventArgs e)
@@ -349,10 +349,10 @@ public sealed partial class EncodingToolPage : Page
     private static string Norm(string s)
         => new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
-    
-    
-    
-    
+    /// <summary>
+    /// 核对结论 —— 只针对**文件**校验（粘贴框就在文件页签里）。
+    /// 结论直接写在粘贴框右边，粘完不用往下翻。
+    /// </summary>
     private void RefreshMatch()
     {
         var expected = Norm(ExpectedBox.Text ?? "");
@@ -364,7 +364,7 @@ public sealed partial class EncodingToolPage : Page
 
         if (_fileHashes.Count == 0)
         {
-            
+            // "还没选文件"是指引不是错误 —— 用次要色，别拿红字吓人
             MatchText.Text = "选择文件后自动比对";
             MatchText.Foreground = Res("TextFillColorSecondaryBrush");
             return;
@@ -383,7 +383,7 @@ public sealed partial class EncodingToolPage : Page
         }
     }
 
-    
+    // ══════════ 编解码 ══════════
     private void B64Enc_Click(object sender, RoutedEventArgs e)
     {
         try { OutputBox.Text = Convert.ToBase64String(Encoding.UTF8.GetBytes(InputBox.Text ?? "")); StatusText.Text = ""; }
@@ -409,7 +409,7 @@ public sealed partial class EncodingToolPage : Page
 
     private void UseOutput_Click(object sender, RoutedEventArgs e) => InputBox.Text = OutputBox.Text;
 
-    
+    /// <summary>清空输入框（文本哈希会跟着一起归零）。</summary>
     private void ClearInput_Click(object sender, RoutedEventArgs e) => InputBox.Text = "";
 
     private void Copy(string? text, string what)

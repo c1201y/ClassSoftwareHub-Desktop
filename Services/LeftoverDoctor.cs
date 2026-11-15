@@ -8,40 +8,40 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 残留清理链路的**无人值守体检**（2026-10-14 加，诊断用）。
+///
+/// ⛔ 为什么非要这么一个东西：这条链路的每一环都要在**真机上**才跑得动
+///    （要真的卸载一个软件、真的看注册表和几个数据目录变成了什么样）。
+///    而界面那条路要在 WinUI 上点按钮 —— 合成点击在这个项目里被证明不可靠
+///    （见记忆里"合成鼠标点击在用户打游戏时不可靠"那条），而且会抢前台。
+///    ⇒ 把同一套服务从命令行拉起来跑一遍，报告写进文件，人再去看文件。
+///    ⚠️ 这里调用的就是界面上那几个**同一个方法**，没有复制任何逻辑。
+///
+/// 两个子命令（由 App 在启动最前面接管，跑完直接退出）：
+///   <c>--leftover-doctor &lt;关键字&gt;</c>      完整链路：卸载 → 复扫 → 判归属 → 清理 → 复核
+///   <c>--leftover-doctor-scan &lt;关键字&gt;</c> 只体检不动作：抓快照 → 判归属 → 打印清单
+///
+/// ⛔ 提权：完整链路默认<b>不提权</b>跑（<c>elevate: false</c>）——
+///    无人值守的验证最怕半路弹一个 UAC 把整条流程挂在等人点确认上。
+///    要验提权那条路得用界面（或者把 <see cref="Elevate"/> 翻成 true 手动跑一次）。
+/// </summary>
 public static class LeftoverDoctor
 {
-    
+    /// <summary>诊断报告落盘的位置（放数据目录根，不进 cache\ —— 那个目录会被自动回收）。</summary>
     public static string ReportPath => Path.Combine(SettingsStore.Dir, "leftover-doctor.txt");
 
     public const string FullSwitch = "--leftover-doctor";
     public const string ScanSwitch = "--leftover-doctor-scan";
 
-    
+    /// <summary>完整链路要不要提权。⛔ 默认 false：见类型注释。</summary>
     private const bool Elevate = false;
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 跑一轮并把报告写进 <see cref="ReportPath"/>。返回进程退出码（0 = 一切正常）。
+    /// </summary>
+    /// <param name="keyword">用来在已装软件列表里找目标的**显示名关键字**（不区分大小写）。</param>
+    /// <param name="scanOnly">true = 只体检（不卸载、不清理）。</param>
     public static async Task<int> RunAsync(string keyword, bool scanOnly)
     {
         var log = new StringBuilder();
@@ -61,7 +61,7 @@ public static class LeftoverDoctor
             Say($"数据目录：{SettingsStore.Dir}");
             Say("");
 
-            
+            // ── ① 找目标 ──
             var all = InstalledApps.Enumerate();
             all.AddRange(InstalledApps.EnumerateStorePackages());
 
@@ -75,7 +75,7 @@ public static class LeftoverDoctor
 
             if (hits.Count == 0)
             {
-                
+                // 只体检模式允许"已经卸载过了"——那时候清单里没有它是正常的
                 if (!scanOnly)
                 {
                     Say("!! 找不到这个软件，完整链路没法跑。");
@@ -87,10 +87,10 @@ public static class LeftoverDoctor
 
             var probe = app ?? new InstalledApp(keyword, "", "", "", Category: AppCategory.Desktop);
 
-            
-            
-            
-            
+            // ── ② 只体检：拿当前状态和"刚才那一份"比是没有意义的，
+            //        所以这里改成"跑完一整轮快照 → 判归属 → 打印"，用来复现某次卸载之后的状态。
+            //        做法：抓两份相邻快照（中间隔几百毫秒），差集只会有极少数噪声 ——
+            //        真正的价值在于把**名字/位置吻合**那一档全部列出来。 ──
             if (scanOnly)
             {
                 var a = FootprintSnapshot.Capture("体检-1");
@@ -104,7 +104,7 @@ public static class LeftoverDoctor
                 return 0;
             }
 
-            
+            // ── ③ 完整链路 ──
             Say("── 开始卸载（含前后快照）──");
             var run = await AppUninstaller.UninstallAndScanAsync(app!, default, Elevate);
 
@@ -120,7 +120,7 @@ public static class LeftoverDoctor
 
             DumpItems(Say, run.Leftovers);
 
-            
+            // 卸载之后软件还在不在清单里
             var after = InstalledApps.Enumerate()
                 .Where(a => a.Name.Contains(keyword, StringComparison.CurrentCultureIgnoreCase))
                 .ToList();
@@ -130,7 +130,7 @@ public static class LeftoverDoctor
                 : $"!! 卸载后清单里**仍有** {after.Count} 条（界面在这种情况下不会进残留状态）。");
             Say("");
 
-            
+            // ── ④ 清理（只清默认勾选的，和界面上按"清理选中"是一回事） ──
             var chosen = run.Leftovers.Where(i => i.Selected).ToList();
             Say($"── 开始清理：默认勾选 {chosen.Count} 条 / 共 {run.Leftovers.Count} 条 ──");
 
@@ -160,9 +160,9 @@ public static class LeftoverDoctor
                 if (r.Note.Length > 0) Say($"         {r.Note}");
             }
 
-            
-            
-            
+            // ── ⑤ 兜底复核：不依赖 Cleaner 内部那次自查，这里**重新读一遍磁盘/注册表** ──
+            //     ⚠️ 两边是独立的判据（Cleaner 复算用的是它自己删完后立刻看的结果，
+            //        这里是从报告往回看）—— 不一致本身就是有价值的信号。
             Say("");
             Say("── 独立复核（重新读一次磁盘/注册表）──");
             foreach (var i in chosen)
@@ -172,7 +172,7 @@ public static class LeftoverDoctor
                 if (stillThere) failed++;
             }
 
-            
+            // 备份文件是不是真的写出来了
             Say("");
             if (report.RegistryBackup.Length > 0 && File.Exists(report.RegistryBackup))
             {

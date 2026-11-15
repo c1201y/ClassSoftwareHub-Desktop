@@ -13,31 +13,31 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
+/// <summary>同网段发现到的一台电脑。PairCode 是它自己广播出来的 6 位码，Ips 是它的候选收件地址。</summary>
 public sealed record LanPeer(string Name, string Label, string PairCode,
                              IReadOnlyList<string> Ips, int Port, DateTime LastSeen)
 {
-    
+    /// <summary>列表主行：有标识显示标识（高28班），没有就退回机器名。</summary>
     public string Display => string.IsNullOrWhiteSpace(Label) ? Name : Label;
 
-    
+    /// <summary>列表副行：机器名 + 配对码，用来区分同名班级的不同机器。</summary>
     public string Detail => string.IsNullOrWhiteSpace(Label)
         ? $"配对码 {PairCode}"
         : $"{Name} · 配对码 {PairCode}";
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 是不是本机自己。
+    /// ⚠️ 故意**不**把自己从列表里滤掉（2026-10-25）：只有一台机器时也需要能自测「直连 → 全屏」，
+    ///    否则功能在装第二台机之前永远验证不了。列表上标「（本机）」免得用户误以为是别人。
+    /// </summary>
     public bool IsSelf => string.Equals(PairCode, AnnounceService.MyPairCode, StringComparison.Ordinal);
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 实际要连的地址序列。
+    /// ⚠️ 一台机器会有多块网卡（Wi-Fi / 有线 / WSL / Hyper-V 虚拟网卡），广播在每块网卡上各发一份，
+    ///    收到的源地址各不相同 —— 2026-10-25 实测就是存到了虚拟网卡地址，发送直接超时。
+    ///    所以这里保留全部候选，逐个试；本机固定先走回环（回环不受防火墙入站规则影响）。
+    /// </summary>
     public IReadOnlyList<string> Candidates
     {
         get
@@ -53,36 +53,36 @@ public sealed record LanPeer(string Name, string Label, string PairCode,
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 教室喊话的局域网通道（2026-10-25，Nick 提：多一条路走，别过度依赖服务器）。
+///
+/// <para>
+/// 三件事：
+/// <list type="number">
+///   <item><b>发现</b>：开了「局域网接收」的机器每 5 秒广播一条心跳
+///     （应用标识 / 机器名 / 本机标识 / 配对码 / 收件端口）；所有客户端监听同一 UDP 端口，
+///     维护一张 15 秒过期的设备表。</item>
+///   <item><b>收件</b>：本机 TCP 端口上跑一个极简 HTTP，只认 <c>POST /announce</c>，
+///     校验配对码 + 每 10 秒一条限流，然后交给与服务器通道同一个展示入口。</item>
+///   <item><b>发送</b>：选中的局域网设备直接 HTTP 投递；失败由调用方回落服务器。</item>
+/// </list>
+/// </para>
+///
+/// <para>
+/// ⛔ 安全边界（写死，别扩）：只收固定格式的喊话，不传文件、不回传任何本机信息、不执行命令；
+/// 配对码不符一律 403。监听端口只在「局域网接收」打开时存在。
+/// </para>
+///
+/// <para>
+/// ⚠️ 为何不用 mDNS：Windows 上要么引库要么自己写 responder，而这里只需要「同应用的机器 + 一个码」，
+/// UDP 广播的报文完全可控，成本低一个数量级。
+/// </para>
+/// </summary>
 public static class AnnounceLanService
 {
     public const string AppTag = "ClassSoftwareHub.Announce";
-    public const int DiscoveryPort = 47820;   
-    public const int ReceivePort = 47821;     
+    public const int DiscoveryPort = 47820;   // UDP 发现 / 心跳
+    public const int ReceivePort = 47821;     // TCP 收件
 
     private const int BroadcastIntervalMs = 5000;
     private const int PeerTtlMs = 15000;
@@ -90,40 +90,40 @@ public static class AnnounceLanService
     private const int RateLimitMs = 10_000;
 
     private static readonly object Gate = new();
-    private static readonly Dictionary<string, LanPeer> _peers = new();   
+    private static readonly Dictionary<string, LanPeer> _peers = new();   // key = pairCode
     private static readonly Dictionary<string, DateTime> _peerSeen = new();
 
-    private static UdpClient? _udp;           
-    private static UdpClient? _sender;        
+    private static UdpClient? _udp;           // 收心跳
+    private static UdpClient? _sender;        // 发心跳（独立实例，避免与接收端互相影响）
     private static Socket? _socket;
     private static CancellationTokenSource? _cts;
 
     private static DateTime _lastAccepted = DateTime.MinValue;
 
-    
+    /// <summary>最近一次给对方回单播心跳的时刻（key = 对方 IP），用于节流，见 <see cref="ReplyOnce"/>。</summary>
     private static readonly Dictionary<string, DateTime> _replyAt = new();
 
-    
+    /// <summary>同一个 IP 最多这么长时间回一次单播心跳。</summary>
     private const int ReplyIntervalSec = 30;
 
-    
+    /// <summary>UI 调度器（Start 在 UI 线程上调用，抓一次）：登记/解除登记要改设置，得回 UI 线程。</summary>
     private static Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
 
-    
+    /// <summary>设备表变化（发现/过期/信息更新）时触发；在后台线程上，订阅方要自己回 UI 线程。</summary>
     public static event Action? PeersChanged;
 
-    
+    /// <summary>「谁保存了本机配对码」的名单有变化（收到登记 / 被删除）。同样在后台线程上触发。</summary>
     public static event Action? BindersChanged;
 
-    
+    /// <summary>本机「已保存的电脑」被对方远程移除后触发（发送列表要跟着刷新）。</summary>
     public static event Action? SavedPeersChanged;
 
     public static bool IsRunning { get; private set; }
 
-    
+    /// <summary>最近一次启动失败的原因（端口被占 / 权限不足等），页面显示用。</summary>
     public static string? LastError { get; private set; }
 
-    
+    /// <summary>当前设备表快照（按机器名排序）。</summary>
     public static IReadOnlyList<LanPeer> Peers
     {
         get
@@ -132,7 +132,7 @@ public static class AnnounceLanService
         }
     }
 
-    
+    // ════════════════════════ 启停 ════════════════════════
 
     public static void Start()
     {
@@ -156,17 +156,17 @@ public static class AnnounceLanService
                 IsRunning = true;
                 AppLog.Begin("announce-lan", $"局域网通道已启动（发现 {DiscoveryPort} / 收件 {ReceivePort}，本机标识「{LabelOrDefault}」）");
 
-                
-                
-                
-                
-                
+                // ⛔ 这里**不再**顺手检查防火墙（2026-10-27 Nick 反馈后移除）。
+                //    上一版在这一步查一次，办法是起一个 powershell.exe 跑 Get-NetFirewallRule ——
+                //    等于每次开机都让应用悄悄拉起 PowerShell，安全软件按启发式规则直接弹窗，
+                //    而用户根本还没打开教室喊话页。现在查询改成进程内读注册表（见 FirewallGateway），
+                //    且只在用户真的打开那一页时才查。
             }
             catch (Exception ex)
             {
                 LastError = ex.Message;
                 AppLog.Fail("announce-lan", ex, "局域网通道启动失败");
-                Stop();   
+                Stop();   // 半开状态比不开更糟
             }
         }
     }
@@ -202,16 +202,16 @@ public static class AnnounceLanService
         ? Environment.MachineName
         : App.Settings.Current.AnnounceLabel.Trim();
 
-    
+    // ════════════════════════ 发现（UDP） ════════════════════════
 
     private static void StartDiscovery(CancellationToken token)
     {
-        
+        // 收心跳：ReuseAddress 让同机多进程/重启后立刻可绑
         _udp = new UdpClient();
         _udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         _udp.Client.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
 
-        
+        // 发心跳：独立实例，只负责发
         _sender = new UdpClient { EnableBroadcast = true };
         _sender.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         _sender.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
@@ -247,7 +247,7 @@ public static class AnnounceLanService
             }
             catch (Exception ex)
             {
-                
+                // 单条脏包不该打断整个发现循环
                 AppLog.Warn("announce-lan", "心跳解析失败：" + ex.Message);
             }
         }
@@ -263,29 +263,29 @@ public static class AnnounceLanService
 
         var code = root.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "";
         if (!AnnounceService.IsValidPairCode(code)) return;
-        
+        // ⚠️ 不跳过自己：单机也要能在列表里看到自己并自测（见 LanPeer.IsSelf 的注释）
 
         var peerName = root.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
         var label = root.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "";
         var port = root.TryGetProperty("port", out var p) && p.TryGetInt32(out var pt) ? pt : ReceivePort;
         if (port <= 0 || port > 65535) port = ReceivePort;
 
-        
+        // 对方出现了：把之前没发出去的「解除登记」补发一次
         RetryPendingUnbind(from.Address.ToString());
 
         lock (Gate)
         {
             _peers.TryGetValue(code, out var old);
 
-            
+            // 合并候选地址：同一台机每块网卡各广播一份，源地址都不一样（Wi-Fi / 有线 / 虚拟网卡）
             var ips = old is null ? new List<string>() : new List<string>(old.Ips);
             var ip = from.Address.ToString();
             var isNewIp = !ips.Contains(ip);
             if (isNewIp && ips.Count < 12) ips.Add(ip);
 
-            
-            
-            
+            // 2026-10-27：对方心跳里自带的本机地址列表也一并收下。
+            // 为什么需要：只靠「包的源地址」推断对方可连地址，在交换机端口隔离 / 双网卡 / 中间设备
+            // 转发的情况下会拿到一个连不通的地址 —— 现象就是「列表里看得到它，但发过去超时」。
             if (root.TryGetProperty("ips", out var ipsEl) && ipsEl.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in ipsEl.EnumerateArray())
@@ -308,15 +308,15 @@ public static class AnnounceLanService
             if (changed) PeersChanged?.Invoke();
         }
 
-        
-        
+        // 收到谁的心跳就回谁一条（单播，30 秒一次）：
+        // 有些交换机/AP 只允许一侧主动发包，单向广播通的时候，对方列表里就一直看不到本机。
         ReplyOnce(from.Address);
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 给对方回一条单播心跳。节流到 <see cref="ReplyIntervalSec"/> 秒一次，避免多机互回形成风暴。
+    /// 用单独的发包 socket（<see cref="_sender"/>），不进接收循环。
+    /// </summary>
     private static void ReplyOnce(IPAddress address)
     {
         var key = address.ToString();
@@ -362,14 +362,14 @@ public static class AnnounceLanService
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 一条心跳的内容。
+    /// <para>
+    /// <c>ips</c> 是本机全部 IPv4（2026-10-27 补）：对方据此得到一组"能直接连"的地址候选，
+    /// 不再只依赖广播包的源地址 —— 多网卡、交换机端口隔离、中间设备转发的情况下，
+    /// 源地址经常不是可连地址，症状是「列表里看得到它，发过去却超时」。
+    /// </para>
+    /// </summary>
     private static byte[] BuildHeartbeat() => JsonSerializer.SerializeToUtf8Bytes(new
     {
         app = AppTag,
@@ -380,7 +380,7 @@ public static class AnnounceLanService
         ips = LocalIPv4(),
     });
 
-    
+    /// <summary>本机全部 IPv4（跳过回环与未启用的网卡）。</summary>
     private static List<string> LocalIPv4()
     {
         var list = new List<string>();
@@ -409,10 +409,10 @@ public static class AnnounceLanService
         return list;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 发一个 UDP 包（心跳用）。同步发送、失败一律吞掉 —— 某块网卡不通不能影响其它网卡。
+    /// ⚠️ 加锁：广播循环和「收到心跳后的回包」会同时用同一个 socket。
+    /// </summary>
     private static void SendRaw(byte[] payload, IPEndPoint to)
     {
         var sender = _sender;
@@ -424,14 +424,14 @@ public static class AnnounceLanService
         }
         catch
         {
-            
+            // 单个目标不可达：跳过
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 广播目标：全局广播 + 每块网卡的定向广播地址。
+    /// ⚠️ 只有全局广播时，部分路由/AP 会直接丢掉，定向广播能让局域网内的机器收到。
+    /// </summary>
     private static IEnumerable<IPAddress> BroadcastTargets()
     {
         var set = new HashSet<string> { IPAddress.Broadcast.ToString() };
@@ -497,12 +497,12 @@ public static class AnnounceLanService
         }
     }
 
-    
+    // ════════════════════════ 收件（极简 HTTP） ════════════════════════
 
     private static void StartReceiver(CancellationToken token)
     {
-        
-        
+        // 2026-10-25 改用裸 Socket：TcpListener 在这台机器上出现过「isBound=True 却连不上」的怪状，
+        // 这里显式 bind/listen，状态一目了然，也少一层封装可怀疑。
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         _socket.Bind(new IPEndPoint(IPAddress.Any, ReceivePort));
@@ -511,17 +511,17 @@ public static class AnnounceLanService
         AppLog.Step("announce-lan", $"收件端口已监听 {_socket.LocalEndPoint}（handle={_socket.Handle}）");
 
         _ = Task.Run(() => AcceptLoopAsync(token));
-        _ = Task.Run(() => SelfCheckAsync(token));   
+        _ = Task.Run(() => SelfCheckAsync(token));   // 起来后自己打一条，确认收件链路真的通
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 自检（2026-10-25）：从进程内部 POST 一条 health 请求到自己的收件端口。
+    /// <para>
+    /// 为什么需要它：外部探针会被沙箱网络隔离干扰，而用户的机器上又不能每次都靠人点一遍。
+    /// 自检跑在同一进程、同一网络栈里，结果直接写日志 —— 收件链路坏没坏，一眼就能看出来。
+    /// health 请求不会弹窗（处理器看到 health=true 直接回 200）。
+    /// </para>
+    /// </summary>
     private static async Task SelfCheckAsync(CancellationToken token)
     {
         try
@@ -538,7 +538,7 @@ public static class AnnounceLanService
             else
                 AppLog.Warn("announce-lan", $"收件自检返回 {(int)resp.StatusCode}");
         }
-        catch (OperationCanceledException) {  }
+        catch (OperationCanceledException) { /* 通道被关掉，正常 */ }
         catch (Exception ex)
         {
             AppLog.Fail("announce-lan", ex, "收件自检失败（本机自己的请求都进不去）");
@@ -568,7 +568,7 @@ public static class AnnounceLanService
             }
             catch (Exception ex)
             {
-                
+                // 2026-10-25：以前这里只 continue，循环一旦持续抛错就变成静默空转（连日志都没有）
                 AppLog.Fail("announce-lan", ex, "接受连接失败");
                 try { await Task.Delay(300, token); } catch { return; }
                 continue;
@@ -585,10 +585,10 @@ public static class AnnounceLanService
         catch { return "?"; }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 手写最小 HTTP：只认 POST /announce。
+    /// ⚠️ 故意不引 Kestrel / ASP.NET：这里只有一个路由，几百行架子换不来任何东西，还多一处攻击面。
+    /// </summary>
     private static async Task HandleClientAsync(Socket client, CancellationToken token)
     {
         using (client)
@@ -596,7 +596,7 @@ public static class AnnounceLanService
         {
             try
             {
-                
+                // 读请求头最多等 5 秒：不说话的连接不能把处理线程永久挂住（以前就是这么挂的）
                 using var headCts = CancellationTokenSource.CreateLinkedTokenSource(token);
                 headCts.CancelAfter(TimeSpan.FromSeconds(5));
 
@@ -620,11 +620,11 @@ public static class AnnounceLanService
                 var method = parts[0];
                 var path = parts[1].Split('?')[0];
 
-                
-                
-                
-                
-                
+                // GET / 或 GET /test：返回内置的测试页（2026-10-28）。
+                // 为什么由服务端返回而不是让用户拿一个 html 文件：
+                //   手机从 file:// 打开页面时，浏览器把它当成不透明来源，fetch 到 http://私有地址
+                //   直接被拦（实测「Failed to fetch」，而同一地址在地址栏里能正常打开）。
+                //   由这里返回就意味着页面与 /announce 同源，零跨域，页面还能读到发送结果。
                 if (method.Equals("GET", StringComparison.OrdinalIgnoreCase)
                     && (path == "/" || path.Equals("/test", StringComparison.OrdinalIgnoreCase)))
                 {
@@ -662,7 +662,7 @@ public static class AnnounceLanService
                 }
 
                 var body = new byte[length];
-                
+                // ⚠️ 先用请求头那一包里已经带进来的字节，再继续读剩下的（见 Core/HttpHeadReader 的说明）
                 var read = Math.Min(leftover.Length, length);
                 if (read > 0) Array.Copy(leftover, body, read);
                 while (read < length)
@@ -684,14 +684,14 @@ public static class AnnounceLanService
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 读 HTTP 请求头，并把它后面**已经读进来的字节**原样交回（body 前缀）。
+    /// <para>
+    /// ⛔ 2026-10-25 的坑：HttpClient 的请求头和小 body 往往在同一个 TCP 包里，一次 Read 就把 body 也读走了。
+    /// 老实现把整段内容当请求头丢掉，之后按 Content-Length 再去等 body 就永远等不到 ——
+    /// 现象是「连接成功、服务端永不应答」，从客户端看就是超时。局域网喊话卡了一下午就是它。
+    /// </para>
+    /// </summary>
     private static async Task OnAnnounceAsync(string json, NetworkStream stream)
     {
         using var doc = JsonDocument.Parse(json);
@@ -702,7 +702,7 @@ public static class AnnounceLanService
             return;
         }
 
-        
+        // 自检请求（进程内部发的）：只要收件链路通就回 200，不弹窗、不登记
         if (root.TryGetProperty("health", out var health) && health.ValueKind == JsonValueKind.True)
         {
             await WriteResponseAsync(stream, 200, "{\"ok\":true}");
@@ -724,7 +724,7 @@ public static class AnnounceLanService
             return;
         }
 
-        
+        // 限流：与服务器同一口径（1 条 / 10 秒），局域网也不给刷屏的口子
         if (DateTime.Now - _lastAccepted < TimeSpan.FromMilliseconds(RateLimitMs))
         {
             await WriteResponseAsync(stream, 429, "{\"error\":\"rate_limited\"}");
@@ -745,13 +745,13 @@ public static class AnnounceLanService
         AnnounceService.DispatchMessage(msg, "局域网");
     }
 
-    
+    // ════════════════════════ 登记：谁保存了本机配对码 ════════════════════════
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 处理对方的登记请求（<c>POST /bind</c>）：对方在发送端保存了本机的配对码，把它记下来，
+    /// 供本机在「谁保存了本机配对码」里查看与删除（2026-10-25 Nick：防滥用）。
+    /// ⚠️ 仍然要求配对码正确 —— 不知道本机码的人连登记都做不了，名单不会被随便塞满。
+    /// </summary>
     private static async Task OnBindAsync(string json, NetworkStream stream)
     {
         using var doc = JsonDocument.Parse(json);
@@ -778,7 +778,7 @@ public static class AnnounceLanService
         RecordBinder(name, label);
     }
 
-    
+    /// <summary>把登记写进设置（回 UI 线程改，避免后台线程与页面同时写 settings.json）。</summary>
     private static void RecordBinder(string name, string label)
     {
         var queue = _uiQueue;
@@ -809,7 +809,7 @@ public static class AnnounceLanService
                     existing.SeenTicks = now;
                 }
 
-                while (list.Count > 30) list.RemoveAt(0);   
+                while (list.Count > 30) list.RemoveAt(0);   // 只留最近 30 条，名单别无限长
                 App.Settings.Save();
                 AppLog.Step("announce-lan", $"有新电脑保存了本机配对码：{(string.IsNullOrWhiteSpace(label) ? name : label)}");
                 BindersChanged?.Invoke();
@@ -821,10 +821,10 @@ public static class AnnounceLanService
         });
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 通知对方「我保存了你的配对码」（发送端保存时调用）。
+    /// 只有对方此刻在同一局域网里才发得出去 —— 发不出去不算错，只是接收端的名单看不到这条。
+    /// </summary>
     public static async Task TryBindAsync(LanPeer peer, string name, string label)
     {
         var payload = JsonSerializer.Serialize(new { pairCode = peer.PairCode, name, label });
@@ -849,10 +849,10 @@ public static class AnnounceLanService
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 处理对方的「解除登记」请求（<c>POST /unbind</c>）：对方（码的主人）把本机的登记删掉了，
+    /// 本机也要把「已保存的电脑」里那条删掉 —— 单边删除会让两边对不上（2026-10-25 Nick 指出）。
+    /// </summary>
     private static async Task OnUnbindAsync(string json, NetworkStream stream)
     {
         using var doc = JsonDocument.Parse(json);
@@ -871,7 +871,7 @@ public static class AnnounceLanService
         RemoveSavedPeer(code);
     }
 
-    
+    /// <summary>把某个配对码从「已保存的电脑」移除（回 UI 线程改设置）。</summary>
     private static void RemoveSavedPeer(string code)
     {
         var queue = _uiQueue;
@@ -895,10 +895,10 @@ public static class AnnounceLanService
         });
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 通知某台电脑「把我的登记删掉」（接收端删除时调用）。返回是否通知成功。
+    /// 对方不在线就返回 false，调用方把它记进「待通知」，等对方下次出现再补发。
+    /// </summary>
     public static async Task<bool> TryUnbindAsync(string ip, string code)
     {
         if (string.IsNullOrWhiteSpace(ip)) return false;
@@ -924,7 +924,7 @@ public static class AnnounceLanService
         return false;
     }
 
-    
+    /// <summary>对方下次广播心跳时，把攒下的「待通知移除」补发一次。</summary>
     private static void RetryPendingUnbind(string ip)
     {
         List<string> codes;
@@ -937,7 +937,7 @@ public static class AnnounceLanService
         }
         catch
         {
-            return;   
+            return;   // 设置正在被 UI 线程改写时读到半成品，下一拍再试
         }
 
         if (codes.Count == 0) return;
@@ -981,17 +981,17 @@ public static class AnnounceLanService
         await stream.FlushAsync();
     }
 
-    
+    // ════════════════════════ 发送（直连） ════════════════════════
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 直接投递到某一台局域网设备。返回 true = 对方已收到（HTTP 200）；
+    /// false = 连不上/被拒，调用方应回落服务器通道。
+    /// <para>
+    /// ⚠️ 逐个试对方的候选地址（多网卡机器会广播出多个源地址），单个地址超时 2 秒：
+    ///    局域网内连不上就是连不上，不能让用户陪它等服务器那条路的 10 秒。
+    ///    对方明确回 4xx（码不符 / 限流）时立刻放弃 —— 换个地址也是同样的结果。
+    /// </para>
+    /// </summary>
     public static async Task<bool> TrySendAsync(LanPeer peer, AnnounceMessage msg)
     {
         var payload = JsonSerializer.Serialize(new
@@ -1029,23 +1029,23 @@ public static class AnnounceLanService
         return false;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    // ════════════════════════ 防火墙 ════════════════════════
+    //
+    // 2026-10-27 整体搬到 Services/FirewallGateway.cs。旧实现（就在这个位置）用 netsh 的中文输出
+    // 做关键字匹配，在 UTF-8 代码页下读到的是 GBK 乱码，判据恒为 false；而且只看「规则存在」，
+    // 没看它覆不覆盖公用网络 —— 这台机器上留下的旧规则是「域,专用」，校园网下等于没加。
+    // 两件事叠起来，用户看到的就是「局域网搜不到、每次都要再点一次放行、点了还弹 UAC」。
+    //
+    // 现在由 FirewallGateway 负责：**进程内读注册表**（不起任何子进程，普通权限即可，
+    // 规则库对 BUILTIN\Users 授予了 ReadKey），判据是「存在 + 已启用 + Profile 含 Public」，
+    // 另外单独查本程序有没有入站 Block 规则（Block 永远优先于 Allow，不查这条，
+    // 端口规则再怎么对也收不到包）。
+    // ⚠️ 2026-10-27 当天先做过一版「PowerShell 查询」，被用户和安全软件一起否掉：
+    //    每次启动都会拉起 powershell.exe，安全软件直接弹窗拦截。别改回去。
 
-    
+    // ════════════════════════ 内置测试页 ════════════════════════
 
-    
+    /// <summary>返回一段 HTML（保持 Connection: close，与其它路由一致）。</summary>
     private static async Task WriteHtmlAsync(NetworkStream stream, string html)
     {
         var bytes = Encoding.UTF8.GetBytes(html);
@@ -1060,17 +1060,17 @@ public static class AnnounceLanService
         await stream.FlushAsync();
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 手机浏览器直接访问 <c>http://本机IP:47821/</c> 就能用的发送页（2026-10-28 加）。
+    /// <para>
+    /// 用途：局域网里手边没有第二台装了本程序的电脑时，手机打开这个页面就能真的投递一条喊话，
+    /// 验证「防火墙 → 收件 → 弹窗」整条链路。以前这种事只能靠人拿着 html 文件互传，
+    /// 而手机从 <c>file://</c> 打开的页面属于不透明来源，fetch 到私有地址一律被拦。
+    /// </para>
+    /// <para>
+    /// ⛔ 配对码**故意不预填**：这个页面同网段谁都能打开，预填等于把码公开。
+    /// </para>
+    /// </summary>
     private const string TestPageHtml = """
 <!doctype html>
 <html lang="zh-CN">
@@ -1082,7 +1082,7 @@ public static class AnnounceLanService
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--text:#16181d;--sub:#6b7280;--line:#e3e6eb;--accent:#2b6df6;--ok:#137a4b;--err:#b91c1c}
 @media (prefers-color-scheme:dark){:root{--bg:#14161a;--card:#1c1f25;--text:#f2f4f7;--sub:#9aa3af;--line:#2b3037;--accent:#2b6df6;--ok:#4ade80;--err:#f87171}}
-
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;padding:20px 16px 40px;background:var(--bg);color:var(--text);
 font:15px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif}
 h1{margin:4px 0 2px;font-size:20px;font-weight:650}

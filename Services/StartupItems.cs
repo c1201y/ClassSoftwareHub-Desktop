@@ -13,33 +13,33 @@ using Microsoft.Win32;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
+/// <summary>一个开机启动位置的存放形式。</summary>
 public enum StartupSourceKind
 {
-    
+    /// <summary>注册表 <c>Run</c> 键下的一个值。</summary>
     Registry,
 
-    
+    /// <summary>启动文件夹里的一个文件（通常是 <c>.lnk</c>）。</summary>
     Folder,
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 一个开机启动位置。
+/// <para>
+/// ⛔⛔ <b>「禁用」不删值、不动文件</b> —— 只写 <paramref name="ApprovalPath"/> 下那 12 字节的状态位。
+/// 这是 Windows 自己（任务管理器 / 设置 → 应用 → 启动）用的同一套机制，所以三边状态天然互通；
+/// 而"删除值再自己备份"的做法会让任务管理器看不懂我们的禁用，也会跟软件自愈行为打架。
+/// </para>
+/// <para>
+/// 状态位格式（社区长期沿用、本机实测一致）：<c>[状态字节][00 00 00][8 字节 FILETIME]</c>，
+/// <c>0x02</c> = 启用、<c>0x03</c> = 禁用。<c>StartupApproved</c> 里没有这条记录 = 默认启用。
+/// </para>
+/// </summary>
+/// <param name="Id">稳定标识，用于界面与提权清单之间对应。</param>
+/// <param name="Label">界面上显示的来源名。</param>
+/// <param name="ItemsPath">注册表键路径 或 文件夹路径。</param>
+/// <param name="ApprovalPath">对应 <c>StartupApproved</c> 键路径。</param>
+/// <param name="NeedsAdmin">是否为"所有用户"级（写状态位要管理员）。</param>
 public sealed record StartupSource(
     string Id,
     string Label,
@@ -48,10 +48,10 @@ public sealed record StartupSource(
     string ApprovalPath,
     bool NeedsAdmin);
 
-
-
-
-
+/// <summary>一条开机启动项（扫描结果里的一项）。</summary>
+/// <param name="Name">注册表值名 或 启动文件夹里的文件名。</param>
+/// <param name="Command">该项实际会执行的命令（启动文件夹项取快捷方式的目标）。</param>
+/// <param name="Missing">命令行指向的文件已经不存在 —— 多半是软件卸载后留下的死项。</param>
 public sealed record StartupItem(
     string Name,
     string Command,
@@ -61,26 +61,26 @@ public sealed record StartupItem(
     bool NeedsAdmin,
     bool Missing)
 {
-    
+    /// <summary>同一条目的稳定键：来源 + 名称（Windows 这两处都不区分大小写）。</summary>
     public string Key => SourceId + "|" + Name.ToLowerInvariant();
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 开机启动项的扫描与启停。
+///
+/// <para>
+/// ⛔ <b>只列 4 个位置</b>：注册表 <c>Run</c>（当前用户 / 所有用户 / 32 位）+ 启动文件夹（当前用户 / 所有用户）。
+/// <b>故意不列 <c>RunOnce</c></b> —— 那是"执行一次就自动消失"的一次性项，没有"开机自启"的含义，
+/// 列出来只会让用户以为关不掉；也不列服务与计划任务（各自是独立的大功能）。
+/// </para>
+/// <para>
+/// ⛔ <c>StartupApproved</c> 里会有一些<b>孤儿记录</b>：软件卸载了但状态位还留着（本机实测就有
+/// Adobe / 钉钉 / 百度网盘 几条）。它们<b>不显示</b> —— 对应的程序都没了，列出来是噪音。
+/// </para>
+/// </summary>
 public static class StartupItems
 {
-    
+    /// <summary>提权助手开关。由 <c>App</c> 在启动最前面接管，见 <see cref="ApplyElevated"/>。</summary>
     public const string AdminSwitch = "--startup-admin";
 
     private static string RoamingAppData => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -88,10 +88,10 @@ public static class StartupItems
 
     private const string ExplorerKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved";
 
-    
-    
-    
-    
+    /// <summary>
+    /// 扫描位置。⚠️ <b>顺序有意义</b>：界面按这个顺序分组排列，而且它固定不变 ——
+    /// 排序若受"启用/禁用"影响，用户拨一下开关整行就会跳位置，那是很糟的手感。
+    /// </summary>
     public static readonly StartupSource[] Sources =
     {
         new("hkcu-run", "当前用户 · 注册表", StartupSourceKind.Registry,
@@ -104,7 +104,7 @@ public static class StartupItems
             @"HKLM\" + ExplorerKey + @"\Run",
             NeedsAdmin: true),
 
-        
+        // ⚠️ 32 位视图的 Run 对应 StartupApproved 下的 Run32（64 位的是 Run）。
         new("hklm-run32", "所有用户 · 注册表（32 位）", StartupSourceKind.Registry,
             @"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
             @"HKLM\" + ExplorerKey + @"\Run32",
@@ -123,9 +123,9 @@ public static class StartupItems
 
     public static StartupSource? SourceOf(string id) => Sources.FirstOrDefault(s => s.Id == id);
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  扫描
+    // ══════════════════════════════════════════════════════════════════════════
 
     public static Task<List<StartupItem>> ScanAsync(CancellationToken ct)
         => Task.Run(() => Scan(ct), ct);
@@ -144,12 +144,12 @@ public static class StartupItems
             }
             catch (Exception ex)
             {
-                
+                // 一个位置读不动（安全软件挂钩、权限不足）不该拖垮整次扫描
                 AppLog.Exception("startup", ex, $"扫描开机启动项（{src.Label}）");
             }
         }
 
-        
+        // 按来源分组、组内按名字。⛔ 不含"是否启用"——见 Sources 的注释。
         var order = Sources.Select((s, i) => (s.Id, i)).ToDictionary(x => x.Id, x => x.i);
         return list
             .OrderBy(i => order.TryGetValue(i.SourceId, out var n) ? n : int.MaxValue)
@@ -169,9 +169,9 @@ public static class StartupItems
 
         foreach (var name in key.GetValueNames())
         {
-            if (name.Length == 0) continue;   
+            if (name.Length == 0) continue;   // "(默认)"值不算
 
-            
+            // ⚠️ 原样取出、**不展开环境变量** —— 界面上要显示的就是用户/安装器当初写进去的那串东西
             var command = key.GetValue(name, "", RegistryValueOptions.DoNotExpandEnvironmentNames) as string ?? "";
 
             sink.Add(new StartupItem(
@@ -217,15 +217,15 @@ public static class StartupItems
                 SourceLabel: src.Label,
                 Enabled: IsEnabled(approval, name),
                 NeedsAdmin: src.NeedsAdmin,
-                
+                // 快捷方式解析不出来时（target 为空）**不判死** —— 拿不到目标就没有依据说它丢了
                 Missing: target.Length > 0 && CommandSeemsMissing(target)));
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 读一个 <c>StartupApproved</c> 键，返回「值名 → 是否启用」。
+    /// ⛔ 键不存在、或某条记录格式不认识 ⇒ 都当<b>启用</b>（系统默认行为），别反过来猜成禁用。
+    /// </summary>
     private static Dictionary<string, bool> ReadApproval(string approvalPath)
     {
         var map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
@@ -243,8 +243,8 @@ public static class StartupItems
                 if (name.Length == 0) continue;
                 if (key.GetValue(name) is not byte[] { Length: > 0 } bytes) continue;
 
-                
-                
+                // 本机实测：0x02 = 启用、0x03 = 禁用，另有系统托管的 0x06（也已在运行）。
+                // 规律是**最低位**：奇数 = 禁用。⛔ 别写成 `== 0x03`，那样 0x06 会被误判成禁用。
                 map[name] = (bytes[0] & 0x01) == 0;
             }
         }
@@ -259,20 +259,20 @@ public static class StartupItems
     private static bool IsEnabled(Dictionary<string, bool> approval, string name)
         => !approval.TryGetValue(name, out var enabled) || enabled;
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  启用 / 禁用
+    // ══════════════════════════════════════════════════════════════════════════
 
-    
-    
-    
-    
+    /// <summary>
+    /// 切换一项的启停。返回空串 = 成功；否则是给用户看的一句话原因。
+    /// <para>「所有用户」级的项普通权限写不动，会自动提权补刀（弹一次 UAC）。</para>
+    /// </summary>
     public static async Task<string> SetEnabledAsync(StartupItem item, bool enabled, CancellationToken ct)
     {
         var src = SourceOf(item.SourceId);
         if (src is null) return "找不到这一项的来源位置";
 
-        
+        // 先按普通权限试。应用本身若正好是提权运行的，这一步就成了，不用多弹 UAC。
         if (TryApply(src, item.Name, enabled, out var note))
         {
             Log(src, item.Name, enabled);
@@ -281,11 +281,11 @@ public static class StartupItems
 
         if (!src.NeedsAdmin) return note;
 
-        
+        // 所有用户级 —— 提权补刀
         return await ApplyElevatedAsync(src, item.Name, enabled, ct);
     }
 
-    
+    /// <summary>写状态位。失败时 <paramref name="note"/> 给出原因（尤其"需要管理员权限"要能识别出来）。</summary>
     private static bool TryApply(StartupSource src, string name, bool enabled, out string note)
     {
         note = "";
@@ -311,7 +311,7 @@ public static class StartupItems
 
             if (!enabled)
             {
-                
+                // 后面 8 字节 = 禁用时间（FILETIME，UTC）。任务管理器也是这么写的。
                 BitConverter.GetBytes(DateTime.UtcNow.ToFileTimeUtc()).CopyTo(bytes, 4);
             }
 
@@ -339,7 +339,7 @@ public static class StartupItems
     private static void Log(StartupSource src, string name, bool enabled)
         => AppLog.Info("startup", $"{(enabled ? "启用" : "禁用")}开机启动项「{name}」（{src.Label}）");
 
-    
+    // ── 提权链路（照「应用卸载」页那套：清单进、结果出、跑完即退） ──────────────
 
     private sealed record AdminTask(string SourceId, string Name, bool Enabled);
 
@@ -375,7 +375,7 @@ public static class StartupItems
                 FileName = exe,
                 Arguments = $"\"{AdminSwitch}\" \"{manifest}\"",
                 UseShellExecute = true,
-                Verb = "runas",            
+                Verb = "runas",            // 会弹一次 UAC
                 WindowStyle = ProcessWindowStyle.Hidden,
             };
 
@@ -414,10 +414,10 @@ public static class StartupItems
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 提权助手：读清单、写状态位、把结果写回去。由 <c>App</c> 在启动最前面调用，
+    /// 跑完直接 <c>Environment.Exit</c>，⛔ 不进 WinUI 的正常流程、不建窗口、不碰互斥体。
+    /// </summary>
     public static void ApplyElevated(string manifestPath)
     {
         AdminResult result;
@@ -464,14 +464,14 @@ public static class StartupItems
         catch (Exception ex) { AppLog.Info("startup", $"删旧结果文件失败：{ex.GetType().Name}"); }
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  命令行 / 快捷方式解析（只为界面上"这是什么、指向哪儿"）
+    // ══════════════════════════════════════════════════════════════════════════
 
-    
-    
-    
-    
+    /// <summary>
+    /// 命令行指向的文件是不是已经没了。⚠️ <b>拿不准就返回 <c>false</c></b>：
+    /// 只有命令行明确以可执行文件开头（带引号，或无引号但能试出一个真实存在的文件前缀）时才敢判。
+    /// </summary>
     private static bool CommandSeemsMissing(string command)
     {
         var s = command.Trim();
@@ -485,12 +485,12 @@ public static class StartupItems
             return !File.Exists(quoted) && Path.IsPathRooted(quoted);
         }
 
-        
-        
-        
+        // ① 整串就是一个路径 —— 无引号写法里最常见的一种，⛔ 这一步不能省：
+        //    "C:\Program Files\X\a.exe" 这种没有参数、但路径本身带空格，
+        //    只靠"从右往左截空格"永远试不到整串，会被错判成死项（2026-10-16 实测踩到过）。
         if (File.Exists(s)) return false;
 
-        
+        // ② 带参数：从右往左在每个空格处截断，谁先命中真实文件就说明没丢
         var idx = s.Length;
         while (true)
         {
@@ -504,7 +504,7 @@ public static class StartupItems
         return !File.Exists(head) && Path.IsPathRooted(head);
     }
 
-    
+    /// <summary>解析 <c>.lnk</c> 的目标与参数。解析不出来返回空串（调用方退回显示文件名）。</summary>
     private static string ResolveShortcut(string lnkPath)
     {
         object? link = null;
@@ -541,8 +541,8 @@ public static class StartupItems
     {
     }
 
-    
-    
+    // ⚠️ vtable 顺序**必须**与 shell32 里的一致，方法一个都不能少、也不能调序 ——
+    //    否则调用会落到别的函数上（这段是从 shell32 的标准定义照抄的，别凭记忆改）。
     [ComImport, Guid("000214F9-0000-0000-C000-000000000046"),
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IShellLinkW

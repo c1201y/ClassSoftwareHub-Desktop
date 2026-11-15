@@ -13,7 +13,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
+/// <summary>分类下拉里的一项。</summary>
 public sealed class CategoryOption
 {
     public CategoryOption(AppCategory category, string glyph, string label, int count)
@@ -29,11 +29,11 @@ public sealed class CategoryOption
     public string Label { get; }
     public int Count { get; }
 
-    
+    /// <summary>⚠️ x:Bind 默认一次性求值 —— 计数变化时靠**重建 ItemsSource**刷新，不是靠通知。</summary>
     public string CountText => Count.ToString("N0");
 }
 
-
+/// <summary>列表里的一行（把 <see cref="InstalledApp"/> 翻译成界面要的样子）。</summary>
 public sealed class UninstallRow
 {
     private ImageSource? _icon;
@@ -46,9 +46,9 @@ public sealed class UninstallRow
         Version = app.Version;
         CategoryText = AppCategoryLook.LabelOf(app.Category);
 
-        
-        
-        
+        // 副标题：发布者。都取不到就退一步 —— 商店包的位置是 C:\Program Files\WindowsApps\…（一长串），
+        // 不如显示包标识（Microsoft.WindowsCalculator_11.…）来得可读。
+        //（⛔ 别写"未知"之类的占位符，看着像没加载出来）
         var bits = new List<string>();
         var publisher = FriendlyPublisher(app.Publisher);
         if (publisher.Length > 0) bits.Add(publisher);
@@ -72,11 +72,11 @@ public sealed class UninstallRow
     public string ActionTip { get; }
     public string CategoryText { get; }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 软件自己的图标。**惰性取**：第一次被界面问到才去掏（见 <see cref="AppIconService"/>）。
+    /// ⚠️ ListView 是虚拟化的，只有真正滚到的那几行会问 —— 所以几百个应用也不会一次性全掏一遍。
+    /// ⚠️ 必须在 UI 线程求值（要建 XAML 对象）：x:Bind 在行模板实例化时求值，天然满足。
+    /// </summary>
     public ImageSource? Icon
     {
         get
@@ -95,20 +95,20 @@ public sealed class UninstallRow
 
     public Visibility PlaceholderVisibility => Icon is null ? Visibility.Visible : Visibility.Collapsed;
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 行尾那颗「⋯」露不露。
+    /// ⛔ 系统组件**永远不露** —— 它们没有任何可执行的操作，留一颗按钮只会让人以为点得动
+    ///    （Nick 2026-10-14 截图报的正是这个：一整列「文件资源管理器」「开始」都带着卸装按钮）。
+    /// </summary>
     public Visibility ActionsVisibility => CanUninstall ? Visibility.Visible : Visibility.Collapsed;
 
-    
+    /// <summary>掏不到图标时的占位字形 —— 按分类给，至少能一眼看出"这是个商店应用/运行库"。</summary>
     public string PlaceholderGlyph => AppCategoryLook.GlyphOf(App.Category);
 
-    
-    
-    
-    
+    /// <summary>
+    /// 发布者友好化：注册表里偶尔直接塞的是证书主题（<c>CN=Microsoft Corporation, O=…</c>），
+    /// 那串摆到界面上没法看，取 CN= 后面那一截。
+    /// </summary>
     private static string FriendlyPublisher(string raw)
     {
         if (raw.Length == 0) return "";
@@ -120,13 +120,13 @@ public sealed class UninstallRow
     }
 }
 
-
-
-
-
-
-
-
+/// <summary>
+/// 残留清单里的一行（把 <see cref="LeftoverItem"/> 翻译成界面要的样子）。
+///
+/// ⚠️ 单独包一层而不直接把 <see cref="LeftoverItem"/> 丢给模板，是因为<b>勾选状态要能双向跑</b>：
+///    用户点勾选框 → 模型要知道（算"已选几项"）；代码里改模型（默认勾选）→ 界面也要跟着动。
+///    后者必须有属性通知，所以这里实现 <see cref="System.ComponentModel.INotifyPropertyChanged"/>。
+/// </summary>
 public sealed class LeftoverRow : System.ComponentModel.INotifyPropertyChanged
 {
     private bool _checked;
@@ -144,27 +144,27 @@ public sealed class LeftoverRow : System.ComponentModel.INotifyPropertyChanged
 
     public LeftoverItem Item { get; }
 
-    
+    /// <summary>主标题：目录/文件名，或注册表值的名字。</summary>
     public string Title => Item.DisplayLeaf;
 
-    
+    /// <summary>副标题：它待在哪儿（环境变量前缀已缩写）。</summary>
     public string Location => Item.DisplayParent;
 
-    
+    /// <summary>完整位置（提示气泡用 —— 缩写过的版本会藏掉真路径）。</summary>
     public string FullPath => Item.DisplayPath;
 
-    
+    /// <summary>「文件夹 · 12.4 MB」这一小串。</summary>
     public string Meta { get; }
 
-    
+    /// <summary>为什么判成这一档（提示气泡）。</summary>
     public string Reason => Item.Reason.Length > 0 ? Item.Reason : "无可用判定依据";
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 勾选状态。
+    /// ⚠️ 用 <c>bool?</c> 而不是 <c>bool</c>：<c>CheckBox.IsChecked</c> 是 <c>bool?</c>，
+    ///    x:Bind 虽然能做隐式转换，但<b>三态</b>下 <c>null</c> 会被折成 false，语义就不对了 ——
+    ///    这里直接把类型对上，免得以后有人开三态时踩坑。
+    /// </summary>
     public bool? IsChecked
     {
         get => _checked;
@@ -179,7 +179,7 @@ public sealed class LeftoverRow : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
-    
+    /// <summary>勾选状态变了（页面拿它更新底部那条统计）。</summary>
     public event EventHandler? Changed;
 
     public Visibility StrongVisibility => Visible(LeftoverEvidence.Strong);
@@ -195,65 +195,65 @@ public sealed class LeftoverRow : System.ComponentModel.INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsChecked)));
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 应用卸载页（2026-10-12 加，挂在「实验性功能」下；2026-10-13 两版、2026-10-14 第三、四版）。
+///
+/// 主题是「以软件下载起步的程序，也管卸载」—— 把本机装了什么列出来，能直接卸。
+/// 扫描走 <see cref="InstalledApps"/>（跟「本机核实」同一套数据源），
+/// 卸载走 <see cref="AppUninstaller"/>（调厂商自己的卸载程序，我们不删文件）。
+///
+/// 2026-10-14 第三版（Nick 的第三轮反馈，全在"像网页"这件事上）：
+///   ① **表格视图砍掉** —— 与列表内容完全相同，是伪功能；
+///   ② 标题下的解释话 + 工具条卡片一起删，标题下方改成动态计数；
+///   ③ 分类 / 搜索 / 重新扫描 / 说明 并到标题行右侧，搜索换 `AutoSuggestBox`；
+///   ④ 行尾大按钮改透明图标钮「⋯」+ 手建 `MenuFlyout`。
+///   ⛔⛔ 另外堵了一个**真会出事的**漏洞：「系统组件」分类里的包 IsStore=true ⇒ 旧判据认为可卸，
+///   界面上「文件资源管理器」「开始」「设置」都带着能点的卸载键。现在后端两道闸 + 界面不给入口。
+///
+/// ⚠️ 扫描一定要丢后台：要遍历三个注册表视图的几百个键、还要问一遍 PackageManager，
+///    某些机器（开着安全软件的）读注册表明显发涩，压 UI 线程会卡成一片白。
+/// </summary>
 public sealed partial class UninstallPage : Page
 {
     private List<UninstallRow> _all = new();
     private AppCategory _category = AppCategory.Desktop;
-    private bool _ready;         
-    private bool _loading;       
-    private bool _busy;          
+    private bool _ready;         // 数据到位了没（构造期的控件事件要忽略）
+    private bool _loading;       // 扫描中（防重入）
+    private bool _busy;          // 正在跑一次卸载或清理（防重入）
 
-    
+    /// <summary>残留状态：当前摆出来的那些行。</summary>
     private List<LeftoverRow> _leftoverRows = new();
 
-    
+    /// <summary>残留状态：这次卸的是哪个软件（清理记录里要写）。</summary>
     private string _leftoverAppName = "";
 
-    
+    /// <summary>当前筛出来、真正摆在页上的那些行（2026-10-30 加，给 Hub AI 当现场数据）。</summary>
     private List<UninstallRow> _shown = new();
 
     public UninstallPage()
     {
         InitializeComponent();
 
-        
-        
+        // 两侧留白 / 标题行上的滚轮也转给列表（见 Core/WheelRelay.cs）。
+        // ⚠️ 两个列表都传进去：同一页里互斥的两个状态各有一个滚动区，指针压在哪个就转给哪个。
         Core.WheelRelay.Attach(this, AppList, LeftoverList);
 
-        
+        // AI 入口跟着「设置 → 启用 Hub AI」总闸走（与「软件下载」「AppData 管理」一致）。
         HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        
+        // 浮层每次提问都来取一份现场数据（见 BuildAiContext）
         AiFlyout.ContextProvider = BuildAiContext;
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 给浮层准备这一页的现场数据（2026-10-30 二版）。
+    /// <para>
+    /// 这一页要知道的是"本机到底装了什么、哪些能卸" —— 注册表扫描很贵，模型自己调工具查
+    /// 既慢又容易只查一半，现成清单直接给它最省事。
+    /// </para>
+    /// </summary>
     private PageContextDoc BuildAiContext()
     {
         var doc = new PageContextDoc(
@@ -273,7 +273,7 @@ public sealed partial class UninstallPage : Page
                            .ToDictionary(g => AppCategoryLook.LabelOf(g.Key), g => g.Count()),
         });
 
-        
+        // 清单给 30 条：本机装了 147 款，全塞读不动，30 条够模型说清"装了什么"
         doc.Add("当前分类下的软件（前 30 个）", _shown.Take(30).Select(r => new
         {
             r.Name,
@@ -314,10 +314,10 @@ public sealed partial class UninstallPage : Page
         return doc;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// Hub AI 入口（2026-10-30，需求 1:23）：弹出提问浮层。
+    /// 浮层是公共控件（Controls/HubAiFlyout），别在这一页再写一套动画与发送逻辑。
+    /// </summary>
     private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -342,20 +342,20 @@ public sealed partial class UninstallPage : Page
             var apps = await Task.Run(() =>
             {
                 var list = new List<InstalledApp>();
-                list.AddRange(InstalledApps.Enumerate());              
-                list.AddRange(InstalledApps.EnumerateStorePackages()); 
+                list.AddRange(InstalledApps.Enumerate());              // 「程序和功能」
+                list.AddRange(InstalledApps.EnumerateStorePackages()); // 商店应用
                 return list.OrderBy(a => a.Name, StringComparer.CurrentCulture).ToList();
             });
 
             _all = apps.Select(a => new UninstallRow(a)).ToList();
             _ready = true;
 
-            FillCategories();   
+            FillCategories();   // 计数在这会儿才算得出来
             ApplyFilter();
 
-            
-            
-            
+            // 图标预热：把"读文件掏图标"那一半丢后台先跑掉（剩下拼位图很快，见 AppIconService.Prewarm）。
+            // ⚠️ 必须**排在列表出来之后**再开 —— 先让用户看到列表，图标慢慢补上，
+            //    别为了几百个图标让"扫描中"多转两秒。
             _ = Task.Run(() =>
             {
                 foreach (var a in apps) AppIconService.Prewarm(a.IconPath);
@@ -379,11 +379,11 @@ public sealed partial class UninstallPage : Page
         }
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 把四个分类灌进下拉（带各自计数）。
+    /// ⚠️ 重建 ItemsSource 会让 <c>SelectedItem</c> 短暂变 null（触发一次 SelectionChanged）——
+    ///    那个分支会读到 null 而**不改**当前分类，所以这里是安全的，不需要"抑制标志"。
+    /// </summary>
     private void FillCategories()
     {
         var wanted = _category;
@@ -393,8 +393,8 @@ public sealed partial class UninstallPage : Page
                                            _all.Count(r => r.App.Category == c)))
             .ToList();
 
-        
-        
+        // ⚠️ 选项内容在这里手建，XAML 那边只有一个空 ComboBox。
+        //    （ItemTemplate + x:Bind 会让 XamlCompiler 在本页的代码生成阶段崩掉 —— 2026-10-13 实测）
         CategoryBox.Items.Clear();
         foreach (var option in options)
         {
@@ -416,8 +416,8 @@ public sealed partial class UninstallPage : Page
             CategoryBox.Items.Add(new ComboBoxItem { Content = panel, Tag = option });
         }
 
-        
-        
+        // 优先沿用用户当前选的那一类；重扫后那一类若空了，退到第一个有内容的；
+        // 全空（本机什么都没扫到）就停在第一项，别把下拉搞成空白。
         var pick = options.FirstOrDefault(o => o.Category == wanted)
                    ?? options.FirstOrDefault(o => o.Count > 0)
                    ?? options[0];
@@ -428,7 +428,7 @@ public sealed partial class UninstallPage : Page
 
     private void ApplyFilter()
     {
-        if (!_ready) return;   
+        if (!_ready) return;   // 构造期 TextChanged / SelectionChanged 也会进来，那时还没数据
 
         var key = SearchBox.Text?.Trim() ?? "";
         var catName = AppCategoryLook.LabelOf(_category);
@@ -442,7 +442,7 @@ public sealed partial class UninstallPage : Page
 
         AppList.ItemsSource = shown;
 
-        
+        // 这一页的 AI 知道装了什么：清单存下来，提问时现采成 JSON（见 BuildAiContext）
         _shown = shown;
 
         if (_all.Count == 0)
@@ -455,7 +455,7 @@ public sealed partial class UninstallPage : Page
         }
         else if (_category == AppCategory.System)
         {
-            
+            // 只读的一类：把"为什么没有卸载键"写在计数这行，省得用户找
             CountLine.Text = $"共 {_all.Count} 个应用 · {catName} {shown.Count} 个 · 系统组件，不提供卸载";
         }
         else
@@ -478,14 +478,14 @@ public sealed partial class UninstallPage : Page
 
     private void Search_Changed(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        
+        // ⚠️ 只在用户真的敲字时筛 —— 程序改 Text 同样会触发这个事件，靠 Reason 区分
         if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
         ApplyFilter();
     }
 
     private void Category_Changed(object sender, SelectionChangedEventArgs e)
     {
-        
+        // ⚠️ 重建下拉内容时 SelectedItem 会先变 null 再变新项 —— 那一下忽略掉
         if (CategoryBox.SelectedItem is not ComboBoxItem item || item.Tag is not CategoryOption option) return;
         _category = option.Category;
         ApplyFilter();
@@ -493,11 +493,11 @@ public sealed partial class UninstallPage : Page
 
     private void Rescan_Click(object sender, RoutedEventArgs e) => _ = LoadAsync();
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 「说明」按钮 —— 原来那一大段页脚说明（占将近四分之一屏）收进这里。
+    /// ⚠️ 两个状态共用一个按钮，只是正文不一样（残留状态下讲的是"凭什么说这些是残留"）。
+    /// ⚠️ ContentDialog 至少要给一个关闭钮（本项目硬规约）。
+    /// </summary>
     private async void About_Click(object sender, RoutedEventArgs e)
     {
         var inLeftover = LeftoverHost.Visibility == Visibility.Visible;
@@ -514,7 +514,7 @@ public sealed partial class UninstallPage : Page
         await dialog.ShowAsync();
     }
 
-    
+    /// <summary>残留状态下的说明：讲清判据与边界，别让人以为这是"灵媒"。</summary>
     private static UIElement BuildLeftoverAboutBody()
     {
         var panel = new StackPanel { Spacing = 14 };
@@ -595,13 +595,13 @@ public sealed partial class UninstallPage : Page
         return panel;
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 行尾「⋯」—— 弹出这一行的操作菜单。
+    ///
+    /// ⚠️ 菜单在这里**手建**，不把 `MenuFlyout` 写进 `DataTemplate`：Flyout 不在可视树里，
+    ///    模板内的 `{x:Bind}` 求值上下文很脆，而 XamlCompiler 对这个组合本身就有前科
+    ///    （见文件头注释里的 WMC9999）。手建时用闭包直接捕获这一行，最稳。
+    /// </summary>
     private void More_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not UninstallRow row) return;
@@ -631,7 +631,7 @@ public sealed partial class UninstallPage : Page
             Content = BuildConfirmBody(row),
             PrimaryButtonText = "卸载",
             CloseButtonText = "取消",
-            
+            // ⚠️ 默认落在「取消」上：这是不可逆操作，别让一个回车就卸掉东西
             DefaultButton = ContentDialogButton.Close,
         };
 
@@ -645,14 +645,14 @@ public sealed partial class UninstallPage : Page
 
         try
         {
-            
+            // 卸载 + 残留体检（前后两份浅层快照求差集，见 Services/AppUninstaller.UninstallAndScanAsync）
             var run = await AppUninstaller.UninstallAndScanAsync(row.App);
 
-            
+            // 卸载程序退出了不等于登记表就更新了（有些要等一两拍）→ 稍等再重扫
             await Task.Delay(1200);
             await LoadAsync();
 
-            
+            // ⚠️ 提示必须放在 LoadAsync **之后** —— 它会把 CountLine 重写成统计值
             if (!run.Outcome.Started)
             {
                 CountLine.Text = run.Outcome.Message;
@@ -671,7 +671,7 @@ public sealed partial class UninstallPage : Page
 
             if (!run.Scanned)
             {
-                
+                // 没做体检（超时 / 用户取消了 UAC 之后的回落）—— 如实说，别假装"没有残留"
                 CountLine.Text = run.Outcome.Message;
                 await InfoAsync("未能完成残留检查",
                     run.Outcome.Message + "\n\n本次没有检查残留，也没有移除任何东西。");
@@ -680,10 +680,10 @@ public sealed partial class UninstallPage : Page
 
             if (stillThere)
             {
-                
-                
-                
-                
+                // ⛔⛔ 卸载记录**还在**（卸载被取消 / 失败 / 要重启才生效）⇒ 一律不进残留状态。
+                //     原因：这时候"名字对得上的痕迹"里有一大半是这个软件**正在用的活数据**
+                //     （它的 AppData、它自己的注册表键、它的安装目录），清掉就等于把一个还在装的软件
+                //     拆坏。宁可什么都不做，也不能在这个状态下摆出一份"看起来像残留"的清单。
                 CountLine.Text = stillThereNote;
                 await InfoAsync("卸载未完成", stillThereNote);
                 return;
@@ -691,8 +691,8 @@ public sealed partial class UninstallPage : Page
 
             if (run.Leftovers.Count == 0)
             {
-                
-                
+                // ⚠️ 措辞是「没有扫描到」，⛔ 不是「没有」—— 扫的是浅层快照 + 名字/位置吻合，
+                //    说"没有残留"等于替扫描能力打包票；"没有扫描到"才是如实交代（Nick 2026-10-16 定）。
                 CountLine.Text = $"「{row.Name}」已卸载 · 没有扫描到残留";
                 await InfoAsync("卸载完成",
                     $"「{row.Name}」已卸载，没有扫描到残留的文件或注册表项。\n\n"
@@ -711,15 +711,15 @@ public sealed partial class UninstallPage : Page
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 一句话的提示框。
+    ///
+    /// ⛔ 存在的理由：卸载这条路上有四种**不会进入残留确认**的结局（卸载程序起不来 / 没做成体检 /
+    ///    卸载未生效 / 确实没残留）。原先这些结局只在标题下面改一行 12px 小字 —— 用户点完「卸载」
+    ///    会觉得界面上什么都没发生（Nick 2026-10-16：「完成卸载之后，没有弹那个什么清理的，很奇怪」）。
+    ///    每种结局都得有个看得见的落点。
+    /// ⛔ 关闭钮一律写「关闭」，不用"知道了"这类口语（项目文案硬规约）。
+    /// </summary>
     private async Task InfoAsync(string title, string body)
     {
         var dialog = new ContentDialog
@@ -733,16 +733,16 @@ public sealed partial class UninstallPage : Page
         await dialog.ShowAsync();
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  状态二：卸载残留确认
+    // ══════════════════════════════════════════════════════════════════════════
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 切到残留状态。
+    /// ⛔ 这里只切**状态**，不改导航 —— 它是同一页里的第二屏（顶栏那些控件换岗）。
+    /// ⚠️ <paramref name="appName"/> 传空 = **主动进来**（从「残留与隔离区」按钮），
+    ///    这时没有目标软件也没有待处理项，走空态。
+    /// </summary>
     private void EnterLeftoverState(string appName, IReadOnlyList<LeftoverItem> items)
     {
         _leftoverAppName = appName;
@@ -752,7 +752,7 @@ public sealed partial class UninstallPage : Page
         TitleText.Text = "卸载残留";
         SetRiskBar(leftover: true);
 
-        
+        // 顶栏换岗：列表那一组收起来，露出「返回列表」
         CategoryBox.Visibility = Visibility.Collapsed;
         SearchBox.Visibility = Visibility.Collapsed;
         RescanButton.Visibility = Visibility.Collapsed;
@@ -772,7 +772,7 @@ public sealed partial class UninstallPage : Page
         }
         else
         {
-            
+            // 主动进来：⛔ 别拼出"「」已卸载 · 发现 0 项残留"那种怪句子
             CountLine.Text = "当前没有待处理的残留项";
         }
 
@@ -788,31 +788,31 @@ public sealed partial class UninstallPage : Page
         AppLog.Info("leftover", $"进入残留确认：{appName}，{items.Count} 项（默认勾选 {_leftoverRows.Count(r => r.IsChecked == true)} 项）");
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 「残留与隔离区」：**主动进入**残留界面。
+    ///
+    /// ⚠️ 2026-10-16 加。在此之前这个界面只能靠"卸载完自动跳过去"进入 —— 用户平时根本看不到它，
+    ///    卸载之后也没法回头补看（Nick：「我卸完 ToDesk 根本不知道残留清没清，还以为是 bug」）。
+    ///    主动进来时没有目标软件、也没有待处理项，所以走空态，由空态说明这里是什么。
+    /// </summary>
     private void LeftoverEntry_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
 
-        
+        // ⚠️ 已经在残留态就别再切一次（会把它重置成空态，把用户正在勾的清单冲掉）
         if (LeftoverHost.Visibility == Visibility.Visible) return;
 
         EnterLeftoverState("", Array.Empty<LeftoverItem>());
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 「查看隔离区」：列出历次清理留下的备份记录。
+    ///
+    /// ⛔ 只读 —— 这里不删任何东西、也不自动还原：每条记录点开是文件夹，还原方式写在里面的
+    ///    「清理记录.txt」里（文件剪切回原位、.reg 双击导入）。
+    /// 之所以必须补这个入口：清理时移除的东西**全部备份在隔离区**，但此前唯一的入口是
+    /// "清理完成"那一刻弹窗里的按钮 —— 弹窗一关，用户的后悔药就再也找不着了。
+    /// </summary>
     private async void Quarantine_Click(object sender, RoutedEventArgs e)
     {
         var entries = QuarantineStore.Scan();
@@ -856,7 +856,7 @@ public sealed partial class UninstallPage : Page
             CloseButtonText = "关闭",
         };
 
-        
+        // ⚠️ 同一时刻只允许一个 ContentDialog（还有弹窗开着时 ShowAsync 会直接抛）
         try
         {
             await dialog.ShowAsync();
@@ -867,7 +867,7 @@ public sealed partial class UninstallPage : Page
         }
     }
 
-    
+    /// <summary>隔离区列表的一行：左＝软件名与时间，右＝打开文件夹。</summary>
     private StackPanel BuildQuarantineRow(QuarantineEntry entry)
     {
         var row = new StackPanel { Spacing = 2 };
@@ -907,7 +907,7 @@ public sealed partial class UninstallPage : Page
         return row;
     }
 
-    
+    /// <summary>回到应用列表状态。⛔ 什么都**没删** —— 「不用了」和「返回列表」走的是同一条路。</summary>
     private void Back_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -917,13 +917,13 @@ public sealed partial class UninstallPage : Page
 
     private void ExitLeftoverState()
     {
-        
-        
+        // 挂着的事件订阅不用逐个退订：这批 LeftoverRow 马上就要被整体丢弃，
+        // 订阅关系是互相引用的一小圈对象，GC 一起收走（⛔ 别写 `r.Changed -= (_, _) => {}` —— 那是句废话）
         _leftoverRows = new List<LeftoverRow>();
         _leftoverAppName = "";
 
         LeftoverList.ItemsSource = null;
-        LeftoverList.Visibility = Visibility.Visible;      
+        LeftoverList.Visibility = Visibility.Visible;      // 复位：下次进残留态默认是列表（主动进来时再收）
         LeftoverEmpty.Visibility = Visibility.Collapsed;
         LeftoverHost.Visibility = Visibility.Collapsed;
         ListHost.Visibility = Visibility.Visible;
@@ -936,12 +936,12 @@ public sealed partial class UninstallPage : Page
         BackButton.Visibility = Visibility.Collapsed;
     }
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 顶部那条风险提示的两个文案。⛔ 只在两个状态**之间**换，不新增控件。
+    /// ⚠️ 提示条是**常驻**的（`IsClosable="False"`）：这个是会动系统和注册表的功能，
+    ///    红条不允许被关掉，⛔ 别为了"少一点打扰"把关闭钮加回来。
+    /// ⛔ 文案一律书面语（项目硬规约：界面文字不出现口语、不出现"你"、不用"啥/搞定/一下"这类词）。
+    /// </summary>
     private void SetRiskBar(bool leftover)
     {
         if (leftover)
@@ -957,7 +957,7 @@ public sealed partial class UninstallPage : Page
         }
     }
 
-    
+    /// <summary>底部那条：已选几项、大约多少体积；主按钮的字数也跟着变。</summary>
     private void UpdateLeftoverBar()
     {
         var chosen = _leftoverRows.Where(r => r.IsChecked == true).ToList();
@@ -971,7 +971,7 @@ public sealed partial class UninstallPage : Page
             ? "未勾选任何项目"
             : $"已选 {chosen.Count} 项" + (size > 0 ? $" · 约 {HumanSize(size)}" : "");
 
-        
+        // 不确定的那些要额外提醒一句 —— 它们是"名字对不上"的，勾了就是用户自己的判断
         if (weakNote > 0) text += $"（其中 {weakNote} 项为「不确定」）";
 
         LeftoverSummary.Text = text;
@@ -985,10 +985,10 @@ public sealed partial class UninstallPage : Page
         _ => $"{bytes / 1073741824.0:0.##} GB",
     };
 
-    
-    
-    
-    
+    /// <summary>
+    /// 执行清理。⚠️ 真正的删除在后台线程上跑（注册表遍历 + 文件移动都可能慢），
+    /// 但 <see cref="LeftoverCleaner"/> 内部全程同步 IO，所以包一层 Task.Run。
+    /// </summary>
     private async void Clean_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -1006,7 +1006,7 @@ public sealed partial class UninstallPage : Page
             Content = BuildCleanConfirmBody(chosen.Count, size),
             PrimaryButtonText = "清理",
             CloseButtonText = "取消",
-            
+            // 不可逆操作，默认落在取消上
             DefaultButton = ContentDialogButton.Close,
         };
 
@@ -1041,7 +1041,7 @@ public sealed partial class UninstallPage : Page
             return;
         }
 
-        
+        // 汇报：清完了什么、还剩什么、后悔药在哪
         var dialog = new ContentDialog
         {
                 RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme ?? Microsoft.UI.Xaml.ElementTheme.Default,
@@ -1064,15 +1064,15 @@ public sealed partial class UninstallPage : Page
         await LoadAsync();
     }
 
-    
+    /// <summary>行尾「⋯」：给残留行用的（打开所在文件夹 / 复制路径）。菜单同样是**手建**的。</summary>
     private void LeftoverMore_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not LeftoverRow row) return;
 
         var flyout = new MenuFlyout();
 
-        
-        
+        // 文件/文件夹才有"打开所在位置"；注册表项没有可靠的"跳过去"命令行参数，
+        // ⛔ 不要假装有（regedit 不支持定位到某个键），只给复制路径。
         var openable = row.Item.Kind == FootprintKind.Path
                        && (File.Exists(row.Item.Path) || Directory.Exists(row.Item.Path));
 
@@ -1114,7 +1114,7 @@ public sealed partial class UninstallPage : Page
         }
     }
 
-    
+    /// <summary>在资源管理器里**选中**这个文件/文件夹（不是打开它）。</summary>
     private static void RevealInExplorer(string path)
     {
         try
@@ -1147,7 +1147,7 @@ public sealed partial class UninstallPage : Page
         }
     }
 
-    
+    /// <summary>清理确认框的正文：说清"会发生什么、后悔药在哪"。</summary>
     private static UIElement BuildCleanConfirmBody(int count, long size)
     {
         var panel = new StackPanel { Spacing = 8 };
@@ -1171,7 +1171,7 @@ public sealed partial class UninstallPage : Page
         return panel;
     }
 
-    
+    /// <summary>清理结果：实际删掉什么、还剩什么、备份在哪。</summary>
     private static UIElement BuildReportBody(CleanupReport report)
     {
         var panel = new StackPanel { Spacing = 8 };
@@ -1197,7 +1197,7 @@ public sealed partial class UninstallPage : Page
         if (blocked > 0)
             Line($"{blocked} 项位于受保护位置，已拒绝执行。", 0.7);
 
-        
+        // ⛔ 这一条必须写：报告讲的是"实际结果"，不是"我们打算做的事"
         var stillThere = report.Results.Count(r => r.Item.Selected && r.Item.StillThere);
         if (stillThere > 0)
             Line($"复扫结果：仍有 {stillThere} 项存在于原位置。", 0.7);
@@ -1216,7 +1216,7 @@ public sealed partial class UninstallPage : Page
         return panel;
     }
 
-    
+    /// <summary>确认框正文：把"要动的是哪个软件"摆清楚，再说清接下来会发生什么。</summary>
     private static UIElement BuildConfirmBody(UninstallRow row)
     {
         var panel = new StackPanel { Spacing = 8 };
@@ -1240,7 +1240,7 @@ public sealed partial class UninstallPage : Page
             ? "将按 Microsoft Store 应用方式移除（等同于系统「设置 → 应用」中的卸载操作）。"
             : "将调用该软件自带的卸载程序。过程中可能弹出其自身界面及系统管理员授权提示。", 0.75);
 
-        
+        // 运行库不是"用户主动装的应用"，卸掉多半会连累别的软件 —— 这里必须多一句
         if (row.App.Category == AppCategory.Runtime)
             Line("⚠ 该项目属于运行库：其他软件可能依赖它，移除后将导致相关软件启动失败。请确认无程序依赖后再继续。", 0.85);
 

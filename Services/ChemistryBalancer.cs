@@ -6,34 +6,34 @@ using System.Text;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 化学方程式配平。
+///
+/// <para>
+/// 本质是**求线性方程组的零空间**（不是"试数字"）：
+/// 每种元素一行，每种物质一列，反应物记正、生成物记负 —— 每一行要求"元素个数守恒"。
+/// 解出的零空间向量就是系数；再把它化成最小正整数。
+/// </para>
+/// <para>
+/// ⛔ 必须精确算：`Fe + O2 = Fe2O3` 用 double 消元会得到 4.000000000000001 : 3 : 2
+/// 这种脏东西，配平结果是要写在黑板上的，不能四舍五入糊过去。
+/// </para>
+/// </summary>
 public static class ChemistryBalancer
 {
-    
+    /// <summary>配平结果。失败时 <see cref="Error"/> 非空。</summary>
     public sealed class Result
     {
         public bool Ok => Error is null;
         public string? Error { get; init; }
-        
+        /// <summary>配平后的完整方程式（系数已写好，系数 1 省略）。</summary>
         public string Equation { get; init; } = "";
-        
+        /// <summary>每一种物质的系数，顺序与输入一致（反应物在前）。</summary>
         public List<(string Formula, int Coeff)> Terms { get; init; } = new();
 
-        
+        /// <summary>每种元素的守恒核对：左边总数与右边总数（应当相等）。</summary>
         public List<(string Element, int Left, int Right)> ElementCheck { get; init; } = new();
-        
+        /// <summary>需要提醒用户的情况（例如有多组解、忽略了电荷）。</summary>
         public string? Note { get; init; }
     }
 
@@ -46,12 +46,12 @@ public static class ChemistryBalancer
 
         var text = Normalize(input);
 
-        
+        // ── 拆左右两侧 ──
         var arrow = text.IndexOfAny(ArrowChars);
         if (arrow < 0)
             return Fail("缺少等号或箭头。请写成「反应物 = 生成物」，例如 H2 + O2 = H2O");
 
-        
+        // 「->」这种写法先归一成 =
         var left = text[..arrow].Trim();
         var right = text[(arrow + 1)..].Trim();
         if (right.StartsWith(">")) right = right[1..].Trim();
@@ -68,7 +68,7 @@ public static class ChemistryBalancer
         if (leftTerms.Count == 0 || rightTerms.Count == 0)
             return Fail("等号两侧都要有物质。");
 
-        
+        // ── 解析每种物质的元素构成 ──
         var species = new List<(string Raw, Dictionary<string, int> Atoms)>();
         var note = "";
         foreach (var raw in leftTerms.Concat(rightTerms))
@@ -79,7 +79,7 @@ public static class ChemistryBalancer
             species.Add((DisplayFormula(raw), atoms!));
         }
 
-        
+        // ── 建矩阵：元素 × 物质 ──
         var elements = species.SelectMany(s => s.Atoms.Keys).Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
         var cols = species.Count;
         var matrix = new Rational[elements.Count][];
@@ -90,13 +90,13 @@ public static class ChemistryBalancer
             for (var c = 0; c < cols; c++)
             {
                 species[c].Atoms.TryGetValue(elements[r], out var count);
-                
+                // 反应物取正、生成物取负 —— 这就是"守恒"：左边总数 − 右边总数 = 0
                 var sign = c < leftTerms.Count ? 1 : -1;
                 matrix[r][c] = new Rational(sign * count, BigInteger.One);
             }
         }
 
-        
+        // ── 求零空间 ──
         var basis = LinearSolver.NullSpace(matrix);
         if (basis.Count == 0)
             return Fail("这个方程式无解：等号两侧的元素种类或数量对不上，无法通过调整系数配平。");
@@ -109,7 +109,7 @@ public static class ChemistryBalancer
         if (ints is null)
             return Fail("系数无法化为整数，请检查输入。");
 
-        
+        // ── 结果 ──
         var terms = new List<(string, int)>();
         for (var i = 0; i < cols; i++)
             terms.Add((species[i].Raw, ints[i]));
@@ -130,7 +130,7 @@ public static class ChemistryBalancer
         if (basis.Count > 1)
             note = "该方程式有多组配平系数（存在歧义），以上为最小正整数解。";
 
-        
+        // 元素守恒核对：把系数代回去，左右各数一遍（界面上直接列出来，让人一眼确认）
         var check = new List<(string, int, int)>();
         foreach (var element in elements)
         {
@@ -157,11 +157,11 @@ public static class ChemistryBalancer
 
     private static Result Fail(string message) => new() { Error = message };
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 校验单个化学式（编辑器实时用）。
+    /// ⛔ 直接调 <see cref="ParseFormula"/> —— 与真正配平走**同一套解析**，
+    /// 绝不出现"编辑器说可以、配平又报错"的两套判据。
+    /// </summary>
     public static bool ValidateFormula(string? raw, out string? error)
     {
         error = null;
@@ -185,10 +185,10 @@ public static class ChemistryBalancer
         return true;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 展示用的化学式：方括号如果只是把整个式子包了一层（如 [O2]），就去掉 ——
+    /// 用户拿它当"整段括起来"用，答案里再带回去显得莫名其妙；真的分组（[Fe(CN)6]）保留。
+    /// </summary>
     private static string DisplayFormula(string raw)
     {
         var s = raw.Trim();
@@ -199,18 +199,18 @@ public static class ChemistryBalancer
         return inner;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 全角符号、Unicode 下标、各种箭头先归一成 ASCII，
+    /// 否则用户从 Word / 网页粘过来的式子会直接解析失败。
+    /// </summary>
     private static string Normalize(string input)
     {
         var sb = new StringBuilder(input.Length);
 
         foreach (var ch in input)
         {
-            
-            
+            // ⛔ 全角字母数字必须先转半角：从 Word / 网页粘过来的「Ｈ２Ｏ」如果原样进解析器，
+            //    会被当成"无法识别的字符"，而用户完全看不出哪里错了。
             if (ch > '\uFF00' && ch < '\uFF5F') { sb.Append((char)(ch - 0xFEE0)); continue; }
             if (ch == '\u3000') { sb.Append(' '); continue; }
 
@@ -240,13 +240,13 @@ public static class ChemistryBalancer
             var p = part.Trim();
             if (p.Length == 0)
             {
-                
-                
+                // 空项说明用户多写了一个 + 或漏了物质，必须报出来 ——
+                // 静默跳过会把「H2 + = H2O」当成「H2 = H2O」去算，错误被藏起来
                 error = "存在空的物质项，请检查是否多写了「+」或漏了物质。";
                 return list;
             }
 
-            
+            // 行首数字是用户抄来的系数：配平由程序算，这里只把它剥掉
             var i = 0;
             while (i < p.Length && char.IsDigit(p[i])) i++;
 
@@ -263,10 +263,10 @@ public static class ChemistryBalancer
         return list;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 解析一个化学式，返回元素 → 原子个数。
+    /// 支持括号嵌套 Ca(OH)2、结晶水 CuSO4·5H2O、方括号 [Fe(CN)6]。
+    /// </summary>
     private static Dictionary<string, int>? ParseFormula(string raw, out string? error, out bool chargeIgnored)
     {
         error = null;
@@ -275,7 +275,7 @@ public static class ChemistryBalancer
         var formula = raw.Trim();
         if (formula.Length == 0) { error = "存在空的物质项。"; return null; }
 
-        
+        // 尾部的电荷（如 SO4^2-、Fe3+ / Fe²⁺）不参与配平，剥掉即可
         var tail = formula[^1];
         if (tail is '+' or '-')
         {
@@ -289,7 +289,7 @@ public static class ChemistryBalancer
 
         var total = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        
+        // 以 · 或 * 分隔的结晶水：CuSO4·5H2O
         foreach (var segment in formula.Split('·', '*'))
         {
             var seg = segment.Trim();
@@ -318,7 +318,7 @@ public static class ChemistryBalancer
         return total;
     }
 
-    
+    /// <summary>括号内递归解析。</summary>
     private static Dictionary<string, int>? ParseGroup(string s, ref int i, out string? error)
     {
         error = null;
@@ -329,7 +329,7 @@ public static class ChemistryBalancer
             var ch = s[i];
 
             if (ch == ')' || ch == ']')
-                return counts;   
+                return counts;   // 交给上层吃掉闭括号
 
             if (ch == '(' || ch == '[')
             {
@@ -353,8 +353,8 @@ public static class ChemistryBalancer
                 i++;
                 if (i < s.Length && char.IsLower(s[i])) { symbol += s[i]; i++; }
 
-                
-                
+                // ⛔ 必须核对元素符号是否存在：不查的话 "Cx"、"Q" 这类会被当成合法元素
+                //    一路算下去，界面给出的配平结果看着对、其实是拿假元素凑的
                 if (!PeriodicTable.IsElement(symbol))
                 {
                     error = $"「{symbol}」不是元素符号，请检查大小写（如 Fe、Na、Cl）。";
@@ -366,7 +366,7 @@ public static class ChemistryBalancer
                 continue;
             }
 
-            
+            // 其它字符（空格、多余符号）跳过会让错误被藏起来，直接报
             error = $"化学式里出现了无法识别的字符「{ch}」。";
             return null;
         }
@@ -382,11 +382,11 @@ public static class ChemistryBalancer
         return int.TryParse(s[start..i], out var n) ? n : fallback;
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 从零空间基里挑一个"全为正（或全为负）"的向量。
+    /// 零空间维数大于 1 时（例如 H2 + O2 = H2O + H2O2），基向量本身未必全正，
+    /// 这里再试它们的组合，尽量给出一个能用的答案。
+    /// </summary>
     private static Rational[]? PickPositiveVector(List<Rational[]> basis)
     {
         foreach (var v in basis)
@@ -394,7 +394,7 @@ public static class ChemistryBalancer
 
         if (basis.Count > 1)
         {
-            
+            // 只试小系数的两两组合：再大就不是"课本上的配平"了
             for (var k1 = -3; k1 <= 3; k1++)
             {
                 for (var k2 = -3; k2 <= 3; k2++)
@@ -411,7 +411,7 @@ public static class ChemistryBalancer
         return null;
     }
 
-    
+    /// <summary>全为正或全为负，且没有 0（0 表示那种物质不参与反应，不是配平解）。</summary>
     private static bool IsUniform(Rational[] v)
     {
         if (v.Length == 0) return false;
@@ -426,7 +426,7 @@ public static class ChemistryBalancer
         return sign != 0;
     }
 
-    
+    /// <summary>化成最小正整数：先乘掉分母，再除以最大公约数。</summary>
     private static (int[]? Values, int Factor) ToSmallestIntegers(Rational[] v)
     {
         var lcm = Rational.LcmOfDenominators(v);

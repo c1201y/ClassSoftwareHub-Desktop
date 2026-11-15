@@ -5,46 +5,46 @@ using System.Text;
 
 namespace ClassSoftwareHub.Desktop.Services.Diagnostics;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 把 <see cref="MachineSnapshot"/> 压成**给模型看的那点字**（2026-10-18）。
+///
+/// <para>
+/// 为什么要有这一层：原始快照里 293 个进程、147 个软件、6 块盘，直接序列化出去是几万 token，
+/// 又贵又慢，而且模型会被噪声淹没。这里做三件事 ——
+/// <b>限量</b>（样本只留几十条）、<b>统一单位</b>（全用 GB/MB，不混）、<b>固定字段</b>（每次结构一样，
+/// 模型不用猜这次给的是哪种格式）。
+/// </para>
+/// <para>
+/// ⚠️ 输出长度必须可控。目标是 400~700 字，超了就是样本给多了。
+/// ⛔ 不要在这里加"建议"——判断属于 <see cref="MachineDiagnosis"/> 和模型，采集/摘要只管陈述。
+/// </para>
+/// </summary>
 public static class MachineDigest
 {
-    
+    /// <summary>给模型的软件名样本上限。给多了没用，模型记不住也读不完。</summary>
     private const int AppSampleLimit = 30;
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>生成体检单纯文本（直接拼进 system prompt）。</summary>
+    /// <param name="includeInstalledApps">
+    /// 是否把**已装软件清单**发出去。<b>默认 false</b>，理由见方法注释。
+    /// </param>
+    /// <remarks>
+    /// ⚠️⚠️ <b>已装软件清单默认不发送</b>（2026-10-18 实测发现的问题）：
+    /// 清单里会出现游戏名、私人工具、公司内部软件，能直接推断出使用者身份和喜好，
+    /// 而这份文本是发给**第三方模型服务商**的。只发数量（"已安装 147 款"）就够用了，
+    /// 模型判断"装机是否臃肿"并不需要知道具体装了什么。
+    /// 用户确实要发时，由设置页的「发送范围」显式打开（对应 <c>HubAiSendInstalledApps</c>）。
+    /// <para>
+    /// AppData 目录名保留发送：它只暴露"哪些软件占空间大"，敏感度低，而对"缓存大户"的判断价值高。
+    /// </para>
+    /// </remarks>
     public static string ToPrompt(MachineSnapshot s, bool includeInstalledApps = false)
     {
         var sb = new StringBuilder(1024);
 
         sb.AppendLine($"[本机情况 · {s.CollectedAt:yyyy-MM-dd HH:mm}]");
 
-        
+        // ── 处理器 ──
         if (s.CpuName.Length > 0)
         {
             sb.Append("处理器：").Append(s.CpuName);
@@ -53,14 +53,14 @@ public static class MachineDigest
             sb.AppendLine();
         }
 
-        
+        // ── 内存 ──
         if (s.MemoryTotalMb > 0)
         {
             sb.Append("内存：").Append(Gb(s.MemoryTotalMb)).Append(" 总计，可用 ")
               .Append(Gb(s.MemoryFreeMb)).Append("（占用 ").Append(s.MemoryLoadPercent).AppendLine("%）");
         }
 
-        
+        // ── 系统 ──
         if (s.OsName.Length > 0)
         {
             sb.Append("系统：").Append(s.OsName);
@@ -70,7 +70,7 @@ public static class MachineDigest
             sb.AppendLine();
         }
 
-        
+        // ── 磁盘 ──
         if (s.Disks.Count > 0)
         {
             sb.Append("磁盘：");
@@ -80,7 +80,7 @@ public static class MachineDigest
             sb.AppendLine();
         }
 
-        
+        // ── 进程 ──
         if (s.ProcessCount > 0)
         {
             sb.Append("后台进程：").Append(s.ProcessCount).Append(" 个");
@@ -93,7 +93,7 @@ public static class MachineDigest
             sb.AppendLine();
         }
 
-        
+        // ── 启动项 / 软件 ──
         if (s.StartupCount > 0) sb.Append("开机启动项：").Append(s.StartupCount).AppendLine(" 项");
 
         if (s.InstalledAppCount > 0)
@@ -102,12 +102,12 @@ public static class MachineDigest
             sb.AppendLine(includeInstalledApps ? "" : "（清单未发送，⛔ 不要据此判断某个软件有没有安装）");
         }
 
-        
-        
+        // ⚠️ 只有显式允许时才列软件名。默认不发 —— 清单能推出使用者身份与喜好，
+        //    而这份文本要离开本机。
         if (includeInstalledApps && s.InstalledAppSample.Count > 0)
         {
-            
-            
+            // ⛔ 必须说清「这只是样本」：2026-11-07 模型对着一份截断的样本，
+            //    给出了「本机没有安装 PowerPoint，也没有 WPS」这种斩钉截铁的结论 —— 实际装了。
             sb.Append("已安装软件样本（共 ").Append(s.InstalledAppCount).Append(" 款，下面只列 ")
               .Append(Math.Min(AppSampleLimit, s.InstalledAppSample.Count))
               .AppendLine(" 项；没列出来的不代表没装，⛔ 不要据此断言某个软件没安装）：")
@@ -120,7 +120,7 @@ public static class MachineDigest
               .AppendLine(string.Join("、", s.AppDataTopFolders.Take(8)));
         }
 
-        
+        // ── 采集缺口：必须让模型知道，否则它会对着"读不到"编结论 ──
         if (s.Warnings.Count > 0)
         {
             sb.Append("⚠️ 以下项目本次未能读取，不要对它们下判断：")
@@ -130,6 +130,6 @@ public static class MachineDigest
         return sb.ToString().TrimEnd();
     }
 
-    
+    /// <summary>把 MB 转成 GB 文本。<c>16303 MB → 15.9 GB</c>。</summary>
     private static string Gb(long mb) => $"{mb / 1024.0:0.#} GB";
 }

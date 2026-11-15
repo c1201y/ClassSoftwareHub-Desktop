@@ -2,10 +2,10 @@ using System.Collections.Generic;
 
 namespace ClassSoftwareHub.Desktop.Services.Docs;
 
-
-
-
-
+/// <summary>
+/// 纯文本 → <see cref="DocBlock"/>。空行分段，段内保留换行；链接（含 <c>ms-settings:</c> /
+/// <c>csh://</c>）自动变成可点的链接。
+/// </summary>
 public static class PlainTextDocParser
 {
     public static IReadOnlyList<DocBlock> Parse(string? text)

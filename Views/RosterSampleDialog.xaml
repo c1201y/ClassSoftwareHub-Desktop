@@ -5,10 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="示例名单">
 
-    
-
-
-
+    <!-- 2026-09-29（Nick 提）：导入名单之前，先让人看见"名单文件该长什么样"。
+         两张示意截图并排（Excel / txt），下面三个按钮：直接用示例试试 / 下载示例文件。
+         ⚠️ 默认对话框宽 548，两张图并排会被压得看不清 —— 覆盖主题资源放宽到 940。
+            这是 ContentDialog 唯一能改宽度的办法（设 MaxWidth 属性没用，模板里走的是主题资源）。 -->
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">940</x:Double>
     </ContentDialog.Resources>
@@ -25,9 +25,9 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                
-
-
+                <!-- ── Excel ──
+                     ⚠️ 图是**整屏截图**，故意不裁：留着的标题栏、行列标、功能区正是"这是 Excel"的招牌。
+                        MaxHeight 只用来兜住小屏，图本身按 Uniform 等比缩，不会变形。 -->
                 <StackPanel Spacing="6">
                     <TextBlock Text="做法一：Excel 表格（.xlsx）" FontSize="12.5" FontWeight="SemiBold" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
@@ -40,7 +40,7 @@
                     </Border>
                 </StackPanel>
 
-                
+                <!-- ── txt ── -->
                 <StackPanel Grid.Column="1" Spacing="6">
                     <TextBlock Text="做法二：纯文本（.txt / .csv）" FontSize="12.5" FontWeight="SemiBold" />
                     <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
@@ -54,9 +54,9 @@
                 </StackPanel>
             </Grid>
 
-            
-
-
+            <!-- ⚠️ 不用 ContentDialog 的底部按钮：三个动作里有两个是"下载"，塞不进 Primary/Secondary/Close 三格；
+                 而且单独一个「关闭」在底部会被拉成一条很宽的横条，看着像主操作，抢了「用示例名单试一下」的注意力。
+                 现在所有按钮聚在内容底部一行，右边留一个「关闭」。 -->
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

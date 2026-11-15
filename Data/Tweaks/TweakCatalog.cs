@@ -3,38 +3,38 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Data.Tweaks;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 系统优化项清单（2026-10-31，需求清单第 20 条，对齐 Dism++「系统优化」的能力）。
+///
+/// <para>
+/// ⭐ 口径（Nick 2026-10-31 最终定）：这些项都是**当前用户的界面与使用习惯设置**，落在
+/// <c>HKCU</c>、改完即时生效、**不弹 UAC**；只有「系统功能」页里的休眠 / 快速启动 / 分页文件
+/// 才是机器级（<c>HKLM</c>、要提权）。「新用户」那一列不做（学校不常建账户）。
+/// </para>
+/// <para>
+/// ⛔ 收录标准：<b>键路径能确认、且当前用户下真实生效</b>。落点拿不准的项宁可先不做 ——
+/// 写错键等于给用户一个什么都不做的开关（2026-10-31 就抓到一个：拼音云候选原来写的是
+/// <c>Policies\Microsoft\InputPersonalization</c>，那条在 HKCU 下不生效，已换成 IME 设置里的真键）。
+/// 只对 <c>HKLM</c> 有效的机器策略（如 <c>DisableWindowsConsumerFeatures</c>）也不收 ——
+/// 写进 HKCU 是无效开关，写进 HKLM 又要 UAC，两头都不符合本页"不弹 UAC 的界面设置"定位。
+/// </para>
+/// <para>
+/// ⛔ 明确不抄的整类（以下说明**只给开发者看**，不要搬到界面上 —— 2026-10-31 Nick：
+/// 「这玩意儿你只需要告诉开发者就行了，而不是写在应用里面给用户看，哪个大厂的应用会写这些」）：
+/// <list type="bullet">
+///   <item>安全相关（UAC / SmartScreen / Defender / 文件关联警告）—— 改错后程序打不开；</item>
+///   <item>服务优化（SysMain / 搜索索引 / 打印后台…）—— 停掉之后机器变慢、打印机不出纸，
+///         而且症状和"优化"隔得太远，用户根本想不到是这里改的；</item>
+///   <item>Windows Update 策略 —— 教室机不更新比更新更麻烦；</item>
+///   <item>右键菜单禁用项 —— Dism++ 靠删 CLSID 实现，影响所有用户与所有文件类型，很难还原；</item>
+///   <item>IE / Edge / WinRAR 等具体软件的设置 —— 装了才有意义，不属于系统层。</item>
+/// </list>
+/// </para>
+/// <para>
+/// ⛔ 界面上**不解释"为什么没有某项"**：用户来这一页是看能做什么，不是看不能做什么。
+/// 罗列一堆不存在的功能，既占篇幅又要解释 UAC / CLSID 这类词，纯属把开发者的顾虑转成阅读负担。
+/// </para>
+/// </summary>
 public static class TweakCatalog
 {
     public const string GroupTaskbar = "任务栏与开始菜单";
@@ -42,15 +42,15 @@ public static class TweakCatalog
     public const string GroupVisual = "外观与动画";
     public const string GroupInput = "输入法与记事本";
 
-    
+    // 2026-10-31 第五轮补的两组（照 Dism++ 的分组习惯：开始菜单的推广/建议单独一栏，桌面图标单独一栏）
     public const string GroupRecommend = "推荐内容与建议";
     public const string GroupDesktop = "桌面图标";
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// Windows 11 的 build 门槛（与 <c>SystemInfo.IsWin11</c> 同一口径）。
+    /// <c>internal</c> 是因为 <c>SystemTweaksPage</c> 要拿它把门槛翻译成人话（"此项需要 Windows 11…"），
+    /// 别在页面里再写一遍 22000。
+    /// </summary>
     internal const int Win11Build = 22000;
 
     private const string ExplorerAdvanced = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
@@ -59,7 +59,7 @@ public static class TweakCatalog
     private const string PolicyExplorer = @"SOFTWARE\Policies\Microsoft\Windows\Explorer";
     private const string Personalize = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
-    
+    // ── 2026-10-31 第五轮补的键（照 Dism++ Data.xml 的落点，逐个核对过） ──
     private const string ExplorerRoot = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer";
     private const string AutoplayHandlers = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers";
     private const string ContentDelivery = @"SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";
@@ -69,7 +69,7 @@ public static class TweakCatalog
 
     public static readonly List<TweakDef> All = new()
     {
-        
+        // ───────────── 任务栏与开始菜单 ─────────────
         new TweakDef
         {
             Id = "taskbar-align-left", Group = GroupTaskbar,
@@ -86,7 +86,7 @@ public static class TweakCatalog
             Description = "选择任务栏上搜索入口的显示方式。隐藏或只留图标能腾出位置给已固定的程序。",
             KeyPath = ExplorerSearch, ValueName = "SearchboxTaskbarMode",
             OnValue = 0, OffValue = 1, Refresh = TweakRefresh.Tray,
-            
+            // 这个设置本来就是四档，不是"开/关"（Dism++ 只列了三档，第四档是 Win11 才有的）
             Choices = new TweakChoice[]
             {
                 new("隐藏", 0),
@@ -144,7 +144,7 @@ public static class TweakCatalog
             Risk = TweakRisk.Caution,
         },
 
-        
+        // ───────────── 资源管理器 ─────────────
         new TweakDef
         {
             Id = "explorer-show-ext", Group = GroupExplorer,
@@ -208,7 +208,7 @@ public static class TweakCatalog
             OnValue = 1, OffValue = 0, Refresh = TweakRefresh.None,
         },
 
-        
+        // ───────────── 外观与动画 ─────────────
         new TweakDef
         {
             Id = "visual-apps-dark", Group = GroupVisual,
@@ -234,30 +234,30 @@ public static class TweakCatalog
             OnValue = 0, OffValue = 1, Refresh = TweakRefresh.None,
         },
 
-        
+        // ───────────── 输入法与记事本 ─────────────
         new TweakDef
         {
             Id = "ime-no-cloud", Group = GroupInput,
             Header = "关闭拼音输入法的云候选",
             Description = "候选词只来自本地词库，不再向微软发送输入内容、也不再联网取候选词。",
-            
-            
-            
-            
-            
+            // ⚠️ 2026-10-31 修正：原来写的是 SOFTWARE\Policies\Microsoft\InputPersonalization
+            //    下的 AllowInputPersonalization —— 那条是机器级策略，HKCU 下**不生效**，
+            //    等于一个拨了没反应的死开关。
+            //    正确落点与 Dism++（Data.xml「关闭微软拼音云计算」）一致：用户级 IME 设置里这一项。
+            //    值为 0 = 不开云候选；1 = 开。
             KeyPath = @"SOFTWARE\Microsoft\InputMethod\Settings\CHS",
             ValueName = "Enable Cloud Candidate",
             OnValue = 0, OffValue = 1, Refresh = TweakRefresh.None,
             Risk = TweakRisk.Caution,
         },
 
-        
-        
-        
-        
-        
+        // ═══════════ 2026-10-31 第五轮：照 Dism++ 的 Data.xml 补齐（21 项） ═══════════
+        // 挑选口径与上面一致：HKCU、单键、REG_DWORD、键路径在 Dism++ 里能确认。
+        // 明确不要的整类：安全（UAC / SmartScreen / 文件关联警告）、服务、Windows Update、
+        // 右键菜单禁用（24 项，靠 CLSID 删注册表、影响面太大）、IE / Edge / WinRAR（与具体软件绑定）。
+        // 落点对照表见 /e/_ref/dism_named.txt。
 
-        
+        // ───────────── 任务栏：补 3 项 ─────────────
         new TweakDef
         {
             Id = "taskbar-all-tray-icons", Group = GroupTaskbar,
@@ -285,7 +285,7 @@ public static class TweakCatalog
             MaxBuild = Win11Build - 1,
         },
 
-        
+        // ───────────── 推荐内容与建议：新组 6 项 ─────────────
         new TweakDef
         {
             Id = "start-no-suggestions", Group = GroupRecommend,
@@ -335,7 +335,7 @@ public static class TweakCatalog
             OnValue = 0, OffValue = 1, Refresh = TweakRefresh.Tray,
         },
 
-        
+        // ───────────── 资源管理器：补 5 项 ─────────────
         new TweakDef
         {
             Id = "explorer-no-autoplay", Group = GroupExplorer,
@@ -379,8 +379,8 @@ public static class TweakCatalog
             OnValue = 1, OffValue = 0, Refresh = TweakRefresh.None,
         },
 
-        
-        
+        // ───────────── 桌面图标：新组 2 项 ─────────────
+        // ⚠️ 这里是 0 = 显示、1 = 隐藏（与「关闭类」项相反，别按习惯写反）。
         new TweakDef
         {
             Id = "desktop-show-thispc", Group = GroupDesktop,
@@ -398,7 +398,7 @@ public static class TweakCatalog
             OnValue = 0, OffValue = 1, Refresh = TweakRefresh.Desktop,
         },
 
-        
+        // ───────────── 外观：补 1 项 ─────────────
         new TweakDef
         {
             Id = "visual-accent-on-taskbar", Group = GroupVisual,
@@ -408,7 +408,7 @@ public static class TweakCatalog
             OnValue = 1, OffValue = 0, Refresh = TweakRefresh.Tray,
         },
 
-        
+        // ───────────── 输入法与记事本：补 4 项 ─────────────
         new TweakDef
         {
             Id = "ime-default-english", Group = GroupInput,

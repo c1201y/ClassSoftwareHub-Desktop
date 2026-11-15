@@ -1,4 +1,4 @@
-
+// 仅为了让 PackageRunner.cs 能脱离 WinUI 编译的最小替身 —— 本文件不属于产品。
 using System;
 
 namespace ClassSoftwareHub.Desktop.Core
@@ -54,7 +54,7 @@ namespace ClassSoftwareHub.Desktop.Services
         public static string DefaultDir => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
-    
+    /// <summary>产品里这个类型在 DownloadManager.cs（依赖 Microsoft.UI.Xaml），这里只放 RunAsync 用得到的成员。</summary>
     public sealed class DownloadTask
     {
         public string? Path { get; init; }

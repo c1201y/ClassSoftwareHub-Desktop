@@ -5,11 +5,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    
-
-
-
-
+    <!--
+      第 5 步：核对并提交。
+      提交按钮在窗口底部（导航条那颗），本页只负责摘要、缺失项定位与结果展示。
+      ⛔ 提交成功后停在这里，不自动关窗：投稿人常要立刻再传第二个。
+    -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,28,24,24">
             <StackPanel Width="600" HorizontalAlignment="Center" Spacing="14">
@@ -67,7 +67,7 @@
                     <Button Content="再提交一个" Click="Restart_Click" />
                 </StackPanel>
 
-                
+                <!-- 连不上提交服务时的兜底：内容已在本机，四条路都能走 -->
                 <StackPanel x:Name="FallbackPanel" Spacing="10" Visibility="Collapsed">
                     <InfoBar IsOpen="True" IsClosable="False" Severity="Warning" Title="无法连接提交服务"
                              Message="内容已保存于本机，不会丢失。可稍后重试，或将提交文件下载后手动放入仓库，亦可直接前往 GitHub 提交。" />

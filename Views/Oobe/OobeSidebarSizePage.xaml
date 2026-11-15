@@ -6,11 +6,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    
-
-
-
-
+    <!--
+      第 7 步：侧边栏大小。
+      收起条与展开面板可以分别选标准 / 紧凑；「展开面板高度 / 自适应高度」只在每行一个时有效
+      （每行三个时行数天然少，不受高度上限约束），切到舒展模式会把这两项置灰。
+    -->
     <Grid>
         <StackPanel x:Name="ContentRoot" Width="600"
                     HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">

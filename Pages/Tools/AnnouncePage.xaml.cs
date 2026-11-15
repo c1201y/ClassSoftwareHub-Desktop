@@ -14,24 +14,24 @@ using Windows.Storage.Pickers;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 教室喊话页（2026-10-25 第七版）。
+/// <para>
+/// 接收页：接收开关 / 本机标识 / 本机配对码（含预览）/ 局域网通道 / 放行防火墙 /
+/// 「谁保存了本机配对码」（可删除、可清空）/ 显示设置三行。
+/// 发送页：局域网设备列表 + 手动填码（可保存）+ 已保存的电脑（勾选即发）+ 内容 / 署名 / 时长 / 发送。
+/// </para>
+/// <para>
+/// ⛔ 控件一律原生：SelectorBar / SettingsCard / CshCardStyle / ListView + DataTemplate / DropDownButton，
+/// 别手拼卡片、别拿字形码画箭头（2026-10-25 返工教训）。
+/// </para>
+/// </summary>
 public sealed partial class AnnouncePage : Page
 {
-    
+    /// <summary>状态行刷新计时器（1 秒一刷；离开页面即停）。</summary>
     private readonly DispatcherQueueTimer _statusTimer;
 
-    
+    /// <summary>构造期正在填初值：此刻控件事件回调会把半成品写进设置。</summary>
     private bool _loading = true;
 
     private bool _sending;
@@ -46,7 +46,7 @@ public sealed partial class AnnouncePage : Page
         QuietToggle.IsOn = s.AnnounceQuietMode;
         SpeakToggle.IsOn = s.AnnounceSpeakText;
         IntervalCombo.SelectedIndex = s.AnnounceIntervalSec switch { 15 => 0, 60 => 2, _ => 1 };
-        DurationCombo.SelectedIndex = 1;   
+        DurationCombo.SelectedIndex = 1;   // 30 秒，与服务端默认一致
         DefaultViewCombo.SelectedIndex = IsSendDefault(s.AnnounceDefaultView) ? 1 : 0;
         PairCodeText.Text = AnnounceService.MyPairCode;
         LabelBox.Text = s.AnnounceLabel;
@@ -63,20 +63,20 @@ public sealed partial class AnnouncePage : Page
 
         SelectTab(IsSendDefault(s.AnnounceDefaultView) ? "send" : "receive");
 
-        
-        
-        
+        // ⚠️ 再在 Loaded 里选一次（2026-10-27）：SelectorBar 直到进入可视树才确定自己的 SelectedItem，
+        //    构造期设的值会被它在模板应用时按「第一个可见项」覆盖回去 —— 现象就是
+        //    「默认显示」选了「发送」，打开仍然是「接收」。
         Loaded += (_, _) => SelectTab(IsSendDefault(App.Settings.Current.AnnounceDefaultView) ? "send" : "receive");
 
         RenderSaved();
         RenderBinders();
         SyncSoundName();
-        _ = RefreshServerBindersAsync();   
+        _ = RefreshServerBindersAsync();   // 服务端登记（未实现时静默跳过）
         UpdateStatus();
-        RefreshFirewall();                 
+        RefreshFirewall();                 // 进程内读注册表，微秒级，构造期直接调
         RefreshPeerList();
 
-        
+        // 两个后台列表（发现 / 登记）都在非 UI 线程上变，必须回 UI 线程再刷
         AnnounceLanService.PeersChanged += OnPeersChanged;
         AnnounceLanService.BindersChanged += OnBindersChanged;
         AnnounceLanService.SavedPeersChanged += OnSavedPeersChanged;
@@ -93,14 +93,14 @@ public sealed partial class AnnouncePage : Page
         _statusTimer.Start();
         UpdateStatus();
         RefreshPeerList();
-        RefreshFirewall(force: true);      
+        RefreshFirewall(force: true);      // 从这里进来时重新查一次（用户可能刚在外面改过防火墙）
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
         _statusTimer.Stop();
-        
+        // 页面是 Disabled 缓存模式，旧实例留着订阅会回调已离开的控件
         AnnounceLanService.PeersChanged -= OnPeersChanged;
         AnnounceLanService.BindersChanged -= OnBindersChanged;
         AnnounceLanService.SavedPeersChanged -= OnSavedPeersChanged;
@@ -110,14 +110,14 @@ public sealed partial class AnnouncePage : Page
 
     private void OnBindersChanged() => DispatcherQueue.TryEnqueue(RenderBinders);
 
-    
+    /// <summary>对方在它的接收端把本机删了 → 本机这边也要把「已保存的电脑」那条去掉。</summary>
     private void OnSavedPeersChanged() => DispatcherQueue.TryEnqueue(() =>
     {
         RenderSaved();
         ShowResult(true, "对方已删除本机的登记，对应的「已保存的电脑」已移除。");
     });
 
-    
+    // ════════════════════════ 分页 ════════════════════════
 
     private static bool IsSendDefault(string? value) =>
         string.Equals(value, "send", StringComparison.OrdinalIgnoreCase);
@@ -137,14 +137,14 @@ public sealed partial class AnnouncePage : Page
         SendView.Visibility = send ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 按 tag 切页。
+    /// <para>
+    /// ⚠️ 可见性**按传入的 tag 直接设**，不回头读 <c>Tabs.SelectedItem</c>（2026-10-27）：
+    /// SelectorBar 在进入可视化树之前可能不接受 SelectedItem 赋值，读回来还是原来的项，
+    /// 于是「默认显示发送」怎么设都停在接收。
+    /// </para>
+    /// </summary>
     private void SelectTab(string tag)
     {
         foreach (var item in Tabs.Items)
@@ -166,15 +166,15 @@ public sealed partial class AnnouncePage : Page
 
         App.Settings.Current.AnnounceDefaultView = tag;
         App.Settings.Save();
-        SelectTab(tag);   
+        SelectTab(tag);   // 选了就立刻切过去，不然像没生效
     }
 
-    
+    // ════════════════════════ 接收 ════════════════════════
 
     private void EnableToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
-        
+        // 值和设置里一样 = 是构造期回填造成的回弹，不是用户动的（见 Lan_Changed 的说明）
         if (EnableToggle.IsOn == App.Settings.Current.AnnounceEnabled) return;
 
         App.Settings.Current.AnnounceEnabled = EnableToggle.IsOn;
@@ -195,17 +195,17 @@ public sealed partial class AnnouncePage : Page
 
         App.Settings.Current.AnnounceLabel = value;
         App.Settings.Save();
-        
+        // 广播下一拍（≤5 秒）就会带上新标识，发送端列表随之更新
     }
 
     private void Lan_Changed(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
 
-        
-        
-        
-        
+        // ⛔ 值和设置里一样 = 不是用户拨的开关，是我们自己在构造期回填的值又被 ToggleSwitch 回弹了一次
+        //    （2026-10-27 Nick 反馈：切走再切回来就弹一次「修复防火墙」）。
+        //    现象背后的链条：页面每次重建 → 构造里设 IsOn → 控件加载完成时再抛一次 Toggled →
+        //    这时 _loading 已经复位成 false → 被当成"用户刚打开局域网通道" → 起通道 + 弹对话框。
         if (LanToggle.IsOn == App.Settings.Current.AnnounceLanEnabled) return;
 
         App.Settings.Current.AnnounceLanEnabled = LanToggle.IsOn;
@@ -223,8 +223,8 @@ public sealed partial class AnnouncePage : Page
             AnnounceLanService.Stop();
         }
 
-        
-        
+        // 只刷新卡片，**不自动弹对话框**（2026-10-27 Nick：「它又要弹这个反复弹」）。
+        // 被拦的原因写在卡片上，用户想修自己点「修复」—— 弹窗只在用户点了按钮之后出现。
         RefreshFirewall(force: true);
         RefreshPeerList();
     }
@@ -264,12 +264,12 @@ public sealed partial class AnnouncePage : Page
         }
         catch (Exception ex)
         {
-            
+            // 剪贴板被别的程序占住是常态，失败不打扰用户（码就在屏幕上）
             AppLog.Warn("announce", "复制配对码失败：" + ex.Message);
         }
     }
 
-    
+    /// <summary>状态行只说人话：能不能收到。⛔ 不露退避秒数等实现细节。</summary>
     private void UpdateStatus()
     {
         if (!EnableToggle.IsOn)
@@ -297,19 +297,19 @@ public sealed partial class AnnouncePage : Page
         StatusText.Text = AnnounceService.LastPollAt is null ? "已开启，正在连接服务器……" : "已连接，正在等待消息。";
     }
 
-    
+    // ════════════════════════ 局域网通道 ════════════════════════
 
-    
+    /// <summary>最近一次查到的防火墙状态（卡片文案按它显示）。</summary>
     private FirewallState _firewall = FirewallState.Unknown;
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 查一次防火墙并刷新卡片。
+    /// <para>
+    /// ⚠️ 同步调用即可：查询是进程内读注册表（微秒级），不再起 PowerShell 进程（2026-10-27）。
+    /// 上一次重写时这里要 await，是因为查询靠 `Get-NetFirewallRule`，每次都会拉起一个
+    /// powershell.exe，被安全软件按启发式规则拦截弹窗。
+    /// </para>
+    /// </summary>
     private void RefreshFirewall(bool force = false)
     {
         if (!LanToggle.IsOn)
@@ -326,13 +326,13 @@ public sealed partial class AnnouncePage : Page
         FirewallCard.Visibility = need ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 执行修复（一次 UAC）并按结果刷新界面。
+    /// <para>
+    /// ⚠️ 这个动作**只能由用户点「修复」触发**（2026-10-27）。早先还有一条「打开局域网通道时自动弹
+    /// 一个确认框」的路径，结果是用户切走页面再切回来就被弹一次 —— 自动弹窗一律不要。
+    /// </para>
+    /// </summary>
     private async Task ApplyFirewallRepairAsync()
     {
         FirewallButton.IsEnabled = false;
@@ -370,15 +370,15 @@ public sealed partial class AnnouncePage : Page
 
     private void RefreshPeers_Click(object sender, RoutedEventArgs e) => RefreshPeerList();
 
-    
-    
-    
+    /// <summary>
+    /// 重铺局域网设备列表。勾选状态按配对码保留 —— 列表会随心跳重刷，不能把用户勾好的刷掉。
+    /// </summary>
     private void RefreshPeerList()
     {
         if (!App.Settings.Current.AnnounceLanEnabled)
         {
-            
-            
+            // 发送端也要开着局域网通道才能发现对方（发现依赖的是本机的广播与监听，不是「只发送」）。
+            // 开关在「接收」页，不在这一页 —— 所以必须指明去哪打开，否则用户会以为这一栏坏了。
             PeerHint.Text = "局域网通道未开启。请到「接收」页打开「局域网通道」，同一网段的电脑才会出现在这里。";
             PeerList.Visibility = Visibility.Collapsed;
             PeerList.ItemsSource = null;
@@ -411,7 +411,7 @@ public sealed partial class AnnouncePage : Page
               + "；可以改用配对码走服务器。";
     }
 
-    
+    // ════════════════════════ 谁保存了本机配对码 ════════════════════════
 
     private void RenderBinders()
     {
@@ -426,24 +426,24 @@ public sealed partial class AnnouncePage : Page
         ClearBindersButton.IsEnabled = list.Count > 0;
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 拉一次服务端登记名单，与本地局域网记录合并展示（2026-10-25）。
+    /// <para>
+    /// ⚠️ 服务端这三个端点还没实现（协议见 docs/教室喊话-服务端接口.md），
+    /// 返回 null 时**什么都不动** —— 保留本地已有的局域网记录，界面也不提示错误。
+    /// </para>
+    /// </summary>
     private async Task RefreshServerBindersAsync()
     {
         var server = await AnnounceService.ListBindersAsync();
-        if (server is null) return;   
+        if (server is null) return;   // 服务端不支持 / 不可达：保持现状
 
         var list = App.Settings.Current.AnnounceBinders;
         list.RemoveAll(b => string.Equals(b.Via, "server", StringComparison.Ordinal));
 
         foreach (var b in server)
         {
-            
+            // 同一台如果局域网也登记过，以服务端记录为准（它能跨网、也能远程删）
             list.RemoveAll(x => string.Equals(x.Name, b.Name, StringComparison.OrdinalIgnoreCase));
             list.Add(new AnnounceBinder
             {
@@ -502,17 +502,17 @@ public sealed partial class AnnouncePage : Page
 
         if (serverCount > 0)
         {
-            var ok = await AnnounceService.UnbindAsync(null);   
+            var ok = await AnnounceService.UnbindAsync(null);   // 服务端支持不带 senderId = 清空
             if (!ok) ShowResult(false, "服务端暂时不可用：跨网络的登记没有清掉。");
         }
 
         if (ips.Count > 0) _ = NotifyUnbindAsync(ips);
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 删除登记的同时通知对方把「已保存的电脑」里那条也删掉（2026-10-25 Nick：单边删除对不上）。
+    /// 通知不到就记进「待通知」，等对方下次广播心跳时补发。
+    /// </summary>
     private async Task NotifyUnbindAsync(IEnumerable<string> ips)
     {
         var code = AnnounceService.MyPairCode;
@@ -552,7 +552,7 @@ public sealed partial class AnnouncePage : Page
         App.Settings.Save();
     }
 
-    
+    // ════════════════════════ 已保存的电脑 ════════════════════════
 
     private void RenderSaved()
     {
@@ -575,10 +575,10 @@ public sealed partial class AnnouncePage : Page
 
     private void SavePeer_Click(object sender, RoutedEventArgs e) => SavePeer(TargetCodeBox.Text, notify: true);
 
-    
-    
-    
-    
+    /// <summary>
+    /// 存一个配对码到「已保存的电脑」。
+    /// 如果这台电脑此刻就在同一局域网里（发现得到），顺手通知它登记一下 —— 它的接收页就能看到「谁保存了我的码」。
+    /// </summary>
     private async void SavePeer(string? rawCode, bool notify)
     {
         var code = (rawCode ?? "").Trim();
@@ -616,7 +616,7 @@ public sealed partial class AnnouncePage : Page
             }
             else
             {
-                
+                // 不在同一局域网：走服务端登记（服务端未实现时自动降级，不报错）
                 var ok = await AnnounceService.BindAsync(code, Environment.MachineName, label);
                 ShowResult(true, ok
                     ? "已保存，并已在服务端登记 —— 对方跨网络也能看到。"
@@ -638,7 +638,7 @@ public sealed partial class AnnouncePage : Page
         RenderSaved();
     }
 
-    
+    // ════════════════════════ 出场方式与提示音 ════════════════════════
 
     private void Animation_Changed(object sender, SelectionChangedEventArgs e)
     {
@@ -662,7 +662,7 @@ public sealed partial class AnnouncePage : Page
             };
             foreach (var ext in AnnounceSound.Extensions) picker.FileTypeFilter.Add(ext);
 
-            
+            // ⚠️ unpackaged 应用必须先把选择器绑到窗口句柄上，否则直接抛异常
             WinRT.Interop.InitializeWithWindow.Initialize(
                 picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow!));
 
@@ -671,7 +671,7 @@ public sealed partial class AnnouncePage : Page
 
             AnnounceSound.CustomPath = file.Path;
             SyncSoundName();
-            AnnounceSound.Play();   
+            AnnounceSound.Play();   // 挑完立刻响一下试听
         }
         catch (Exception ex)
         {
@@ -688,7 +688,7 @@ public sealed partial class AnnouncePage : Page
         AnnounceSound.Play();
     }
 
-    
+    // ════════════════════════ 本机预览（不联网） ════════════════════════
 
     private void PreviewShort_Click(object sender, RoutedEventArgs e)
         => Preview("请李明同学到办公室拿东西", "教务处", 15);
@@ -714,7 +714,7 @@ public sealed partial class AnnouncePage : Page
         }, quiet: QuietToggle.IsOn, speak: SpeakToggle.IsOn);
     }
 
-    
+    // ════════════════════════ 发送 ════════════════════════
 
     private void Content_Changed(object sender, TextChangedEventArgs e)
     {
@@ -741,7 +741,7 @@ public sealed partial class AnnouncePage : Page
             return;
         }
 
-        
+        // 目标 = 勾选的局域网设备 ∪ 勾选的已保存设备 ∪ 手填的码（按码去重）
         var targets = new List<string>();
         targets.AddRange((PeerList.ItemsSource as List<LanPeerItem>)?.Where(p => p.IsSelected)
             .Select(p => p.PairCode) ?? Enumerable.Empty<string>());
@@ -768,7 +768,7 @@ public sealed partial class AnnouncePage : Page
         var from = FromBox.Text ?? "";
         var msg = new AnnounceMessage
         {
-            Id = Guid.NewGuid().ToString("N")[..12],   
+            Id = Guid.NewGuid().ToString("N")[..12],   // 两条通道共用，接收端据此去重
             Text = text,
             From = from,
             Duration = duration,
@@ -778,11 +778,11 @@ public sealed partial class AnnouncePage : Page
         var lanOk = 0;
         var serverOk = 0;
         var failed = 0;
-        var revoked = new List<string>();   
+        var revoked = new List<string>();   // 对方已在它的接收端把我们删了
 
         foreach (var code in targets)
         {
-            
+            // 发现得到的优先直连；发现不到的（已保存但不在同一网段）走服务器
             var peer = AnnounceLanService.Peers.FirstOrDefault(p => p.PairCode == code);
             if (peer is not null && await AnnounceLanService.TrySendAsync(peer, msg))
             {
@@ -796,7 +796,7 @@ public sealed partial class AnnouncePage : Page
             else failed++;
         }
 
-        
+        // 服务端说「对方已删除你的登记」：把本地那条也删掉，免得一直留着发不出去
         if (revoked.Count > 0)
         {
             App.Settings.Current.AnnounceSavedPeers.RemoveAll(p => revoked.Contains(p.Code));
@@ -807,7 +807,7 @@ public sealed partial class AnnouncePage : Page
         _sending = false;
         SendButton.IsEnabled = (ContentBox.Text?.Length ?? 0) > 0;
 
-        
+        // 手填的码发成功了就顺手存起来，下次直接勾选（已存在的不会重复加）
         if (manualCode.Length > 0 && lanOk + serverOk > 0) SavePeer(manualCode, notify: false);
 
         var parts = new List<string>();
@@ -818,7 +818,7 @@ public sealed partial class AnnouncePage : Page
 
         if (failed == 0)
         {
-            ContentBox.Text = "";   
+            ContentBox.Text = "";   // 内容清空、署名保留（连续喊话常见）
             ShowResult(true, "已发送：" + string.Join("，", parts) + "。");
         }
         else

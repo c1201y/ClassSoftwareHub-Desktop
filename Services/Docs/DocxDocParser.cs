@@ -9,19 +9,19 @@ using System.Xml.Linq;
 
 namespace ClassSoftwareHub.Desktop.Services.Docs;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// .docx → <see cref="DocBlock"/>（自己解析 OOXML，不引第三方库）。
+///
+/// <para>
+/// 读的是 <c>word/document.xml</c> 及其配套的 <c>styles.xml</c>（标题级别）、
+/// <c>numbering.xml</c>（有序 / 无序列表）、<c>document.xml.rels</c>（超链接与图片）。
+/// 图片直接从压缩包里取字节交给渲染器，不落盘。
+/// </para>
+/// <para>
+/// ⛔ 不处理：页眉页脚、脚注尾注、批注、文本框、域代码（除 HYPERLINK）、修订痕迹、嵌套表格。
+/// 这些在教程文章里极少出现，跳过比渲染错安全。
+/// </para>
+/// </summary>
 public static class DocxDocParser
 {
     private static readonly XNamespace W =
@@ -156,7 +156,7 @@ public static class DocxDocParser
                     return;
                 }
 
-                
+                // bookmarkStart / bookmarkEnd / proofErr / del 之类不产出文字
             }
 
             void AppendRun(XElement run, string? link)
@@ -290,7 +290,7 @@ public static class DocxDocParser
         return blocks;
     }
 
-    
+    // ── 元数据 ───────────────────────────────────────────────────
 
     private static int HeadingLevel(
         string styleId, XElement? props, IReadOnlyDictionary<string, int> styles)
@@ -346,13 +346,13 @@ public static class DocxDocParser
         }
         catch
         {
-            
+            // styles.xml 坏掉不影响正文，按默认样式读
         }
 
         return result;
     }
 
-    
+    /// <summary>numId → 每一级的编号格式（是否有序）。</summary>
     private static Dictionary<string, Dictionary<int, bool>> ReadNumbering(ZipArchive zip)
     {
         var result = new Dictionary<string, Dictionary<int, bool>>(StringComparer.Ordinal);
@@ -387,7 +387,7 @@ public static class DocxDocParser
         }
         catch
         {
-            
+            // 编号表读不出来就统一按无序处理
         }
 
         return result;
@@ -413,7 +413,7 @@ public static class DocxDocParser
     {
         if (!numbering.TryGetValue(numId, out var levels)) return false;
 
-        
+        // 没声明的那一级沿用最近的一级
         for (var i = ilvl; i >= 0; i--)
             if (levels.TryGetValue(i, out var ordered)) return ordered;
 
@@ -446,13 +446,13 @@ public static class DocxDocParser
         }
         catch
         {
-            
+            // 关系表坏掉 → 链接和图片都读不出来，正文照常
         }
 
         return result;
     }
 
-    
+    /// <summary><c>w:b</c> 这类开关：元素存在且没有 <c>w:val="0"/"false"</c> 即为开。</summary>
     private static bool IsOn(XElement? element)
     {
         if (element is null) return false;
@@ -463,7 +463,7 @@ public static class DocxDocParser
     private static string PlainText(XElement paragraph) =>
         string.Concat(paragraph.Descendants(W + "t").Select(t => t.Value)).Trim();
 
-    
+    /// <summary>把 rels 里的相对地址（如 <c>media/image1.png</c>）拼成压缩包内的完整路径。</summary>
     private static string ResolvePart(string baseDir, string target)
     {
         var combined = target.StartsWith('/')

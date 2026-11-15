@@ -6,21 +6,21 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:hub="using:ClassSoftwareHub.Desktop.Services.HubAi">
 
-    
+    <!--
+      Hub AI 完整对话页（2026-10-20 整体重做）。
 
+      三栏：**历史 248 / 对话 * / 本机状态 300**，左右两栏都能折叠。
+      版式借鉴三份前端参考件里真正立得住的部分：
+        · 左栏是"任务列表"的密度（图标、状态、时间），不是裸标题列表；
+        · 中间是**无气泡纯文本流**，用户消息才用气泡；
+        · 右栏把「本机概况 / 初步判断」这些**状态快照**挪出对话流 ——
+          它们不是对话内容，挤在消息里会把第一屏顶得很长（这是主要动机）。
 
-
-
-
-
-
-
-
-
-
-
-
-
+      ⛔ 与「软件下载」页右下那个浮层是同一个内核的两种外壳：浮层只负责把问题送进来
+         （见 HubAiPage.PendingQuestion），对话/历史/工具/用量都只在这一页实现。
+      ⛔ 主题色一律走 ThemeBrush / ThemeResource，别在代码里查 Application.Current.Resources
+         （应用级主题与窗口主题不一致时会刷出反色，这个坑本页踩过三次）。
+    -->
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -28,16 +28,16 @@
             <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        
+        <!-- 2026-10-19 Nick 特批：本页取消 960 宽度限制、直接铺满。⛔ 别扩散到其它页面。 -->
         <Grid Grid.Column="1" Margin="0,28,0,32">
             <Grid.ColumnDefinitions>
-                
-
+                <!-- 左右两栏都可折叠。⚠️ 列宽用 Auto，由面板自身的 Width 决定 ——
+                     GridLength 不是 double，没法直接做宽度动画；动画打在面板的 Width 上才有滑入滑出手感。 -->
                 <ColumnDefinition x:Name="HistoryCol" Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            
+            <!-- ═══════════════ 左：历史对话 ═══════════════ -->
             <Grid x:Name="HistoryPanel" Width="248" Margin="0,0,16,0" RowSpacing="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -51,15 +51,15 @@
                 <Button Grid.Row="1" Content="新对话" HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center" Click="NewChat_Click" />
 
-                
+                <!-- 原生 ListView：选中/悬停/键盘导航交给系统默认视觉 -->
                 <ListView x:Name="SessionList" Grid.Row="2"
                           SelectionMode="Single"
                           SelectionChanged="SessionList_SelectionChanged"
                           RightTapped="SessionList_RightTapped">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="hub:ChatSession">
-                            
-
+                            <!-- ⚠️ 右键菜单不要挂在 DataTemplate 元素上：ListViewItem 会吞掉 ContextFlyout。
+                                 统一走 ListView 的 RightTapped（见 code-behind）。 -->
                             <StackPanel Spacing="2" Padding="0,6">
                                 <TextBlock Text="{x:Bind Title}" FontSize="13"
                                            MaxLines="1" TextTrimming="CharacterEllipsis" />
@@ -72,8 +72,8 @@
                 </ListView>
             </Grid>
 
-            
-            
+            <!-- ═══════════════ 中：对话 ═══════════════ -->
+            <!-- ⚠️ 左右各留 6：两栏都收起时内容会直接贴到窗口边，看着像位置歪了 -->
             <Grid Grid.Column="1" RowSpacing="0" Margin="6,0,6,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -82,7 +82,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                
+                <!-- 标题行：折叠按钮 / 标题 / 右栏开关 -->
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -97,21 +97,21 @@
                         <FontIcon Glyph="&#xE700;" FontSize="15" />
                     </Button>
 
-                    
-
+                    <!-- 标题可点：连点 6 次触发彩蛋（见 Title_Tapped）。Padding 只是把命中区撑大一点，
+                         与 Margin 相加仍是 8，视觉位置不变 -->
                     <TextBlock x:Name="TitleText" Grid.Column="1" Text="Hub AI" FontSize="26" FontWeight="Bold"
                                VerticalAlignment="Center" Margin="4,0,0,0" Padding="4,1"
                                Tapped="Title_Tapped" />
 
                 </Grid>
 
-                
+                <!-- 已配置模型时这条自动收起（见 ApplyEnabledState） -->
                 <InfoBar x:Name="NotWiredBar" Grid.Row="1" Severity="Informational"
                          IsOpen="True" IsClosable="False" Margin="0,0,0,10"
                          Title="模型尚未配置"
                          Message="下面这些是本机实时概况，由本地采集，不经过网络。配置模型之后，这里才会出现针对这台电脑的建议。" />
 
-                
+                <!-- 总闸关闭时的替身 -->
                 <Border x:Name="DisabledPanel" Grid.Row="1" Visibility="Collapsed"
                         Background="{ThemeResource HubAiCardBackground}"
                         BorderBrush="{ThemeResource HubAiCardBorder}" BorderThickness="1"
@@ -127,17 +127,17 @@
                     </StackPanel>
                 </Border>
 
-                
+                <!-- 消息区：居中 860，铺满时两侧留白也不至于让人要把头转来转去 -->
                 <ScrollViewer x:Name="ChatScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-                    
-
-                    
-
+                    <!-- ⛔ 不要在这里写 MaxWidth：StackPanel 一旦比 ScrollViewer 视口宽就会溢出并被裁，
+                         里面的 HorizontalAlignment=Center 会按溢出后的宽度居中，整体看起来偏右。 -->
+                    <!-- ⚠️ 右侧留 16px：WinUI 的滚动条是**浮层**，不占布局宽度 ——
+                         不留白的话正文最后几个字会被压在滚动条底下（2026-10-23 Nick 截图）。 -->
                     <StackPanel x:Name="HubAiMessages" Spacing="22" Padding="0,4,16,16"
                                 HorizontalAlignment="Stretch">
 
-                        
+                        <!-- 欢迎屏：空对话时露出，发出第一条消息后收起 -->
                         <StackPanel x:Name="WelcomePanel" Spacing="0" Margin="0,48,0,12"
                                     HorizontalAlignment="Center">
 
@@ -157,11 +157,11 @@
                                        Foreground="{ThemeResource HubAiSubForeground}" />
                         </StackPanel>
 
-                        
-
-
-
-
+                        <!--
+                          本机状态（2026-10-20 从右栏搬回对话流）：
+                          ⚠️ **默认隐藏**，第一次对话之后才出现（Nick：右栏不要了，本机状况等聊过再显示）。
+                          ⚠️ 里面用 Padding 而不是 Margin：卡片自身上下留白一致，跟着消息流滚动。
+                        -->
                         <StackPanel x:Name="SidePanel" Visibility="Collapsed" Spacing="10" Margin="0,8,0,0">
                             <TextBlock Text="本机状态" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{ThemeResource HubAiSubForeground}" />
@@ -169,7 +169,7 @@
                     <TextBlock Text="本机状态" FontSize="12" FontWeight="SemiBold"
                                Foreground="{ThemeResource HubAiSubForeground}" />
 
-                    
+                    <!-- 本机概况：采集层真实输出，不需要模型 -->
                     <Border Background="{ThemeResource HubAiCardBackground}"
                             BorderBrush="{ThemeResource HubAiCardBorder}" BorderThickness="1"
                             CornerRadius="12" Padding="16,14">
@@ -232,7 +232,7 @@
                         </StackPanel>
                     </Border>
 
-                    
+                    <!-- 本地规则结论（MachineDiagnosis）：不经过模型，模型抽风时它仍然是准的 -->
                     <Border Background="{ThemeResource HubAiCardBackground}"
                             BorderBrush="{ThemeResource HubAiCardBorder}" BorderThickness="1"
                             CornerRadius="12" Padding="16,14">
@@ -247,7 +247,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                
+                <!-- 输入区：整块容器（圆角 + 边框 + 聚焦高亮），不是"一条文本框 + 一个按钮" -->
                 <StackPanel x:Name="ChatInput" Grid.Row="3" Spacing="8"
                             HorizontalAlignment="Stretch" Margin="0,10,0,0">
 
@@ -278,7 +278,7 @@
                                               SelectionChanged="ModelPicker_SelectionChanged" />
                                     <ToggleButton x:Name="ThinkToggle" Content="思考" FontSize="12"
                                                   Padding="10,4" Click="ThinkToggle_Click" />
-                                    
+                                    <!-- 联网开关：跟「思考」对等（2026-10-20） -->
                                     <ToggleButton x:Name="WebToggle" Content="联网" FontSize="12"
                                                   Padding="10,4" Click="WebToggle_Click"
                                                   ToolTipService.ToolTip="开启后允许检索网页" />
@@ -286,7 +286,7 @@
                                               SelectionChanged="EffortPicker_SelectionChanged" />
                                 </StackPanel>
 
-                                
+                                <!-- ⚠️ 发送按钮靠右必须走 Grid 第三列：塞在 StackPanel 里 HorizontalAlignment 是无效的 -->
                                 <Button x:Name="SendButton" Grid.Column="2" Padding="14,8"
                                         Style="{StaticResource AccentButtonStyle}"
                                         Click="HubAiSend_Click" ToolTipService.ToolTip="发送">

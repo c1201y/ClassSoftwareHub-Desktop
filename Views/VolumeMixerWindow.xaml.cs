@@ -13,19 +13,19 @@ using Windows.Graphics;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 音量合成器浮窗（横向）：主音量浮窗上点「展开」弹出，**贴着主音量浮窗往屏幕里侧排**。
+///
+/// 每个应用**一行** = 软件图标 + 软件名称 + 横滑块（不管边条贴哪条边都是这个搭法 ——
+/// 贴着上/下时把它改成"一列一个应用"会很怪，2026-09-26 Nick 定）。
+///
+/// 刷新策略：1.5s 轮询，但**只增删、绝不重建、绝不重排**：
+///   · 重建（Clear + 重加）会把正在拖的滑块从可视树里摘下来 → 指针捕获当场断掉，
+///     表现就是"滑一半不滑了"（2026-09-26 修）；
+///   · 重排同理，所以新冒出来的应用**追加在最后**，不做排序。
+/// 拖动判定的按下/松手要用 <c>AddHandler(..., handledEventsToo: true)</c> 才收得到 ——
+/// Slider 内部会把 PointerPressed 标成 handled，普通订阅收不到（也是这个 bug 的一半原因）。
+/// </summary>
 public sealed partial class VolumeMixerWindow : Window
 {
     private const int RowWidthDip = 380;
@@ -33,7 +33,7 @@ public sealed partial class VolumeMixerWindow : Window
     private const int RowGapDip = 6;
     private const int MaxVisible = 6;
 
-    
+    // 高度 = 上边距 + 标题行 + 标题与列表的间隔 + 各行 + 行间距 + 下边距
     private const int PadTopDip = 14;
     private const int PadBottomDip = 14;
     private const int HeaderHeightDip = 20;
@@ -91,18 +91,18 @@ public sealed partial class VolumeMixerWindow : Window
         if (_instance?._visible == true) _instance.HideSelf();
     }
 
-    
+    /// <summary>合成器现在开着吗（主音量浮窗用它点亮「展开」键）。</summary>
     public static bool IsVisible => _instance?._visible == true;
 
-    
+    /// <summary>合成器浮窗当前在屏幕上的矩形。</summary>
     public static RectInt32? CurrentRect => _instance?._chrome.CurrentRect;
 
     private void Configure()
     {
         try
         {
-            
-            
+            // 跟**侧边栏**那套外观（2026-11-04 Nick 定）：合成器是从音量浮窗「展开」出来的，
+            // 和边条、主音量浮窗是一整块，不能一个白一个黑。
             ThemeHost.Apply(Root, external: true);
             VolumeFlyoutGroup.MixerHwnd = _chrome.Hwnd;
 
@@ -123,7 +123,7 @@ public sealed partial class VolumeMixerWindow : Window
         }
     }
 
-    
+    // ── 尺寸 ──────────────────────────────────────────────────────────────
 
     private PointInt32 SizeDip(int count)
     {
@@ -133,7 +133,7 @@ public sealed partial class VolumeMixerWindow : Window
         return new PointInt32(RowWidthDip, h);
     }
 
-    
+    // ── 显示 / 收起 ───────────────────────────────────────────────────────
 
     private void ShowSelf()
     {
@@ -146,13 +146,13 @@ public sealed partial class VolumeMixerWindow : Window
             var h = (int)Math.Round(dip.Y * scale);
             var work = DisplayArea.Primary.WorkArea;
 
-            
-            
-            
+            // 锚点 = 主音量浮窗的**最终落点**（不是半路上的实时位置 —— 主音量还在滑入时
+            //    点「展开」，锚实时位置会让主音量随后滑进来正好压住合成器，2026-10-01 修）。
+            //    沿边方向与主音量**顶对齐**（左右边）/左对齐（上下边）：两个高矮不一的窗排成一列整齐的块。
             var anchor = VolumeWindow.AnchorRect ?? EdgeGeometry.EdgeBar(VolumeWindow.Edge, work);
             var (start, final) = EdgeGeometry.BesideAnchor(VolumeWindow.Edge, anchor, work, w, h, scale, alignStart: true);
 
-            Start();                                    
+            Start();                                    // 先把条目建好再显形
             _chrome.Present(start, w, h);
             _visible = true;
 
@@ -195,7 +195,7 @@ public sealed partial class VolumeMixerWindow : Window
         }
     }
 
-    
+    /// <summary>行数变了就把窗口长/缩到对应高度（滑动动画中间不动位置）。</summary>
     private void ResizeForCount(int count)
     {
         var n = Math.Clamp(count, 1, MaxVisible);
@@ -219,7 +219,7 @@ public sealed partial class VolumeMixerWindow : Window
         catch { }
     }
 
-    
+    // ── 轮询 / 刷新 ────────────────────────────────────────────────────────
 
     private void Start()
     {
@@ -244,16 +244,16 @@ public sealed partial class VolumeMixerWindow : Window
 
     private int CurrentSessionCount() => AudioService.GetActiveSessions().Count;
 
-    
-    
-    
+    /// <summary>
+    /// ⚠️ 只增删、不重建、不重排 —— 见类注释（重建会把正在拖的滑块摘出可视树，拖动当场断）。
+    /// </summary>
     private void Refresh()
     {
         if (!_started || _anyDragging) return;
 
         var sessions = AudioService.GetActiveSessions();
 
-        
+        // 已经不发声的进程：把它的行摘掉（只摘这一个，别的行一根手指都不碰）
         var alive = new HashSet<uint>(sessions.Select(s => s.ProcessId));
         foreach (var pid in _rows.Keys.ToList())
         {
@@ -262,7 +262,7 @@ public sealed partial class VolumeMixerWindow : Window
             _rows.Remove(pid);
         }
 
-        
+        // 新出现的进程：建行，**追加在最后**（不插队、不排序，免得把已有的行摘下来重排）
         foreach (var s in sessions)
         {
             if (_rows.TryGetValue(s.ProcessId, out var row))
@@ -316,10 +316,10 @@ public sealed partial class VolumeMixerWindow : Window
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 建一行：图标（24）｜名称（定宽 118，超了省略号）｜滑块（吃掉剩下的宽度）。
+    /// 名称定宽是为了**行行对齐**；滑块要拖，所以按下/松手判定挂 handledEventsToo。
+    /// </summary>
     private SessionRow BuildSessionRow(AudioSessionItem session)
     {
         var root = new Grid { Height = RowHeightDip, ColumnSpacing = 12 };
@@ -386,8 +386,8 @@ public sealed partial class VolumeMixerWindow : Window
             AudioService.SetSessionPercent(row.Item, (int)Math.Round(e.NewValue));
         };
 
-        
-        
+        // ⚠️ handledEventsToo: true —— Slider 内部会把 PointerPressed 标成 handled，
+        //    普通 += 订阅收不到，"_anyDragging" 就永远是 false，轮询照样来拆行（滑一半就断）。
         slider.AddHandler(UIElement.PointerPressedEvent,
             new PointerEventHandler((_, _) => { row.Dragging = true; _anyDragging = true; }), true);
         slider.AddHandler(UIElement.PointerReleasedEvent,

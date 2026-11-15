@@ -6,15 +6,15 @@ using Microsoft.UI.Xaml.Media.Animation;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-
-
-
-
+/// <summary>
+/// 向导里的两段通用动效：单元素淡入、完成页卡片横滑。
+/// 页面本体的进出场交给 Frame 的左右滑动转场，这里不再做整页上浮。
+/// </summary>
 public static class OobeMotion
 {
     private static bool? _animationsEnabled;
 
-    
+    /// <summary>系统「显示动画」开关。关掉时一切直接落到终值，别硬播。</summary>
     public static bool AnimationsEnabled
     {
         get
@@ -32,7 +32,7 @@ public static class OobeMotion
         }
     }
 
-    
+    /// <summary>只淡入、不位移。开场标题落位后，周围的文字用它亮出来。</summary>
     public static void Fade(FrameworkElement element, int delayMs, int durationMs = 320)
     {
         if (!AnimationsEnabled)
@@ -65,9 +65,9 @@ public static class OobeMotion
         }
     }
 
-    
-    
-    
+    /// <summary>
+    /// 两页/两张卡之间横滑换位（完成页轮播用）。前进从右侧来，后退从左侧来。
+    /// </summary>
     public static void Swap(FrameworkElement from, FrameworkElement to, bool forward,
         double distance = 60, int durationMs = 300)
     {
@@ -91,8 +91,8 @@ public static class OobeMotion
             to.IsHitTestVisible = false;
             to.RenderTransform = new TranslateTransform { X = distance * direction };
 
-            
-            
+            // 出去那一页也必须先挂上 TranslateTransform：属性路径在 RenderTransform
+            // 为 null 时解析不了，Storyboard.Begin() 会直接抛 0x800F1000（踩过）。
             if (from.RenderTransform is not TranslateTransform)
                 from.RenderTransform = new TranslateTransform();
 
@@ -178,6 +178,6 @@ public static class OobeMotion
 
     private static Duration Ms(double ms) => new(TimeSpan.FromMilliseconds(ms));
 
-    
+    /// <summary>BeginTime 在 WinUI 3 里是 <see cref="TimeSpan"/>?，不是 Duration。</summary>
     private static TimeSpan Time(double ms) => TimeSpan.FromMilliseconds(ms);
 }

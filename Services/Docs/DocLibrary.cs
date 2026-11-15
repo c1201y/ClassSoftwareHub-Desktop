@@ -12,28 +12,28 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.Docs;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 文档库（需求 15）：文章放在桌面端仓库的「文档库/」下，桌面端按需取用。
+///
+/// <para>
+/// 两层缓存，目的不同：
+/// <list type="bullet">
+///   <item><b>清单</b>（<c>docs\catalog.json</c>）：所有文章的标题 / 作者 / 简介 / 标签。
+///         列表页与全局搜索只读这一份，不下载正文。</item>
+///   <item><b>正文</b>（<c>docs\files\</c>）：真正打开某篇时才下载。落地时**去掉扩展名、文件名换成
+///         64 位随机十六进制**，映射关系只保存在本机的 <c>docs\cache.json</c> 里 ——
+///         缓存文件不经本程序打不开，也无法根据文件名判断是哪篇文章。</item>
+/// </list>
+/// </para>
+///
+/// <para>
+/// ⛔ 正文缓存必须保留真实字节：docx / pdf 不是纯文本，改名不影响读取，但换编码或转存会破坏格式。
+/// 映射表是唯一的"钥匙"，删掉它等于缓存全部作废（下次打开重新下载即可，不会报错）。
+/// </para>
+/// </summary>
 public static class DocLibrary
 {
-    
+    /// <summary>桌面端仓库里放文章的目录。</summary>
     public const string RepoDir = "文档库";
 
     private static readonly object Gate = new();
@@ -53,7 +53,7 @@ public static class DocLibrary
 
     private static readonly string[] SupportedExtensions = { ".md", ".markdown", ".txt", ".docx", ".pdf" };
 
-    
+    /// <summary>自动同步的最小间隔：列表页每次进入都问一次会很吵，十分钟足够。</summary>
     private static readonly TimeSpan SyncInterval = TimeSpan.FromMinutes(10);
 
     private static List<DocArticle>? _articles;
@@ -65,7 +65,7 @@ public static class DocLibrary
     private static string CatalogPath => Path.Combine(RootDir, "catalog.json");
     private static string CachePath => Path.Combine(RootDir, "cache.json");
 
-    
+    /// <summary>清单有变化时触发（正文变化不触发，正文在打开时自己校验指纹）。</summary>
     public static event Action? Changed;
 
     public static IReadOnlyList<DocArticle> Articles
@@ -80,12 +80,12 @@ public static class DocLibrary
         return _articles!.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
     }
 
-    
+    // ── 清单同步 ─────────────────────────────────────────────────
 
-    
-    
-    
-    
+    /// <summary>
+    /// 从 GitHub 仓库读出「文档库/」的目录清单，按需更新各篇的 meta.json。
+    /// **不抛网络异常**：失败时保留本机清单返回 Ok=false。
+    /// </summary>
     public static async Task<DocSyncResult> SyncAsync(
         bool force = false,
         IProgress<string>? progress = null,
@@ -179,7 +179,7 @@ public static class DocLibrary
                     catch (Exception ex)
                     {
                         AppLog.Warn("docs", $"文章 {id} 的 meta.json 读取失败：{ex.Message}");
-                        
+                        // 新文章读不到就跳过；老文章沿用本机那份，别因一次网络抖动让它从列表里消失
                         article = existing;
                     }
                 }
@@ -192,7 +192,7 @@ public static class DocLibrary
                 next.Add(article);
             }
 
-            
+            // 目录被截断时，没列出来的老朋友不能当"已被删除"处理
             if (truncated)
                 foreach (var old in _articles!)
                     if (next.All(a => !string.Equals(a.Id, old.Id, StringComparison.OrdinalIgnoreCase)))
@@ -224,11 +224,11 @@ public static class DocLibrary
         }
     }
 
-    
+    // ── 正文缓存 ─────────────────────────────────────────────────
 
-    
-    
-    
+    /// <summary>
+    /// 取到某篇的正文。已经缓存过且仓库内容没变就不联网；否则下载并写成无扩展名随机文件。
+    /// </summary>
     public static async Task<DocContent> EnsureContentAsync(
         string id,
         IProgress<string>? progress = null,
@@ -251,7 +251,7 @@ public static class DocLibrary
         await ContentGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            
+            // 排队期间可能已经被另一处下载好了
             cache = GetCache();
             if (cache.Articles.TryGetValue(id, out hit)
                 && hit.Fingerprint == fingerprint
@@ -289,7 +289,7 @@ public static class DocLibrary
                     }
                     catch (Exception ex) when (!string.Equals(relative, article.File, StringComparison.OrdinalIgnoreCase))
                     {
-                        
+                        // 图片之类缺一张不影响读正文
                         AppLog.Warn("docs", $"文章 {id} 的资源 {relative} 读取失败：{ex.Message}");
                         continue;
                     }
@@ -334,7 +334,7 @@ public static class DocLibrary
         }
     }
 
-    
+    /// <summary>已经缓存过就返回，不联网。给 AI 工具做"能读就读"的快速路径。</summary>
     public static DocContent? TryGetCachedContent(string id)
     {
         var article = Find(id);
@@ -346,20 +346,20 @@ public static class DocLibrary
         return BuildContent(article, hit);
     }
 
-    
+    // ── 链接 ─────────────────────────────────────────────────────
 
-    
+    /// <summary>文章目录在 GitHub 上的地址（网页版也能直接看源文件）。</summary>
     public static string FolderUrl(string id) =>
         $"https://github.com/{ShellConfig.DocsRepoOwner}/{ShellConfig.DocsRepoName}/tree/" +
         $"{ShellConfig.DocsRepoBranch}/{Uri.EscapeDataString(RepoDir)}/{Uri.EscapeDataString(id)}";
 
-    
+    /// <summary>投稿入口（GitHub Issue 表单，不走服务器）。</summary>
     public static string SubmitUrl(string? title = null) =>
         $"https://github.com/{ShellConfig.DocsRepoOwner}/{ShellConfig.DocsRepoName}/issues/new" +
         "?template=doc-submission.yml&title=" +
         Uri.EscapeDataString(string.IsNullOrWhiteSpace(title) ? "[文档投稿] " : "[文档投稿] " + title.Trim());
 
-    
+    // ── 内部：清单 ───────────────────────────────────────────────
 
     private static void EnsureLoaded()
     {
@@ -540,7 +540,7 @@ public static class DocLibrary
         _ => "",
     };
 
-    
+    // ── 内部：缓存 ───────────────────────────────────────────────
 
     private sealed class CacheIndex
     {
@@ -589,7 +589,7 @@ public static class DocLibrary
         Resources = entry.Resources,
     };
 
-    
+    /// <summary>缓存里"这篇文章现在由哪些文件组成"的指纹：文件集合或任一处内容变化都会变。</summary>
     private static string Fingerprint(DocArticle article)
     {
         var text = new StringBuilder(article.Id);
@@ -599,7 +599,7 @@ public static class DocLibrary
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))).ToLowerInvariant();
     }
 
-    
+    /// <summary>清单同步后清掉已下架 / 内容已变的旧缓存，免得缓存目录越攒越大。</summary>
     private static void PruneCache()
     {
         var cache = GetCache();
@@ -636,7 +636,7 @@ public static class DocLibrary
         }
     }
 
-    
+    /// <summary>64 位十六进制、无扩展名 —— 文件本身看不出是什么，也打不开。</summary>
     private static string NewCacheName() =>
         Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
 

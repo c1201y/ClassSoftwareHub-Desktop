@@ -12,21 +12,21 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 条款阅读窗 —— 独立 AppWindow，站点「条款」页（#/agreement）的桌面版。
+///
+/// 三份文档（用户协议 / 隐私政策 / 免责声明）由 <see cref="LegalTextSource"/> 提供：
+/// **在线优先、本地缓存次之、程序内置兜底**（2026-11-01 改）。
+/// 真源仍是站点仓库根目录的 `法律文本.ts` —— 站点改动后通过 `public/legal.json`
+/// 传到客户端，**不必重新发版**；断网时退回内置那份，此时窗口顶部会说一句「可能不是最新」。
+///
+/// 入口：设置页「条款与声明」组里的三张卡片（各带一个 key）。
+///
+/// = 标准窗口 + **系统标题栏**（不自绘）：读文档的窗，系统原生最省事。
+///   故意留在任务栏 / Alt+Tab 里 —— 用户可能一边看条款一边操作应用。
+/// ⚠️ 关掉 = 真销毁：条款窗没有"留着复用"的价值，真关掉最省事，
+///    也不会在退出链路上留下没关掉的窗口把进程吊住（§V）。
+/// </summary>
 public sealed partial class LegalWindow : Window
 {
     private const int DefaultWidthDip = 920;
@@ -36,11 +36,11 @@ public sealed partial class LegalWindow : Window
 
     private AppWindow? _appWindow;
 
-    
-    
+    /// <summary>期望展示的文档 key（<see cref="Show"/> 传进来的）。SelectorBar 加载时会自己
+    /// 选中第一项，所以 Loaded 之后要按它再拨一次，免得多档场景下"点隐私政策却显示用户协议"。</summary>
     private string _wantKey = "agreement";
 
-    
+    /// <summary>程序化改选中项时的闸门（防 SelectionChanged 里再渲染一遍）。</summary>
     private bool _suppress;
 
     private LegalWindow()
@@ -49,22 +49,22 @@ public sealed partial class LegalWindow : Window
         BuildTabs();
         Configure();
 
-        
-        
+        // SelectorBar 在 Loaded 时会自动选中第一项（MiniPickNumber 那边踩过同样的坑）⇒
+        // 这时按我们真正想要的那一档再拨一次；顺带把正文刷出来（Show 里那次可能早于布局）。
         Root.Loaded += (_, _) => ShowDoc(_wantKey);
     }
 
-    
+    // ── 对外 ─────────────────────────────────────────────────────────────
 
-    
-    
+    /// <summary>摊开这扇窗；已经开着就切到指定文档，再把它调到前面。</summary>
+    /// <param name="key">agreement / privacy / disclaimer；不认识的值按第一份（用户协议）处理。</param>
     public static void Show(string? key)
     {
         try
         {
             _instance ??= new LegalWindow();
             _instance._wantKey = NormalizeKey(key);
-            _instance.BuildTabs();          
+            _instance.BuildTabs();          // 可能刚拉到新条款，档位跟着文档标题走
             _instance.ShowDoc(_instance._wantKey);
             _instance.BringUp();
         }
@@ -74,10 +74,10 @@ public sealed partial class LegalWindow : Window
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 退出应用时真正销毁（见 <see cref="MainWindow"/> 的 FinishExit）。
+    /// ⛔ Application.Exit() 会漏窗口，没关掉的窗口把消息循环撑住 ⇒ 进程残留（§V）。
+    /// </summary>
     public static void CloseForExit()
     {
         var w = _instance;
@@ -86,13 +86,13 @@ public sealed partial class LegalWindow : Window
         AppLog.Info("exit", "条款窗口实例已请求 Close");
     }
 
-    
+    // ── 内容 ─────────────────────────────────────────────────────────────
 
-    
-    
-    
-    
-    
+    /// <summary>把三档标签按文档顺序建出来。文字直接用文档 title（跟站点「条款」页的标签一致）。</summary>
+    ///
+    /// ⚠️ 可以被重复调用（每次 Show 前刷一遍）：条款是启动后从网络拉的，拉到新版时
+    ///    文档标题 / 档位可能跟着变，复用同一个窗口实例时必须重建，否则标签还是旧的。
+    ///    ⛔ 别忘了先 Clear —— 以前这里是纯追加，重复调用会越攒越多档。
     private void BuildTabs()
     {
         try
@@ -114,13 +114,13 @@ public sealed partial class LegalWindow : Window
         }
     }
 
-    
+    /// <summary>切到某一份文档：标题 / 版本行 / 选中档 / 正文一起换。</summary>
     private void ShowDoc(string key)
     {
         try
         {
             var doc = LegalTextSource.Find(key) ?? LegalTextSource.All.FirstOrDefault();
-            if (doc is null) return;                       
+            if (doc is null) return;                       // 理论上不会（内置那份固定三份）
 
             _wantKey = doc.Key;
             DocTitle.Text = doc.Title;
@@ -139,14 +139,14 @@ public sealed partial class LegalWindow : Window
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 只有「一次都没拉到过、现在显示的是随程序内置那份」时才出这条提示。
+    ///
+    /// <para>
+    /// 正常情况用户不需要知道正文是从站点还是缓存来的 —— 写出来像推责。
+    /// 但它出现时必须说清一件事：手上这份可能已经过期，否则用户在旧条款上做的判断会失真。
+    /// </para>
+    /// </summary>
     private void UpdateSourceBar()
     {
         try
@@ -167,7 +167,7 @@ public sealed partial class LegalWindow : Window
         }
     }
 
-    
+    /// <summary>把 SelectorBar 的选中项拨到某个 key（不触发渲染，调用方自己套 <c>_suppress</c>）。</summary>
     private void SelectTab(string key)
     {
         foreach (var obj in DocSelector.Items)
@@ -188,7 +188,7 @@ public sealed partial class LegalWindow : Window
         ShowDoc(key);
     }
 
-    
+    /// <summary>正文：引言 → 各节（小节标题 + 逐条）。样式都在 XAML 的根 Grid.Resources 里。</summary>
     private void Render(LegalDoc doc)
     {
         BodyHost.Children.Clear();
@@ -205,12 +205,12 @@ public sealed partial class LegalWindow : Window
                 BodyHost.Children.Add(NewLine(item, "LegalBodyStyle"));
         }
 
-        
+        // 换文档后回到顶部（不这么做的话：看完长的再切短的，会停在中段）
         try
         {
             if (BodyHost.Parent is ScrollViewer sv) sv.ChangeView(null, 0, null, true);
         }
-        catch {  }
+        catch { /* 布局还没完成时忽略 */ }
     }
 
     private TextBlock NewLine(string text, string styleKey) => new()
@@ -224,7 +224,7 @@ public sealed partial class LegalWindow : Window
     private static string NormalizeKey(string? key)
         => string.IsNullOrWhiteSpace(key) ? "agreement" : key.Trim().ToLowerInvariant();
 
-    
+    // ── 窗口本身 ─────────────────────────────────────────────────────────
 
     private void Configure()
     {
@@ -236,24 +236,24 @@ public sealed partial class LegalWindow : Window
 
             if (_appWindow.Presenter is OverlappedPresenter p)
             {
-                
-                p.IsResizable = true;                 
+                // 边框交给 ModernWindow 保留（圆角与阴影靠系统）；这里只调能不能拉伸/最大化
+                p.IsResizable = true;                 // 条款要能拉大着看
                 p.IsMaximizable = true;
                 p.IsMinimizable = true;
             }
 
-            
+            // 自绘标题栏（2026-10-19）：没有独立标题条，系统按钮浮在右上角
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
-            
-            
+            // ⛔ 这是**文档窗口**，跟应用主题走，⛔ 不要传 external: true
+            //    （「桌面悬浮窗单独设置外观」只管侧边栏与浮动工具窗，2026-10-29 Nick 定）。
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 
             ApplySize();
             CenterOnScreen();
 
-            
+            // 真关掉 ⇒ 清掉单例，下次 Show 重新建
             Closed += (_, _) => { _instance = null; };
         }
         catch (Exception ex)
@@ -262,7 +262,7 @@ public sealed partial class LegalWindow : Window
         }
     }
 
-    
+    /// <summary>按逻辑像素（dip）定客户区大小，并夹进当前屏幕（小屏上别长出屏幕外）。</summary>
     private void ApplySize()
     {
         if (_appWindow is null) return;

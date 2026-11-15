@@ -5,29 +5,29 @@ using System.Text.RegularExpressions;
 
 namespace ClassSoftwareHub.Desktop.Services.Docs;
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 行内解析：<c>**粗体**</c>、<c>*斜体*</c>、<c>~~删除线~~</c>、`` `代码` ``、<c>[文字](链接)</c>、<c>&lt;链接&gt;</c>，
+/// 以及"裸链接自动变成链接"（<c>https://</c> / <c>csh://</c> / <c>ms-settings:</c>）。
+///
+/// <para>
+/// 解析结果是 <see cref="DocRun"/> 列表 —— 文案与样式分开，渲染器按样式拼 Hyperlink / Run。
+/// </para>
+/// <para>
+/// ⛔ 不追求完整的 CommonMark：教程文章用不到嵌套引用链接、引用式链接、脚注这些。
+/// 遇到不认识的行内标记按原文显示，宁可不美化也不能把字吞掉。
+/// </para>
+/// </summary>
 internal static class DocInline
 {
-    
+    /// <summary>裸链接。<paramref name="Value"/> 右侧的标点稍后会被剥掉。</summary>
     private static readonly Regex BareUrl = new(
         @"(?<url>(?:https?://|csh://|ms-settings:)[^\s<>""'`]+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private const string TrailingPunctuation = ".,;:!?，。；：！？、）】》」』”’*_~";
 
-    
-    
+    /// <summary>把一段行内文本拆成 run。</summary>
+    /// <param name="link">外层链接（递归时带上，段落里的子文本都继承它）。</param>
     public static List<DocRun> Parse(
         string? text, string? link = null, bool bold = false, bool italic = false, bool strike = false)
     {
@@ -47,7 +47,7 @@ internal static class DocInline
         {
             var ch = source[i];
 
-            
+            // 转义：\* \_ \` \[ 之类按字面输出
             if (ch == '\\' && i + 1 < source.Length && IsEscapable(source[i + 1]))
             {
                 plain.Append(source[i + 1]);
@@ -55,7 +55,7 @@ internal static class DocInline
                 continue;
             }
 
-            
+            // 行内代码：反引号里一律按字面，不再解析其他标记
             if (ch == '`')
             {
                 var end = source.IndexOf('`', i + 1);
@@ -68,7 +68,7 @@ internal static class DocInline
                 }
             }
 
-            
+            // 图片（行内出现时退化成链接文字，真正的图片走块级）
             if (ch == '!' && i + 1 < source.Length && source[i + 1] == '['
                 && TryReadLink(source, i + 1, out var alt, out _, out var afterImage))
             {
@@ -78,7 +78,7 @@ internal static class DocInline
                 continue;
             }
 
-            
+            // 链接：[文字](地址)
             if (ch == '[' && TryReadLink(source, i, out var label, out var url, out var afterLink))
             {
                 Flush();
@@ -87,7 +87,7 @@ internal static class DocInline
                 continue;
             }
 
-            
+            // 删除线：~~…~~
             if (ch == '~' && i + 1 < source.Length && source[i + 1] == '~')
             {
                 var end = source.IndexOf("~~", i + 2, StringComparison.Ordinal);
@@ -100,7 +100,7 @@ internal static class DocInline
                 }
             }
 
-            
+            // 加粗：**…** / __…__
             if ((ch == '*' || ch == '_') && i + 1 < source.Length && source[i + 1] == ch)
             {
                 var marker = new string(ch, 2);
@@ -114,7 +114,7 @@ internal static class DocInline
                 }
             }
 
-            
+            // 斜体：*…* / _…_（下划线夹在单词中间不算，避免 snake_case 被吃掉）
             if (ch == '*' || ch == '_')
             {
                 var isWordUnderscore = ch == '_' && i > 0 && char.IsLetterOrDigit(source[i - 1]);
@@ -128,7 +128,7 @@ internal static class DocInline
                 }
             }
 
-            
+            // 自动链接：<https://…>
             if (ch == '<')
             {
                 var end = source.IndexOf('>', i + 1);
@@ -153,7 +153,7 @@ internal static class DocInline
         return runs;
     }
 
-    
+    /// <summary>裸链接识别（txt 和 Markdown 里的普通文字都走它）。</summary>
     private static void AppendPlain(
         List<DocRun> runs, string text, string? link, bool bold, bool italic, bool strike = false)
     {
@@ -182,10 +182,10 @@ internal static class DocInline
             runs.Add(new DocRun(text[cursor..], null, bold, italic, Strike: strike));
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 从 <paramref name="start"/>（必须是 <c>[</c>）读一个 <c>[文字](地址)</c>。
+    /// 读不到返回 false，调用方按普通字符处理。
+    /// </summary>
     public static bool TryReadLink(
         string text, int start, out string label, out string url, out int next)
     {
@@ -204,12 +204,12 @@ internal static class DocInline
         label = text[(start + 1)..close];
         url = text[(close + 2)..paren].Trim();
 
-        
+        // [文字](地址 "标题") —— 标题部分丢掉
         var space = url.IndexOf(' ');
         if (space > 0 && !url.StartsWith('<')) url = url[..space];
         if (url.StartsWith('<') && url.EndsWith('>')) url = url[1..^1];
 
-        
+        // 地址里常见的转义写法
         url = url.Replace("\\_", "_");
 
         next = paren + 1;

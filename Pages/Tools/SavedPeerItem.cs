@@ -4,11 +4,11 @@ using ClassSoftwareHub.Desktop.Services;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
+/// <summary>
+/// 发送页「已保存的电脑」列表的一行（2026-10-25）。
+/// 与局域网发现的那个列表分开：这个是用户手动存下来的，断网、跨网段也能勾；
+/// 发现列表则会随网段变化来去。
+/// </summary>
 public sealed class SavedPeerItem : INotifyPropertyChanged
 {
     private bool _isSelected;
@@ -21,7 +21,7 @@ public sealed class SavedPeerItem : INotifyPropertyChanged
 
     public string Code { get; }
 
-    
+    /// <summary>保存时记下的名字（可能为空）。</summary>
     public string Name { get; }
 
     public string Display => string.IsNullOrWhiteSpace(Name) ? Code : Name;
@@ -42,7 +42,7 @@ public sealed class SavedPeerItem : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
-
+/// <summary>接收页「谁保存了本机配对码」列表的一行。</summary>
 public sealed class BinderItem
 {
     public BinderItem(AnnounceBinder binder)

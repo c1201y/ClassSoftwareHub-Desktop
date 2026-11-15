@@ -12,16 +12,16 @@ using Windows.ApplicationModel.DataTransfer;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 方程求解页（第二版）。
+///
+/// <para>
+/// 与化学配平页同一套交互（Nick 2026-10-17）：**一条方程一张卡片**，
+/// 点开是按键式编辑器（数字 / 未知数 / 运算 / 函数 / 常用式子），
+/// 化学式那样"点出来"而不是"敲出来"；改完自动求解，不需要再按一次求解。
+/// </para>
+/// <para>求解全在 <see cref="EquationSolver"/>（纯计算，可脱离界面断言）。</para>
+/// </summary>
 public sealed partial class EquationPage : Page
 {
     private readonly List<string> _equations = new();
@@ -36,9 +36,9 @@ public sealed partial class EquationPage : Page
 
     private Brush Ink => Services.ThemeBrush.Get(this, "TextFillColorPrimaryBrush");
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  方程列表
+    // ══════════════════════════════════════════════════════
 
     private void AddEquation_Click(object sender, RoutedEventArgs e) => _ = AddEquationAsync();
 
@@ -72,12 +72,12 @@ public sealed partial class EquationPage : Page
         Refresh();
     }
 
-    
+    // ── 编辑器浮层（见 XAML 注释为什么不用 ContentDialog） ──
 
     private EquationEditor? _editor;
     private TaskCompletionSource<string?>? _editorResult;
 
-    
+    /// <summary>弹出方程编辑器。返回 null 表示取消。</summary>
     private Task<string?> EditEquationAsync(string initial)
     {
         _editor = new EquationEditor(initial, Ink);
@@ -87,7 +87,7 @@ public sealed partial class EquationPage : Page
         EditorHost.Child = _editor.View;
         EditorTitle.Text = initial.Length == 0 ? "添加方程" : "修改方程";
 
-        
+        // 尺寸全由页面算；⛔ 不给内容写死宽高，否则内层滚动区的视口会比看得见的地方高（见化学页教训）
         var width = ActualWidth > 0 ? ActualWidth : 1000;
         var height = ActualHeight > 0 ? ActualHeight : 700;
 
@@ -120,9 +120,9 @@ public sealed partial class EquationPage : Page
         result?.TrySetResult(value);
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  刷新与求解
+    // ══════════════════════════════════════════════════════
 
     private void Refresh()
     {
@@ -143,14 +143,14 @@ public sealed partial class EquationPage : Page
             EquationList.Children.Add(EquationCard(_equations[i], i));
     }
 
-    
+    /// <summary>一条方程：数学排版（真分数、真上标）+ 删除按钮。点整块可修改。</summary>
     private Border EquationCard(string equation, int index)
     {
         var math = MathText.Render(equation, 20, Ink);
         math.VerticalAlignment = VerticalAlignment.Center;
 
-        
-        
+        // ⛔ 排版结果自带文本选中，会把点击吃掉；卡片上的点击用途是「修改」，
+        //    所以让它不参与命中测试 —— 要看、要复制的结果在下面结果区。
         math.IsHitTestVisible = false;
 
         var host = new Border
@@ -317,9 +317,9 @@ public sealed partial class EquationPage : Page
         }
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  示例
+    // ══════════════════════════════════════════════════════
 
     private void ExampleQuadratic_Click(object sender, RoutedEventArgs e) =>
         LoadExample("x^2 - 5x + 6 = 0");

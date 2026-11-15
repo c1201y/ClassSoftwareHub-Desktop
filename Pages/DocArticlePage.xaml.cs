@@ -11,18 +11,18 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 文档正文页（需求 15）。
+///
+/// <para>
+/// 进来先确保这篇的正文已缓存（<see cref="DocLibrary.EnsureContentAsync"/>：内容没变就不联网），
+/// 再交给 <see cref="DocView"/> 渲染。正文缓存是无扩展名的随机文件，只有本程序知道怎么读。
+/// </para>
+/// <para>
+/// ⚠️ 链接可能指向一篇还没同步过的文章（比如刚投稿、或本机从没进过文档库）：
+/// 找不到就先同步一次清单再找，别直接报"不存在"。
+/// </para>
+/// </summary>
 public sealed partial class DocArticlePage : Page
 {
     private readonly DocView _view = new();
@@ -66,7 +66,7 @@ public sealed partial class DocArticlePage : Page
             var article = DocLibrary.Find(_id);
             if (article is null)
             {
-                
+                // 本机清单可能是空的（从没进过文档库页面）：先同步一次再找
                 ShowLoading("正在检查文档库。");
                 await DocLibrary.SyncAsync(force: false, progress: null, ct: ct);
                 article = DocLibrary.Find(_id);
@@ -92,7 +92,7 @@ public sealed partial class DocArticlePage : Page
         }
         catch (OperationCanceledException)
         {
-            
+            // 用户已经离开这一页
         }
         catch (Exception ex)
         {

@@ -9,20 +9,20 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 化学式编辑器。
+///
+/// <para>
+/// 站在**学生 / 老师**的角度排的（Nick 2026-10-17）：
+/// 左边先用**常用元素**的大按钮（带中文名，一眼能找到"铁、氧、钠"），
+/// 需要别的元素再展开完整周期表；右边是括号/数字与常用物质、离子根。
+/// </para>
+/// <para>
+/// ⛔ 一上来就摆 118 个 24px 的小格子是开发者思维：中学生配平翻来覆去就那十几种元素，
+/// 满屏小方块只会让人找不着。
+/// ⛔ 不让用户手敲 "H2O" —— 键盘上打出来的 2 是正文，看着像 H 乘以 2。
+/// </para>
+/// </summary>
 internal sealed class FormulaEditor
 {
     private List<string> _substances;
@@ -37,7 +37,7 @@ internal sealed class FormulaEditor
 
     public Grid View { get; }
 
-    
+    /// <summary>内容变了，参数 = 当前是否合法（用来控制「确定」能不能点）。</summary>
     public event Action<bool>? Changed;
 
     public bool IsValid { get; private set; }
@@ -99,14 +99,14 @@ internal sealed class FormulaEditor
 
     public string Value => _raw.ToString();
 
-    
+    // ── 预览 ──
     private Border BuildPreviewCard()
     {
         var stack = new StackPanel { Spacing = 2 };
         stack.Children.Add(_preview);
         stack.Children.Add(_error);
 
-        
+        // ⛔ 删除键必须贴在输入内容旁边：放到下面的小键盘里，用户得满处找（Nick 点名）
         var backspace = new Button
         {
             Content = new FontIcon { Glyph = "\uE750", FontSize = 15 },
@@ -194,12 +194,12 @@ internal sealed class FormulaEditor
         Changed?.Invoke(IsValid);
     }
 
-    
+    // ── 左：常用元素（大）+ 完整周期表（折叠） ──
     private FrameworkElement BuildLeftPanel()
     {
         var panel = new StackPanel { Spacing = 8 };
 
-        
+        // 标题跟着内容走：展开周期表后还写「常用元素」会让人以为下面还是常用那几个
         var sectionTitle = SectionTitle("常用元素");
         panel.Children.Add(sectionTitle);
 
@@ -224,9 +224,9 @@ internal sealed class FormulaEditor
 
         panel.Children.Add(grid);
 
-        
-        
-        
+        // 完整周期表：默认收起，需要时再展开。
+        // ⛔ 展开时把「常用元素」整块收起来：两块都摆着，左栏一定比可视区高，
+        //    周期表得滚半天才看得见（Nick 2026-10-17）。
         ScrollViewer? scroller = null;
 
         var toggle = new HyperlinkButton
@@ -261,8 +261,8 @@ internal sealed class FormulaEditor
         panel.Children.Add(toggle);
         panel.Children.Add(_fullTableWrap);
 
-        
-        
+        // ⛔ 整条左栏也要能滚：展开完整周期表后，内容一定比可视区高，
+        //    没有滚动区就只能被裁掉（Nick 2026-10-17：滑到底还是被截断）。
         scroller = new ScrollViewer
         {
             Content = panel,
@@ -281,7 +281,7 @@ internal sealed class FormulaEditor
         Opacity = 0.55,
     };
 
-    
+    /// <summary>常用元素：符号大、中文名在下，按钮本身就是"看得清、点得中"的尺寸。</summary>
     private Button BuildCommonElement(string symbol, string name)
     {
         var content = new StackPanel { Spacing = 0, HorizontalAlignment = HorizontalAlignment.Center };
@@ -322,18 +322,18 @@ internal sealed class FormulaEditor
         return button;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 完整周期表（18 族 × 7 周期 + 镧系锕系两行）。
+    ///
+    /// <para>
+    /// 格子尺寸按左栏的实际宽度算：窗口窄的时候缩到 30，宽的时候给到 44，
+    /// 这样绝大多数情况下 18 列正好摆下、不用横向拖。
+    /// </para>
+    /// </summary>
     private FrameworkElement BuildPeriodicTable(double availableWidth)
     {
-        
-        
+        // 18 列 + 17 个 2px 间隙。⛔ 上限别贴着算：展开表格后纵向滚动条会占掉十几像素，
+        // 按满宽算会让第 18 族（He/Ne/Ar…）正好被裁掉一截（Nick 2026-10-17 实测）。
         var cellWidth = Math.Clamp((availableWidth - 48) / 18, 30, 42);
         var cellHeight = Math.Round(cellWidth * 1.19);
 
@@ -356,8 +356,8 @@ internal sealed class FormulaEditor
         grid.Children.Add(GroupLabel("镧系", 8));
         grid.Children.Add(GroupLabel("锕系", 9));
 
-        
-        
+        // ⛔ 只给横向滚动：竖向交给外层那条滚动区，
+        //    两层都能竖向滚的话滚轮会互相抢，手感很怪。
         return new ScrollViewer
         {
             Content = grid,
@@ -386,8 +386,8 @@ internal sealed class FormulaEditor
     {
         var name = PeriodicTable.ChineseName(element.Number);
 
-        
-        
+        // 三行各占各的位置（⛔ 不能都叠在中间：符号和中文名会糊成一团）：
+        // 上面留原子序数，中间符号，下面中文名。
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(Math.Round(cellHeight * 0.21)) });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(Math.Round(cellHeight * 0.42)) });
@@ -451,11 +451,11 @@ internal sealed class FormulaEditor
         return button;
     }
 
-    
+    // ── 右：括号 / 数字 + 常用物质 / 离子根 ──
     private FrameworkElement BuildRightPanel()
     {
-        
-        
+        // ⛔ 整条右栏都进滚动区：窗口矮的时候 数字键 / 常用物质 / 离子根 必须都够得着，
+        //    固定住键盘只让下面滚，离子根必然被截断（Nick 两次点名）。
         var content = new StackPanel { Spacing = 10 };
         content.Children.Add(BuildKeypad());
         content.Children.Add(BuildFavoriteSection("常用物质", false));
@@ -587,7 +587,7 @@ internal sealed class FormulaEditor
         return section;
     }
 
-    
+    /// <summary>常用项：两列，按钮 40 高 —— 鼠标好点、投影上也看得清。</summary>
     private FrameworkElement BuildChips(IReadOnlyList<string> items)
     {
         var stack = new StackPanel { Spacing = 5 };
@@ -602,7 +602,7 @@ internal sealed class FormulaEditor
             {
                 var text = items[i + c];
 
-                
+                // ⛔ 按钮上不能出 "SO4^2-" 这种计算机写法：照化学式排成 SO₄²⁻（Nick 2026-10-17）
                 var chip = new Button
                 {
                     Content = ChemicalNotation.Formula(text, 14, _brush),
@@ -618,7 +618,7 @@ internal sealed class FormulaEditor
 
                 ToolTipService.SetToolTip(chip, $"追加 {ChemicalNotation.Plain(text)}");
 
-                
+                // 内容是排版出来的控件树，读屏/自动化拿不到文字 ⇒ 单独补一个名字
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                     chip, ChemicalNotation.Plain(text));
 
@@ -635,7 +635,7 @@ internal sealed class FormulaEditor
         return stack;
     }
 
-    
+    // ── 括号 / 结晶水 / 数字 ──
     private FrameworkElement BuildKeypad()
     {
         var stack = new StackPanel { Spacing = 5 };
@@ -684,7 +684,7 @@ internal sealed class FormulaEditor
         return button;
     }
 
-    
+    /// <summary>按下去要有反馈：底色换成**主题色渐变**（与方程编辑器共用 <see cref="ButtonFeel"/>）。</summary>
     private static void AttachPressGradient(Button button) => ButtonFeel.ApplyPressGradient(button);
 
     private void Append(string text)

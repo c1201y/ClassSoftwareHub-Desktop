@@ -4,17 +4,17 @@ using System.Globalization;
 
 namespace ClassSoftwareHub.Desktop.Services.Updating;
 
-
+/// <summary>更新通道。</summary>
 public enum UpdateChannel
 {
-    
+    /// <summary>正式版（对应 GitHub Release 的 Latest，非预发布）。</summary>
     Stable,
 
-    
+    /// <summary>预览版（对应 GitHub Release 的 Pre-release）。</summary>
     Insider,
 }
 
-
+/// <summary>通道的字符串形式（设置里存的就是这个）。</summary>
 public static class UpdateChannels
 {
     public const string Stable = "stable";
@@ -25,11 +25,11 @@ public static class UpdateChannels
 
     public static string ToText(UpdateChannel channel) => channel == UpdateChannel.Insider ? Insider : Stable;
 
-    
+    /// <summary>界面上的中文名。</summary>
     public static string ToDisplay(UpdateChannel channel) => channel == UpdateChannel.Insider ? "Insider" : "正式版";
 }
 
-
+/// <summary>一个可下载的更新文件。</summary>
 public sealed record UpdatePackage(
     string Name,
     Uri Url,
@@ -43,7 +43,7 @@ public sealed record UpdatePackage(
         (Size / 1024d).ToString("0.#") + " KB";
 }
 
-
+/// <summary>一个发布（对应 GitHub 的一个 Release）。</summary>
 public sealed record UpdateRelease(
     string Tag,
     string Version,
@@ -53,12 +53,12 @@ public sealed record UpdateRelease(
     DateTimeOffset? PublishedAt,
     IReadOnlyList<UpdatePackage> Packages)
 {
-    
+    /// <summary>取主安装包（按名字挑，见 GitHubReleaseSource.PickInstallers）。</summary>
     public UpdatePackage? Primary =>
         Packages.Count == 0 ? null : Packages[0];
 }
 
-
+/// <summary>一次检查更新的结果。</summary>
 public sealed record UpdateCheckResult(
     bool HasUpdate,
     UpdateRelease? Release,
@@ -67,12 +67,12 @@ public sealed record UpdateCheckResult(
     public static UpdateCheckResult None(string message) => new(false, null, message);
 }
 
-
-
-
-
-
-
+/// <summary>
+/// 版本号比较（够用的 SemVer 子集）：
+/// 1.0.0 / 1.0.0-insider.3 / v1.2.3 / 1.2.3.4
+/// 规则：数字段逐个比；数字相同的情况下，**带预发布后缀的小于不带后缀的**（正式 &gt; 预览）；
+/// 两边都有后缀时按点分段比较（数字段按数字比，其它按字典序）。
+/// </summary>
 public static class VersionCompare
 {
     public static int Compare(string? a, string? b)
@@ -89,8 +89,8 @@ public static class VersionCompare
         }
 
         if (pa.Length == 0 && pb.Length == 0) return 0;
-        if (pa.Length == 0) return 1;    
-        if (pb.Length == 0) return -1;   
+        if (pa.Length == 0) return 1;    // a 是正式版
+        if (pb.Length == 0) return -1;   // b 是正式版
 
         var sa = pa.Split('.', StringSplitOptions.RemoveEmptyEntries);
         var sb = pb.Split('.', StringSplitOptions.RemoveEmptyEntries);
@@ -103,7 +103,7 @@ public static class VersionCompare
             var numB = long.TryParse(sb[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out var vb);
             int c;
             if (numA && numB) c = va.CompareTo(vb);
-            else if (numA) c = -1;                 
+            else if (numA) c = -1;                 // 数字段 < 字母段
             else if (numB) c = 1;
             else c = string.Compare(sa[i], sb[i], StringComparison.OrdinalIgnoreCase);
             if (c != 0) return c;
@@ -121,7 +121,7 @@ public static class VersionCompare
 
         var v = version.Trim();
         if (v.StartsWith('v') || v.StartsWith('V')) v = v[1..];
-        
+        // 桌面版显示前缀 dv
         if (v.StartsWith("dv", StringComparison.OrdinalIgnoreCase)) v = v[2..];
 
         var dash = v.IndexOf('-');

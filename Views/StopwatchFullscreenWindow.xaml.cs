@@ -10,31 +10,31 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 全屏秒表窗口：铺满屏幕显示秒表时间，按 Esc / 双击屏幕 / 右上角那颗按钮退出。
+///
+/// ⚠️ 它是**只读投影**：时间由 <see cref="Show"/> 传进来的取时函数提供，窗口自己不含任何计时状态。
+/// 好处是浮窗版秒表和应用端秒表能共用同一个窗口，不会出现"两个时间对不上"。
+///
+/// ⚠️ **同一时刻只允许存在一个**（跟 <see cref="ClockFullscreenWindow"/> 同一条铁律）：
+/// 已经开着就只把它拉到前台，不叠新的 —— 触屏上连点几下就叠出十几个全屏窗口，
+/// 现场反馈原话就是「点了一下然后卡死了/关不掉」。
+/// </summary>
 public sealed partial class StopwatchFullscreenWindow : Window
 {
-    
+    /// <summary>当前开着的这一个（没有则为 null）。</summary>
     private static StopwatchFullscreenWindow? _current;
 
-    
+    /// <summary>取当前已计毫秒（由调用方提供）。</summary>
     private readonly Func<long> _elapsed;
 
-    
+    /// <summary>源秒表是否正在跑 —— 只用来显示"计时中/已暂停"。</summary>
     private readonly Func<bool> _running;
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _exitTimer;
 
-    
+    /// <summary>退出入口的淡出倒计时（毫秒）。</summary>
     private int _exitRemainMs;
 
     private const int ExitHoldMs = 4500;
@@ -42,9 +42,9 @@ public sealed partial class StopwatchFullscreenWindow : Window
 
     private AppWindow? _appWindow;
 
-    
-    
-    
+    /// <summary>
+    /// 唯一入口：开一个全屏秒表。已经开着就复用（拉到最前），**不会**再多出一个窗口。
+    /// </summary>
     public static void Show(Func<long> elapsed, Func<bool> running)
     {
         if (_current is not null)
@@ -57,7 +57,7 @@ public sealed partial class StopwatchFullscreenWindow : Window
             }
             catch
             {
-                
+                // 窗口已销毁但字段没清 —— 丢掉引用重新开
                 _current = null;
             }
         }
@@ -84,7 +84,7 @@ public sealed partial class StopwatchFullscreenWindow : Window
         _exitTimer.IsRepeating = true;
         _exitTimer.Tick += (_, _) => FadeExit();
 
-        
+        // 「使用全屏时钟背景设置」开着 → 铺时钟那套背景；关着保持固定深底。见 Views/ClockBackdrop.cs。
         if (App.Settings.Current.TimerUseClockBackground)
             ClockBackdrop.Apply(Root, BgImage, BgVeil, null, TimeText, CsText, StateText);
 
@@ -112,7 +112,7 @@ public sealed partial class StopwatchFullscreenWindow : Window
 
             WindowChrome.RemoveBorder(hwnd, rounded: false, dark: true);
         }
-        catch {  }
+        catch { /* 全屏失败也能当普通窗口用 */ }
 
         Tick();
         _timer.Start();
@@ -137,13 +137,13 @@ public sealed partial class StopwatchFullscreenWindow : Window
         }
         catch
         {
-            
+            // 取时的那一端已经被关掉了 —— 停表，别让空窗一直挂在屏上
             _timer.Stop();
             Close();
         }
     }
 
-    
+    // ══════════ 退出入口 ══════════
 
     private void RevealExit()
     {

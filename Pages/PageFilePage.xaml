@@ -7,18 +7,18 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    
+    <!--
+      虚拟内存 / 分页文件（需求清单第 19 条，2026-10-31）。
 
+      搬的是系统「高级系统设置 → 性能选项 → 高级 → 虚拟内存」那个对话框，换成 WinUI 3 的排法：
+      先选驱动器，再给这一个驱动器三选一（自定义 / 系统管理 / 无），差值写进待应用队列。
 
+      版式照抄母版 Pages/AutoShutdownPage.xaml：三列 Grid 把内容钉在中间 960 宽。
+      ⚠️ 别用 Stretch + MaxWidth —— 触发上限时 WinUI 会把整列右甩。
 
-
-
-
-
-
-
-
-
+      交互与「系统功能」页一致（Nick 定「排队 + 一次弹 UAC」），
+      所以右下角有同一套 TeachingTip：清单 + 单项取消 + 一次授权。
+    -->
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <Grid Margin="24,36,24,44">
@@ -41,7 +41,7 @@
                             <ui:ExperimentalBadge FeatureId="pagefile" />
                         </StackPanel>
 
-                        
+                        <!-- 提示条被收起后的回入口：两个入口不同时出现 -->
                         <Button x:Name="PendingButton" Grid.Column="1" Visibility="Collapsed"
                                 VerticalAlignment="Center" Click="PendingButton_Click" />
 
@@ -57,7 +57,7 @@
                     <InfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" Visibility="Collapsed"
                              Severity="Informational" Message="" Margin="0,0,0,8" />
 
-                    
+                    <!-- 常驻：这件事改完不重启看不到效果，且重启是唯一生效方式 -->
                     <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
                              Title="修改后需重启"
                              Message="系统在启动时按这份配置创建或删除分页文件，进入系统后配置才生效。" />
@@ -73,22 +73,22 @@
                                       OnContent="已开启" OffContent="已关闭" Toggled="Automatic_Toggled" />
                     </controls:SettingsCard>
 
-                    
-                    
+                    <!-- ═════════ 系统盘锁定 ═════════ -->
+                    <!--
+                      2026-11-04 加。Nick 反馈：分页文件全设到 D 盘之后，C 盘还是会冒出一个小的
+                      pagefile.sys，设置像是没生效。
 
+                      原因不在本页写的 PagingFiles，而是同一个注册表键下的另一个值
+                      PagefileOnOsVolume：系统启用磁盘加密时会自动把它设成 1，
+                      此时会话管理器**只认系统盘**当分页文件的位置。加密关掉之后这个值也不会自己消失。
+                      微软 KB 929820 有完整说明，那边的建议就是把它改成 0。
 
+                      位置放在「自动管理」下面、逐盘设置上面：它是逐盘设置能不能生效的**前提**，
+                      锁着的时候下面怎么改都没用，先让用户看见。2026-11-04
 
-
-
-
-
-
-
-
-
-
-
-
+                      ⚠️ 界面上不写 BitLocker / 注册表键名 / 会话管理器这些词 ——
+                         用户看到的是"设了不算数"，这里就按这个说。
+                    -->
                     <controls:SettingsCard Header="系统盘的分页文件锁定" Margin="0,4,0,0">
                         <controls:SettingsCard.Description>
                             <TextBlock TextWrapping="Wrap"
@@ -102,14 +102,14 @@
                                       Toggled="OsLock_Toggled" />
                     </controls:SettingsCard>
 
-                    
+                    <!-- ═════════ 驱动器列表 ═════════ -->
                     <TextBlock Text="每个驱动器的分页文件大小" FontSize="14" Margin="0,18,0,2" />
 
-                    
-
-
-
-
+                    <!--
+                      原生 ListView：选中态、键盘导航、焦点框都是控件自带的。
+                      ⚠️ 行内容在代码里构造（BuildDriveRows），⛔ 不用 ItemTemplate + x:Bind ——
+                         这套组合在这份 XamlCompiler 上会崩（见 MustRead §3）。
+                    -->
                     <ListView x:Name="DriveList" MaxHeight="260" SelectionMode="Single"
                               SelectionChanged="DriveList_SelectionChanged" />
 
@@ -117,7 +117,7 @@
                                TextWrapping="Wrap" Margin="0,4,0,0"
                                Text="没有检测到可用的固定磁盘。" />
 
-                    
+                    <!-- ═════════ 所选驱动器的设置 ═════════ -->
                     <Border Style="{StaticResource CshCardStyle}" Margin="0,10,0,0" Padding="16,14">
                         <StackPanel x:Name="EditPanel" Spacing="10">
 
@@ -151,7 +151,7 @@
                         </StackPanel>
                     </Border>
 
-                    
+                    <!-- ═════════ 汇总 ═════════ -->
                     <Border Style="{StaticResource CshCardStyle}" Margin="0,10,0,0" Padding="16,12">
                         <StackPanel Spacing="6">
                             <Grid ColumnSpacing="12">
@@ -178,10 +178,10 @@
             </Grid>
         </ScrollViewer>
 
-        
-
-
-
+        <!--
+            应用提示：非目标式 TeachingTip，固定在右下角浮出。
+            ⚠️ 必须挂在 ScrollViewer **外面**，否则会随内容一起滚走。
+        -->
         <TeachingTip x:Name="ApplyTip"
                      PreferredPlacement="BottomRight"
                      IsLightDismissEnabled="False"
@@ -191,7 +191,7 @@
                      CloseButtonClick="ApplyTip_CloseClick"
                      Closed="ApplyTip_Closed">
             <TeachingTip.Content>
-                
+                <!-- ⛔ 不用 ItemsRepeater / ListView + 模板：塞进模板容器时进程会被直接杀掉（2026-10-30 实测） -->
                 <ScrollViewer MaxHeight="260"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">

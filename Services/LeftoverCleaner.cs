@@ -12,29 +12,29 @@ using Microsoft.Win32;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
+/// <summary>一条残留的清理结果。</summary>
 public enum CleanStatus
 {
-    
+    /// <summary>已删掉（文件进了隔离区，注册表项进了备份）。</summary>
     Removed = 0,
 
-    
+    /// <summary>删掉了，但**没能备份**（体积超上限之类）—— 界面上要如实标出来。</summary>
     RemovedNoBackup = 1,
 
-    
+    /// <summary>权限不够，没删成（会被提权补刀再试一次）。</summary>
     NeedsAdmin = 2,
 
-    
+    /// <summary>真删不掉（文件被占用 / 只读卷 / 路径没了）。</summary>
     Failed = 3,
 
-    
+    /// <summary>安全闸拦下了（不该出现，出现了说明前面漏判了）。</summary>
     Blocked = 4,
 }
 
-
+/// <summary>一条残留的清理结果明细。</summary>
 public sealed record CleanupItemResult(LeftoverItem Item, CleanStatus Status, string Note);
 
-
+/// <summary>一轮清理的总结。</summary>
 public sealed class CleanupReport
 {
     public string QuarantineDir { get; init; } = "";
@@ -48,50 +48,50 @@ public sealed class CleanupReport
     public bool AnyRemoved => RemovedTotal > 0;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 残留清理器（2026-10-14 加，卸载流程的最后一步）。
+///
+/// ⛔⛔ 三条设计铁律（每一条都是"绝对安全干净"这个承诺的一部分）：
+///
+///  ① **先备份，再删**。这不是我们自己想出来的讲究 —— 业界那几个卸载工具都是这么干的
+///     （HiBit 的注册表清理器原话：<c>automatically stores all deleted registry items, on a
+///     per session basis, and includes a Restore feature for each</c>）。所以：
+///       · 注册表 → 序列化成**标准 <c>.reg</c> 文本**（双击就能导回来，不依赖本程序）；
+///       · 文件   → **移动**到隔离区（同盘符的移动是改目录项，几乎不花时间、不多占空间）。
+///
+///  ② **删除动作自己写，⛔ 绝不 shell out 到 <c>reg.exe</c> / <c>del</c>**。
+///     除了没法拼出可靠的引号转义，"调系统的删除命令"本身就是这类工具出事故的主要来源。
+///     本机开发环境里 <c>reg.exe</c> 还被安全策略硬拦（不可绕过），所以自己遍历
+///     <c>Microsoft.Win32.Registry</c> 也是唯一可测的路。
+///
+///  ③ **两道闸，且复扫报实**。动手前把 <see cref="LeftoverResolver"/> 的禁碰名单**再判一次**
+///     （界面上勾了什么都不算数）；动手后**当场复扫**，报告里写的是"实际删掉了什么"，
+///     不是"我们打算删什么"。
+///
+/// ⚠️ 权限：<c>HKCU</c> 和用户目录普通权限就够；<c>HKLM</c> 与 <c>Program Files</c> 需要管理员。
+///    做法是**先不提权跑一遍**，把失败的收起来，只有真有失败时才弹一次 UAC 补刀
+///    （见 <see cref="ApplyManifestElevatedAsync"/>）—— 绝大多数情况一次 UAC 都不用多弹。
+///
+/// ⚠️ 隔离区放 <c>%LOCALAPPDATA%\ClassSoftwareHub\quarantine\</c>，⛔ **不进 <c>cache\</c>**：
+///    <c>cache\</c> 由 <see cref="CacheHome.Clean"/> 按"保留最近 N 个版本"自动回收，
+///    把隔离区放进去就等于过几天偷偷把用户的后悔药删了。
+/// </summary>
 public static class LeftoverCleaner
 {
-    
+    /// <summary>隔离区根目录（永不自动清理，只有用户在设置页里显式清才会走）。</summary>
     public static string QuarantineRoot => Path.Combine(SettingsStore.Dir, "quarantine");
 
-    
+    /// <summary>跨盘符时"复制+删除"能接受的体积上限。超过就只删不备份，并在汇报里标明。</summary>
     private const long CrossVolumeBackupLimit = 2L * 1024 * 1024 * 1024;
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  主流程
+    // ══════════════════════════════════════════════════════════════════════════
 
-    
-    
-    
-    
+    /// <summary>
+    /// 清一轮。只处理 <see cref="LeftoverItem.Selected"/> 为 true 的条目。
+    /// ⚠️ 调用方负责让它跑在后台线程上（注册表遍历 + 文件移动都可能慢）。
+    /// </summary>
     public static async Task<CleanupReport> CleanAsync(
         IReadOnlyList<LeftoverItem> items, string appName, CancellationToken ct = default)
     {
@@ -112,7 +112,7 @@ public static class LeftoverCleaner
             AppLog.Exception("cleanup", ex, "建立隔离区目录");
         }
 
-        
+        // ① 注册表备份 —— 必须在删之前，而且**一次写全**
         var backup = "";
         try
         {
@@ -125,7 +125,7 @@ public static class LeftoverCleaner
 
         var results = new List<CleanupItemResult>();
 
-        
+        // ② 逐条动手
         var index = 0;
         foreach (var item in picked)
         {
@@ -151,7 +151,7 @@ public static class LeftoverCleaner
             }
         }
 
-        
+        // ③ 提权补刀（只在真有失败时）
         var pendingIndexes = Enumerable.Range(0, results.Count)
             .Where(i => results[i].Status == CleanStatus.NeedsAdmin)
             .ToList();
@@ -161,24 +161,24 @@ public static class LeftoverCleaner
             var pending = pendingIndexes.Select(i => results[i].Item).ToList();
             var retried = await ApplyManifestElevatedAsync(dir, pending, ct);
 
-            
+            // 用提权结果替换原结果（按位置回填，⛔ 别用 record 的相等性去 IndexOf —— 那是在比较整个对象）
             for (var n = 0; n < pendingIndexes.Count; n++)
                 if (n < retried.Count) results[pendingIndexes[n]] = retried[n];
         }
         else if (pendingIndexes.Count > 0)
         {
-            
+            // 隔离区都建不起来 ⇒ 不提权硬删（备份是前提，这条不能破）
             foreach (var i in pendingIndexes)
                 results[i] = results[i] with { Status = CleanStatus.Failed, Note = "需要管理员权限，但本轮无法备份" };
         }
 
-        
+        // ④ 复扫：实际剩下什么
         Verify(picked);
 
         var logFile = WriteHumanLog(dir, appName, results, backup, quarantineOk);
 
-        
-        
+        // 另出一份**机器可读**的清单：「隔离区」界面要按记录列出"都清过什么"，
+        // 去解析上面那份中文记录太脆（措辞一改解析就废）。
         WriteManifest(dir, appName, results, quarantineOk);
 
         var report = new CleanupReport
@@ -199,13 +199,13 @@ public static class LeftoverCleaner
         return report;
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  文件
+    // ══════════════════════════════════════════════════════════════════════════
 
     private static CleanupItemResult CleanPath(LeftoverItem item, string dir, int index, bool quarantineOk)
     {
-        
+        // ⛔ 第二道闸：进场再判一次禁碰（界面勾过的也不能例外）
         if (LeftoverResolver.IsForbiddenPathPublic(item.Path))
         {
             AppLog.Warning("cleanup", $"拒绝清理受保护的位置：{item.Path}");
@@ -217,7 +217,7 @@ public static class LeftoverCleaner
         if (!isDir && !isFile)
             return new CleanupItemResult(item, CleanStatus.Removed, "已经不在了");
 
-        
+        // ① 先试着**移动**到隔离区（同盘符 = 改目录项，瞬间完成且不占额外空间）
         if (quarantineOk)
         {
             var target = Path.Combine(dir, "files", $"{index:000}_{Sanitize(Path.GetFileName(item.Path.TrimEnd('\\')))}");
@@ -249,7 +249,7 @@ public static class LeftoverCleaner
         }
         catch (IOException)
         {
-            
+            // 跨盘符（IOException 的典型来源）→ 复制 + 删除。先量一下体积，太大就放弃备份。
             try
             {
                 var size = isDir ? MeasureDir(source) : new FileInfo(source).Length;
@@ -273,7 +273,7 @@ public static class LeftoverCleaner
         }
         catch (UnauthorizedAccessException)
         {
-            throw;   
+            throw;   // 交给上一层记成 NeedsAdmin
         }
         catch (Exception ex)
         {
@@ -282,11 +282,11 @@ public static class LeftoverCleaner
         }
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 强制删除。⚠️ 必须自己清只读属性 —— <c>Directory.Delete(path, true)</c> 碰到
+    /// 只读文件会直接抛 <c>UnauthorizedAccessException</c>，于是被误判成"需要管理员"，
+    /// 白弹一次 UAC。
+    /// </summary>
     private static void ForceDelete(string path, bool isDir)
     {
         if (!isDir) { ClearReadOnly(path); File.Delete(path); return; }
@@ -297,7 +297,7 @@ public static class LeftoverCleaner
         foreach (var d in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
         {
             try { File.SetAttributes(d, FileAttributes.Directory); }
-            catch {  }
+            catch { /* 某些目录改不了属性，删的时候再报 */ }
         }
 
         Directory.Delete(path, recursive: true);
@@ -311,7 +311,7 @@ public static class LeftoverCleaner
             if ((attrs & FileAttributes.ReadOnly) != 0)
                 File.SetAttributes(file, attrs & ~FileAttributes.ReadOnly);
         }
-        catch {  }
+        catch { /* 改不了属性就交给删除那一步报错 */ }
     }
 
     private static long MeasureDir(string dir)
@@ -320,7 +320,7 @@ public static class LeftoverCleaner
         foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
         {
             try { total += new FileInfo(f).Length; }
-            catch {  }
+            catch { /* 单个文件量不到就跳过 */ }
         }
         return total;
     }
@@ -344,14 +344,14 @@ public static class LeftoverCleaner
         return s.Length > 60 ? s[..60] : s;
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  注册表
+    // ══════════════════════════════════════════════════════════════════════════
 
     private static CleanupItemResult CleanRegistry(LeftoverItem item)
     {
-        
-        
+        // ⛔ 第二道闸：进场再判一次禁碰。⚠️ 修键和修值走**不同**的判据 ——
+        //    Run 那条**键**不能删，但它底下的某个**值**正是要删的东西。
         var forbidden = item.Kind == FootprintKind.RegistryKey
             ? LeftoverResolver.IsForbiddenKeyPublic(item.Probe, item.Path)
             : LeftoverResolver.IsForbiddenRegistryPublic(item.Probe, item.Path, item.ValueName);
@@ -391,7 +391,7 @@ public static class LeftoverCleaner
         }
         catch (UnauthorizedAccessException)
         {
-            throw;   
+            throw;   // → NeedsAdmin → 提权补刀
         }
         catch (System.Security.SecurityException)
         {
@@ -399,7 +399,7 @@ public static class LeftoverCleaner
         }
     }
 
-    
+    /// <summary>打开一个键的**父键**，并给出最后一段名字（删除只能从父键下手）。</summary>
     private static RegistryKey? OpenParent(RegistryKey root, string subPath, out string leaf)
     {
         leaf = "";
@@ -410,11 +410,11 @@ public static class LeftoverCleaner
         return root.OpenSubKey(subPath[..i], writable: true);
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 把要删的注册表项序列化成**标准 <c>.reg</c> 文本**（UTF-16LE）。
+    /// ⚠️ 导出是**递归**的：删的是整棵子树，导的也必须整棵，否则导回来是残缺的。
+    /// ⛔ 别用 <c>reg export</c> —— 本机安全策略硬拦 <c>reg.exe</c>，而且是不可绕过的。
+    /// </summary>
     private static string WriteRegistryBackup(string dir, IReadOnlyList<LeftoverItem> items, string appName)
     {
         var regItems = items.Where(i => i.Kind != FootprintKind.Path).ToList();
@@ -437,7 +437,7 @@ public static class LeftoverCleaner
 
                 if (item.Kind == FootprintKind.RegistryValue)
                 {
-                    
+                    // 只备份"这一个值"：把它的键连同这一个值写出来
                     using var key = root.OpenSubKey(subPath, writable: false);
                     if (key is null) continue;
 
@@ -491,13 +491,13 @@ public static class LeftoverCleaner
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 一个值 → <c>.reg</c> 的一行（长的十六进制会自动折行）。
+    /// 值的类型必须**原样保留**，否则导回去会变成字符串 —— 那就不是"还原"了。
+    /// </summary>
     private static string FormatValue(RegistryKey key, string name)
     {
-        
+        // ⛔ 值名在 .reg 里也要转义引号和反斜杠，否则名字里有引号的项会写出一个坏文件
         var label = name.Length == 0 ? "@" : "\"" + Escape(name) + "\"";
 
         object? raw;
@@ -545,11 +545,11 @@ public static class LeftoverCleaner
 
     private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
-    
+    /// <summary>UTF-16LE 的十六进制（字符串值，末尾带双字节 0）。EXPAND_SZ 用。</summary>
     private static string HexOfUtf16(string s, bool terminate)
         => HexOfBytes(Encoding.Unicode.GetBytes(s + (terminate ? "\0" : "")));
 
-    
+    /// <summary>MULTI_SZ：每个串各带一个 0，整组结束再来一个 0。</summary>
     private static string HexOfMultiString(string[] parts)
     {
         var bytes = new List<byte>();
@@ -558,9 +558,9 @@ public static class LeftoverCleaner
         return HexOfBytes(bytes.ToArray());
     }
 
-    
-    
-    
+    /// <summary>
+    /// 字节数组 → <c>a1,b2,...</c>，每 25 个字节一行，续行末尾加反斜杠（<c>.reg</c> 的规定）。
+    /// </summary>
     private static string HexOfBytes(byte[] bytes)
     {
         if (bytes.Length == 0) return "";
@@ -586,17 +586,17 @@ public static class LeftoverCleaner
         _ => "HKEY_LOCAL_MACHINE",
     };
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  提权补刀
+    // ══════════════════════════════════════════════════════════════════════════
 
-    
+    /// <summary>提权助手模式的命令行开关。⛔ 改这里要同步改 <c>App.xaml.cs</c> 里的判定。</summary>
     public const string ApplySwitch = "--apply-leftovers";
 
-    
-    
-    
-    
+    /// <summary>
+    /// 把还需要管理员权限的条目写成清单，提权再跑一次自己。
+    /// ⚠️ 提权是**按需**的：普通权限就能搞定的条目根本不会走到这儿，所以多数时候不弹 UAC。
+    /// </summary>
     private static async Task<List<CleanupItemResult>> ApplyManifestElevatedAsync(
         string dir, List<LeftoverItem> items, CancellationToken ct)
     {
@@ -633,7 +633,7 @@ public static class LeftoverCleaner
                 FileName = exe,
                 Arguments = $"\"{ApplySwitch}\" \"{manifest}\"",
                 UseShellExecute = true,
-                Verb = "runas",            
+                Verb = "runas",            // 会弹一次 UAC
                 WindowStyle = ProcessWindowStyle.Hidden,
             };
 
@@ -651,7 +651,7 @@ public static class LeftoverCleaner
                 }
             }
 
-            
+            // 读回结果
             if (!File.Exists(outcomeFile))
             {
                 AppLog.Warning("cleanup", "提权补刀没留下结果文件（可能被用户取消了 UAC）");
@@ -677,7 +677,7 @@ public static class LeftoverCleaner
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            
+            // 用户在 UAC 上点了"否"
             AppLog.Info("cleanup", "用户取消了提权补刀");
             results.AddRange(items.Select(i => new CleanupItemResult(i, CleanStatus.Failed, "已取消管理员授权")));
         }
@@ -691,10 +691,10 @@ public static class LeftoverCleaner
         return results;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 提权助手：读清单，照着删，把结果写回去。由 <c>App</c> 在启动最前面调用，
+    /// 跑完直接 <c>Environment.Exit</c>，⛔ 不进 WinUI 的正常流程。
+    /// </summary>
     public static void ApplyManifestElevated(string manifestPath)
     {
         var outcome = new List<ManifestResult>();
@@ -755,11 +755,11 @@ public static class LeftoverCleaner
         }
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 提权模式下的文件删除。⚠️ 提权进程**不往隔离区搬** —— 因为隔离区在用户的
+    /// <c>%LOCALAPPDATA%</c> 下，管理员进程搬过去的目录属主会变成 Administrators，
+    /// 反而让用户自己以后删不掉。备份的事在非提权那一轮已经做过了（能备份的都备份了）。
+    /// </summary>
     private static CleanupItemResult CleanPathElevated(LeftoverItem item)
     {
         if (LeftoverResolver.IsForbiddenPathPublic(item.Path))
@@ -791,15 +791,15 @@ public static class LeftoverCleaner
 
     private static readonly JsonSerializerOptions ManifestJson = new() { WriteIndented = true };
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════════════════════════
+    //  复扫与汇报
+    // ══════════════════════════════════════════════════════════════════════════
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 清完之后当场看一遍还剩什么。
+    /// ⛔ 这一步不能省 —— 汇报里必须写"实际结果"，不是"我们以为的结果"。
+    ///    （文件被别的进程占用而删不掉是常态，不单查出来用户根本不知道。）
+    /// </summary>
     private static void Verify(IReadOnlyList<LeftoverItem> items)
     {
         foreach (var item in items)
@@ -813,7 +813,7 @@ public static class LeftoverCleaner
             catch (Exception ex)
             {
                 AppLog.Info("cleanup", $"复扫失败（{item.DisplayPath}）：{ex.GetType().Name}");
-                item.StillThere = true;   
+                item.StillThere = true;   // 查不清就算它还在，宁可保守
             }
         }
     }
@@ -833,7 +833,7 @@ public static class LeftoverCleaner
         return key is not null && Array.IndexOf(key.GetValueNames(), item.ValueName) >= 0;
     }
 
-    
+    /// <summary>写一份人看得懂的清理记录（放进隔离区，和注册表备份摆一起）。</summary>
     private static string WriteHumanLog(string dir, string appName, List<CleanupItemResult> results,
                                         string backupFile, bool quarantineOk)
     {
@@ -878,13 +878,13 @@ public static class LeftoverCleaner
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 写一份**机器可读**的清单（<c>manifest.json</c>），供「隔离区」界面读取。
+    ///
+    /// 为什么除了「清理记录.txt」还要这个：那份中文记录是写给人看的，程序要想列出
+    /// "隔离区里都清过什么"就得去解析它 —— 措辞一改解析就废。所以另出一份结构化的，界面只认这一份。
+    /// ⚠️ 读不到（旧记录没有这个文件）就只显示目录名与体积，⛔ 不假装知道详情。
+    /// </summary>
     private static void WriteManifest(string dir, string appName, List<CleanupItemResult> results, bool quarantineOk)
     {
         if (dir.Length == 0 || !quarantineOk) return;
@@ -914,7 +914,7 @@ public static class LeftoverCleaner
         }
         catch (Exception ex)
         {
-            
+            // 清单写不出来不算致命：界面读不到就退回"只显示目录名与体积"
             AppLog.Exception("cleanup", ex, "写隔离区清单");
         }
     }

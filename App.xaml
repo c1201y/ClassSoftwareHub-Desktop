@@ -10,15 +10,15 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
-            
+            <!-- 快捷入口模板用：SVG 图标与 FontIcon 二选一显示 -->
             <csh:NullToCollapsed x:Key="NullToCollapsed" />
             <csh:NotNullToCollapsed x:Key="NotNullToCollapsed" />
 
-            
-
-
-
-
+            <!--
+              ⚠️ 卡片外面那圈矩形框 = GridViewItem 自带的「焦点框 / 悬停底色」。
+              卡片是自己画的 Border（带外边距），容器再画一层就套不上 → 这里把容器整套 chrome 关掉，
+              悬停反馈改由卡片自己的 PointerEntered/PointerExited 做（和首页卡片一致）。
+            -->
             <Style x:Key="CshCardItemStyle" TargetType="GridViewItem">
                 <Setter Property="Margin" Value="0" />
                 <Setter Property="Padding" Value="0" />
@@ -34,25 +34,25 @@
                 <Setter Property="BorderThickness" Value="0" />
             </Style>
 
-            
+            <!--
+              ═══════════════════════════════════════════════════════════════════════════════
+              CshModeCardStyle —— 把「模式选择」做成一张看得见、点得懂的卡片。
 
+              用途：页面里有「两种以上玩法」需要用户先选一个的场合（抽号 / 分组、号码 / 名单、
+              文件校验 / 文本编解码、倒计时 / 秒表…）。原来这些都用小号 RadioButton 或一列
+              平铺按钮，未选中的那一边几乎等于不存在，用户根本不知道这个页面还有另一种用法。
 
+              为什么用 RadioButton 而不是自己写 Button：
+                · GroupName 自带互斥，不用手写"选中状态"逻辑；
+                · 方向键切换、屏幕阅读器朗读（RadioButton 语义）都是白送的；
+                · ⚠️ 但 RadioButton 的 IsChecked **不能在 XAML 里写 True**（会运行时报
+                  「Failed to assign to property」，整页加载失败）—— 一律在代码里赋初值。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+              卡片长什么样：整块可点，内容自定（通常是「图标 + 标题 + 一句话说明」）。
+                · 未选中：普通卡片底 + 普通描边；
+                · 选中：强调色描边 2px + 强调色淡底 + 右侧一个对勾 —— 三处同时变，绝不靠颜色一项。
+              ═══════════════════════════════════════════════════════════════════════════════
+            -->
             <Style x:Key="CshModeCardStyle" TargetType="RadioButton">
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="MinHeight" Value="0" />
@@ -70,11 +70,11 @@
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                                 <Grid>
-                                    
-
+                                    <!-- 选中时的强调色淡底：作为最底下的一层铺满整卡（内容区自带 16,13 内边距，
+                                         所以这里不需要负边距）。上面再压内容，文字永远清晰。 -->
                                     <Border x:Name="Tint" CornerRadius="9" Opacity="0"
                                             Background="{ThemeResource AccentFillColorDefaultBrush}" />
-                                    
+                                    <!-- 悬停 / 按下时的浅灰底（未选中才有感，选中时被 Tint 盖住也不难看） -->
                                     <Border x:Name="Hover" CornerRadius="9" Opacity="0"
                                             Background="{ThemeResource ControlFillColorSecondaryBrush}" />
 
@@ -161,17 +161,17 @@
                 </Setter>
             </Style>
 
-            
+            <!--
+              卡片容器统一样式（2026-10-02 建；同日二改：圆角 8→4、补统一内边距 16,12）。
+              全站内容卡片统一走这一套「4px 圆角 + 系统卡片底 + 系统描边 + 16,12 内边距」，
+              别再每页手写 CornerRadius/Background/BorderBrush/BorderThickness 四件套。
 
-
-
-
-
-
-
-
-
-
+              ⛔⛔ 圆角必须是 4，不是 8（Nick 2026-10-02 抓的「劣质第三方绘制」根源）：
+                  - 4 = 系统 ControlCornerRadius —— 原生 SettingsCard / Button / ComboBox 全是 4；
+                  - 8 = OverlayCornerRadius —— 那是**浮层/弹窗**该用的值，不是卡片。
+                  手写卡片写 8 摆在原生控件旁边，一眼就能看出"两个来源"，即所谓劣质感。
+              ⛔ 别再往 Style 外手写卡片外壳；内边距要不同就在本地覆盖 Padding。
+            -->
             <Style x:Key="CshCardStyle" TargetType="Border">
                 <Setter Property="CornerRadius" Value="4" />
                 <Setter Property="Padding" Value="16,12" />
@@ -180,16 +180,16 @@
                 <Setter Property="BorderThickness" Value="1" />
             </Style>
 
-            
+            <!--
+              块状入口卡（2026-10-13 建）：首页「快速开始」那两张一行的入口卡就是这套 ——
+              圆角 8 + 更宽松的上下内边距，高度**靠内容撑、不写 Height**。
+              Nick 2026-10-13：「直接复用首页卡片」⇒ 实验性功能 / 内置工具页的卡片也改用它。
 
-
-
-
-
-
-
-
-
+              ⚠️ 它和 CshCardStyle **不是一类**，别互相替：
+                 · CshCardStyle      = 内容卡（说明、表单、结果），圆角 4 = 系统 ControlCornerRadius；
+                 · CshNavCardStyle   = 入口/导航卡，做得更"块"一点，圆角 8。
+                 首页的入口卡一直就是 8，这里是把它收成共享样式，不是一个新造的观感。
+            -->
             <Style x:Key="CshNavCardStyle" TargetType="Border">
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="14,18" />
@@ -198,71 +198,71 @@
                 <Setter Property="BorderThickness" Value="1" />
             </Style>
 
-            
-
-
-
-
-
-
-
-
+            <!--
+              只读结果行（编码 / 哈希工具的四条哈希值）。
+              2026-10-02 建（Nick：「用 Border 堆叠的表单表格，所有块都是方块包方块」）：
+              这类"一行一条结果"的内容改用 ListView 承载 —— 每一行自带系统悬停底色、
+              圆角走 ControlCornerRadius，不再需要外面再套一张大卡片。
+              ⛔ 配合 ListView 用：SelectionMode=None、IsItemClickEnabled=False、
+                 ScrollViewer.VerticalScrollBarVisibility=Disabled（它本来就待在外层滚动区里，
+                 不禁用会出现内外两层滚动条）。
+            -->
             <Style x:Key="CshResultRowStyle" TargetType="ListViewItem">
                 <Setter Property="MinHeight" Value="0" />
-                
-
-
+                <!-- 左右 14 = 与同页其它内容（拖拽区、核对行）同一条内缩线；
+                     ⛔ 别靠给 ListView 加负 Margin 去"让悬停铺满" —— 那会把行内容顶出 960 内容列，
+                        右侧的复制键会比页面里所有其它按钮都凸出来约 10px（实测过）。 -->
                 <Setter Property="Padding" Value="14,8" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                
-
-
-
+                <!-- ⚠️⚠️ 圆角**必须显式给**。`ItemContainerStyle` 一旦指定，WinUI 默认样式里那条
+                     `CornerRadius` 就不再跟着来了（这儿的 Style 没有 BasedOn，而跨文件 BasedOn 会让
+                     XamlCompiler 崩 —— 见 Pages/AppDataPage.xaml 文件头），结果是选中/悬停底色
+                     变成**直角**。2026-10-16 Nick 抓到的就是这个：「那个选出来的框是直角」。 -->
                 <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
             </Style>
 
-            
+            <!--
+              ═══════════════════════════════════════════════════════════════════════════════
+              ⚠️⚠️ 弹窗圆角。2026-09-29 Nick 抓到的 bug：「名单」「示例名单」两个弹窗四角是**直角**，
+              在 Win 11 上看着像 Win 10。
 
+              弹窗是进程内的浮层（不是独立窗口），DWM 的圆角管不到它 —— 圆角只能来自 XAML 模板。
 
+              ⛔ 为什么覆盖主题资源 `OverlayCornerRadius` 没用（试过，无效）：
+                 这个版本里 ContentDialog 模板画底色那个 Border 的圆角绑的是
+                 `{TemplateBinding CornerRadius}`，也就是 **ContentDialog.CornerRadius** ——
+                 实测 dump 模板树，覆盖 OverlayCornerRadius 后它仍然是 0。
+                 而 ContentDialog.CornerRadius 的默认值就是 0（不像 WinUI 2 里默认 8），
+                 所以四角开箱即直角，且不报任何错。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+              → 修法：给所有 ContentDialog 设上 CornerRadius，隐式 Style 让全站一次生效。
+                ⛔ BasedOn 不能省 —— 不写就等于把默认样式整个换掉，弹窗的模板会直接消失。
+              ═══════════════════════════════════════════════════════════════════════════════
+            -->
             <Style TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
                 <Setter Property="CornerRadius" Value="8" />
             </Style>
 
-            
+            <!--
+              ═══════════════════════════════════════════════════════════════════════════════
+              ⚠️⚠️ 滚动区"死区"。2026-09-29 Nick 抓到的 bug：「设置页每个标题上面那一块区域，
+              鼠标放上去滚轮就不动了」。
 
+              ⛔ 真因不是哪个控件吞了滚轮 —— 实测（进程内 AddHandler 打事件 + 逐点扫描）：
+                 卡住的位置，滚轮事件**根本没有到达 ScrollViewer**（应用内一条日志都没有）。
+                 原因：ScrollViewer 默认 `Background` 是 null，它内层的 Grid / StackPanel 也没有背景
+                 → 这些元素**不参与命中测试**。于是落到"没有任何控件"的缝隙上时，命中测试直接穿过去，
+                 事件从 ScrollViewer 外面的元素开始冒泡，ScrollViewer 自己永远收不到。
 
+                 缝隙长什么样：分区标题上方的 `Margin="0,24,0,8"`、卡片之间的 StackPanel 间距、
+                 ScrollViewer 自己的 Padding —— 全是"看着有地方、其实没有东西"的区域。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+              → 修法：全站 ScrollViewer 统一给一个 Transparent 底。
+                `Transparent` 不画任何像素（外观与 null 完全一致），但会让整块矩形参与命中测试，
+                事件因此能正常冒泡到 ScrollViewer。
+                ⛔ 别改成 `{x:Null}`（等于没设）；页面里若显式写了 Background，会盖住这条样式，也要一并去掉。
+              ═══════════════════════════════════════════════════════════════════════════════
+            -->
             <Style TargetType="ScrollViewer">
                 <Setter Property="Background" Value="Transparent" />
             </Style>
@@ -280,25 +280,25 @@
             <SolidColorBrush x:Key="GridViewItemBorderBrushSelectedPointerOver" Color="Transparent" />
             <SolidColorBrush x:Key="GridViewItemBorderBrushSelectedPressed" Color="Transparent" />
 
-            
+            <!-- 文本框右键菜单：⛔ 不在这里声明，改在 App.xaml.cs 的 SetupTextEditContextMenu() 里建。
+                 两个理由，都是实测撞出来的：
+                   ① 这里写 Click / Opening 事件 → 编译直接失败
+                      （WMC1005: Events cannot be set in the Application class XAML file）；
+                   ② 把 MenuFlyout / 隐式 Style 写在这里 → **应用启动即崩**，而且 crash.log 零新增
+                      （死在 InitializeComponent，连 UnhandledException 都来不及挂，查都没法查）。
+                 挪进代码后能 try/catch + 记日志，最坏也只是菜单不出现，不会拖垮整个应用。 -->
 
+            <!--
+              ════════════ Hub AI 品牌资源（2026-10-18）════════════
+              为什么集中在这里：AI 的品牌色**不跟随系统强调色** —— 用户把 Windows 强调色改成
+              绿色，AI 图标也跟着变绿会很怪。所以这里是全项目唯一允许写死色值的地方，
+              页面只引用键名，⛔ 别在页面里散落颜色。
 
-
-
-
-
-
-            
-
-
-
-
-
-
-
-
-
-
+              配色口径（Nick 2026-10-18 定，改之前先问）：借鉴 Copilot 官网那套
+              「极淡多色过渡」—— 彩色不当装饰贴在图标上，而是当空气铺在背景里。
+              三个渐变停靠点彼此只差 5~8 级明度，看上去像纸的色温变化，不像渐变。
+              图标反过来保持中性（暖石灰 + 深褐符号），因为任何单一色相看久了都普通。
+            -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <LinearGradientBrush x:Key="HubAiCardBackground" StartPoint="0,0" EndPoint="1,1">
@@ -316,13 +316,13 @@
                     <SolidColorBrush x:Key="HubAiBubbleBackground" Color="#F1F2F2" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    
-
-
-
-
-
-
+                    <!--
+                      ⚠️ 深色**不做多色氛围渐变**（2026-10-18 实测翻车）：
+                          浅色下 5~8 级色差看着是"有温度"，同样的差值放在深色大面积上
+                          会变成脏斑 —— 尤其原来末端那个 #1E1519 偏红褐，整块看着像发霉。
+                          这里改成**冷灰只走明度**：三个停靠点明度一致，色相只挪 2~3 级，
+                          靠 1px 描边（#343A3F）把卡片从页面底上"拎起来"。
+                    -->
                     <LinearGradientBrush x:Key="HubAiCardBackground" StartPoint="0,0" EndPoint="1,1">
                         <GradientStop Color="#292F33" Offset="0" />
                         <GradientStop Color="#292E36" Offset="0.52" />
@@ -333,8 +333,8 @@
                     <SolidColorBrush x:Key="HubAiIconForeground" Color="#EDE6DC" />
                     <SolidColorBrush x:Key="HubAiTitleForeground" Color="#E8EDF0" />
                     <SolidColorBrush x:Key="HubAiSubForeground" Color="#93A0A6" />
-                    
-
+                    <!-- 2026-10-30：深色下换成 WinUI 原生窗口底色（原来那对偏灰蓝）。
+                         边框不在这里定 —— 浮层在深色时用主题色描边（见 HubAiFlyout.ApplySurface）。 -->
                     <SolidColorBrush x:Key="HubAiPanelBackground" Color="#FF202020" />
                     <SolidColorBrush x:Key="HubAiPanelBorder" Color="#FF3A3A3A" />
                     <SolidColorBrush x:Key="HubAiBubbleBackground" Color="#2E3338" />

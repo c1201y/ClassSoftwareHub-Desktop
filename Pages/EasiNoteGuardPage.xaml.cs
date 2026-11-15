@@ -6,20 +6,20 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
-
-
-
+/// <summary>
+/// 「白板专杀」页（2026-10-29 从实验性功能转正，现属「系统工具」；tag = <c>easiguard</c>）。
+///
+/// 逻辑全在 <see cref="EasiNoteGuard"/>（扫进程 / 判窗口 / 杀 / 定时），
+/// 这里只管界面，外加一个 <see cref="_ready"/> 闸门挡住构造期的假事件。
+/// </summary>
 public sealed partial class EasiNoteGuardPage : Page
 {
     private EasiNoteGuardConfig _cfg = new();
 
-    
-    
-    
-    
+    /// <summary>
+    /// ⚠️ 构造期给 ToggleSwitch 设初值会**触发 Toggled**，那一刻 _cfg 还没铺好，
+    ///    回写就把存档冲成默认值了。所以铺完初值再放行（跟 ClockToolPage 同一个套路）。
+    /// </summary>
     private bool _ready;
 
     public EasiNoteGuardPage()
@@ -27,7 +27,7 @@ public sealed partial class EasiNoteGuardPage : Page
         InitializeComponent();
 
         _cfg = EasiNoteGuardConfig.Load();
-        EnableSwitch.IsOn = _cfg.Enabled;                  
+        EnableSwitch.IsOn = _cfg.Enabled;                  // ⚠️ 别写进 XAML
         TimePick.Time = new TimeSpan(17, 30, 0);
 
         RefreshTimes();
@@ -37,7 +37,7 @@ public sealed partial class EasiNoteGuardPage : Page
         _ready = true;
     }
 
-    
+    // ── 开关 / 时间点 ────────────────────────────────────────
 
     private void EnableSwitch_Toggled(object sender, RoutedEventArgs e)
     {
@@ -113,7 +113,7 @@ public sealed partial class EasiNoteGuardPage : Page
         }
 
         _cfg.Times.Add(hhmm);
-        _cfg.Times.Sort(StringComparer.Ordinal);           
+        _cfg.Times.Sort(StringComparer.Ordinal);           // 列表按时间先后排，看着舒服
         _cfg.Save();
 
         RefreshTimes();
@@ -132,7 +132,7 @@ public sealed partial class EasiNoteGuardPage : Page
         }
     }
 
-    
+    // ── 手动执行 ─────────────────────────────────────────────
 
     private void Check_Click(object sender, RoutedEventArgs e) =>
         Show(EasiNoteGuard.RunOnce(dryRun: true), "仅检测");
@@ -141,8 +141,8 @@ public sealed partial class EasiNoteGuardPage : Page
     {
         var r = EasiNoteGuard.RunOnce(dryRun: false);
 
-        
-        
+        // 手动清理也留一条日志 —— 以后翻 easiguard.log 能分清「是到点自己杀的」还是「我手点的」
+        // （到点那条在 EasiNoteGuard.Tick 里记）
         EasiNoteGuard.Log($"手动清理：{r.Summary}"
             + (r.KilledNames.Count > 0 ? " 清掉=" + string.Join("、", r.KilledNames) : "")
             + (r.Errors.Count > 0 ? " 失败=" + string.Join("；", r.Errors) : ""));
@@ -166,7 +166,7 @@ public sealed partial class EasiNoteGuardPage : Page
         RefreshProcs();
     }
 
-    
+    // ── 当前进程 ─────────────────────────────────────────────
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshProcs();
 

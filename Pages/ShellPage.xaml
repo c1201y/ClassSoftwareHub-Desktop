@@ -4,19 +4,19 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    
-
-
-
-
+    <!--
+      导航项右侧的文字角标没有写在这里，而是 ShellPage.xaml.cs 的 MakeTextBadge 现造：
+      InfoBadge 原生只能放数字和图标，放文字得整个替换它的模板，那是"自己画的控件"。
+      改成 Border + TextBlock 两个原生基础控件的组合，颜色跟系统语义色走。2026-11-04。
+    -->
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        
-
+        <!-- 原生标题栏：拖动区由 MainWindow 的 SetTitleBar 指定；系统按钮（三大金刚）在右上角。
+             三列（* / Auto / *）：左＝图标与名称，中＝全局搜索（靠这套列定义真正居中于窗口），右＝外观按钮。 -->
         <Grid x:Name="TitleBarArea" Grid.Row="0" Background="{x:Null}"
               SizeChanged="TitleBarArea_SizeChanged">
             <Grid.ColumnDefinitions>
@@ -32,25 +32,25 @@
                            VerticalAlignment="Center" />
             </StackPanel>
 
-            
-
-
-
-
-
-
+            <!--
+              全局搜索（Ctrl + K）。
+              整套都用 AutoSuggestBox 的原生能力：搜索框外观、前置放大镜、清除按钮、以及**结果下拉**
+              （定位、滚动、键盘上下选择、点外面自动收起，全归系统管），⛔ 不再自己叠一层浮层。
+              2026-10-16 Nick 看过自绘那版，明确要求「用 WinUI 原生的就行，你不需要照抄网页的」。
+              搜索范围与匹配规则在 Data/SearchIndex.cs。
+            -->
             <AutoSuggestBox x:Name="SearchBox" Grid.Column="1" Width="360" VerticalAlignment="Center"
                             QueryIcon="Find"
                             PlaceholderText="Ctrl+K 搜索软件、内置工具、页面…"
                             TextChanged="SearchBox_TextChanged"
                             SuggestionChosen="SearchBox_SuggestionChosen"
                             QuerySubmitted="SearchBox_QuerySubmitted">
-                
-
-
-
-
-
+                <!--
+                  ⚠️ 模板里用 {Binding} 而不是 x:Bind：绑定源是普通对象列表，运行时绑定最省事，
+                     也避开嵌套模板 + x:Bind 在这套 XamlCompiler 上的坑（§D ㉗）。
+                  ⚠️ 那个"首字 / 字形"是两套并存、按可见性切换 —— 软件没有图标字体字形
+                     （它的 icon 是远程图片，搜索结果不等它加载）。
+                -->
                 <AutoSuggestBox.ItemTemplate>
                     <DataTemplate>
                         <Grid ColumnSpacing="10" Padding="0,3">
@@ -91,9 +91,9 @@
 
         </Grid>
 
-        
-
-
+        <!-- 2026-10-01 Nick 反馈「页面还够宽导航栏就自动收进去了，阈值太大」：
+             CompactModeThresholdWidth 820→700、ExpandedModeThresholdWidth 1180→1008
+             （1008 = WinUI 系统默认，与 Gallery 同款）：≥1008 展开、700~1008 图标条、<700 全隐 -->
         <NavigationView x:Name="Nav" Grid.Row="1" Background="{x:Null}"
                         IsBackButtonVisible="Visible" IsSettingsVisible="False"
                         PaneDisplayMode="Auto" OpenPaneLength="296"
@@ -101,50 +101,50 @@
                         BackRequested="Nav_BackRequested"
                         ItemInvoked="Nav_ItemInvoked">
 
-            
+            <!--
+              材质底座（2026-09-28 起；2026-09-29 修正过一次 —— 之前刷得太狠了）。
+              ⚠️ 本窗口的外观是 Mica / 亚克力（MainWindow.ApplyBackdrop 挂 SystemBackdrop）。
+                 NavigationView 的默认模板会给**内容区**糊一层不透明底色
+                 （SolidBackgroundFillColorBaseBrush），把窗口材质整个盖住 ——
+                 表现就是设置页一片死灰/死黑。所以**只需要把这一层改透明**，材质才透得上来。
+              ⚠️ 必须写成同 key 的 SolidColorBrush 定义：模板用的是 {ThemeResource} 查表，
+                 换成 StaticResource 重指向同一 key 是无效的（会自引用）。
 
+              ⛔⛔ 其余键**一律不要覆盖** —— 2026-09-29 Nick 连着报的两个 bug 全出在这里：
 
+              ① 面板背景（`NavigationViewExpandedPaneBackground` /
+                 `NavigationViewDefaultPaneBackground`）刷成透明会连出两个毛病：
+                   · 窄窗口点汉堡，弹出的浮层面板透明 → 后面的页面内容整个漏出来；
+                   · 并排展开时面板和内容区成了同一张底 → 左边分不出"导航栏"这一块。
+                 官方对照表（NavigationView → Pane Backgrounds）：
+                   Left                       → NavigationViewExpandedPaneBackground
+                   LeftCompact / LeftMinimal  → NavigationViewDefaultPaneBackground
+                   Top                        → NavigationViewTopPaneBackground
+                 系统给它们的是**亚克力**（Expanded 是 background acrylic、跟着窗口材质；
+                 Compact/Minimal 是 in-app acrylic，专为"浮在内容之上"设计）——
+                 本身就是半透明的，不会把材质盖住，⛔ 别再改回 Transparent。
 
+              ② `NavigationViewPaneBorderBrush` / `NavigationViewPaneBorderThickness`
+                 —— 这就是**导航面板与内容区之间那条分隔线**。
+                 2026-09-28 顺手刷成透明 + 粗细 0，线就没了。Nick 原话：
+                 「原先导航栏还有标题栏，他们俩的是连接在一起的，并且与右边的内容区域是有分隔开的，
+                   有一条线的，现在却是没有的」。
+                 同类的还有 `NavigationViewContentGridBorderBrush` / `...GridBorderThickness`
+                 （内容区那一圈边框），一并交回系统。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            
-
-
-
+              → 结论（2026-10-01 修订，Nick 对标 WinUI Gallery）：
+                 **一个键都不刷，NavigationView.Resources 整段删掉**。
+                 Gallery 的分层 = 系统默认模板：标题栏 + 导航栏露窗口 Mica 材质，
+                 内容区默认取 LayerFillColorDefaultBrush（设计规范「内容层色」，
+                 "Used on background colors of any material to create layering"）+ 顶部 1px 分隔线。
+                 09-28 刷透明治的「死灰盖材质」根因是当时的背板组合；现在默认背板已是 Mica，
+                 与 Gallery 同构，恢复系统默认即 Gallery 观感，不会复发。
+                 ⚠️ 若再遇内容区盖材质，先查背板设置，⛔ 别再刷 Transparent 抹掉分层。
+            -->
+            <!-- 上半区：首页 / 软件下载 / 内置工具 / 侧边布局 / 实验性功能（实验性功能永远排最后）
+                 ⚠️ 图标别撞脸：E719（购物袋）＝软件商店，E896（下载箭头）留给「任务进行」，
+                    E7F4（显示器）＝本机核实，EA80（灯泡）＝实验性功能。
+                    改图标前先把码位渲染成图看一眼有没有字形（曾经差点用到不存在的码位）。 -->
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="首页" Tag="home">
                     <NavigationViewItem.Icon>
@@ -156,71 +156,71 @@
                         <FontIcon Glyph="&#xE719;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
+                <!--
+                  Hub AI（2026-10-18）：电脑顾问的完整对话页。
+                  ⚠️ 与「软件下载」页右下的浮层是同一个内核的两种外壳，浮层里「↗」会跳到这一页。
+                  ⚠️ 名字里必须带 AI（Nick 明确要求）—— 叫 Agent 会让人以为它能改电脑，
+                     实际全程只读，改个名字比加一句免责声明有效。
 
-
-
-
-
-
-
-
-
-
-
-
+                  ⛔⛔ **这一项永远常驻，不受「启用 Hub AI」总闸控制**（2026-10-28 Nick 定）。
+                     原话：「导航里的 Hub AI 不需要消失……我要常驻这个，因为我要让你宣传这个功能。
+                     如果我不开这个功能，他们根本不知道，那么我根本就没有办法进行宣传。」
+                     ⇒ 总闸关着时点进来是「去启用」引导页（见 HubAiPage.ApplyEnabledState），
+                       那是**故意**留给用户的展示位，不是 bug。
+                     ⇒ 软件下载页那张入口卡片受总闸控制、会隐藏，这两处的规则不一样，别一起改。
+                -->
                 <NavigationViewItem x:Name="HubAiNav" Content="Hub AI" Tag="hubai">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8F2;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
-
-
-
-
-
-
-                
-
-
-
-
-
-                
+                <!--
+                  内置工具：和「实验性功能」一样是分组父项 —— 点它 = 进工具索引页 + 展开/收起分组，
+                  子项（图片取色 / 随机抽号 / 课堂计时器 / 全屏时钟 / 编码哈希）直达各自页面。
+                  子项由 ShellPage 构造时按 ToolCatalog.All 动态生成（tag = ToolDef.Id），
+                  ⛔ 别在 XAML 里手写 —— 工具清单只有 ToolCatalog 一份，手写会变成两处维护。
+                  父项自己也是入口（进 ToolsPage），不进 NavigationView 的选中体系（原因同实验性功能）。
+                -->
+                <!--
+                  内置工具拆成两项（2026-10-22 Nick）：**课堂工具** 与 **系统工具**。
+                  ⚠️ 子项仍由 ShellPage 按 ToolCatalog.All 动态生成，只是按 <c>ToolDef.Group</c> 分到不同父项。
+                  ⚠️ 两个父项各自有 tag（tools-classroom / tools-system），
+                     分别进**同一个 ToolsPage 的两种形态**（参数决定显示哪组）。
+                -->
+                <!-- 2026-10-24 Nick：侧边布局提到课堂工具上面 —— 它是「调界面」的页，比工具分组更常进。 -->
                 <NavigationViewItem Content="侧边布局" Tag="sidebar">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8A0;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
-
-
-
-
-
-
-
+                <!--
+                  教室喊话（2026-10-25 Nick：从「内置工具」里提出来，单独成一个功能项；
+                  同日 Nick 又把它挪到「侧边布局」正下方 —— 也是常驻开关类的功能，跟工具分组分开）。
+                  ⚠️ 为什么不留在 ToolCatalog：它的形态是「开/关 + 后台常驻轮询」，
+                     跟其余「点开用一下就走」的小工具不是一类，塞在工具索引里容易被当成一次性页面。
+                  ⚠️ 因此它不参与工具的动态子项与载体选择，tag 与 NavigateTagCore 的 case 单独写。
+                  ⚠️ 出现顺序：紧挨「侧边布局」之下、两个工具分组之上 —— 实验性功能永远保持最后一位。
+                -->
                 <NavigationViewItem x:Name="AnnounceNav" Content="教室喊话" Tag="announce">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE720;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
+                <!--
+                  函数图像（2026-10-28 Nick：从「课堂工具」里提出来，单独成一个功能项）。
+                  位置：紧贴「课堂工具」之上 —— 它本来就属于课堂工具，提出去之后放在组的最前面，
+                       读起来就是「常用的那几个 + 剩下的都在下面」。
 
+                  ⚠️ 与「教室喊话」的处理方式**不同**，别照抄那一条：
+                     喊话是从 ToolCatalog 里整条删掉的，因为它不是"可替换的网页小工具"；
+                     函数图像有 WebToolId（网页版载体），而且命令行直达（tool=function-plot）、学科工具窗、
+                     侧边栏模块、导航按 Id 反查页面类型，全都依赖 ToolCatalog 这张表。
+                     所以它在表里保留，只标 Standalone：工具分组子项与索引页卡片跳过它，其余照旧。
 
-
-
-
-
-
-
-
-
-
-
-
-
+                  ⚠️ 因此 NavigateTagCore **不需要**给它写 case：按 Id 反查 ToolCatalog 那一支就会命中，
+                     并且自动走 ToolCarrier 的载体选择（有 Web 版且本机跑得起来 → 宿主页，否则原生页）。
+                     给它单写 case 反而会绕过载体选择，退回 2026-10-25 修过的那个坑。
+                -->
                 <NavigationViewItem x:Name="FunctionPlotNav" Content="函数图像" Tag="function-plot">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D2;" />
@@ -231,10 +231,10 @@
                         <FontIcon Glyph="&#xE8F1;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
-
-
-
+                <!--
+                  文档库（需求 1:15）：与「查阅单词」同属"查资料"这一类的常驻页，
+                  所以紧挨着放。文章放在站点仓库里，桌面端只缓存清单与读过的正文。
+                -->
                 <NavigationViewItem x:Name="DocsNav" Content="文档库" Tag="docs">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8A5;" />
@@ -250,56 +250,56 @@
                         <FontIcon Glyph="&#xE945;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
-
-
-
-
-
-
-
-
-
-
-
-
+                <!--
+                  实验性功能：稳定性和准确度都还没到能上主界面的小玩意挂这儿。
+                  ⚠️ **永远排在导航上半区最后一位** —— 这是「还没成熟」的位置含义，
+                     以后往里加新功能也照此放，别插到前面去。
+                  ⚠️ 父项**自己就是总览入口**：点它 = 打开总览页 + 展开/收起分组。
+                     走的就是普通 ItemInvoked（实测：有子项的项被点击时 ItemInvoked 照样触发，
+                     只是 InvokedItemContainer 的 Tag 为空 —— 所以给它设上 Tag 即可）。
+                  ⚠️ 父项**不要进 NavigationView 的选中体系**：把 SelectedItem 指到 group header 上，
+                     它偶尔会顺着分组去 Invoke 第一个子项（实测：点实验性功能却跳到本机核实）。
+                     所以 SelectTag 对 experimental 是特判——手动点亮父项，不碰 SelectedItem（见 ShellPage.xaml.cs）。
+                  ⚠️ 因此**不要**为了"能高亮"再往里加一个「总览」子项：总览没有独立内容，
+                     它就是这一组本身，导航里凭空多一项反而像是个单独的功能。
+                -->
                 <NavigationViewItem x:Name="ExperimentalNav" Content="实验性功能" Tag="experimental">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEA80;" />
                     </NavigationViewItem.Icon>
-                    
-
-
-
-
+                    <!--
+                      子项由 ShellPage.BuildExperimentalNavItems 按 ExperimentalFeatureCatalog.All 填，
+                      ⛔ 别在这里手写：以前手写七条、总览页另有一份，两份必然漂移
+                      （白板专杀 / AppData 管理 / 系统修复 转正后仍留在总览页，虚拟内存却漏了卡片）。
+                    -->
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
-            
+            <!-- 下半区：任务进行 / 提交软件 / 反馈中心 / 更新日志 / 设置 -->
             <NavigationView.FooterMenuItems>
-                
+                <!-- 下载不再占着界面：进度在这里看得到；徽标上是「正在下载几个」（0 个就把徽标摘掉） -->
                 <NavigationViewItem x:Name="DownloadsNav" Content="任务进行" Tag="downloads">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE896;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                
-
-
-
-
-
-                
-
-
-
-
-
-                
-
-
-
-
+                <!--
+                  「提交软件」2026-10-30 从导航栏移除（Nick：软件生态已足够丰富，不必再挤占导航）。
+                  入口改到「软件下载」页顶部工具条的提交按钮，首页那张卡片保留为第二入口。
+                  ⚠️ NavigateTagCore 里的 case "submit" **保留** —— 那是路由，不是导航项；
+                     删了首页卡片和命令行的 page=submit 参数都会掉进 default 直接回首页。
+                -->
+                <!--
+                  反馈中心 / 更新日志：2026-11-13 起**不再各占一颗底部导航项**（Nick：整合成「关于」一页）。
+                  两个页面本身没动，入口改成「关于 → 遇到问题？」里的两张卡片；
+                  NavigateTagCore 里的 case "feedback" / "changelog" 仍然保留 —— 那是路由，
+                  首页快捷入口、csh://page/feedback 这类链接还指着它们。
+                -->
+                <!--
+                  「关于」：ClassIsland 那一页的骨架（横幅 + 一列可展开的分组卡），
+                  里面装着应用信息、反馈 / 更新日志入口、回声洞、授权、条款与声明。
+                  E946 是信息圆圈，与「设置」的齿轮分得开。
+                -->
                 <NavigationViewItem Content="关于" Tag="about">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" />
@@ -312,20 +312,20 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            
+            <!--
+                CacheSize（2026-10-04 由 12 收紧到 2）：
+                原本是 0（页面一切走就丢，每次回来都要重新解析 XAML + 重建整棵树，切页能明显顿一下）；
+                10-01 为了消掉那个顿，一口气放到 12。Nick 现在要"回到最开始那种激进省内存的思路"，
+                所以**不再攒一堆页面** —— 只留最近 2 页（够"来回切"不重解析，又不会把十来个页面的
+                可视化树长期钉在内存里）。
+                ⛔ 没取 0：那正是 10-01 实测"切页明显顿一下"的配置，代价已经被否过一次。
+                ⛔ 没取 12：Nick 明确说"缓存各种页面…还是不够好"。
+                页面用 NavigationCacheMode="Enabled" 的才真进缓存，其余仍旧走完就丢；
+                "内存立刻降下来"主要还是靠 MemoryTrimmer 的回收时机（现在切一页就收一次，
+                见 Services/MemoryTrimmer.cs）。
 
-
-
-
-
-
-
-
-
-
-
-
-
+                ContentTransitions：WinUI 原生的切页过渡（淡入 + 轻微上移），不是自绘动画。
+            -->
             <Frame x:Name="ContentFrame" CacheSize="2">
                 <Frame.ContentTransitions>
                     <TransitionCollection>

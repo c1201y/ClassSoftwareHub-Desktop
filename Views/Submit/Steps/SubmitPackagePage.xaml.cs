@@ -10,17 +10,17 @@ using Windows.Storage.Pickers;
 
 namespace ClassSoftwareHub.Desktop.Views.Submit.Steps;
 
-
-
-
-
-
-
-
-
+/// <summary>
+/// 第 3 步：安装包与系统。
+///
+/// <para>
+/// 每条下载项默认只露「平台」与「直链 / 上传」，其余四项收进「更多选项」。
+/// 上传走站点 OSS 直传，成功后回填 <c>oss://</c> 键并把输入框锁住。
+/// </para>
+/// </summary>
 public sealed partial class SubmitPackagePage : Page, ISubmitStep
 {
-    
+    /// <summary>内容还没同步下来时的平台兜底（与 软件数据/platforms.json 的 key 一致）。</summary>
     private static readonly (string Key, string Name)[] DefaultPlatforms =
     {
         ("windows", "Windows"),
@@ -51,7 +51,7 @@ public sealed partial class SubmitPackagePage : Page, ISubmitStep
         SyncFromDraft();
     }
 
-    
+    /// <summary>平台复选框按 <c>ContentStore.Platforms</c> 生成，清单新增平台会自动多出一个框。</summary>
     private void BuildPlatformChecks()
     {
         var platforms = App.Content.Platforms.Count > 0
@@ -77,13 +77,13 @@ public sealed partial class SubmitPackagePage : Page, ISubmitStep
             box.IsChecked = _draft.Platforms.Contains(box.Tag as string ?? "");
         _syncing = false;
 
-        
+        // 回到本页时收掉上一次的提示
         ErrorBar.IsOpen = false;
         _draft.Renumber();
         SyncAddButton();
     }
 
-    
+    /// <summary>任一字段改动就收起错误提示。</summary>
     private void Field_Changed(object sender, TextChangedEventArgs e)
     {
         if (ErrorBar is not null) ErrorBar.IsOpen = false;
@@ -108,7 +108,7 @@ public sealed partial class SubmitPackagePage : Page, ISubmitStep
         }
     }
 
-    
+    // ── 下载项增删 ───────────────────────────────────────────────────────
 
     private void AddDownload_Click(object sender, RoutedEventArgs e)
     {
@@ -129,11 +129,11 @@ public sealed partial class SubmitPackagePage : Page, ISubmitStep
         SyncAddButton();
     }
 
-    
+    /// <summary>到上限就把「添加」灰掉（与网页端同一表现，别让人点了没反应）。</summary>
     private void SyncAddButton()
         => AddDownloadButton.IsEnabled = _draft is not null && _draft.Downloads.Count < SubmitDraft.MaxDownloads;
 
-    
+    // ── 上传到本站 ───────────────────────────────────────────────────────
 
     private async void Upload_Click(object sender, RoutedEventArgs e)
     {
@@ -164,7 +164,7 @@ public sealed partial class SubmitPackagePage : Page, ISubmitStep
             var result = await OssUpload.UploadAsync(filePath, OssPurpose.File, progress);
 
             item.Url = result.Url;
-            
+            // ⛔ 必须显式标「文件直链」：oss:// 键推断不出类型，停在自动识别会被当成网页跳转
             item.Kind = "file";
             item.UploadHint = result.OrphanMinutes > 0
                 ? $"已上传，请在 {result.OrphanMinutes} 分钟内完成提交，否则会被自动清理。"
@@ -217,7 +217,7 @@ public sealed partial class SubmitPackagePage : Page, ISubmitStep
         _ => bytes + " B",
     };
 
-    
+    // ── 导航壳接口 ───────────────────────────────────────────────────────
 
     public string? Validate() => _draft?.ValidatePackage();
 

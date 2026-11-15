@@ -5,29 +5,29 @@ using ClassSoftwareHub.Desktop.Services;
 
 namespace ClassSoftwareHub.Desktop.Data.SysFeatures;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 系统功能清单（2026-10-31 重做，需求清单第 20 条）。
+///
+/// <para>
+/// 口径（Nick 2026-10-31 定）：<b>这一页就是对系统大操刀的，弹 UAC 是正常做法，不绕</b>。
+/// 所以这里收的项全落在 <c>HKLM</c> 或 <c>powercfg</c>，与「系统优化」页（纯 HKCU、不提权）分工清楚。
+/// </para>
+///
+/// <para>
+/// ⛔ 收录标准：<b>改之前的当前值读得到、改之后能重读验证</b>。两条缺一不可：
+/// <list type="bullet">
+///   <item>读不到 → 界面上只能显示"—"，用户点了也不知道原来是什么，等于死开关；</item>
+///   <item>验证不了 → 只能"看起来成功了"，这与 <c>FirewallGateway</c> 吃过的亏是同一类。</item>
+/// </list>
+/// 2026-10-31 因此砍掉四项：<b>休眠文件类型</b>（<c>HiberFileType</c> 只有设过才存在，本机读不到）、
+/// <b>关闭硬盘时间</b>、<b>合盖行为</b>、<b>唤醒时需要密码</b>（这三项在没被改过的机器上
+/// <c>ACSettingIndex</c> 是空的，回落默认值也读不出具体数字）。等找到可靠的读法再加。
+/// </para>
+///
+/// <para>
+/// ⛔ 不收 <c>HKCU</c> 的项：提权批次跑在管理员令牌下，写 HKCU 会写到管理员账户去。
+/// </para>
+/// </summary>
 public static class SystemFeatureCatalog
 {
     public const string GroupPower = "电源与启动";
@@ -35,7 +35,7 @@ public static class SystemFeatureCatalog
     public const string GroupRecovery = "故障与恢复";
     public const string GroupPrivacy = "隐私与共享";
 
-    
+    // ── 注册表路径 ────────────────────────────────────────────────────────
     private const string PowerKey = @"SYSTEM\CurrentControlSet\Control\Power";
     private const string BootPowerKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Power";
     private const string MemoryKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management";
@@ -45,7 +45,7 @@ public static class SystemFeatureCatalog
     private const string SqmKey = @"SOFTWARE\Microsoft\SQMClient\Windows";
     private const string RdpKey = @"SYSTEM\CurrentControlSet\Control\Terminal Server";
 
-    
+    // ── 电源设置的 GUID（Windows 内置，全系统通用，不随机器变）────────────
     private const string SubVideo = "7516b95f-f776-4464-8c53-06167f40cc99";
     private const string VideoIdle = "3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e";
     private const string SubSleep = "238c9fa8-0aad-41ed-83f4-97be242c8f20";
@@ -53,14 +53,14 @@ public static class SystemFeatureCatalog
     private const string SubButtons = "4f971e89-eebd-4455-a8de-9e59040e7347";
     private const string PowerButtonAction = "7648efa3-dd9c-4e3e-b566-50f929386280";
 
-    
+    /// <summary>三个内置电源计划的固定 GUID。用户可以在系统设置里删掉某一个，所以写入前要判在不在。</summary>
     public const string PlanBalanced = "381b4222-f694-41f0-9685-ff5bb260df2e";
     public const string PlanHighPerf = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
     public const string PlanSaver = "a1841308-3541-4fab-bc81-f71556f20b4a";
 
     public static IReadOnlyList<SysFeatureDef> All { get; } = new List<SysFeatureDef>
     {
-        
+        // ═════════ 电源与启动 ═════════
         new()
         {
             Id = "hibernate", Group = GroupPower,
@@ -171,7 +171,7 @@ public static class SystemFeatureCatalog
             Label = v => v switch { 0 => "不操作", 1 => "睡眠", 3 => "关机", _ => $"未知（{v}）" },
         },
 
-        
+        // ═════════ 磁盘与内存 ═════════
         new()
         {
             Id = "memory-compression", Group = GroupDisk,
@@ -194,7 +194,7 @@ public static class SystemFeatureCatalog
             Label = v => v != 0 ? "已开启" : "已关闭",
         },
 
-        
+        // ═════════ 故障与恢复 ═════════
         new()
         {
             Id = "crash-dump", Group = GroupRecovery,
@@ -231,14 +231,14 @@ public static class SystemFeatureCatalog
             Label = v => v != 0 ? "已开启" : "已关闭",
         },
 
-        
+        // ═════════ 隐私与共享 ═════════
         new()
         {
             Id = "error-reporting", Group = GroupPrivacy,
             Header = "Windows 错误报告",
             Description = "关闭后崩溃信息不再上报。",
             Glyph = "\uE730",
-            
+            // 值不存在 = 未限制 = 开启（系统默认）
             Read = () => SystemFeatures.ReadRegistryInt(WerKey, "Disabled") ?? 0,
             Command = v => new[] { SysFeatureRules.RegAdd(WerKey, "Disabled", v) },
             Label = v => v != 0 ? "已关闭" : "已开启",
@@ -259,14 +259,14 @@ public static class SystemFeatureCatalog
             Header = "远程桌面",
             Description = "教室机建议保持关闭。",
             Glyph = "\uE8AF",
-            
+            // ⚠️ 这个键是"拒绝连接"，语义与其它项相反：1 = 已禁用
             Read = () => SystemFeatures.ReadRegistryInt(RdpKey, "fDenyTSConnections"),
             Command = v => new[] { SysFeatureRules.RegAdd(RdpKey, "fDenyTSConnections", v) },
             Label = v => v != 0 ? "已关闭" : "已开启",
         },
     };
 
-    
+    /// <summary>秒数 → "从不 / 5 分钟 / 1 小时"。</summary>
     private static string SecLabel(int seconds) => seconds switch
     {
         0 => "从不",

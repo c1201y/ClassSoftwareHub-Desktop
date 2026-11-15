@@ -3,9 +3,9 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-
-
-
+/// <summary>
+/// 第 9 步：启动方式。只改草稿；开机自启写注册表、最小化重算命令行这些留到收尾。
+/// </summary>
 public sealed partial class OobeStartupPage : Page
 {
     private bool _loading;
@@ -48,7 +48,7 @@ public sealed partial class OobeStartupPage : Page
         if (session is not null) session.Draft.CloseToTray = TraySwitch.IsOn;
     }
 
-    
+    /// <summary>自启关掉时，「开机时最小化启动」没有意义 —— 置灰并说明当前状态。</summary>
     private void UpdateMinimizeState()
     {
         var on = AutoStartSwitch.IsOn;

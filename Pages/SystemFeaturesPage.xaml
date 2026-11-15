@@ -7,19 +7,19 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    
+    <!--
+      系统功能（需求清单第 20 条，2026-10-31 重做）。
 
+      版式**逐字照抄** Pages/AutoShutdownPage.xaml：三列 Grid 把内容钉在中间 960 宽。
+      ⚠️ 别用 Stretch + MaxWidth —— 一旦触发上限 WinUI 会把整列右甩，开关跑到可视区外。
 
+      交互与「系统优化」页一致（Nick 2026-10-31 定「排队 + 一次弹 UAC」）：
+      拨开关只排队，点右下角提示条的主按钮时把所有改动拼成一个脚本、弹一次授权。
+      ⛔ 那套提示条代码目前与 SystemTweaksPage 各一份，第三处出现时再抽公共控件 ——
+         现在抽会连带动已经稳的页面，不划算。
 
-
-
-
-
-
-
-
-
-
+      卡片只用 controls:SettingsCard，不手搭 Border。
+    -->
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <Grid Margin="24,36,24,44">
@@ -43,7 +43,7 @@
                             <ui:ExperimentalBadge FeatureId="sysfeatures" />
                         </StackPanel>
 
-                        
+                        <!-- 提示条被收起后的回入口：两个入口不同时出现 -->
                         <Button x:Name="PendingButton" Grid.Column="1" Visibility="Collapsed"
                                 VerticalAlignment="Center" Click="PendingButton_Click" />
 
@@ -59,7 +59,7 @@
                     <InfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" Visibility="Collapsed"
                              Severity="Informational" Message="" Margin="0,0,0,8" />
 
-                    
+                    <!-- ═════════ 电源与启动 ═════════ -->
                     <TextBlock Text="电源与启动" FontSize="14" Margin="0,6,0,2" />
 
                     <controls:SettingsCard Header="休眠">
@@ -128,7 +128,7 @@
                                   SelectionChanged="Row_SelectionChanged" />
                     </controls:SettingsCard>
 
-                    
+                    <!-- ═════════ 磁盘与内存 ═════════ -->
                     <TextBlock Text="磁盘与内存" FontSize="14" Margin="0,18,0,2" />
 
                     <controls:SettingsCard Header="休眠文件">
@@ -164,7 +164,7 @@
                                       OnContent="已开启" OffContent="已关闭" Toggled="Row_Toggled" />
                     </controls:SettingsCard>
 
-                    
+                    <!-- ═════════ 故障与恢复 ═════════ -->
                     <TextBlock Text="故障与恢复" FontSize="14" Margin="0,18,0,2" />
 
                     <controls:SettingsCard Header="崩溃转储">
@@ -189,7 +189,7 @@
                                       OnContent="已开启" OffContent="已关闭" Toggled="Row_Toggled" />
                     </controls:SettingsCard>
 
-                    
+                    <!-- ═════════ 隐私与共享 ═════════ -->
                     <TextBlock Text="隐私与共享" FontSize="14" Margin="0,18,0,2" />
 
                     <controls:SettingsCard Header="Windows 错误报告">
@@ -229,11 +229,11 @@
             </Grid>
         </ScrollViewer>
 
-        
-
-
-
-
+        <!--
+            应用提示：非目标式 TeachingTip，固定在右下角浮出。
+            ⚠️ 必须挂在 ScrollViewer **外面**，否则会随内容一起滚走 —— 这一页 14 张卡，
+               用户拨完最下面那张，滚回顶部才能点应用的话就等于没解决。
+        -->
         <TeachingTip x:Name="ApplyTip"
                      PreferredPlacement="BottomRight"
                      IsLightDismissEnabled="False"
@@ -243,11 +243,11 @@
                      CloseButtonClick="ApplyTip_CloseClick"
                      Closed="ApplyTip_Closed">
             <TeachingTip.Content>
-                
-
-
-
-
+                <!--
+                    任务清单：逐项列出这次要写进系统的内容，可单项取消。
+                    ⚠️ 用 ItemsControl + 代码里构造（与系统优化页同一套）：⛔ 不用 ItemsRepeater
+                       —— 这套组合塞进模板容器时进程会被直接杀掉（2026-10-30 实测）。
+                -->
                 <ScrollViewer MaxHeight="260"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">

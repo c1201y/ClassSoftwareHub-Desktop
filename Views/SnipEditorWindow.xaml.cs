@@ -25,16 +25,16 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 截图编辑窗：截完一块就弹这个，简单编辑 + 三个动作（复制 / 保存 / 钉图）。
+///
+/// 规矩（踩过的坑）：
+///   · 图片**一律 1:1**（原始像素），窗口装不下就让 ScrollViewer 滚，绝不缩放、绝不铺满；
+///   · 这里 **一个 ThemeResource 都不用**（本 build 里缺 key 会抛 XamlParseException 把窗口搞没）；
+///   · 导出统一走 PNG（`RenderTargetBitmap` → `BitmapEncoder`）：剪贴板 / 保存 / 钉图都用它，
+///     省得自己折腾 BMP 和预乘 alpha；
+///   · 撤销/重做 = 增删 InkLayer 上的元素（不原地改，天生好回滚）。
+/// </summary>
 public sealed partial class SnipEditorWindow : Window
 {
     private enum Tool
@@ -64,13 +64,13 @@ public sealed partial class SnipEditorWindow : Window
     private Tool _tool = Tool.Pen;
     private Color _color = Color.FromArgb(255, 232, 17, 35);
     private readonly List<Color> _palette = new();
-    private double _thickness = 6;                       
-    private int _thicknessStep = 1;                      
+    private double _thickness = 6;                       // DIP
+    private int _thicknessStep = 1;                      // 0=细 1=中 2=粗
 
     private readonly List<UIElement> _items = new();
     private readonly List<UIElement> _redo = new();
 
-    
+    // 当前这一笔
     private bool _drawing;
     private Point _start;
     private Polyline? _stroke;
@@ -88,7 +88,7 @@ public sealed partial class SnipEditorWindow : Window
         InkLayer.PointerReleased += Ink_PointerReleased;
         InkLayer.PointerCaptureLost += (_, _) => _drawing = false;
 
-        
+        // 快捷键
         AddKey(BtUndo, VirtualKey.Z, VirtualKeyModifiers.Control);
         AddKey(BtRedo, VirtualKey.Y, VirtualKeyModifiers.Control);
         AddKey(BtCopy, VirtualKey.C, VirtualKeyModifiers.Control);
@@ -100,7 +100,7 @@ public sealed partial class SnipEditorWindow : Window
         b.KeyboardAccelerators.Add(new KeyboardAccelerator { Key = key, Modifiers = mods });
     }
 
-    
+    /// <summary>截完一块 → 打开编辑窗（必须在 UI 线程调用）。</summary>
     public static SnipEditorWindow? Open(ScreenFrame frame, int cropX, int cropY, int cropW, int cropH)
     {
         try
@@ -108,7 +108,7 @@ public sealed partial class SnipEditorWindow : Window
             var w = new SnipEditorWindow();
             w.Setup(frame, cropX, cropY, cropW, cropH);
             w.Activate();
-            _ = w.AutoSaveAsync();                        
+            _ = w.AutoSaveAsync();                        // 自动存一份原图（设置里能关/能换目录）
             ScreenCapture.Log($"编辑窗已开: {cropW}x{cropH}");
             return w;
         }
@@ -119,10 +119,10 @@ public sealed partial class SnipEditorWindow : Window
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 四角圆角（最大化时退回直角）。为什么要手动设、为什么不能拿 RemoveBorder 顶上，
+    /// 见 Core/WindowChrome.SetRounded 的说明 —— 这里和主窗口是同一个坑。
+    /// </summary>
     private void ApplyRounded(AppWindow app)
     {
         try
@@ -152,14 +152,14 @@ public sealed partial class SnipEditorWindow : Window
 
         if (app.Presenter is OverlappedPresenter p)
         {
-            p.IsAlwaysOnTop = true;                      
+            p.IsAlwaysOnTop = true;                      // 上课时别被别的窗口压下去
             p.IsResizable = true;
             p.IsMaximizable = true;
             p.IsMinimizable = true;
         }
 
-        
-        
+        // 自绘标题栏：外观我们自己的（跟应用里「常用工具」窗一个套路），拖动/阴影/圆角还是系统的。
+        // 注意：根元素必须有**不透明底色**，否则 WinUI3 的内容岛不铺满会露黑底（之前就是一团黑的）。
         try
         {
             ExtendsContentIntoTitleBar = true;
@@ -168,15 +168,15 @@ public sealed partial class SnipEditorWindow : Window
 
             var bar = app.TitleBar;
             bar.ExtendsContentIntoTitleBar = true;
-            bar.PreferredHeightOption = TitleBarHeightOption.Standard;   
-            bar.ButtonBackgroundColor = Colors.Transparent;              
+            bar.PreferredHeightOption = TitleBarHeightOption.Standard;   // 32px，跟 AppTitleBar 一样高
+            bar.ButtonBackgroundColor = Colors.Transparent;              // 系统按钮底透明，跟面板底色融为一体
             bar.ButtonInactiveBackgroundColor = Colors.Transparent;
             UpdateCaptionColors();
             RootGrid.ActualThemeChanged += (_, _) => UpdateCaptionColors();
 
-            
-            
-            
+            // ⚠️ 上面那句 ExtendsContentIntoTitleBar 会把窗口圆角偏好按回 Default —— 2026-09-29 实测
+            //    在这台 Win11 上渲染出来就是**直角**，跟"拖动/阴影/圆角还是系统的"那句注释正好相反。
+            //    必须显式要一次 ROUND；这个窗口可以最大化，最大化时再退回直角（贴边窗口不该削角）。
             ApplyRounded(app);
             app.Changed += (_, e) =>
             {
@@ -188,10 +188,10 @@ public sealed partial class SnipEditorWindow : Window
             ScreenCapture.Log("编辑窗标题栏定制失败: " + ex.Message);
         }
 
-        
-        
+        // 系统背景（云母 / 亚克力，跟着「设置」里主窗口那个选择走）：根底置空让背景透出来，
+        // 工具条那行透明、图片区是 in-app 亚克力——不支持就退纯色（BackdropHost 管）。
         BackdropHost.Apply(this, RootGrid);
-        ThemeHost.Apply(RootGrid);                       
+        ThemeHost.Apply(RootGrid);                       // 跟应用主题（分体只管常用工具浮窗）
 
         _scale = DpiScale();
         _dipW = _pxW / _scale;
@@ -204,9 +204,9 @@ public sealed partial class SnipEditorWindow : Window
         CanvasHost.Width = _dipW;
         CanvasHost.Height = _dipH;
 
-        
+        // 窗口：能装下就 1:1 摆开，装不下就按工作区开 + 里面滚（图片本身永远不缩放）
         var work = DisplayArea.Primary.WorkArea;
-        var chromeH = (int)Math.Round(96 * _scale);      
+        var chromeH = (int)Math.Round(96 * _scale);      // 标题栏 + 工具栏
         var maxW = Math.Max(360, work.Width - (int)Math.Round(40 * _scale));
         var maxH = Math.Max(260, work.Height - chromeH - (int)Math.Round(40 * _scale));
         var winW = Math.Min(Math.Max(_pxW + (int)Math.Round(24 * _scale), (int)Math.Round(720 * _scale)), maxW);
@@ -226,7 +226,7 @@ public sealed partial class SnipEditorWindow : Window
         _ = LoadAsync();
     }
 
-    
+    /// <summary>截完自动存一份原图（设置 → 常用工具里能关、能改目录，默认桌面）。</summary>
     private async Task AutoSaveAsync()
     {
         try
@@ -243,7 +243,7 @@ public sealed partial class SnipEditorWindow : Window
                 try
                 {
                     Status("已自动保存：" + name);
-                    ToolTipService.SetToolTip(StatusText, path);   
+                    ToolTipService.SetToolTip(StatusText, path);   // 悬停看完整路径
                 }
                 catch { }
             });
@@ -254,7 +254,7 @@ public sealed partial class SnipEditorWindow : Window
         }
     }
 
-    
+    /// <summary>右上角系统按钮的配色跟着深浅色走（照搬「常用工具」窗那套）。</summary>
     private void UpdateCaptionColors()
     {
         try
@@ -297,7 +297,7 @@ public sealed partial class SnipEditorWindow : Window
         return 1.0;
     }
 
-    
+    // ── 工具栏 ───────────────────────────────────────────────
 
     private void Tool_Click(object sender, RoutedEventArgs e)
     {
@@ -336,13 +336,13 @@ public sealed partial class SnipEditorWindow : Window
     private void BuildPalette()
     {
         _palette.Clear();
-        _palette.Add(Color.FromArgb(255, 232, 17, 35));    
-        _palette.Add(Color.FromArgb(255, 255, 140, 0));    
-        _palette.Add(Color.FromArgb(255, 255, 214, 10));   
-        _palette.Add(Color.FromArgb(255, 16, 185, 129));   
-        _palette.Add(Color.FromArgb(255, 0, 120, 212));    
-        _palette.Add(Color.FromArgb(255, 255, 255, 255));  
-        _palette.Add(Color.FromArgb(255, 0, 0, 0));        
+        _palette.Add(Color.FromArgb(255, 232, 17, 35));    // 红
+        _palette.Add(Color.FromArgb(255, 255, 140, 0));    // 橙
+        _palette.Add(Color.FromArgb(255, 255, 214, 10));   // 黄
+        _palette.Add(Color.FromArgb(255, 16, 185, 129));   // 绿
+        _palette.Add(Color.FromArgb(255, 0, 120, 212));    // 蓝
+        _palette.Add(Color.FromArgb(255, 255, 255, 255));  // 白
+        _palette.Add(Color.FromArgb(255, 0, 0, 0));        // 黑
 
         foreach (var c in _palette)
         {
@@ -366,7 +366,7 @@ public sealed partial class SnipEditorWindow : Window
         PaintPalette();
     }
 
-    
+    /// <summary>调色板小方块的描边：浅色底用黑、深色底用白，不然深色下看不见边。</summary>
     private Color SwatchLine()
         => RootGrid.ActualTheme == ElementTheme.Dark
             ? Color.FromArgb(70, 255, 255, 255)
@@ -394,7 +394,7 @@ public sealed partial class SnipEditorWindow : Window
         };
     }
 
-    
+    // ── 画 ──────────────────────────────────────────────────
 
     private void Ink_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
@@ -506,7 +506,7 @@ public sealed partial class SnipEditorWindow : Window
 
         if (_stroke is not null)
         {
-            
+            // 点一下没动 → 不要这一笔
             if (moved < 3) InkLayer.Children.Remove(_stroke);
             else Commit(_stroke);
             _stroke = null;
@@ -523,7 +523,7 @@ public sealed partial class SnipEditorWindow : Window
             }
             else if (_tool == Tool.Mosaic)
             {
-                InkLayer.Children.Remove(_shape);        
+                InkLayer.Children.Remove(_shape);        // 换成一格一格的颜色块
                 AddMosaic(rect);
             }
             else
@@ -579,7 +579,7 @@ public sealed partial class SnipEditorWindow : Window
         shape.Height = Math.Max(0, r.Height);
     }
 
-    
+    /// <summary>马赛克：按"截图原始像素"取色，一格一格铺（格数封顶，别造出几万个元素）。</summary>
     private void AddMosaic(Rect rDip)
     {
         var frame = _frame;
@@ -678,7 +678,7 @@ public sealed partial class SnipEditorWindow : Window
         }
     }
 
-    
+    // ── 撤销 / 重做 / 清除 ────────────────────────────────────
 
     private void Undo_Click(object sender, RoutedEventArgs e)
     {
@@ -706,7 +706,7 @@ public sealed partial class SnipEditorWindow : Window
         Status("已清除所有标注");
     }
 
-    
+    // ── 三个动作 ─────────────────────────────────────────────
 
     private async void Copy_Click(object sender, RoutedEventArgs e)
     {
@@ -768,13 +768,13 @@ public sealed partial class SnipEditorWindow : Window
         }
     }
 
-    
+    /// <summary>把「底图 + 标注」合成成 PNG（按物理像素输出）。</summary>
     private async Task<byte[]?> ComposeAsync()
     {
         try
         {
             var status = StatusText.Text;
-            StatusText.Text = "";                        
+            StatusText.Text = "";                        // 别把状态字也照进去
 
             var rtb = new RenderTargetBitmap();
             await rtb.RenderAsync(CanvasHost);

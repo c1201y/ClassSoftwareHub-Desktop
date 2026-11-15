@@ -12,74 +12,74 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
+/// <summary>软件下载页：搜索 + 分类筛选 + 软件卡片墙（全原生，不加载任何网页）。</summary>
 public sealed partial class SoftwarePage : Page
 {
     private string _category = "";
 
-    
-    
-    
-    
+    /// <summary>
+    /// 当前选中的操作系统平台 key（空串 = 全部系统）。与 <see cref="_category"/> 是「且」的关系，
+    /// 判定见 <see cref="SoftwareApp.SupportsPlatform"/>。取值来自 软件数据/platforms.json。
+    /// </summary>
     private string _platform = "";
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 关键词过滤链（2026-10-18 起**没有 UI 入口** —— 页内搜索框已删，顶部总搜索接手了）。
+    /// 刻意保留字段与 <see cref="Apply"/> 里的过滤：以后若要把"筛列表"接回顶部搜索，
+    /// 只需要给它赋值，不用再把整条链路重写一遍。当前恒为空串，行为等于不过滤。
+    /// </summary>
     private string _keyword = "";
-    private string _view = "tile";          
+    private string _view = "tile";          // tile | grid
     private bool _loading;
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 上一次真正重建列表时的「状态指纹」（分类|关键词|视图|内容包版本|内容来源）。
+    ///
+    /// 为什么要有它：本页 XAML 是 NavigationCacheMode="Enabled"，实例会被 Frame 留下来，
+    /// 但 <see cref="Apply"/> 每次都把 ItemsSource 换成新的 List —— GridView 见到新集合
+    /// 会把**所有卡片容器整个重建一遍**（含图标），那 200ms 左右的停顿又回来了，缓存等于白做。
+    /// 指纹没变就什么都不做，"退出去再进来"就变成零成本。
+    /// </summary>
     private string _appliedKey = "";
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 当前筛选后真正显示在页上的那些软件（2026-10-30 加）。
+    /// 给 Hub AI 浮层当现场数据用 —— 用户问"这页里有什么""哪几款支持 XP"时，
+    /// 直接照这份清单回答，不用模型再去猜或调工具。
+    /// </summary>
     private List<SoftwareApp> _shown = new();
 
     public SoftwarePage()
     {
         InitializeComponent();
 
-        
+        // 卡片宽度按可用宽度自适应（2026-10-24 Nick：「右边空的能开蜜雪冰城了」）
         TileGrid.Loaded += (_, _) => FitCards();
         TileGrid.SizeChanged += (_, _) => FitCards();
         CompactGrid.Loaded += (_, _) => FitCards();
         CompactGrid.SizeChanged += (_, _) => FitCards();
 
-        
+        // 两侧留白 / 标题行上的滚轮也转给卡片列表（见 Core/WheelRelay.cs）
         Core.WheelRelay.Attach(this, TileGrid, CompactGrid);
 
-        
+        // 浮层每次提问都来取一份现场数据（见 BuildAiContext）
         AiFlyout.ContextProvider = BuildAiContext;
     }
 
-    
+    /// <summary>卡片之间的水平间距 = 模板里 Border 的 Margin 右边距。</summary>
     private const double CardGap = 8;
 
     private const double TileMinWidth = 300, TileHeight = 126;
     private const double CompactMinWidth = 184, CompactHeight = 114;
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 按当前可用宽度重算卡片宽度：列数取"塞得下的最多列"，剩余宽度**平摊给每一列**，
+    /// 于是最右边不会留一条空白。
+    ///
+    /// ⚠️ 宽度必须写到 <see cref="ItemsWrapGrid.ItemWidth"/> 上，不能靠 Border 的
+    ///    HorizontalAlignment=Stretch —— 每个 GridViewItem 的槽宽由面板决定，
+    ///    Border 再 Stretch 也只会在自己的槽里撑满，槽与槽之间照样空着。
+    /// </summary>
     private void FitCards()
     {
         FitOne(TileGrid, TileMinWidth, TileHeight);
@@ -90,24 +90,24 @@ public sealed partial class SoftwarePage : Page
     {
         if (grid.ItemsPanelRoot is not ItemsWrapGrid panel) return;
 
-        
-        
+        // 面板自身宽度变了也要重算 —— 滚动条显隐、内边距调整这类变化不会改 grid.ActualWidth，
+        // 只订阅 grid.SizeChanged 会漏掉，于是停在"少排一列"的状态上（2026-11-07 实测就是这个）
         if (panel.Tag is null)
         {
             panel.Tag = "fit-watch";
             panel.SizeChanged += (_, _) => FitOne(grid, minWidth, height);
         }
 
-        
-        
-        
-        
-        
+        // ⚠️ 宽度取 ItemsHost 自己的，⛔ 不要用 grid.ActualWidth：
+        //    后者比真正能排布的区域宽十几像素（垂直滚动条与容器内边距），
+        //    按它算出的槽宽会让最后一列差一点点排不下，面板于是少排一列，
+        //    右边留出整整一列空白。
+        //    2026-11-07 磁贴视图实测：卡片槽 511、只排 2 列、右侧空 506（正好一列）。
         var available = panel.ActualWidth;
         if (available < 1)
         {
-            
-            
+            // 首帧 ItemsHost 还没量出来，先退回容器宽度凑一帧；随后在低优先级队列里重算一次，
+            // 换成面板的真实宽度（只重试一次，靠 Tag 打标记 —— 面板始终量不出来时不能无限排队）
             available = grid.ActualWidth - grid.Padding.Left - grid.Padding.Right;
             if (grid.Tag is null)
             {
@@ -119,27 +119,27 @@ public sealed partial class SoftwarePage : Page
                 });
             }
         }
-        if (available <= minWidth) return;   
+        if (available <= minWidth) return;   // 还没量出来 / 窗口太窄 → 保持模板里的初值
 
-        
+        // 面板偶尔会比容器还宽（测量尚未稳定）。取两者较小的，⛔ 别按虚高的宽度排布
         var container = grid.ActualWidth - grid.Padding.Left - grid.Padding.Right;
         if (container > 1 && container < available) available = container;
 
         var columns = Math.Max(1, (int)Math.Floor((available + CardGap) / (minWidth + CardGap)));
 
-        
-        
-        
-        
-        
+        // 槽宽（含右边距）按"总宽 ÷ 列数"平摊，再往下取整。
+        // ⚠️ 不能用 (available - (columns-1)*gap)/columns 算卡片宽再加 gap：
+        //    那样 N 列总共要 N×(卡宽+gap) 宽度，比可用宽度多算了最后一个 gap，
+        //    面板判定"放不下"就会少排一列（2026-10-24 实测：1297 宽只排了 5 列，右边空一整列）。
+        // 再减半像素：浮点累积误差下 columns×slot 可能正好等于 available，边界判定会翻车。
         var slot = Math.Floor(available / columns) - 0.5;
 
-        
-        
+        // 除下来比最小宽还窄（窗口宽度正好卡在临界）→ 退回"最小宽 + 间距"，
+        // 让面板自己决定换行，别硬塞成一张细长卡片
         if (slot - CardGap < minWidth) slot = minWidth + CardGap;
 
-        
-        
+        // 拖窗口时 SizeChanged 会连发，差值不到 1px 就别动 —— 每设一次 ItemWidth
+        // 面板都要把所有项重新测量一遍
         if (Math.Abs(panel.ItemWidth - slot) < 1) return;
 
         panel.ItemWidth = slot;
@@ -150,16 +150,16 @@ public sealed partial class SoftwarePage : Page
     {
         base.OnNavigatedTo(e);
 
-        
-        
-        
-        
+        // ⛔ **只有带了分类参数才改分类**（2026-10-22）。
+        //    以前无条件 `_category = e.Parameter as string ?? ""`，于是从「系统工具」点进某个软件、
+        //    再返回时参数是 null ⇒ 分类被清成「全部」，用户得重新点一遍（Nick 反馈的核心问题）。
+        //    现在：带参数 = 用户主动切分类；不带参数（返回/从导航进来）= **保持上次选择**。
         if (e.Parameter is string requestedCategory && requestedCategory.Length > 0)
             _category = requestedCategory;
 
-        
-        
-        
+        // 总闸关掉时入口卡整体隐藏（Nick 2026-10-18 定：不占位、不留灰块）。
+        // ⚠️ 必须每次导航都重读一次 —— 本页 NavigationCacheMode=Enabled 实例长驻，
+        //    用户去设置里开关一次再回来，页面不会重建，只在构造时读一次会一直是旧状态。
         HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -170,13 +170,13 @@ public sealed partial class SoftwarePage : Page
         _loading = false;
         UpdateView();
 
-        
-        
-        
+        // 内容同步好之后自己要刷新 —— 安装包不自带清单，首启就停在"正在获取"这一屏上，
+        // 用户多半不会为了看到列表专门切一次页（2026-10-05）。
+        // ⚠️ 本页 NavigationCacheMode=Enabled（实例长驻），先 -= 再 += 保证只挂一次。
         App.Content.Changed -= OnContentChanged;
         App.Content.Changed += OnContentChanged;
 
-        if (Fingerprint() == _appliedKey) return;   
+        if (Fingerprint() == _appliedKey) return;   // 状态没变 → 保留现有卡片，别重建
 
         BuildChips();
         Apply();
@@ -188,7 +188,7 @@ public sealed partial class SoftwarePage : Page
         base.OnNavigatedFrom(e);
     }
 
-    
+    /// <summary>内容变了（同步完成 / 同步状态变化）：重建列表，或只刷一下空清单那几句提示。</summary>
     private void OnContentChanged()
     {
         if (!DispatcherQueue.HasThreadAccess)
@@ -204,23 +204,23 @@ public sealed partial class SoftwarePage : Page
             return;
         }
 
-        
-        
+        // 指纹没变 = 内容本身没换，只是"正在同步"的开关翻了页 → 不必重建卡片，
+        // 否则每次同步开始/结束都要付一次列表重建的代价。
         if (App.Content.Apps.Count == 0) UpdateEmptyState(0);
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 当前"页面状态"的指纹；任一要素变了才值得重建列表与分类条。
+    ///
+    /// ⚠️ 内容那一位必须用 <see cref="Core.ContentStore.Revision"/>（每次 Load 都涨），
+    /// **不能**用 ContentVersion / Source（一个恒为空、一个恒为同一路径，索引不到"清单被补全了"，
+    /// 首启同步完页面就不会自己刷新 —— 2026-10-05 实测踩到）。
+    /// </summary>
     private string Fingerprint()
         => string.Join("\u0001", _category, _platform, _keyword, _view,
                        App.Content.Revision.ToString(), App.Content.Source);
 
-    
+    /// <summary>磁贴（3 列，带简介）/ 网格（5 列，紧凑）切换，选择会记进设置。</summary>
     private void ViewPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
@@ -239,11 +239,11 @@ public sealed partial class SoftwarePage : Page
         CompactGrid.Visibility = tile ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 分类条（2026-10-18 换成系统 <see cref="SelectorBar"/>）。
+    /// ⚠️ 原来是一排自绘 ToggleButton + 横向 ScrollViewer：选中态要自己维护、
+    /// 键盘导航没有、滚动条还占一行。SelectorBar 自带下划线指示器与键盘操作。
+    /// </summary>
     private void BuildChips()
     {
         CategoryBar.Items.Clear();
@@ -263,7 +263,7 @@ public sealed partial class SoftwarePage : Page
             });
         }
 
-        
+        // 回填时不触发 Apply（否则每次切页都会重建一遍列表）
         _loading = true;
         try
         {
@@ -278,16 +278,16 @@ public sealed partial class SoftwarePage : Page
             _loading = false;
         }
 
-        
+        // 分类与系统下拉总是一起变（同一份内容、同一次 Load），顺手在这里重建
         BuildPlatformPicker();
     }
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 系统筛选下拉：第一项「全部系统」，后面按 platforms.json 的顺序列平台。
+    ///
+    /// ⚠️ 一个平台都没有（或只有 1 个）时整个下拉隐藏 —— 对齐网页版
+    /// <c>v-if="platformItems.length > 1"</c>：只有一种平台时这个筛选没有意义，白占宽度。
+    /// </summary>
     private void BuildPlatformPicker()
     {
         var platforms = App.Content.Platforms;
@@ -307,7 +307,7 @@ public sealed partial class SoftwarePage : Page
                 if (platforms[i].Key == _platform) index = i + 1;
             }
 
-            
+            // 选中的平台在新数据里没了（内容更新过）→ 退回「全部系统」，别留一个指向空集合的状态
             if (_platform.Length > 0 && index == 0) _platform = "";
 
             PlatformPicker.SelectedIndex = index;
@@ -339,13 +339,13 @@ public sealed partial class SoftwarePage : Page
         Apply();
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 给浮层准备这一页的现场数据（2026-10-30 二版）。
+    /// <para>
+    /// 关键词：**用户眼前这一页有什么**。当前分类/平台/关键词筛出来的是哪些、各自多大、支持哪些系统，
+    /// 都是模型答"有没有 XX""哪个适合老电脑"必须看得见的东西 —— 让它去全盘搜反而更容易答错。
+    /// </para>
+    /// </summary>
     private PageContextDoc BuildAiContext()
     {
         var doc = new PageContextDoc(
@@ -377,7 +377,7 @@ public sealed partial class SoftwarePage : Page
 
         doc.Add("可筛选的平台", App.Content.Platforms.Select(p => new { key = p.Key, 名称 = p.Name }).ToList());
 
-        
+        // 清单给 25 款：一页差不多就这么多，再多模型也读不动；总体数量上面已经给了
         doc.Add("当前页上的软件（前 25 款）", _shown.Take(25).Select(a => new
         {
             a.Name,
@@ -419,30 +419,30 @@ public sealed partial class SoftwarePage : Page
 
         WarmPalette(list);
 
-        
+        // 这一页的 AI 就该知道页上有什么：清单存下来，提问时现采成 JSON（见 BuildAiContext）
         _shown = list;
 
         var baseTitle = _category.Length == 0
             ? (_keyword.Length == 0 ? "软件下载" : $"搜索：{_keyword}")
             : App.Content.CategoryName(_category);
 
-        
+        // 选了系统就在标题后面带上平台名，否则只有一个「软件下载」看不出列表被筛过
         TitleText.Text = _platform.Length == 0
             ? baseTitle
             : $"{baseTitle} · {App.Content.PlatformName(_platform)}";
 
         UpdateEmptyState(list.Count);
 
-        _appliedKey = Fingerprint();   
+        _appliedKey = Fingerprint();   // 记下这次是按什么状态建的，下次同状态直接跳过
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 预热详情页色带要用的图标主色。
+    ///
+    /// ⛔⛔ 详情页不能"等页面画完再去取色"—— 那必然是先显示一种颜色、过一会儿跳成另一种。
+    /// 列表这里提前把前几十个算好（`IconPalette.Preload` 内部有缓存与去重，重复调用不重复下载）。
+    /// 只做首屏那几十个：再往后滚到的软件，用户点进去时图标早就加载过了，那时再算也来得及。
+    /// </summary>
     private static void WarmPalette(List<SoftwareApp> list)
     {
         const int limit = 32;
@@ -451,10 +451,10 @@ public sealed partial class SoftwarePage : Page
             Services.IconPalette.Preload(list[i].Icon);
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 空清单时别只写一句"没有匹配的软件"——要分清三种情况：
+    /// ① 搜索/分类筛掉了 ② 正常：安装包不自带清单，正在联网取 ③ 异常：真的没取到
+    /// </summary>
     private void UpdateEmptyState(int shown)
     {
         if (shown > 0)
@@ -483,7 +483,7 @@ public sealed partial class SoftwarePage : Page
         EmptyRetry.IsEnabled = true;
         EmptyRetry.Content = "重新获取清单";
 
-        
+        // 正在联网取 —— 这是最正常的首启状态（安装包不再内置清单），别吓唬用户
         if (App.Content.IsSyncing)
         {
             EmptyTitle.Text = "正在获取软件清单";
@@ -498,7 +498,7 @@ public sealed partial class SoftwarePage : Page
                          "若始终为空，多半是当前网络连不上（教学机、校园网常见），换个网络再点下面的按钮。";
     }
 
-    
+    /// <summary>空状态里的「重新获取清单」：拉一次网络内容再重读（失败就照实说）。</summary>
     private async void EmptyRetry_Click(object sender, RoutedEventArgs e)
     {
         EmptyRetry.IsEnabled = false;
@@ -544,7 +544,7 @@ public sealed partial class SoftwarePage : Page
             Frame.Navigate(typeof(DetailPage), app.Id);
     }
 
-    
+    // 卡片自己的悬停反馈（容器 chrome 已关掉，见 XAML 里的 CshCardItemStyle）
     private void Card_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         if (sender is Border b) b.Opacity = 0.88;
@@ -555,23 +555,23 @@ public sealed partial class SoftwarePage : Page
         if (sender is Border b) b.Opacity = 1.0;
     }
 
-    
-    
-    
+    // 占位字形（购物袋）的显隐由 SoftwareApp.IconPlaceholder 驱动（见 Data/SoftwareApp.cs）：
+    // 没图 / 加载中 / 加载失败都显示，加载成功才收掉。用属性 + INotifyPropertyChanged 而不是
+    // Image 元素事件，是因为 GridView 回收容器时属性会重新求值，不会被上一次的状态卡住。
 
-    
-    
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  Hub AI 入口与浮层（2026-10-18）
+    //  ⚠️ 现在**没有接模型**：发送只回一句占位。AiClient / 诊断采集都还没写，
+    //     这一版只为把形态定下来（尺寸、配色、展开位置），别当成能用。
+    // ══════════════════════════════════════════════════════
 
     private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 「提交软件」入口。
+    /// 2026-11-12 起改开投稿向导窗口（非模态，可与清单对照）；旧提交页仍可通过
+    /// <c>csh://page/submit</c> 或命令行 <c>--page=submit</c> 打开，作为路由保留。
+    /// </summary>
     private void SubmitEntry_Click(object sender, RoutedEventArgs e)
         => ClassSoftwareHub.Desktop.Views.Submit.SubmitWizardWindow.Show();
 

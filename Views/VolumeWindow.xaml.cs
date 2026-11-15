@@ -13,44 +13,44 @@ using Windows.Graphics;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 单滑块浮窗：点侧边栏「音量」/「屏幕亮度」模块弹出，**挨着边条**长出来一栏（边条不收起，见 VolumeFlyoutGroup）。
+///
+/// ⚠️ 类名是历史遗留（一开始只伺候音量）—— 现在**音量 + 屏幕亮度共用这一个窗口**，
+///    靠 <see cref="Target"/> 区分：文案、数值来源、下面那颗键的含义都不一样。
+///    两个模块共用一个窗口还有个好处：同一时刻只可能开一栏，不会两块都贴在边条上。
+///
+/// 从上到下（贴左/右时）= 数值 + 垂直滑块 + 第一颗键（音量：静音 / 亮度：自动亮度）+ 第二颗键（仅音量：展开合成器）；
+/// 贴上/下时自动换成**横版**（从左到右一排），见 <see cref="ApplyOrientation"/>。
+///
+/// 窗口外壳 / 材质（跟边条同一套）/ 贴边几何都在 <see cref="FlyoutChrome"/> + <see cref="EdgeGeometry"/> 里，
+/// 本文件只管「长什么样、报什么数」。
+///
+/// ⚠️ **音量那一路和亮度那一路的读取代价差了三个数量级**（2026-09-27 修）：
+///    音量 = 内存里的 Core Audio 调用（微秒级），1.5 秒轮一次没问题；
+///    亮度 = WMI 查一次十几到几十毫秒，**自动亮度还要起一个 powercfg 进程**（WaitForExit 最长 4 秒）。
+///    两条路都按 1.5 秒压在 UI 线程上 → 浮窗开着就周期性卡顿、白烧 CPU 和 IO。
+///    现在：亮度改 3 秒 + **后台线程读**（见 <see cref="KickBrightnessRead"/>），
+///    自动亮度状态只在**开窗那次**和**自己改过之后**读（那状态不会自己变）。
+/// </summary>
 public sealed partial class VolumeWindow : Window
 {
-    
+    /// <summary>这一栏现在在伺候谁。</summary>
     public enum Target
     {
-        
+        /// <summary>系统主音量（下面第一颗键 = 静音）。</summary>
         Volume,
-        
+        /// <summary>屏幕亮度（下面第一颗键 = 自动亮度；**没有**二级浮窗）。</summary>
         Brightness,
     }
 
-    
+    // 兜底尺寸（量不出来的时候用），dip
     private const int TallWidthDip = 72;
     private const int TallHeightDip = 300;
     private const int FlatWidthDip = 330;
     private const int FlatHeightDip = 64;
 
-    
+    // 再挤也别小于这个（不然圆角/描边会把内容吃掉）
     private const int MinPanelWidthDip = 68;
     private const int MinPanelHeightDip = 120;
 
@@ -63,15 +63,15 @@ public sealed partial class VolumeWindow : Window
     private bool _visible;
     private bool _started;
     private bool _syncing;
-    private bool _dragging;             
-    private bool _flat;                 
+    private bool _dragging;             // 滑块正被拖着（音量和亮度共用这一个标志）
+    private bool _flat;                 // 当前是不是横版（贴着上/下）
     private Target _target = Target.Volume;
 
-    
-    private bool? _adaptiveOn;              
-    private int _brightnessPercent = -1;    
+    // ── 亮度这一路的缓存（读数很重，见类注释）──
+    private bool? _adaptiveOn;              // 自动亮度状态；只在开窗那次和自己改过之后读
+    private int _brightnessPercent = -1;    // 亮度缓存（-1 = 还没读到）
     private bool _brightnessReadable = true;
-    private bool _brightnessReading;        
+    private bool _brightnessReading;        // 后台读正在进行，别叠着再发一个
 
     private VolumeWindow()
     {
@@ -80,14 +80,14 @@ public sealed partial class VolumeWindow : Window
         Configure();
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>开 / 关（再点一次同一个模块就收起来；点另一个模块就换成那一栏）。</summary>
+    /// <param name="fromEdge">
+    /// **是哪条边条上的键被按的**（left / right / top / bottom）。
+    /// ⚠️ 2026-10-11 修 Nick 报的「贴靠模式 + 左右都开，点左边的音量、浮窗从右边弹出来」：
+    ///    浮窗以前自己问 <see cref="ToolSidebarWindow.CurrentEdge"/> 该贴哪边，而那个属性在双边模式下
+    ///    **优先返回右边** ⇒ 无论点哪条边，浮窗都跑右边去。现在改成"谁开的就贴谁那边"。
+    ///    传 null 时才退回"猜一条边"的旧行为（目前没有这种调用方）。
+    /// </param>
     public static void Toggle(Target target, string? fromEdge = null)
     {
         try
@@ -96,19 +96,19 @@ public sealed partial class VolumeWindow : Window
             var w = _instance;
 
             var edge = fromEdge ?? ToolSidebarWindow.CurrentEdge;
-            var moved = w._originEdge != edge;      
+            var moved = w._originEdge != edge;      // 这次是从**另一条**边条点过来的
 
-            
-            
+            // 同一个模块、**同一条边**再点一次 = 收起来。
+            // ⚠️ "同模块但换了边"绝不能当收起：用户点的是另一条边条上的键，他要的是浮窗挪过来。
             if (w._visible && w._target == target && !moved)
             {
                 w.HideSelf();
                 return;
             }
 
-            
-            
-            
+            // 换边时先把合成器收掉：它的落点是按"主音量在哪"算的，主音量一挪它就吊在旧位置了。
+            // ⚠️ 必须在改 _originEdge **之前**调 —— 它的滑出方向也是读 Edge 算的，
+            //    先改边会让它朝着新边滑出去（反方向）。
             if (moved && VolumeMixerWindow.IsVisible) VolumeMixerWindow.CloseIfOpen();
 
             w._originEdge = edge;
@@ -119,7 +119,7 @@ public sealed partial class VolumeWindow : Window
 
             if (w._visible)
             {
-                
+                // 换了边 ⇒ 重播一次滑入（从新边"长出来"）；只换 target ⇒ 原地挪，别重播（会像闪了两下）。
                 if (moved) w.MoveToEdge();
                 else w.Reposition();
             }
@@ -127,8 +127,8 @@ public sealed partial class VolumeWindow : Window
         }
         catch (Exception ex)
         {
-            
-            
+            // ⚠️ 这里原来是个空 catch —— 整段异常全吞掉，"点了没反应"就完全查不出来。
+            //    项目其他地方一律走 ScreenCapture.Log，这里跟着统一。
             ScreenCapture.Log("浮窗开关失败: " + ex.Message);
         }
     }
@@ -138,55 +138,55 @@ public sealed partial class VolumeWindow : Window
         if (_instance?._visible == true) _instance.HideSelf();
     }
 
-    
+    /// <summary>主音量浮窗现在开着吗。</summary>
     public static bool IsVisible => _instance?._visible == true;
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 侧边栏贴哪条边（跟侧边栏同一个设置）。竖/横版、滑入方向、合成器排哪儿全靠它。
+    ///
+    /// ⚠️ 一律问**开它的那条边条**（<see cref="_originEdge"/>，由 <see cref="Toggle"/> 记下），
+    ///    ⛔ 不要再去问 <see cref="ToolSidebarWindow.CurrentEdge"/> —— 那边是"猜一条边"，
+    ///    双边模式下优先猜右边 ⇒ 点左边的音量、浮窗从右边弹出来（2026-10-11 Nick 报的）。
+    ///    只有记的那条边已经不在了（自由模式拖换过边、边条重建成别的边）才退回 CurrentEdge 兜底。
+    ///
+    /// ⚠️ 也**别**读死 <c>App.Settings.SidebarEdge</c>：自由模式下那条可能是旧值。
+    ///    读错方向 = 浮窗排到边条另一侧（屏幕外）→ 夹回屏幕边 → 压住边条（2026-10-01 修）。
+    /// </summary>
     public static string Edge => _instance?.MyEdge ?? ToolSidebarWindow.CurrentEdge;
 
-    
+    /// <summary>本条浮窗该贴的边：优先"是谁开的"，那条边没了才猜。</summary>
     private string MyEdge =>
         _originEdge.Length > 0 && ToolSidebarWindow.IsEdgePresent(_originEdge)
             ? _originEdge
             : ToolSidebarWindow.CurrentEdge;
 
-    
+    /// <summary>开这条浮窗的边条贴在哪条边（left / right / top / bottom；空 = 还没定过）。</summary>
     private string _originEdge = "";
 
-    
+    /// <summary>主音量浮窗当前在屏幕上的矩形（给合成器浮窗「贴着它排」用）。</summary>
     public static RectInt32? CurrentRect => _instance?._chrome.CurrentRect;
 
-    
-    
-    
+    /// <summary>主音量浮窗本次落定的**最终**矩形（滑入动画的目标位置，不是半路上的实时位置）。
+    /// ⚠️ 合成器必须锚这里：锚实时位置的话，主音量还在滑入时点「展开」，
+    ///    合成器就按半路位置落座，主音量随后滑到位正好压进合成器（2026-10-01 修「三个窗叠一起」）。</summary>
     public static RectInt32? AnchorRect => _instance?._finalRect ?? CurrentRect;
 
-    
+    /// <summary>ShowSelf/Reposition 里算出的最终落点（滑入动画的目标）。</summary>
     private RectInt32? _finalRect;
 
     private void Configure()
     {
         try
         {
-            
-            
-            
+            // 跟**侧边栏**那套外观（2026-11-04 Nick 定）：这一栏是挨着边条长出来的，
+            // 属于侧边栏的一部分。以前跟应用主题，于是「应用深色 + 侧边栏浅色」时
+            // 边条发白、贴出来的音量和亮度面板整片发黑，像两个不相干的东西。
             ThemeHost.Apply(Root, external: true);
             VolumeFlyoutGroup.MainHwnd = _chrome.Hwnd;
 
-            
-            
-            
+            // ⚠️ handledEventsToo: true —— Slider 内部会把 PointerPressed 标成 handled，
+            //    普通 += 订阅收不到，"_dragging" 就永远是 false，
+            //    轮询一到就把滑块值按真实值写回去（拖到一半被"拽回去"就是这个）。
             MasterSlider.AddHandler(UIElement.PointerPressedEvent,
                 new PointerEventHandler((_, _) => _dragging = true), true);
             MasterSlider.AddHandler(UIElement.PointerReleasedEvent,
@@ -218,13 +218,13 @@ public sealed partial class VolumeWindow : Window
         Refresh();
     }
 
-    
+    // ── 竖版 / 横版 ───────────────────────────────────────────────────────
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 贴着左/右 = 竖版（数值在上、滑块竖着、两个键在下）；
+    /// 贴着上/下 = 横版（数值 / 滑块 / 两个键 从左到右一排）。
+    /// 滑块自带的 Orientation 也一起换 —— 横条里塞一根竖滑块是很怪的。
+    /// </summary>
     private void ApplyOrientation(bool flat)
     {
         _flat = flat;
@@ -233,19 +233,19 @@ public sealed partial class VolumeWindow : Window
         ContentHost.Spacing = 10;
         ContentHost.Padding = flat ? new Thickness(12, 10, 12, 10) : new Thickness(8, 12, 8, 8);
 
-        
-        
+        // 竖版：两个键**撑满整宽**（跟边条上的键一个长相，也就不留左右空地）；
+        // 横版：两个键并排，各自保持自己的宽度
         ButtonHost.Orientation = flat ? Orientation.Horizontal : Orientation.Vertical;
         ButtonHost.Spacing = flat ? 6 : 4;
         ButtonHost.HorizontalAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
 
         foreach (var b in new[] { ActionToggle, ExpandToggle })
         {
-            b.Width = flat ? 40 : double.NaN;                 
+            b.Width = flat ? 40 : double.NaN;                 // NaN = 交给 Stretch 撑满
             b.Height = 36;
         }
 
-        
+        // 横版把两根滑块的方向也掉过来（横条里塞一根竖滑块太怪）
         if (flat)
         {
             MasterSlider.Orientation = Orientation.Horizontal;
@@ -260,12 +260,12 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 面板尺寸 = **内容实测**（量一遍，别写死）。
+    ///
+    /// 写死数字的后果就是二选一：要么夹字（数字被裁一半），要么留空（滑块两边能开蜜雪冰城）。
+    /// 实测还有一个好处：量的时候把数字临时摆成最宽的「100%」，所以 99%→100% 那一下面板不会跳宽度。
+    /// </summary>
     private Windows.Foundation.Point SizeDip()
     {
         var fallback = _flat
@@ -282,7 +282,7 @@ public sealed partial class VolumeWindow : Window
             var w = Math.Max(desired.Width, MinPanelWidthDip);
             var h = Math.Max(desired.Height, MinPanelHeightDip);
 
-            return new Windows.Foundation.Point(Math.Ceiling(w) + 2, Math.Ceiling(h) + 2);   
+            return new Windows.Foundation.Point(Math.Ceiling(w) + 2, Math.Ceiling(h) + 2);   // +2 = 1px 描边 ×2
         }
         catch
         {
@@ -294,38 +294,38 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
+    // ── 显示 / 收起 ───────────────────────────────────────────────────────
 
     private void ShowSelf()
     {
         try
         {
-            var edge = MyEdge;                          
-            ApplyTarget();                              
+            var edge = MyEdge;                          // ⚠️ 只取一次：动画中途别的代码改了边会前后不一致
+            ApplyTarget();                              // 文案 / 图标 / 第二颗键的显隐，先按当前 target 摆好
             ApplyOrientation(EdgeGeometry.IsFlat(edge));
 
             var scale = _chrome.Scale;
             var work = DisplayArea.Primary.WorkArea;
 
-            Start();                                    
+            Start();                                    // 先把内容刷好（数字先摆对），再按内容量面板尺寸
             var dip = SizeDip();
             var w = (int)Math.Round(dip.X * scale);
             var h = (int)Math.Round(dip.Y * scale);
 
-            
+            // 锚点 = **开它的那条**边条（挨着它长）；那条边条拿不到就当成贴屏幕边
             var anchor = ToolSidebarWindow.RectOf(edge) ?? EdgeGeometry.EdgeBar(edge, work);
             var (start, final) = EdgeGeometry.BesideAnchor(edge, anchor, work, w, h, scale);
-            _finalRect = new RectInt32(final.X, final.Y, w, h);   
+            _finalRect = new RectInt32(final.X, final.Y, w, h);   // 给合成器当锚（别让它锚半路上的实时位置）
 
             _chrome.Present(start, w, h);
             _visible = true;
 
-            _chrome.Finish(Root.ActualTheme == ElementTheme.Dark);   
+            _chrome.Finish(Root.ActualTheme == ElementTheme.Dark);   // ⚠️ 必须在显示之后调
 
             FlyoutFade.In(ContentHost, 160);
             _slide.Run(_chrome.AppWindow, start, final, FlyoutSlider.SlideInMs);
 
-            VolumeFlyoutGroup.HoldSidebar();             
+            VolumeFlyoutGroup.HoldSidebar();             // 边条按住，别让它缩回去
         }
         catch (Exception ex)
         {
@@ -350,7 +350,7 @@ public sealed partial class VolumeWindow : Window
             _slide.Run(_chrome.AppWindow, from, to, FlyoutSlider.SlideOutMs, () =>
             {
                 _chrome.HideDirect();
-                VolumeFlyoutGroup.OnAnyHidden();          
+                VolumeFlyoutGroup.OnAnyHidden();          // 都收完了才放开边条
             }, easeIn: true);
         }
         catch
@@ -360,11 +360,11 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 已经开着的时候换 target（音量 ↔ 亮度）：面板高度可能不一样（亮度少一颗键），
+    /// 所以按新内容重新量一遍尺寸再挪过去 —— 不重播滑入动画，免得看着像"闪了两下"。
+    /// ⚠️ 只管**同一条边**内的挪动；换边走 <see cref="MoveToEdge"/>。
+    /// </summary>
     private void Reposition()
     {
         try
@@ -389,24 +389,24 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 已经开着的时候**换到另一条边条**（贴靠模式左右都开：从左边条的键点过来、浮窗得挪到左边）。
+    ///
+    /// ⚠️ 为什么不复用 <see cref="HideSelf"/> + <see cref="ShowSelf"/>：HideSelf 会滑出屏幕
+    ///    并调 <c>OnAnyHidden</c> 放开边条，而这条浮窗其实**一直开着**，中间那一瞬边条会缩回去。
+    ///    所以这里直接 <c>HideDirect</c>（不做滑出）→ 重新量尺寸算新落点 → 重播一次滑入，
+    ///    看着就是"这条边上重新长出来一栏"。
+    ///
+    /// ⚠️ 别为了"省事"改成一句 MoveAndResize 硬挪：横跨整屏的那一下会先画出窗口停在半路，
+    ///    再叠加滑入，观感是"闪一下"。本方法全程只在两个明确位置之间切，不经过中间帧。
+    /// </summary>
     private void MoveToEdge()
     {
         try
         {
             ApplyOrientation(EdgeGeometry.IsFlat(MyEdge));
-            _chrome.HideDirect();          
-            ShowSelf();                    
+            _chrome.HideDirect();          // ⛔ 不要走 HideSelf：那条路会放开边条
+            ShowSelf();                    // 重新量尺寸 + 按新边算落点 + 播滑入（顺便 HoldSidebar 重新按住）
         }
         catch (Exception ex)
         {
@@ -414,11 +414,11 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 按当前 target 摆「文案 / 图标 / 按钮」：
+    ///   音量 → 第一颗键是静音（\uE74F），第二颗键（展开合成器）露面；
+    ///   亮度 → 第一颗键是自动亮度（\uE706），第二颗键收起来（亮度没有二级浮窗）。
+    /// </summary>
     private void ApplyTarget()
     {
         try
@@ -427,7 +427,7 @@ public sealed partial class VolumeWindow : Window
 
             ActionToggle.IsChecked = false;
             _chrome.AppWindow.Title = volume ? "音量" : "屏幕亮度";
-            _adaptiveOn = null;                          
+            _adaptiveOn = null;                          // 换了目标：自动亮度状态重新读一遍
 
             if (ActionToggle.Content is FontIcon fi)
                 fi.Glyph = volume ? "\uE74F" : "\uE706";
@@ -437,9 +437,9 @@ public sealed partial class VolumeWindow : Window
             ExpandToggle.Visibility = volume ? Visibility.Visible : Visibility.Collapsed;
             ApplyPollInterval();
 
-            
-            
-            
+            // ⚠️ 亮度**没有**二级浮窗：切到亮度时要把已经开着的合成器收掉。
+            //    不然面板显示亮度、旁边还挂着一个列各应用音量的窗，
+            //    而且那个窗的位置是按旧尺寸算的（2026-09-27 修）。
             if (!volume) VolumeMixerWindow.CloseIfOpen();
         }
         catch (Exception ex)
@@ -448,7 +448,7 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
+    /// <summary>第一颗键的悬停提示：音量固定一句话；亮度按「有没有传感器 / 上次有没有改失败」说清楚。</summary>
     private void UpdateActionTooltip(string? error = null)
     {
         if (_target == Target.Volume)
@@ -462,14 +462,14 @@ public sealed partial class VolumeWindow : Window
             : "自动亮度不可用：设备不具备环境光传感器"));
     }
 
-    
+    /// <summary>两个 ToggleButton 按真实状态点亮（静音中 / 合成器开着）。</summary>
     private void SyncToggles()
     {
         if (AudioService.TryGetMaster(out _, out var muted)) ActionToggle.IsChecked = muted;
         ExpandToggle.IsChecked = VolumeMixerWindow.IsVisible;
     }
 
-    
+    // ── 轮询 ──────────────────────────────────────────────────────────────
 
     private void Start()
     {
@@ -485,10 +485,10 @@ public sealed partial class VolumeWindow : Window
         ApplyPollInterval();
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// ⚠️ 两条路的节奏必须分开（2026-09-27）：音量是 Core Audio 内存调用，1.5 秒轮一次很便宜；
+    ///    亮度要过 WMI、自动亮度还要起 powercfg 进程，按 1.5 秒压在 UI 线程上就是周期性卡顿。
+    /// </summary>
     private void ApplyPollInterval()
     {
         if (_poll is null) return;
@@ -501,7 +501,7 @@ public sealed partial class VolumeWindow : Window
     {
         _started = false;
         _poll?.Stop();
-        _brightnessReading = false;      
+        _brightnessReading = false;      // 万一半路收窗，别把"正在读"的闸门永久卡住
     }
 
     private void OnPoll(DispatcherQueueTimer sender, object args) => Refresh();
@@ -513,7 +513,7 @@ public sealed partial class VolumeWindow : Window
         else RefreshBrightness();
     }
 
-    
+    /// <summary>主音量：读不到设备（没声卡 / 音频服务停了）就**如实说**，别装成 0%。</summary>
     private void RefreshVolume()
     {
         if (!AudioService.TryGetMaster(out var percent, out var muted))
@@ -539,17 +539,17 @@ public sealed partial class VolumeWindow : Window
         SyncToggles();
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 屏幕亮度：笔记本内屏能调，**外接显示器基本调不了**（系统亮度接口不管它）→ 读不到就如实说。
+    /// 读数本身在后台线程（<see cref="KickBrightnessRead"/>），这里只负责把已有结果刷到界面上。
+    /// </summary>
     private void RefreshBrightness()
     {
         ApplyBrightnessUi();
         KickBrightnessRead();
     }
 
-    
+    /// <summary>把缓存的亮度值刷到界面（读不到就明确写「读不到设备」，绝不假装 0%）。</summary>
     private void ApplyBrightnessUi()
     {
         if (!_brightnessReadable || _brightnessPercent < 0)
@@ -573,14 +573,14 @@ public sealed partial class VolumeWindow : Window
         MasterPercentText.Text = _brightnessPercent + "%";
         MasterPercentText.Opacity = 1.0;
 
-        
+        // 状态还不知道时别去动开关：先写个 false 再改回来会看到"闪一下"
         if (_adaptiveOn.HasValue) ActionToggle.IsChecked = _adaptiveOn.Value;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 后台读一次「当前亮度」+「自动亮度开关状态」，读完回 UI 线程刷。
+    /// 自动亮度只在**还不知道**的时候读 —— 那状态不会自己变，没必要每轮都去起一个 powercfg 进程。
+    /// </summary>
     private void KickBrightnessRead()
     {
         if (_brightnessReading) return;
@@ -616,7 +616,7 @@ public sealed partial class VolumeWindow : Window
         finally { _syncing = false; }
     }
 
-    
+    // ── 交互 ──────────────────────────────────────────────────────────────
 
     private void MasterSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
@@ -630,16 +630,16 @@ public sealed partial class VolumeWindow : Window
             return;
         }
 
-        
-        
+        // ⚠️ 亮度写下去是异步的（50ms 合并窗口 + WMI 延迟），下一次后台读还可能读回旧值；
+        //    所以先把缓存改成用户刚设的值，界面就不会"自己弹回去"。
         _brightnessPercent = percent;
         BrightnessService.SetPercent(percent);
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 第一颗键：音量模式 = 静音开关；亮度模式 = 自动亮度开关。
+    /// 改不动（比如电源设置不让改）就把开关弹回原样 —— 界面不能显示一个假的状态。
+    /// </summary>
     private void Action_Click(object sender, RoutedEventArgs e)
     {
         if (_target == Target.Volume)
@@ -659,8 +659,8 @@ public sealed partial class VolumeWindow : Window
         var want = ActionToggle.IsChecked == true;
         if (BrightnessService.SetAdaptive(want))
         {
-            _adaptiveOn = want;                  
-            UpdateActionTooltip();               
+            _adaptiveOn = want;                  // SetAdaptive 内部已经复核过，直接记住
+            UpdateActionTooltip();               // ⚠️ 把上次失败留下的那条提示清掉，否则会一直挂着
         }
         else
         {
@@ -669,7 +669,7 @@ public sealed partial class VolumeWindow : Window
         }
     }
 
-    
+    /// <summary>展开 / 收起合成器浮窗（它贴着本窗往屏幕里侧排）。亮度模式下这颗键藏着，点不到。</summary>
     private void Expand_Click(object sender, RoutedEventArgs e)
     {
         VolumeMixerWindow.Toggle();

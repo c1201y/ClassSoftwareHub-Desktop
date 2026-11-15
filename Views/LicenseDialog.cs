@@ -8,21 +8,21 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 输入激活码的对话框。设置页的「授权状态」卡片和"请求被挡下来了"的提示都走它，
+/// 两处共用一份，免得长得不一样。
+///
+/// <para>
+/// 行为：点「激活」→ 就地提交；失败**不关窗**，把服务端那句话显示在下面，
+/// 用户改一个字就能再试，不用从头点一遍。成功才关。
+/// </para>
+/// </summary>
 public static class LicenseDialog
 {
-    
+    /// <summary>同一时刻只允许一个 —— 两个 ContentDialog 同时 ShowAsync 会直接抛异常。</summary>
     private static bool _open;
 
-    
+    /// <summary>弹出对话框；返回是否激活成功。</summary>
     public static async Task<bool> ShowAsync(XamlRoot? root, bool fromGate = false)
     {
         if (root is null || _open) return false;
@@ -69,7 +69,7 @@ public static class LicenseDialog
 
             dialog.PrimaryButtonClick += async (_, args) =>
             {
-                
+                // 失败时**不关窗**，就地显示原因：让用户改一个字再试，不用从头点一遍
                 var deferral = args.GetDeferral();
                 try
                 {
@@ -90,7 +90,7 @@ public static class LicenseDialog
 
                     if (result.Ok)
                     {
-                        args.Cancel = false;      
+                        args.Cancel = false;      // 成功才关窗
                         return;
                     }
 
@@ -123,13 +123,13 @@ public static class LicenseDialog
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 取"危险色"画刷。
+    /// <para>
+    /// ⚠️ 对话框没有页面可挂，拿不到"元素所在那棵树"的主题，所以走应用级资源；
+    /// 深浅两套都由系统按当前主题给，够用。
+    /// </para>
+    /// </summary>
     private static class ServiceLocator
     {
         public static Brush CriticalBrush()

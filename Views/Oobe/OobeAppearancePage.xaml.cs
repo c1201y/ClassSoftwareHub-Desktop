@@ -9,9 +9,9 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-
-
-
+/// <summary>
+/// 第 4 步：外观。主题、背景材质只在本窗预览，真正的落盘在窗口收尾。
+/// </summary>
 public sealed partial class OobeAppearancePage : Page
 {
     private bool _loading;
@@ -38,11 +38,11 @@ public sealed partial class OobeAppearancePage : Page
         UpdateExtThemeAvailability();
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 预览图跟着 exe 走（内嵌资源），释放到缓存目录后再交给 Image —— 单文件发布也没有散落文件。
+    /// ⚠️ 用 Image 而不是 Border.Background 的 ImageBrush：主题一换（本页选浅色/深色就是换主题），
+    ///    挂在 Background 上的 ImageBrush 不保证重新绘制（实测切浅色后三张图整块空白）。
+    /// </summary>
     private static void LoadPreview(Image target, string assetName)
     {
         try
@@ -72,11 +72,11 @@ public sealed partial class OobeAppearancePage : Page
         if (session is null) return;
 
         session.Draft.Theme = theme;
-        session.PreviewTheme(theme);      
+        session.PreviewTheme(theme);      // 本窗立刻换色，真正的写入留到收尾
         UpdateRings(theme);
     }
 
-    
+    /// <summary>选中态画在卡片外圈：默认的单选圆点被模板去掉了，靠这圈强调色表达。</summary>
     private void UpdateRings(string theme)
     {
         RingSystem.Opacity = theme == "system" ? 1 : 0;
@@ -93,7 +93,7 @@ public sealed partial class OobeAppearancePage : Page
         if (session is null) return;
 
         session.Draft.Backdrop = kind;
-        session.PreviewBackdrop(kind);    
+        session.PreviewBackdrop(kind);    // 让用户当场看到材质变化
     }
 
     private void SplitTheme_Toggled(object sender, RoutedEventArgs e)
@@ -116,7 +116,7 @@ public sealed partial class OobeAppearancePage : Page
         if (session is not null) session.Draft.ExternalTheme = theme;
     }
 
-    
+    /// <summary>关掉分体外观时，「外部组件外观」没有意义 —— 置灰并说明当前行为。</summary>
     private void UpdateExtThemeAvailability()
     {
         ExtThemeCard.IsEnabled = SplitThemeSwitch.IsOn;

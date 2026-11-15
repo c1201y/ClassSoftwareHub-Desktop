@@ -11,19 +11,19 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// Hub AI 的二级设置页（2026-10-18）。
+///
+/// <para>
+/// 版式原则：**页面上只放"有哪些模型"，配置细节全部收进对话框**。
+/// 上一版把服务商/地址/模型名/密钥/思考/上下文六项平铺在页面上，用户分不清哪块属于哪个模型，
+/// 配一个已知厂商的模型要填五项（Nick：「恶心，不如人家一步搞定」）。
+/// </para>
+/// <para>
+/// ⛔ 密钥只在对话框里输入，保存后立刻清空；列表上只显示「未配置密钥」这种状态。
+/// **每条模型一个密钥文件**，删模型不会误伤别的。
+/// </para>
+/// </summary>
 public sealed partial class HubAiSettingsPage : Page
 {
     private bool _loading;
@@ -65,9 +65,9 @@ public sealed partial class HubAiSettingsPage : Page
         }
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  总闸
+    // ══════════════════════════════════════════════════════
 
     private async void EnableToggle_Toggled(object sender, RoutedEventArgs e)
     {
@@ -79,11 +79,11 @@ public sealed partial class HubAiSettingsPage : Page
         App.Settings.Save();
         AppLog.Step("hubai", enabled ? "总闸打开" : "总闸关闭");
 
-        
-        
-        
-        
-        
+        // 打开与关闭都给一个「立即重启」的出口（2026-10-28 Nick：关掉之后前台功能还能用）。
+        // ⚠️ 说清楚哪些是即时生效的、哪些要重新进入页面才刷新 —— 别一句"请重启"糊过去：
+        //    软件下载页的入口卡片、对话页的状态都是"进入页面时重算"，
+        //    加上 HubAiPage 是 NavigationCacheMode=Enabled，停在原地确实看不到变化。
+        // ⛔ 导航栏的 Hub AI 项**不受总闸影响**，永远在那儿（Nick 要留作宣传位），文案里别把它算进去。
         var dialog = new ContentDialog
         {
             Title = enabled ? "Hub AI 已启用" : "Hub AI 已停用",
@@ -94,7 +94,7 @@ public sealed partial class HubAiSettingsPage : Page
                   + "导航栏的 Hub AI 保留，方便随时重新开启。如需立刻清掉残留，可以重启应用。",
             PrimaryButtonText = "立即重启",
             CloseButtonText = "稍后",
-            DefaultButton = ContentDialogButton.Close,   
+            DefaultButton = ContentDialogButton.Close,   // 默认不是重启：多数情况重进一次页面就够
             XamlRoot = XamlRoot,
         };
 
@@ -102,9 +102,9 @@ public sealed partial class HubAiSettingsPage : Page
             App.MainWindow?.RestartApp();
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  模型列表
+    // ══════════════════════════════════════════════════════
 
     private void RenderModelList()
     {
@@ -168,7 +168,7 @@ public sealed partial class HubAiSettingsPage : Page
 
             if (!isActive)
             {
-                
+                // 没密钥的模型不给「使用」：点了也用不了，还会让人以为已经在用它
                 var use = new Button { Content = "使用", IsEnabled = hasKey };
                 if (!hasKey) ToolTipService.SetToolTip(use, "这条模型还没有配置密钥，暂时无法使用");
                 use.Click += (_, _) =>
@@ -213,7 +213,7 @@ public sealed partial class HubAiSettingsPage : Page
 
     private void AddModel_Click(object sender, RoutedEventArgs e) => _ = ShowModelDialogAsync(null);
 
-    
+    /// <summary>上下文档位。⚠️ 存的是**近似字符数**（0 = 不限制），不是 token 数。</summary>
     private static readonly (string Label, int Chars)[] ContextOptions =
     {
         ("不限制", 0),
@@ -231,27 +231,27 @@ public sealed partial class HubAiSettingsPage : Page
         return 0;
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 添加 / 编辑对话框。已知厂商只需要三步：**选供应商 → 填密钥 → 选模型**。
+    /// 地址由预设自动带出，只有「自定义」和「本地模型」才露出来。
+    /// </summary>
     private async Task ShowModelDialogAsync(AiModelEntry? existing)
     {
         var editing = existing is not null;
 
         var providerCombo = new ComboBox { Header = "供应商", HorizontalAlignment = HorizontalAlignment.Stretch };
 
-        
-        
+        // 云端厂商在前；本地与自定义单独放最后 —— 前者跑在自己机器上（不要密钥），
+        // 后者要手填地址，和"选一家直营厂商"是完全不同的心智
         foreach (var provider in AiProviders.All.Where(p => p.Id is not ("local" or "custom")))
             providerCombo.Items.Add(new ComboBoxItem { Content = provider.Name, Tag = provider.Id });
 
         providerCombo.Items.Add(new ComboBoxItem { Content = "本地模型（Ollama / LM Studio）", Tag = "local" });
         providerCombo.Items.Add(new ComboBoxItem { Content = "自定义（兼容 OpenAI 协议）", Tag = "custom" });
 
-        
-        
-        
+        // ⛔ 已配置过密钥的模型，不能再摆一个空白的密码框：密钥用 DPAPI 加密存在本机、
+        //    本来就不可查看，空白框只会让用户以为「这条模型没配密钥」
+        //    （2026-11-07 Nick 反馈的原话就是这个）。改成显式写「已配置」，另给一个「更换密钥」入口。
         var hasSavedKey = existing is not null && SecretStore.Has(existing.EffectiveSecretId);
         var keyEditing = false;
 
@@ -293,7 +293,7 @@ public sealed partial class HubAiSettingsPage : Page
             Visibility = Visibility.Collapsed,
         };
 
-        
+        // 高级参数默认折叠：绝大多数人只需要"选厂商 → 填密钥 → 选模型"
         var thinkToggle = new ToggleSwitch { Header = "思考模式", IsOn = true };
 
         var effortCombo = new ComboBox { Header = "思考强度", HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -362,12 +362,12 @@ public sealed partial class HubAiSettingsPage : Page
             var isLocal = providerId == "local";
             var isCustom = providerId == "custom";
 
-            
+            // 本地模型不校验密钥；自定义才需要手填地址
             keyPanel.Visibility = isLocal ? Visibility.Collapsed : Visibility.Visible;
             urlBox.Visibility = isLocal || isCustom ? Visibility.Visible : Visibility.Collapsed;
 
-            
-            
+            // 同一家供应商、密钥已经存过、用户也没点「更换密钥」→ 显示「已配置」而不是空白框。
+            // 换了供应商就必须重填：密钥是按厂商签发的，不能拿 A 家的去测 B 家。
             var configured = !isLocal
                              && existing is not null
                              && existing.ProviderId == providerId
@@ -380,7 +380,7 @@ public sealed partial class HubAiSettingsPage : Page
             modelCombo.Items.Clear();
             foreach (var model in provider.Models)
             {
-                
+                // 显示名给人看，Tag 存真正的模型 ID —— 两者不一样（deepseek-flash ↔ DeepSeek-V4.1-Flash）
                 modelCombo.Items.Add(new ComboBoxItem
                 {
                     Content = AiProviders.ModelLabel(provider.Id, model),
@@ -405,7 +405,7 @@ public sealed partial class HubAiSettingsPage : Page
             keyBox.Focus(FocusState.Programmatic);
         };
 
-        
+        // 回填：先把选项摆好，再让 filling=false，避免回填过程触发"切换供应商"的副作用
         var initialProvider = existing?.ProviderId ?? "deepseek";
         providerCombo.SelectedItem = providerCombo.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => (string?)i.Tag == initialProvider) ?? providerCombo.Items[0];
@@ -436,14 +436,14 @@ public sealed partial class HubAiSettingsPage : Page
             var provider = AiProviders.ById(providerId);
             var baseUrl = urlBox.Text.Trim().Length > 0 ? urlBox.Text.Trim() : provider.BaseUrl;
 
-            
+            // 下拉选中项给的是 Tag（真 ID）；手填时 Text 就是 ID
             var model = modelCombo.SelectedItem is ComboBoxItem { Tag: string pickedModel }
                 ? pickedModel
                 : (modelCombo.Text ?? "").Trim();
 
             var key = keyBox.Password?.Trim() ?? "";
 
-            
+            // 「已配置」状态下输入框是空的，测试时要用本机存着的那把，而不是拿空串去撞
             if (key.Length == 0 && existing is not null && existing.ProviderId == providerId)
             {
                 try { key = SecretStore.Load(existing.EffectiveSecretId); }
@@ -475,9 +475,9 @@ public sealed partial class HubAiSettingsPage : Page
             }
         };
 
-        
-        
-        
+        // ⛔ 没填密钥不许保存。以前允许留空，于是列表里能躺着一条「看着配好了、实际用不了」的模型，
+        //    用户会以为那是应用自带的（2026-11-07 Nick 反馈）。拦在对话框里面，
+        //    不要等对话框关掉再拿 InfoBar 报错 —— 那样用户还得重新打开填一遍。
         dialog.PrimaryButtonClick += (_, args) =>
         {
             if (providerCombo.SelectedItem is not ComboBoxItem { Tag: string providerId })
@@ -486,7 +486,7 @@ public sealed partial class HubAiSettingsPage : Page
                 return;
             }
 
-            if (providerId == "local") return;   
+            if (providerId == "local") return;   // 本地模型不要密钥
 
             var typed = keyBox.Password?.Trim() ?? "";
             var reuse = existing is not null
@@ -506,7 +506,7 @@ public sealed partial class HubAiSettingsPage : Page
 
         var saveProvider = AiProviders.ById(saveProviderId);
 
-        
+        // 下拉选中项给的是 Tag（真 ID）；手填时 Text 就是 ID
         var saveModel = modelCombo.SelectedItem is ComboBoxItem { Tag: string savedModelId }
             ? savedModelId
             : (modelCombo.Text ?? "").Trim();
@@ -528,7 +528,7 @@ public sealed partial class HubAiSettingsPage : Page
 
         if (entry.Effort is not ("low" or "high" or "max")) entry.Effort = "high";
 
-        
+        // 高级选项
         entry.Thinking = thinkToggle.IsOn;
         if (effortCombo.SelectedItem is ComboBoxItem { Tag: string effort }) entry.Effort = effort;
         if (contextCombo.SelectedItem is ComboBoxItem { Tag: int charCount }) entry.ContextLimit = charCount;
@@ -538,13 +538,13 @@ public sealed partial class HubAiSettingsPage : Page
         var key = keyBox.Password?.Trim() ?? "";
         if (key.Length > 0) SecretStore.Save(key, entry.EffectiveSecretId);
 
-        
+        // 这条保存之后到底能不能用？本地模型不看密钥，其余要有「这次填的」或「原本存着的」
         var usable = saveProviderId == "local"
                      || key.Length > 0
                      || (existing is not null && existing.ProviderId == saveProviderId
                          && SecretStore.Has(existing.EffectiveSecretId));
 
-        
+        // 新加的第一条自动设为当前；没有密钥的**不抢**这个位置，否则用户以为它已经在用了
         if (!editing && usable) AiModelStore.Activate(entry.Id);
 
         RenderModelList();
@@ -559,9 +559,9 @@ public sealed partial class HubAiSettingsPage : Page
         TestBar.IsOpen = true;
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  个人资料
+    // ══════════════════════════════════════════════════════
 
     private void UserNameBox_LostFocus(object sender, RoutedEventArgs e)
     {
@@ -574,9 +574,9 @@ public sealed partial class HubAiSettingsPage : Page
         App.Settings.Save();
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  工具包（可选安装）
+    // ══════════════════════════════════════════════════════
 
     private bool _installingToolPack;
 

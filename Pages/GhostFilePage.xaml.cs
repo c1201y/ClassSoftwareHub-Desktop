@@ -14,12 +14,12 @@ using Windows.System;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
+/// <summary>
+/// 结果列表里的一行。包一层是为了让勾选状态能双向绑回控件（<see cref="GhostFile.GhostEntry"/> 本身是只读的）。
+/// </summary>
 public sealed class GhostRow : INotifyPropertyChanged
 {
-    private bool _selected = true;      
+    private bool _selected = true;      // 默认全勾上：用户扫完通常就是想把它们清掉
 
     public required GhostFile.GhostEntry Entry { get; init; }
 
@@ -34,7 +34,7 @@ public sealed class GhostRow : INotifyPropertyChanged
         }
     }
 
-    
+    /// <summary>末尾的空格用 ␣ 画出来 —— 不然一行「新建文件夹」和「新建文件夹 」在屏幕上完全一样。</summary>
     public string DisplayName => Entry.DisplayName;
 
     public string SubText => (Entry.IsDirectory ? "文件夹" : "文件") + "　·　" + Entry.Reason;
@@ -52,11 +52,11 @@ public sealed class GhostRow : INotifyPropertyChanged
     };
 }
 
-
-
-
-
-
+/// <summary>
+/// 「幽灵文件清理」页（实验性功能，2026-11-03）。
+///
+/// 判定与删除都在 <see cref="GhostFile"/>，这里只管界面与那道确认流程。
+/// </summary>
 public sealed partial class GhostFilePage : Page
 {
     private List<GhostRow> _rows = new();
@@ -65,7 +65,7 @@ public sealed partial class GhostFilePage : Page
     {
         InitializeComponent();
 
-        
+        // 回车直接扫，省得每次去点按钮
         PathBox.KeyDown += (_, e) =>
         {
             if (e.Key != VirtualKey.Enter) return;
@@ -115,7 +115,7 @@ public sealed partial class GhostFilePage : Page
         ApplyScanResult(result);
     }
 
-    
+    /// <summary>把扫描结果铺到界面上（初次扫描和删完重扫都走这里）。</summary>
     private void ApplyScanResult(GhostFile.ScanResult result)
     {
         if (result.Error.Length > 0)
@@ -126,7 +126,7 @@ public sealed partial class GhostFilePage : Page
 
         if (result.Items.Count == 0)
         {
-            
+            // 这一支很重要：扫不到不等于没救 —— 文件系统里根本没这东西，那是资源管理器没刷新视图。
             var detail = result.Total == 0
                 ? "这个目录当前是空的。"
                 : $"这个目录里共 {result.Total} 个条目，名字和访问都正常。";
@@ -177,7 +177,7 @@ public sealed partial class GhostFilePage : Page
 
             AppLog.Info("ghost", $"删除完成：成功 {ok} 个，失败 {picked.Count - ok} 个");
 
-            
+            // 删完立刻重扫一遍，让列表反映真实情况（别让用户对着已经删掉的东西再点一次）
             var parent = picked[0].Entry.Parent;
             PathBox.Text = parent;
 
@@ -211,15 +211,15 @@ public sealed partial class GhostFilePage : Page
             "回到资源管理器看看那个图标还在不在。如果还在，把它所在的文件夹关掉再重新打开。");
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 二次确认，带 3 秒缓冲。
+    ///
+    /// <para>
+    /// 3 秒是刻意留的：这些东西是**永久删除、进不了回收站**，而这一页的操作往往是在
+    /// 「咦怎么删不掉」的烦躁状态下做的 —— 手快连点两下就把别的东西删了。
+    /// 缓冲期间主按钮是禁用的，按钮上的数字一跳一跳，用户能看清自己在确认什么。
+    /// </para>
+    /// </summary>
     private async Task<bool> ConfirmAsync(int count)
     {
         var dialog = new ContentDialog

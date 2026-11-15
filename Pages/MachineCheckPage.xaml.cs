@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
+/// <summary>列表里的一行（把 CheckItem 翻译成界面要的样子）。</summary>
 public sealed class CheckRow
 {
     public CheckRow(CheckItem item)
@@ -27,8 +27,8 @@ public sealed class CheckRow
         };
         StatusBrush = BrushFor(item.Status);
 
-        
-        
+        // 卡片窄（302 宽），版本文案按状态精简：能一眼看出"要不要动手"就够了，
+        // 完整信息在详情页。升级时给出 本机 → 清单 的方向，比罗列两个版本号直观。
         VersionText = item.Status switch
         {
             CheckStatus.Missing => item.App.Version.Length > 0 ? $"清单 {item.App.Version}" : "",
@@ -40,7 +40,7 @@ public sealed class CheckRow
 
         Note = item.Note;
 
-        
+        // 图标：有图就显示图，没图（或占位没解析出来）露一个字形，别留一块空白
         var img = item.App.IconImage;
         IconImage = img;
         PlaceholderVisibility = img is null ? Visibility.Visible : Visibility.Collapsed;
@@ -55,7 +55,7 @@ public sealed class CheckRow
     public ImageSource? IconImage { get; }
     public Visibility PlaceholderVisibility { get; }
 
-    
+    /// <summary>状态色。用主题资源，深色/浅色自动跟着走；取不到就退回次要文字色（不会渲染成黑块）。</summary>
     private static Brush BrushFor(CheckStatus status)
     {
         var key = status switch
@@ -66,7 +66,7 @@ public sealed class CheckRow
             _ => "TextFillColorTertiaryBrush",
         };
         return Lookup(key) ?? Lookup("TextFillColorSecondaryBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);   
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);   // 都没取到也要可见，不能是透明
     }
 
     private static Brush? Lookup(string key)
@@ -82,12 +82,12 @@ public sealed class CheckRow
     }
 }
 
-
-
-
-
-
-
+/// <summary>
+/// 本机核实页：拿（联网同步下来的）软件清单核对这台电脑装了什么。
+///
+/// 为什么要后台线程：枚举要遍历三个注册表视图的几百个键，某些机器（尤其开了安全软件的）
+/// 读注册表会明显发涩。这活儿不该压在 UI 线程上，所以整体 Task.Run，先把"检测中"摆出来。
+/// </summary>
 public sealed partial class MachineCheckPage : Page
 {
     private const string All = "全部";
@@ -103,7 +103,7 @@ public sealed partial class MachineCheckPage : Page
         InitializeComponent();
         BuildFilters();
 
-        
+        // 两侧留白 / 标题行上的滚轮也转给卡片列表（见 Core/WheelRelay.cs）
         Core.WheelRelay.Attach(this, ResultGrid);
     }
 
@@ -138,11 +138,11 @@ public sealed partial class MachineCheckPage : Page
             return;
         }
 
-        
+        // 注册表枚举 + 比对一起丢后台（都是纯计算/只读，不碰 UI）
         var results = await Task.Run(() =>
         {
             var installed = InstalledApps.Enumerate();
-            
+            // 商店版应用不写「程序和功能」的键，只跑上面那一趟会把它们全判成"没装"
             var store = InstalledApps.EnumerateStorePackages();
             return (
                 Items: MachineCheck.Run(apps, installed, store),
@@ -158,7 +158,7 @@ public sealed partial class MachineCheckPage : Page
         StatOutdated.Text = s.Outdated.ToString();
         StatMissing.Text = s.Missing.ToString();
 
-        
+        // 商店应用单独报个数：它跟「程序和功能」是两本账，混着数会显得"多报了"
         var storeTail = results.StoreCount > 0 ? $"，另有 {results.StoreCount} 个 Microsoft Store 应用" : "";
         SummaryHint.Text = s.Outdated > 0
             ? $"{s.Outdated} 个软件建议升级 · 本机共检测到 {results.InstalledCount} 个已安装软件{storeTail}"
@@ -177,7 +177,7 @@ public sealed partial class MachineCheckPage : Page
 
     private void ApplyFilter()
     {
-        if (!_ready) return;   
+        if (!_ready) return;   // 构造期 SelectedIndex 赋值也会触发一次，那时还没数据
         var key = FilterBox.SelectedItem as string ?? All;
 
         var shown = key switch
@@ -199,7 +199,7 @@ public sealed partial class MachineCheckPage : Page
 
     private void Rescan_Click(object sender, RoutedEventArgs e) => Load();
 
-    
+    /// <summary>整张卡片可点，进详情页（和「软件下载」的卡片行为一致，省掉卡上一个按钮的位置）。</summary>
     private void Result_ItemClick(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is not CheckRow row) return;
@@ -210,7 +210,7 @@ public sealed partial class MachineCheckPage : Page
     private void GoApps_Click(object sender, RoutedEventArgs e)
         => App.MainWindow?.Shell.NavigateTo("apps");
 
-    
+    /// <summary>整卡可点，给个悬停反馈（和「软件下载」的卡片同一手法：压一点不透明度）。</summary>
     private void Card_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         if (sender is Border b) b.Opacity = 0.88;

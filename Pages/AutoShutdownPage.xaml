@@ -6,11 +6,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    
-
-
-
-
+    <!--
+      版式与「程序专杀」「白板专杀」「本机核实」同源：三列 Grid 把内容钉在中间 960 宽。
+      ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
+      卡片语言也照它们：圆角 4、卡片间距 4、手写 Border 一律 CshCardStyle。
+    -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -21,12 +21,12 @@
 
             <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
-                
+                <!-- 标题。（原来的「实验性功能」徽标 2026-10-12 去掉了：功能转正、搬进「内置工具」） -->
                 <StackPanel Spacing="6" Margin="0,0,0,20">
                     <TextBlock Text="自动关机" FontSize="28" FontWeight="Bold" />
                 </StackPanel>
 
-                
+                <!-- 总开关 -->
                 <controls:SettingsCard Header="自动执行">
                     <controls:SettingsCard.Description>
                         <TextBlock x:Name="SwitchHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" Text="" />
@@ -35,19 +35,19 @@
                                   MinWidth="0" Toggled="EnableSwitch_Toggled" />
                 </controls:SettingsCard>
 
-                
+                <!-- 时间表 -->
                 <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="12">
                         <TextBlock Text="关机时间表" FontSize="14" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                    Text="点每天下方的 ＋ 添加时间点；点已有时间点可修改或删除，也可套用前一天。" />
                         <Grid x:Name="ScheduleGrid" ColumnSpacing="8" />
-                        
+                        <!-- 时间表这块自己的一句提示（套用结果 / 没什么可套用）—— 别跟上面那张「自动执行」卡的说明混用 -->
                         <TextBlock x:Name="ScheduleHint" FontSize="12" TextWrapping="Wrap" Opacity="0.75" Text="" />
                     </StackPanel>
                 </Border>
 
-                
+                <!-- 侧边栏的取消关机 -->
                 <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="取消关机" FontSize="14" />
@@ -61,11 +61,11 @@
                     </StackPanel>
                 </Border>
 
-                
-
-
-
-
+                <!--
+                    常驻警示（2026-10-31 文案收敛）。原来是「执行依据与限制」标题 + 四条「·」，
+                    讲的是"为什么只有这个程序在跑才生效"之类的原理；用户只需要知道两件事：
+                    程序退了就不会关、到点前要存东西。用 InfoBar 常驻，比一坨小字更显眼也更短。
+                -->
                 <InfoBar IsOpen="True" IsClosable="False" Severity="Warning"
                          Title="程序退出后不会执行"
                          Message="到点前请保存正在编辑的内容。本程序完全退出后，到达时间点也不会关机。" />

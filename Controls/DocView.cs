@@ -19,19 +19,19 @@ using Windows.Storage.Streams;
 
 namespace ClassSoftwareHub.Desktop.Controls;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 文档正文渲染（需求 15）。把 <see cref="DocContent"/> 变成原生控件：
+/// 标题 / 段落 / 列表（含任务列表）/ 引用 / 代码块 / 表格 / 图片，PDF 则逐页渲染成图片。
+///
+/// <para>
+/// ⛔ 不引第三方 Markdown / Word / PDF 库：Markdown 与 docx 自己解析（见同名解析器），
+/// PDF 用系统自带的 <see cref="PdfDocument"/>，发布包不会因此变大。
+/// </para>
+/// <para>
+/// 文字一律可选中（<c>IsTextSelectionEnabled</c>）—— 文章常常要照着做操作，不能选就得手抄。
+/// 链接点击走 <see cref="DocLinks"/>，与外部 <c>csh://</c> 链接同一条路。
+/// </para>
+/// </summary>
 public sealed class DocView : UserControl
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
@@ -48,7 +48,7 @@ public sealed class DocView : UserControl
 
     public bool IsEmpty => _host.Children.Count == 0;
 
-    
+    /// <summary>渲染一篇文章。同一个实例可以反复调用（会先清空）。</summary>
     public async Task RenderAsync(DocContent content, CancellationToken ct = default)
     {
         _host.Children.Clear();
@@ -96,11 +96,11 @@ public sealed class DocView : UserControl
 
     public void Clear() => _host.Children.Clear();
 
-    
+    // ── 块 ───────────────────────────────────────────────────────
 
     private void RenderBlocks(IReadOnlyList<DocBlock> blocks, string title)
     {
-        
+        // 页头已经是大标题，正文第一块若就是同一个标题（md/docx 的 H1、txt 的首行）就不再重复一遍
         var start = 0;
         if (blocks.Count > 0 && title.Trim().Length > 0 && IsTitleBlock(blocks[0], title.Trim()))
             start = 1;
@@ -151,7 +151,7 @@ public sealed class DocView : UserControl
         }
     }
 
-    
+    /// <summary>正文第一块是不是"又把标题写了一遍"。</summary>
     private static bool IsTitleBlock(DocBlock block, string title)
     {
         var text = block switch
@@ -213,8 +213,8 @@ public sealed class DocView : UserControl
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            
-            
+            // 任务列表项画勾选框，普通项画符号。两者都钉在第一行的高度上，
+            // 否则多行内容会把这个符号顶到整块的垂直中间去。
             FrameworkElement marker = item.Checked is bool done
                 ? new FontIcon
                 {
@@ -268,7 +268,7 @@ public sealed class DocView : UserControl
     {
         var stack = new StackPanel();
 
-        
+        // 语言标记（```powershell 这种）。不参与语法高亮，只是让读者知道该在哪儿执行
         if (code.Language is { Length: > 0 } language)
         {
             stack.Children.Add(new TextBlock
@@ -282,8 +282,8 @@ public sealed class DocView : UserControl
             });
         }
 
-        
-        
+        // ⛔ 不要 Wrap：命令行按宽度折行之后，读者复制出来会多出换行，照着敲就错了。
+        // 长命令改为在本块内部横向滚动，外层页面仍是纵向滚动，两个方向不冲突。
         stack.Children.Add(new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -314,17 +314,17 @@ public sealed class DocView : UserControl
         };
     }
 
-    
+    // ── 表格 ─────────────────────────────────────────────────────
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 表格：一张 Grid 打底，每个单元格是一圈右下描边的 Border，外层再套一圈整框。
+    ///
+    /// <para>
+    /// 列宽按各列内容长度分权重（全角算 2、半角算 1），夹在 1~3 之间：
+    /// 等分会让短列浪费宽度、长列挤成竖排；纯按内容分又会让一列吃掉整张表。
+    /// 正文区最大 960 宽且外层不允许横向滚动，所以列宽只有这一条路可选。
+    /// </para>
+    /// </summary>
     private void AddTable(DocTableBlock table)
     {
         if (table.Rows.Count == 0) return;
@@ -357,8 +357,8 @@ public sealed class DocView : UserControl
                 var align = c < table.Alignments.Count ? table.Alignments[c] : DocAlign.Left;
                 var cell = BuildCell(runs, align, isHeader);
 
-                
-                
+                // 只画右、下两条，最后一行/列不画：相邻单元格共用一条线，
+                // 每格都画整框的话交界处会变成 2px 的双线。
                 cell.BorderThickness = new Thickness(
                     0,
                     0,
@@ -402,8 +402,8 @@ public sealed class DocView : UserControl
 
         var paragraph = new Paragraph();
 
-        
-        
+        // ⛔ 表头加粗要显式落在 Paragraph 上：只设 RichTextBlock.FontWeight 时，
+        // 段落内部的行默认样式会把它盖掉，表现为「表头不加粗」。
         if (header) paragraph.FontWeight = FontWeights.SemiBold;
 
         AppendRuns(paragraph.Inlines, runs);
@@ -436,14 +436,14 @@ public sealed class DocView : UserControl
         var weights = new double[columns];
         for (var c = 0; c < columns; c++)
         {
-            
+            // 12 个半角字符约等于一份基准宽度；上下限防止极端内容把比例拉爆
             weights[c] = Math.Clamp(longest[c] / 12.0, 1.0, 3.0);
         }
 
         return weights;
     }
 
-    
+    /// <summary>粗略估算显示宽度：全角按 2，半角按 1。</summary>
     private static int DisplayWidth(string text)
     {
         var width = 0;
@@ -451,7 +451,7 @@ public sealed class DocView : UserControl
         return width;
     }
 
-    
+    // ── 图片 ─────────────────────────────────────────────────────
 
     private void AddImage(DocImageBlock block)
     {
@@ -530,7 +530,7 @@ public sealed class DocView : UserControl
         }
     }
 
-    
+    // ── PDF ─────────────────────────────────────────────────────
 
     private async Task RenderPdfAsync(string path, CancellationToken ct)
     {
@@ -567,7 +567,7 @@ public sealed class DocView : UserControl
         }
     }
 
-    
+    // ── 行内 ─────────────────────────────────────────────────────
 
     private static void AppendRuns(InlineCollection inlines, IReadOnlyList<DocRun> runs)
     {

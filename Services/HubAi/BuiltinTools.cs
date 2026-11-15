@@ -3,18 +3,18 @@ using System.Text.Json;
 
 namespace ClassSoftwareHub.Desktop.Services.HubAi;
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 客户端内置的工具定义（2026-10-21）。
+///
+/// <para>
+/// 为什么联网工具不走站点 <c>toolpack.json</c>：联网是**用户自己拨的开关**，
+/// 不应该要求站点数据先更新、也不该依赖「工具总闸」——总闸关着时联网仍然可用（见 <c>HubAiPage.LoadTools</c>）。
+/// </para>
+/// <para>
+/// ⚠️ <c>Parameters</c> 是 <see cref="JsonElement"/>，必须 <c>RootElement.Clone()</c> ——
+/// <c>JsonDocument</c> 一旦释放，未克隆的 element 会抛 ObjectDisposedException。
+/// </para>
+/// </summary>
 public static class BuiltinTools
 {
     private static readonly JsonElement SearchSchema = JsonDocument.Parse("""
@@ -68,11 +68,11 @@ public static class BuiltinTools
         }
         """).RootElement.Clone();
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 文档库（需求 1:15 的"可接入 Hub AI"）。
+    /// ⚠️ 这两个工具跟着「工具总闸」走（见 <see cref="ActiveTools"/>）——
+    ///    总闸在用户那里的含义就是"让不让模型调工具"，文档也不例外。
+    /// </summary>
     public static IReadOnlyList<ToolDefinition> Docs { get; } = new List<ToolDefinition>
     {
         new()
@@ -99,7 +99,7 @@ public static class BuiltinTools
         },
     };
 
-    
+    /// <summary>联网相关的工具清单。</summary>
     public static IReadOnlyList<ToolDefinition> Web { get; } = new List<ToolDefinition>
     {
         new()

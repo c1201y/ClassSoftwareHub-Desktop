@@ -4,23 +4,23 @@ using System.Linq;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 矩形树图（squarified treemap）布局：把一组权重铺进一个矩形，面积严格正比于权重。
+///
+/// <para>
+/// 为什么用 squarified 而不是"横着切 / 竖着切"：后者会把磁盘里最常见的小文件切成一条条细线，
+/// 既看不清也点不中。squarified 会尽量让每块接近正方形 —— 这是 WinDirStat、SpaceSniffer 一类
+/// 工具的标准做法。
+/// </para>
+/// <para>纯函数，可脱离界面断言（见 %TEMP%\csh-math）。</para>
+/// </summary>
 public static class TreemapLayout
 {
     public readonly record struct Tile(int Index, double X, double Y, double Width, double Height);
 
-    
-    
-    
+    /// <summary>
+    /// <paramref name="weights"/> 需按从大到小排好序（调用方排）。返回的矩形坐标系与入参一致。
+    /// </summary>
     public static List<Tile> Squarify(IReadOnlyList<double> weights, double x, double y, double width, double height)
     {
         var result = new List<Tile>();
@@ -61,7 +61,7 @@ public static class TreemapLayout
         return result;
     }
 
-    
+    /// <summary>把一行铺在最靠边的地方，然后收窄剩余矩形。</summary>
     private static void LayoutRow(
         List<int> row,
         List<double> scaled,
@@ -76,7 +76,7 @@ public static class TreemapLayout
 
         if (restW >= restH)
         {
-            
+            // 竖着排成一列，列宽由面积定
             var columnWidth = rowArea / restH;
             var offsetY = cursorY;
 
@@ -92,7 +92,7 @@ public static class TreemapLayout
         }
         else
         {
-            
+            // 横着排成一行，行高由面积定
             var rowHeight = rowArea / restW;
             var offsetX = cursorX;
 
@@ -108,7 +108,7 @@ public static class TreemapLayout
         }
     }
 
-    
+    /// <summary>这一行里最差的"长宽比"（越小越方）。</summary>
     private static double Worst(List<int> row, List<double> scaled, double side)
     {
         if (row.Count == 0 || side <= 0) return double.MaxValue;

@@ -11,20 +11,20 @@ using Windows.ApplicationModel.DataTransfer;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 化学方程式配平（第二版）。
+///
+/// <para>
+/// ⛔ 交互原则（Nick 2026-10-17）：**不让用户手打整条方程式**。
+/// 左边一行行加反应物、右边一行行加生成物，化学式从元素周期表点出来，
+/// 反应条件从下拉多选 —— 用户只需要知道"有哪些物质"，不用关心
+/// 哪里要打括号、下标怎么敲、箭头怎么画。
+/// </para>
+/// <para>判定逻辑仍然全在 <see cref="ChemistryBalancer"/>（纯计算，可脱离界面断言）。</para>
+/// </summary>
 public sealed partial class ChemistryPage : Page
 {
-    
+    /// <summary>可选的反应条件。⚠️ 只是书写样式，不参与配平计算。</summary>
     private static readonly string[] ConditionNames =
         { "点燃", "加热", "高温", "催化剂", "通电", "光照", "加压" };
 
@@ -42,9 +42,9 @@ public sealed partial class ChemistryPage : Page
 
     private Brush Ink => Services.ThemeBrush.Get(this, "TextFillColorPrimaryBrush");
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  物质列表
+    // ══════════════════════════════════════════════════════
 
     private void AddReactant_Click(object sender, RoutedEventArgs e) => _ = AddSpeciesAsync(true);
 
@@ -73,12 +73,12 @@ public sealed partial class ChemistryPage : Page
         Refresh();
     }
 
-    
+    // ── 化学式编辑器（页面内浮层，见 XAML 注释为什么不用 ContentDialog） ──
 
     private FormulaEditor? _editor;
     private System.Threading.Tasks.TaskCompletionSource<string?>? _editorResult;
 
-    
+    /// <summary>弹出化学式编辑器。返回 null 表示用户取消。</summary>
     private System.Threading.Tasks.Task<string?> EditFormulaAsync(string initial)
     {
         _editor = new FormulaEditor(initial, Ink);
@@ -88,21 +88,21 @@ public sealed partial class ChemistryPage : Page
         EditorHost.Child = _editor.View;
         EditorTitle.Text = initial.Length == 0 ? "添加物质" : "修改物质";
 
-        
+        // 尺寸全由页面算：留一圈边距，窗口再小也不会被切
         var width = ActualWidth > 0 ? ActualWidth : 1000;
         var height = ActualHeight > 0 ? ActualHeight : 700;
 
-        
+        // Canvas 里的元素不吃布局，尺寸全靠这里给
         EditorOverlay.Width = width;
         EditorOverlay.Height = height;
 
-        
+        // 周期表 18 列，每格放大到 38 还要带中文名，右栏还要放常用项 ⇒ 默认给到 1200
         EditorShell.Width = Math.Min(1200, Math.Max(680, width - 48));
         EditorShell.Height = Math.Min(760, Math.Max(440, height - 56));
 
-        
-        
-        
+        // ⛔ 别给 View 写死宽高：它比外壳的可用高度高一点点时，
+        //    内层滚动区的视口就比看得见的地方高，滚到底也有一截永远露不出来
+        //    （Nick 2026-10-17：离子根滑到下面还是被截断）。交给布局自己撑满。
 
         EditorOverlay.Visibility = Visibility.Visible;
 
@@ -149,7 +149,7 @@ public sealed partial class ChemistryPage : Page
             host.Children.Add(SpeciesCard(list[i], isReactant, i));
     }
 
-    
+    /// <summary>一种物质：化学式（真下标）+ 删除按钮。单击化学式可修改。</summary>
     private Border SpeciesCard(string formula, bool isReactant, int index)
     {
         var host = new Border
@@ -196,9 +196,9 @@ public sealed partial class ChemistryPage : Page
         return card;
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  反应条件（多选）
+    // ══════════════════════════════════════════════════════
 
     private void BuildConditionFlyout()
     {
@@ -224,9 +224,9 @@ public sealed partial class ChemistryPage : Page
             : string.Join("、", ConditionNames.Where(_conditions.Contains));
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  配平与结果
+    // ══════════════════════════════════════════════════════
 
     private void Balance()
     {
@@ -318,7 +318,7 @@ public sealed partial class ChemistryPage : Page
             });
         }
 
-        
+        // ── 元素守恒核对 ──
         ResultPanel.Children.Add(new TextBlock
         {
             Text = "元素守恒核对",
@@ -361,7 +361,7 @@ public sealed partial class ChemistryPage : Page
         }
     }
 
-    
+    /// <summary>核对表的一行：元素 / 左边 / 右边 / 打勾，四列宽度固定，行与行才对得齐。</summary>
     private static Grid NewCheckGrid()
     {
         var grid = new Grid { ColumnSpacing = 18 };
@@ -386,9 +386,9 @@ public sealed partial class ChemistryPage : Page
         return block;
     }
 
-    
-    
-    
+    // ══════════════════════════════════════════════════════
+    //  其它
+    // ══════════════════════════════════════════════════════
 
     private void Example_Click(object sender, RoutedEventArgs e)
     {

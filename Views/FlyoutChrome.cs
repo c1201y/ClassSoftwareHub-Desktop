@@ -14,29 +14,29 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 浮窗的「窗口外壳」——音量两个浮窗（主音量 / 合成器）共用，**完全照 <see cref="ToolSidebarWindow"/> 那一套**：
+///
+///   · 材质：<see cref="DesktopAcrylicBackdrop"/> 打底 + <see cref="ApplyMaterial"/> 压一层纯色薄纱
+///     （深色压深、浅色压白）。跟边条**一模一样**，两个东西摆在一起才像一个整体。
+///   · 无边框 + <c>WS_EX_TOOLWINDOW</c> + 圆角 8 + 去白边，走 <see cref="Core.WindowChrome"/>。
+///   · <see cref="Core.ThemeHost"/> 管深浅色跟着设置走。
+///
+/// ⚠️ 规矩（都是踩出来的，别改）：
+///   1. <see cref="Finish"/> 必须在窗口**显示之后**再调 —— 显示前改窗口样式会让窗口显示不出来；
+///   2. 材质随主题变：<c>ActualThemeChanged</c> 里重压一次薄纱 + 重画一次窗口边框；
+///   3. 别在这儿自己写无边框那套，去用 WindowChrome。
+/// </summary>
 public sealed class FlyoutChrome
 {
     private readonly Window _window;
     private readonly FrameworkElement _root;
     private readonly Border _panel;
 
-    
+    /// <summary>窗口句柄（注册给 <see cref="VolumeFlyoutGroup"/> 判焦点用）。</summary>
     public IntPtr Hwnd { get; }
 
-    
+    /// <summary>这个窗口的 AppWindow（移动、尺寸都走它）。</summary>
     public AppWindow AppWindow { get; }
 
     public FlyoutChrome(Window window, FrameworkElement root, Border panel, string title)
@@ -49,7 +49,7 @@ public sealed class FlyoutChrome
         AppWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(Hwnd));
 
         AppWindow.Title = title;
-        AppWindow.IsShownInSwitchers = false;          
+        AppWindow.IsShownInSwitchers = false;          // 别进 Alt+Tab、别占任务栏
 
         if (AppWindow.Presenter is OverlappedPresenter p)
         {
@@ -63,7 +63,7 @@ public sealed class FlyoutChrome
         var ex = GetWindowLongPtr(Hwnd, GwlExStyle).ToInt64();
         SetWindowLongPtr(Hwnd, GwlExStyle, new IntPtr(ex | WsExToolWindow));
 
-        
+        // 跟侧边栏同一个底：亚克力
         try { window.SystemBackdrop = new DesktopAcrylicBackdrop(); } catch { }
 
         ApplyMaterial();
@@ -75,10 +75,10 @@ public sealed class FlyoutChrome
         };
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 侧边栏同款薄纱：亚克力上面再压一层很淡的纯色 —— 深色压深、浅色压白，保证字看得清。
+    /// 色值跟 <see cref="ToolSidebarWindow"/> 里的 ApplyPanelBrush **逐字一致**，改就一起改。
+    /// </summary>
     public void ApplyMaterial()
     {
         try
@@ -91,7 +91,7 @@ public sealed class FlyoutChrome
         catch { }
     }
 
-    
+    /// <summary>窗口所在显示器的缩放比（96dpi = 1.0）。</summary>
     public double Scale
     {
         get
@@ -105,7 +105,7 @@ public sealed class FlyoutChrome
         }
     }
 
-    
+    /// <summary>当前在屏幕上的矩形。</summary>
     public RectInt32? CurrentRect
     {
         get
@@ -120,10 +120,10 @@ public sealed class FlyoutChrome
         }
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 一次把「起点位置 + 最终尺寸」设下去，再显形抢前台。
+    /// ⚠️ 位置和尺寸必须**一次** MoveAndResize：分开写的话中间那一帧会被系统画出来，就是"闪一下再滑"的来源。
+    /// </summary>
     public void Present(PointInt32 start, int width, int height)
     {
         AppWindow.MoveAndResize(new RectInt32(start.X, start.Y, width, height));
@@ -132,16 +132,16 @@ public sealed class FlyoutChrome
         _window.Activate();
     }
 
-    
+    /// <summary>外观收尾（去白边 + 圆角 + 深浅色）。**必须在窗口显示之后调**。</summary>
     public void Finish(bool dark) => Core.WindowChrome.RemoveBorder(Hwnd, rounded: true, dark: dark);
 
-    
+    /// <summary>立刻藏起来（滑出动画播完后由动画回调调它）。</summary>
     public void HideDirect()
     {
         try { ShowWindow(Hwnd, SW_HIDE); } catch { }
     }
 
-    
+    // ── Win32 ────────────────────────────────────────────────────────────
 
     private const int GwlExStyle = -20;
     private const int WsExToolWindow = 0x00000080;
@@ -164,41 +164,41 @@ public sealed class FlyoutChrome
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 }
 
-
-
-
-
-
-
+/// <summary>
+/// 贴边浮窗的位置计算。两个概念要分清：
+///   · **沿边方向**（left/right 时是 Y、top/bottom 时是 X）—— 浮窗在这条线上跟锚点对齐；
+///   · **进退方向**（垂直那条边的方向）—— 浮窗从边上滑进来多少。
+/// 坐标一律物理像素：dip × <see cref="FlyoutChrome.Scale"/>。
+/// </summary>
 public static class EdgeGeometry
 {
-    
+    /// <summary>挨着锚点时留的缝（dip）。</summary>
     public const int GapDip = 8;
 
-    
+    /// <summary>贴上/下（横条）时，浮窗也走横版；贴左/右走竖版。</summary>
     public static bool IsFlat(string edge) => edge is "top" or "bottom";
 
-    
+    /// <summary>浮窗「厚度」：竖版是宽、横版是高。</summary>
     public static int Thickness(string edge, int w, int h) => IsFlat(edge) ? h : w;
 
-    
+    /// <summary>沿边方向上的长度：竖版是高、横版是宽。</summary>
     public static int Length(string edge, int w, int h) => IsFlat(edge) ? w : h;
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 挨着锚点（边条 / 主音量浮窗）往屏幕**里侧**排：
+    /// 进退方向贴住锚点的内侧；沿边方向默认跟锚点**对齐居中**，
+    /// <paramref name="alignStart"/> 为 true 时改**顶对齐**（左右边）/**左对齐**（上下边）——
+    /// 链上两个高矮不一的浮窗（主音量 + 合成器）顶对齐排出来才像一个整齐的块，
+    /// 居中会让高窗口两头都冒出来，看着像叠在一起（2026-10-01）。
+    /// 最后夹进工作区别跑出屏幕。返回（滑入起点 = 往边外退半块，最终位置）。
+    /// </summary>
     public static (PointInt32 Start, PointInt32 Final) BesideAnchor(
         string edge, RectInt32 anchor, RectInt32 work, int w, int h, double scale, bool alignStart = false)
     {
         var gap = (int)Math.Round(GapDip * scale);
         var flat = IsFlat(edge);
 
-        
+        // 沿边方向：默认以锚点中线为基准居中；alignStart 则与锚点的起点边对齐
         var along = alignStart
             ? (flat ? anchor.X : anchor.Y)
             : (flat ? anchor.X + anchor.Width / 2 : anchor.Y + anchor.Height / 2) - (flat ? w : h) / 2;
@@ -213,13 +213,13 @@ public static class EdgeGeometry
 
         final = ClampToWork(final, work, w, h);
 
-        
-        
+        // ⚠️ 起点只往屏幕外退**半块**：整块挪到屏幕外的窗口 DWM 常常不给它刷帧，
+        //    滑进来的第一帧会发虚/卡顿（侧边栏当初就是踩了这个才改的）。
         var start = Outward(final, edge, Thickness(edge, w, h) / 2);
         return (start, final);
     }
 
-    
+    /// <summary>从某个位置往"屏幕外"退 <paramref name="distance"/> 像素（滑入起点 / 滑出终点）。</summary>
     public static PointInt32 Outward(PointInt32 p, string edge, int distance) => edge switch
     {
         "left" => new PointInt32(p.X - distance, p.Y),
@@ -228,10 +228,10 @@ public static class EdgeGeometry
         _ => new PointInt32(p.X + distance, p.Y),
     };
 
-    
+    /// <summary>整个窗口都在屏幕外（滑出要滑到底，屏幕边上不留残片）。</summary>
     public static PointInt32 FullyOut(PointInt32 p, string edge, int thickness) => Outward(p, edge, thickness + 2);
 
-    
+    /// <summary>把这条屏幕边当成一条零厚度的「锚点」（边条拿不到时的退路）。</summary>
     public static RectInt32 EdgeBar(string edge, RectInt32 work) => edge switch
     {
         "left" => new RectInt32(work.X, work.Y, 0, work.Height),
@@ -240,7 +240,7 @@ public static class EdgeGeometry
         _ => new RectInt32(work.X + work.Width, work.Y, 0, work.Height),
     };
 
-    
+    /// <summary>把矩形夹进工作区（贴屏幕下边时会长出屏幕，这里兜住）。</summary>
     public static PointInt32 ClampToWork(PointInt32 p, RectInt32 work, int w, int h)
     {
         var x = Math.Clamp(p.X, work.X, Math.Max(work.X, work.X + work.Width - w));
@@ -249,10 +249,10 @@ public static class EdgeGeometry
     }
 }
 
-
+/// <summary>浮窗内容淡入（走合成器，跟窗口滑动同时进行，别让字"啪"一下出现）。</summary>
 public static class FlyoutFade
 {
-    
+    /// <summary>把内容压到透明（不播动画）。用在"窗口露脸之前"——先压透明再淡入，免得先闪一帧再淡。</summary>
     public static void Prepare(UIElement element)
     {
         try { ElementCompositionPreview.GetElementVisual(element).Opacity = 0f; }
@@ -281,7 +281,7 @@ public static class FlyoutFade
         }
     }
 
-    
+    /// <summary>内容淡出，播完回调 <paramref name="done"/>（用于"淡出后再藏窗"，别让窗口先消失动画没得播）。</summary>
     public static void Out(UIElement element, double ms, Action? done = null)
     {
         try

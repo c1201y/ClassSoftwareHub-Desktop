@@ -13,16 +13,16 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
-
+/// <summary>
+/// 系统修复：7 张预设任务卡，选中一张 → 二次确认 → 提权执行 → 实时输出。
+/// 提权与输出落盘的机制见 <see cref="SystemRepair"/> 的类注释。
+/// </summary>
 public sealed partial class SystemRepairPage : Page
 {
-    
+    /// <summary>输出保留上限。超了从头砍 —— sfc / DISM 的输出能到几百 KB，不能无限堆。</summary>
     private const int MaxOutputChars = 200 * 1024;
 
-    
+    /// <summary>助手进程刚起来那两秒还没有心跳，别拿 IsAlive 判死（见 Poll）。</summary>
     private static readonly TimeSpan AliveGrace = TimeSpan.FromSeconds(15);
 
     private readonly StringBuilder _output = new();
@@ -37,7 +37,7 @@ public sealed partial class SystemRepairPage : Page
     {
         InitializeComponent();
 
-        
+        // 两列布局（照首页「快速开始」）：偶数序号进左列、奇数进右列
         CardColumnLeft.ItemsSource = SystemRepair.Tasks.Where((_, i) => i % 2 == 0).ToList();
         CardColumnRight.ItemsSource = SystemRepair.Tasks.Where((_, i) => i % 2 == 1).ToList();
 
@@ -52,7 +52,7 @@ public sealed partial class SystemRepairPage : Page
 
         SystemRepair.CleanupOldRuns();
 
-        
+        // 上一轮页面被切走时任务还在跑 —— 回来就把它接上（不然用户会以为任务没了）
         var unfinished = SystemRepair.FindUnfinished();
         if (unfinished is null) return;
 
@@ -60,17 +60,17 @@ public sealed partial class SystemRepairPage : Page
         EnterRun(unfinished);
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// ⛔ 离开页面**不中止**任务：sfc / DISM 中途打断是比"多等一会儿"糟得多的结果。
+    /// 这里只是停掉轮询；任务继续跑，回来时由 <c>OnLoaded</c> 接上。
+    /// </summary>
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
         StopTimer();
     }
 
-    
+    // ── 选卡 → 确认 → 起任务 ──────────────────────────────────────────
 
     private async void Card_Tapped(object sender, TappedRoutedEventArgs e)
     {
@@ -82,7 +82,7 @@ public sealed partial class SystemRepairPage : Page
         var session = await SystemRepair.StartAsync(task, CancellationToken.None);
         if (session is null)
         {
-            
+            // ⚠️ StartAsync 返回 null ⇒ 进程根本没起来，所以"没有任何改动"是成立的
             await ShowMessageAsync("任务未开始",
                 "已取消管理员授权，或提权进程未能启动。没有对系统做任何改动。");
             return;
@@ -91,11 +91,11 @@ public sealed partial class SystemRepairPage : Page
         EnterRun(session);
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// ⛔⛔ 这道确认框是**唯一的安全闸**（Nick 2026-10-16 定：不建还原点，改成执行前二次确认）。
+    /// 所以它不能只问一句"确定吗" —— 具体命令、会发生什么、耗时、要不要授权全摆在同一屏，
+    /// 高风险任务还把默认焦点放在「取消」上，免得顺手一个回车就跑起来。
+    /// </summary>
     private async Task<bool> ConfirmAsync(RepairTask task)
     {
         var panel = new StackPanel { Spacing = 12 };
@@ -135,7 +135,7 @@ public sealed partial class SystemRepairPage : Page
             Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
             PrimaryButtonText = high ? $"确认{task.Name}" : "确认执行",
             CloseButtonText = "取消",
-            
+            // 高风险任务的默认按钮是「取消」—— 回车不会误触发
             DefaultButton = high ? ContentDialogButton.Close : ContentDialogButton.Primary,
         };
 
@@ -159,7 +159,7 @@ public sealed partial class SystemRepairPage : Page
         return block;
     }
 
-    
+    // ── 运行中的界面切换 ──────────────────────────────────────────────
 
     private void EnterRun(RepairSession session)
     {
@@ -231,8 +231,8 @@ public sealed partial class SystemRepairPage : Page
             return;
         }
 
-        
-        
+        // 请求中止之后助手没留下结局就消失了 ⇒ 按"已中止"收场，别让界面永远停在"正在中止…"。
+        // ⚠️ 必须给一段宽限期：助手刚起来的那几秒还没写过心跳，IsAlive 会是 false。
         if (_stopRequested && DateTime.Now - session.StartedAt > AliveGrace && !session.IsAlive)
         {
             Finish(session, new RepairOutcome(true, -1, "已中止"));
@@ -256,7 +256,7 @@ public sealed partial class SystemRepairPage : Page
 
         OutputBox.Text = _output.ToString();
 
-        
+        // 给只读 TextBox 设光标位置会把那一行带进视野 —— 这就是"自动滚到底"
         OutputBox.SelectionStart = OutputBox.Text.Length;
         OutputBox.SelectionLength = 0;
     }
@@ -329,7 +329,7 @@ public sealed partial class SystemRepairPage : Page
         StopButton.IsEnabled = false;
         RunStatus.Text = "正在中止…";
 
-        
+        // ⛔ 这里只能写哨兵：普通权限杀不掉提权进程，真正杀子进程树的是助手那边
         session.RequestCancel();
     }
 
@@ -344,7 +344,7 @@ public sealed partial class SystemRepairPage : Page
         CardArea.Visibility = Visibility.Visible;
     }
 
-    
+    // ── 卡片悬停反馈（容器 chrome 已关掉，见 CshNavCardStyle） ──────────
 
     private void Card_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
@@ -356,7 +356,7 @@ public sealed partial class SystemRepairPage : Page
         if (sender is Border b) b.Opacity = 1.0;
     }
 
-    
+    // ── 说明 ──────────────────────────────────────────────────────────
 
     private async void About_Click(object sender, RoutedEventArgs e)
     {
@@ -409,7 +409,7 @@ public sealed partial class SystemRepairPage : Page
         await ShowDialogAsync(dialog);
     }
 
-    
+    // ── 弹窗（ContentDialog 同时只能开一个，统一走这两个入口） ──────────
 
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {

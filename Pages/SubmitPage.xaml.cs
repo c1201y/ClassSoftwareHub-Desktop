@@ -20,21 +20,21 @@ using Windows.System;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-
-
-
-
-
+/// <summary>
+/// 提交软件（原生版，不再用 WebView2）。
+/// 提交流程跟网页版一致：POST 到自建 Worker（带服务端令牌）→ 仓库 submissions/ 草稿 → 审核 Issue → 合并上架。
+/// 入口按顺序回退、记住上次成功的入口；连不上时内容存本机，可重试 / 下载 JSON / 复制 / 去 GitHub 提 PR。
+/// </summary>
 public sealed partial class SubmitPage : Page
 {
-    
+    /// <summary>提交入口与选路逻辑都在 <see cref="Services.SubmitEndpoint"/>：投稿与 OSS 直传签名共用一份。</summary>
     private static int SubmitTimeoutMs => Services.SubmitEndpoint.TimeoutMs;
-    
+    /// <summary>站点仓库的 submissions 目录（兜底走 GitHub 新建文件页）。</summary>
     private const string RepoNewFileUrl = "https://github.com/c1201y/ClassSoftwareHub/new/main/submissions";
-    
+    /// <summary>合法校验值位数：32=MD5 / 40=SHA-1 / 56=SHA-224 / 64=SHA-256 / 96=SHA-384 / 128=SHA-512</summary>
     private static readonly int[] HashLengths = { 32, 40, 56, 64, 96, 128 };
 
-    
+    // 投稿是受保护路由，必须带身份头 → 走认证处理器（见 Services/License/AuthHandler.cs）
     private static readonly HttpClient Http = new(new AuthHandler(new HttpClientHandler()));
 
     private static string DataDir => Core.AppPaths.DataDir;
@@ -48,16 +48,16 @@ public sealed partial class SubmitPage : Page
         public string Url = "";
         public string Hash = "";
 
-        
+        /// <summary>用户在「下载方式」里显式选的 kind；空串＝自动识别，提交时不写这个字段。</summary>
         public string Kind = "";
     }
 
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 「下载方式」下拉的选项 —— 与网页端提交页 SubmitPage.vue 的 downloadKindItems **同一套**，
+    /// 顺序也一样：第 0 项是「自动识别」（不写 kind，交给详情页按链接推断），其余对应
+    /// Data/DownloadLinkKind.cs 里的 DownloadKind。
+    /// ⛔ 两边选项必须一致，否则同一份提交数据在网页端与桌面端会长得不一样。
+    /// </summary>
     private static readonly (string Label, string Kind)[] DownloadKinds =
     {
         ("自动识别（按链接判断）", ""),
@@ -66,13 +66,13 @@ public sealed partial class SubmitPage : Page
         ("应用商店", "store"),
     };
 
-    
-    
-    
-    
+    /// <summary>
+    /// 一稿最多几条下载项 —— 与网页端 <c>SubmitPage.vue</c> 的 <c>MAX_DOWNLOADS = 5</c> 一致。
+    /// 这是提交数据的约定（服务端与审核都按这个口径），桌面端不能比网页端更宽松。
+    /// </summary>
     private const int MaxDownloads = 5;
 
-    
+    /// <summary>kind 值 → 下拉索引；空串（自动）返回 -1，让占位文案显示出来（与网页端一致）。</summary>
     private static int KindIndexOf(string kind)
     {
         if (kind.Length == 0) return -1;
@@ -81,11 +81,11 @@ public sealed partial class SubmitPage : Page
         return -1;
     }
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 一张下载项卡片里的输入框与下拉。
+    /// ⛔ 存引用而不是「遍历卡片按顺序取第 N 个」—— 直链那行外面多包了一层 StackPanel，
+    /// 早期按遍历顺序取会把直链填进校验值框（2026-10-09 用户报的恢复草稿错位）。
+    /// </summary>
     private sealed class DownloadFields
     {
         public TextBox Platform = null!;
@@ -97,12 +97,12 @@ public sealed partial class SubmitPage : Page
     }
 
     private readonly List<DownloadDraft> _downloads = new();
-    
+    /// <summary>每张下载项卡片里五个输入框的引用，**按字段语义**存，⛔别再靠遍历顺序取第 N 个。</summary>
     private readonly List<DownloadFields> _fields = new();
     private readonly List<Border> _cards = new();
     private readonly List<TextBlock> _titles = new();
     private bool _busy;
-    
+    /// <summary>连不上时留存的那份 payload（兜底面板用）。</summary>
     private Dictionary<string, object?>? _pending;
 
     public SubmitPage()
@@ -119,10 +119,10 @@ public sealed partial class SubmitPage : Page
         RefreshDraftButton();
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 内容还没同步下来时用的平台兜底清单（与 软件数据/platforms.json 顶层 key/顺序一致）。
+    /// 没有它的话首启直接进提交页会一条都勾不上，等于提交被卡死。
+    /// </summary>
     private static readonly (string Key, string Name)[] DefaultPlatforms =
     {
         ("windows", "Windows"),
@@ -133,10 +133,10 @@ public sealed partial class SubmitPage : Page
         ("web", "网页版"),
     };
 
-    
-    
-    
-    
+    /// <summary>
+    /// 适用系统复选框：平台清单取自 <see cref="ContentStore.Platforms"/>（= 软件数据/platforms.json）。
+    /// 数据到位后以文件为准 —— 文件里新增平台会自动多出一个框，不用改这里。
+    /// </summary>
     private void BuildPlatformChecks()
     {
         var platforms = App.Content.Platforms.Count > 0
@@ -148,7 +148,7 @@ public sealed partial class SubmitPage : Page
             PlatformChecks.Children.Add(new CheckBox { Content = name, Tag = key, MinWidth = 0 });
     }
 
-    
+    /// <summary>当前勾选的平台 key（保持复选框顺序，便于和网页端产出一致）。</summary>
     private List<string> SelectedPlatforms()
         => PlatformChecks.Children
             .OfType<CheckBox>()
@@ -157,12 +157,12 @@ public sealed partial class SubmitPage : Page
             .Where(k => k.Length > 0)
             .ToList();
 
-    
+    // ══════════ 下载项 ══════════
     private void AddDownload_Click(object sender, RoutedEventArgs e) => AddDownload();
 
     private void AddDownload()
     {
-        
+        // 与网页端 MAX_DOWNLOADS（= 5）同一口径：这是提交数据的约定，超限的投稿服务端不收
         if (_downloads.Count >= MaxDownloads) return;
 
         var draft = new DownloadDraft();
@@ -194,7 +194,7 @@ public sealed partial class SubmitPage : Page
         row.Children.Add(noteBox);
         stack.Children.Add(row);
 
-        
+        // 直链一行：输入框占满，上传按钮贴在它右侧（排法照「从 GitHub 读取」那一行）
         var urlBar = new ProgressBar
         {
             Height = 4,
@@ -203,8 +203,8 @@ public sealed partial class SubmitPage : Page
             Visibility = Visibility.Collapsed,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
-        
-        
+        // 说明行**不能**塞进 TextBox.Description —— 那样按钮的「底边对齐」会跟着一起被顶下去，
+        // 看起来就跟输入框错位了（2026-10-06 Nick 抓的）。它得是这一行的独立兄弟，且要跟输入框贴紧。
         var urlHint = new TextBlock
         {
             FontSize = 12,
@@ -219,15 +219,15 @@ public sealed partial class SubmitPage : Page
 
         var urlBox = Field("下载直链 *", "https://…/setup.exe", null, value => draft.Url = value);
 
-        
-        
-        
+        // 下载方式（对应网页端提交页同一个下拉）：决定详情页那颗按钮写「下载」还是
+        // 「前往网盘 / 前往官网」。默认 -1 ＝不选 ＝自动识别，提交时不写 kind 字段。
+        // ⚠️ 在这里就建好（比直链那一行早），是因为上传成功后要立刻把它拨到「文件直链」。
         var kindCombo = new ComboBox
         {
             Header = "下载方式",
             PlaceholderText = DownloadKinds[0].Label,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            
+            // ⛔ 必须先填项、再置 -1：SelectedIndex 在空集合上设 -1 会被后续 Add 顶成 0
             SelectedIndex = -1,
         };
         foreach (var (label, _) in DownloadKinds)
@@ -247,11 +247,11 @@ public sealed partial class SubmitPage : Page
             {
                 draft.Url = url;
                 urlBox.Text = url;
-                
+                // 键是服务端生成的，手改一个字符就失效 ⇒ 锁住（跟网页版一样）
                 urlBox.IsReadOnly = true;
-                
-                
-                
+                // ⛔ 必须显式标「文件直链」：`oss://` 键推断不出类型，停在「自动识别」会被
+                //    当成网页跳转，详情页点一下就把人带走 —— 正是用户报的「上传了还要管直链」。
+                //    网页端同一处也是这么做的（SubmitPage.vue：kindIndex = 1）。
                 draft.Kind = "file";
                 kindCombo.SelectedIndex = 1;
             });
@@ -259,7 +259,7 @@ public sealed partial class SubmitPage : Page
 
         urlGrid.Children.Add(urlBox);
         urlGrid.Children.Add(uploadButton);
-        
+        // 输入框行 + 进度条 + 说明/状态行三件贴成一小块（间距 4，跟 TextBox 自带说明行的观感一致）
         var urlBlock = new StackPanel { Spacing = 4 };
         urlBlock.Children.Add(urlGrid);
         urlBlock.Children.Add(urlBar);
@@ -290,7 +290,7 @@ public sealed partial class SubmitPage : Page
 
     private void RemoveDownload(DownloadDraft draft)
     {
-        if (_downloads.Count <= 1) return;   
+        if (_downloads.Count <= 1) return;   // 至少留一项（跟网页版一致）
         var index = _downloads.IndexOf(draft);
         if (index < 0) return;
         _downloads.RemoveAt(index);
@@ -307,7 +307,7 @@ public sealed partial class SubmitPage : Page
         for (var i = 0; i < _titles.Count; i++) _titles[i].Text = $"下载项 {i + 1}";
     }
 
-    
+    /// <summary>下载项到上限就把「添加」按钮灰掉（跟网页端同一表现，别让人点了没反应）。</summary>
     private void SyncAddButton() => AddDownloadButton.IsEnabled = _downloads.Count < MaxDownloads;
 
     private TextBox Field(string header, string placeholder, string? description, Action<string>? onText)
@@ -324,13 +324,13 @@ public sealed partial class SubmitPage : Page
 
     private Brush Res(string key) => Services.ThemeBrush.Get(this, key);
 
-    
-    
-    
-    
-    
+    // ══════════ 上传到本站（OSS 直传，与网页版同一套协议） ══════════
+    //
+    // 链路：向 /api/oss-sign 要一条一次性预签名 PUT 地址 → 客户端直传 OSS（进度就是这一步的）
+    //       → 回填对象键。软件包落 upload/ 前缀、下载时走票据闸门；图标落 icon/ 前缀、公开只读。
+    // 为什么要它：投稿人不必自己准备网盘或 GitHub Releases，站点代管文件本体。
 
-    
+    /// <summary>图标：选本地图片 → 本地压到 128 px → 上传 → 回填公开只读地址。</summary>
     private async void IconUpload_Click(object sender, RoutedEventArgs e)
     {
         var picked = await PickFileAsync("选择图标图片",
@@ -338,7 +338,7 @@ public sealed partial class SubmitPage : Page
         if (picked is null) return;
 
         long size = 0;
-        try { size = (long)(await picked.GetBasicPropertiesAsync()).Size; } catch {  }
+        try { size = (long)(await picked.GetBasicPropertiesAsync()).Size; } catch { /* 拿不到大小就照常往下走 */ }
         if (size > Services.OssUpload.IconInputMaxBytes)
         {
             IconUploadHint.Text = $"这张图有 {HumanSize(size)}，请换一张小一些的"
@@ -347,7 +347,7 @@ public sealed partial class SubmitPage : Page
             return;
         }
 
-        
+        // 缩不了（不是图片 / 编解码器不认 / 压完更大）就用原文件 —— 压缩只是优化，不是门槛
         var shrunken = await Services.IconResize.ShrinkToTempAsync(picked.Path);
         try
         {
@@ -358,12 +358,12 @@ public sealed partial class SubmitPage : Page
         {
             if (shrunken is not null)
             {
-                try { File.Delete(shrunken); } catch {  }
+                try { File.Delete(shrunken); } catch { /* 删不掉就留给系统清临时目录 */ }
             }
         }
     }
 
-    
+    /// <summary>把文件传到站点 OSS，并把进度、结果、失败原因都写到给定的控件上。</summary>
     private async Task UploadToSiteAsync(
         string filePath,
         Services.OssPurpose purpose,
@@ -410,7 +410,7 @@ public sealed partial class SubmitPage : Page
         }
     }
 
-    
+    /// <summary>上传失败的本地化说法（服务端的英文/XML 原始报错不适合直接甩给用户）。</summary>
     private static string DescribeUploadError(Services.OssUploadException ex) => ex.Code switch
     {
         Services.OssUploadErrorCode.TooLarge =>
@@ -422,7 +422,7 @@ public sealed partial class SubmitPage : Page
         _ => "站点拒绝了这次上传：" + ex.Message,
     };
 
-    
+    /// <summary>弹系统选文件框（unpackaged 应用必须先把它跟窗口关联起来）。</summary>
     private static async Task<StorageFile?> PickFileAsync(
         string commitText,
         IReadOnlyList<string> filters,
@@ -448,7 +448,7 @@ public sealed partial class SubmitPage : Page
         _ => bytes + " B",
     };
 
-    
+    // ══════════ 从 GitHub 一键读取 ══════════
     private readonly Dictionary<string, string> _lastFilled = new();
     private string _lastDownloadUrls = "";
     private bool _importing;
@@ -534,7 +534,7 @@ public sealed partial class SubmitPage : Page
             filled.Add(label);
         }
 
-        
+        // ── 软件 ID：由仓库名生成，跟站内已有软件撞车就自动加序号 ──
         var takenIds = App.Content.Apps.Select(app => app.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var suggestedId = Services.GithubImport.RepoToId(repo.Repo);
         if (suggestedId.Length > 0 && takenIds.Contains(suggestedId))
@@ -549,15 +549,15 @@ public sealed partial class SubmitPage : Page
         if (IdBox.Text.Trim().Length > 0 && takenIds.Contains(IdBox.Text.Trim()))
             warnings.Add($"站内已存在 id 为 {IdBox.Text.Trim()} 的软件，直接提交会产生冲突，建议更换。");
 
-        
+        // ── 文本字段 ──
         Put("软件名称", NameBox.Text, repo.Repo, text => NameBox.Text = text);
         Put("一句话简介", TaglineBox.Text, Services.GithubImport.ToTagline(repo.Description), text => TaglineBox.Text = text);
         Put("详细介绍", DescBox.Text, repo.Description, text => DescBox.Text = text);
         Put("版本号", VersionBox.Text, release?.TagName ?? "", text => VersionBox.Text = text);
         Put("系统限制", SystemBox.Text, result.System, text => SystemBox.Text = text);
 
-        
-        
+        // 适用系统：GuessSystem 的输出形如 "Windows / macOS / Linux"，按分隔符拆开自动勾上，
+        // 省得用户导入完还得自己再点一遍；识别不出任何平台就保持不动（留给用户手选）。
         var detectedPlatforms = result.System
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -574,22 +574,22 @@ public sealed partial class SubmitPage : Page
         Put("官网地址", WebsiteBox.Text, repo.Homepage, text => WebsiteBox.Text = text);
         Put("GitHub 仓库", GithubBox.Text, repo.HtmlUrl, text => GithubBox.Text = text);
 
-        
-        
+        // ── 开发者与开源协议（2026-11-08 补，与网页版 submit.author / submit.license 同口径）──
+        // 协议：接口给的是 SPDX 标识（如 MIT / GPL-3.0），比用户手填准确，直接回填。
         Put("开源协议", LicenseBox.Text, repo.License, text => LicenseBox.Text = text);
-        
-        
+        // 开发者：GitHub 接口没有「作者」这个概念，只能拿仓库所有者顶。fork 出来的仓库这里
+        // 会是 fork 者本人，所以填上之后要明说一句让人核对，⛔ 不能当成已经核实过。
         Put("开发者", AuthorBox.Text, repo.Owner, text => AuthorBox.Text = text);
         if (filled.Contains("开发者"))
             warnings.Add($"开发者已按仓库所有者填为 {repo.Owner}，若实际作者不同请手动修改。");
 
         if (repo.Homepage.Contains("apps.microsoft.com"))
             Put("应用商店地址", StoreBox.Text, repo.Homepage, text => StoreBox.Text = text);
-        
+        // 用的是预发布版：写一条提示条，详情页会在下载区上方提示
         if (result.Facts.UsedPrerelease && release is not null)
             Put("提示条", NoticeBox.Text, $"当前提交的为预发布版本（{release.TagName}），稳定版需等待正式发布。", text => NoticeBox.Text = text);
 
-        
+        // ── 图标：接口拿不到软件图标，先用仓库所有者的头像顶上 ──
         var icon = IconBox.Text.Trim();
         if (repo.OwnerAvatar.Length > 0 && icon != repo.OwnerAvatar
             && (icon.Length == 0 || _lastFilled.GetValueOrDefault("图标") == icon || overwrite))
@@ -604,7 +604,7 @@ public sealed partial class SubmitPage : Page
             kept.Add("图标");
         }
 
-        
+        // ── 下载项 ──
         var currentUrls = string.Join("\n", _downloads.Select(item => item.Url.Trim()).Where(url => url.Length > 0));
         var downloadsEditedByUser = currentUrls.Length > 0 && currentUrls != _lastDownloadUrls;
         var hashByUrl = new Dictionary<string, string>();
@@ -651,7 +651,7 @@ public sealed partial class SubmitPage : Page
             }
         }
 
-        
+        // ── 需注意的地方 ──
         if (result.Facts.ReleaseFailed) warnings.Add("无法读取该仓库的版本信息（接口限流或网络异常），已填入仓库信息，版本号与安装包需手动补充。");
         if (result.Facts.NoRelease) warnings.Add("该仓库尚未发布任何 Release，版本号与安装包需手动填写。");
         if (result.Facts.NoAsset) warnings.Add("该 Release 中没有可下载的安装包（可能仅含源码包），需手动填写下载直链。");
@@ -661,7 +661,7 @@ public sealed partial class SubmitPage : Page
         if (result.Facts.NewerPrereleaseTag.Length > 0) warnings.Add($"存在更新的预发布版 {result.Facts.NewerPrereleaseTag}。如需获取，需勾选「优先取最新预发布版」后重新读取。");
         if (repo.Archived) warnings.Add("该仓库已归档（不再维护），建议确认是否仍需收录。");
 
-        
+        // 地址栏统一成规范写法，方便核对
         RepoBox.Text = repo.HtmlUrl;
 
         var summary = $"已读取 {repo.FullName}：最新版本 {(release?.TagName.Length > 0 ? release.TagName : "—")}，"
@@ -705,7 +705,7 @@ public sealed partial class SubmitPage : Page
         ImportReport.Visibility = Visibility.Visible;
     }
 
-    
+    /// <summary>整段重建下载项（一键读取 / 恢复草稿都用它）。</summary>
     private void SetDownloads(List<(string Platform, string Note, string Size, string Url, string Hash)> items)
     {
         _downloads.Clear();
@@ -729,7 +729,7 @@ public sealed partial class SubmitPage : Page
         _lastDownloadUrls = string.Join("\n", _downloads.Select(item => item.Url.Trim()));
     }
 
-    
+    // ══════════ 组装 payload ══════════
     private static string NormalizeHash(string raw)
     {
         var text = (raw ?? "").Trim();
@@ -757,8 +757,8 @@ public sealed partial class SubmitPage : Page
                 };
                 var hash = NormalizeHash(item.Hash);
                 if (hash.Length > 0) entry["hash"] = hash;
-                
-                
+                // 下载方式：用户显式选了才写 kind，选「自动识别」就交给详情页按链接推断
+                // —— 与网页端提交页同一口径（SubmitPage.vue：if (kind) entry.kind = kind）
                 if (item.Kind.Length > 0) entry["kind"] = item.Kind;
                 return entry;
             })
@@ -775,19 +775,19 @@ public sealed partial class SubmitPage : Page
             ["version"] = VersionBox.Text.Trim(),
             ["size"] = SizeBox.Text.Trim(),
             ["system"] = SystemBox.Text.Trim(),
-            
-            
+            // 列表页的系统筛选只认这个字段（网页端 HomePage.vue 的 app.platforms）；
+            // system 那行只是展示文字，缺了不影响筛选、留着给详情页看
             ["platforms"] = SelectedPlatforms(),
             ["website"] = WebsiteBox.Text.Trim(),
             ["github"] = GithubBox.Text.Trim(),
-            
+            // 选填，详情页「详细信息」里有值才显示这两行（与网页版提交字段同名同义）
             ["author"] = AuthorBox.Text.Trim(),
             ["license"] = LicenseBox.Text.Trim(),
             ["notice"] = NoticeBox.Text.Trim(),
             ["store"] = StoreBox.Text.Trim(),
             ["downloads"] = downloads,
-            
-            
+            // 下划线开头 = 只给审核工单看的元数据，合并时会被剥掉，不会发布到站点
+            // 联系方式本地用 age 公钥加密后再提交，只传密文（私钥仅开发者持有，不在客户端）
             ["_联系方式"] = EncryptContact(),
         };
 
@@ -797,20 +797,20 @@ public sealed partial class SubmitPage : Page
         return payload;
     }
 
-    
+    /// <summary>联系方式字段：本地加密成 ASCII armor 密文；留空或加密失败返回空串，由必填校验兜底。</summary>
     private string EncryptContact()
     {
         var contact = ContactBox.Text.Trim();
         if (contact.Length == 0) return "";
         try { return Services.AgeEncryption.EncryptToArmor(contact); }
-        catch { return ""; } 
+        catch { return ""; } // 公钥是编译期常量、已随实现验证，失败视同未填，走必填提示
     }
 
-    
+    /// <summary>必填校验 + 校验值格式检查；返回要显示的错误，null 表示没问题。</summary>
     private string? Validate(Dictionary<string, object?> payload)
     {
-        
-        
+        // 适用系统单独判：它是列表页系统筛选的唯一依据，缺了这条软件在任何平台下都查不到，
+        // 比其他必填项更值得给一句明确的提示（而不是混在「必填项未填完」里）
         if (((List<string>)payload["platforms"]!).Count == 0)
             return "请在「适用系统」里至少勾选一项。";
 
@@ -832,7 +832,7 @@ public sealed partial class SubmitPage : Page
         return null;
     }
 
-    
+    // ══════════ 提交 ══════════
     private async void Submit_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -856,7 +856,7 @@ public sealed partial class SubmitPage : Page
             var (reply, endpoint) = await PostAsync(payload);
             if (reply is null)
             {
-                
+                // 所有入口都不通：存草稿 + 给兜底面板
                 SaveDraft(payload);
                 _pending = payload;
                 RefreshDraftButton();
@@ -915,7 +915,7 @@ public sealed partial class SubmitPage : Page
 
     private readonly record struct Reply(bool Success, string? Message, string? Error);
 
-    
+    /// <summary>按顺序试每个入口，返回第一个"确实是提交接口"的响应；全不通返回 (null, null)。</summary>
     private async Task<(Reply? reply, string? endpoint)> PostAsync(Dictionary<string, object?> payload)
     {
         foreach (var baseUrl in OrderedEndpoints())
@@ -931,14 +931,14 @@ public sealed partial class SubmitPage : Page
                 var root = document.RootElement;
                 var hasSuccess = root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True;
                 var hasError = root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String;
-                if (!hasSuccess && !hasError) continue;   
+                if (!hasSuccess && !hasError) continue;   // 不是提交接口的响应（回源还没生效时会返回 nginx 错误页）
 
                 var message = root.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.String ? msg.GetString() : null;
                 return (new Reply(hasSuccess, message, hasError ? err.GetString() : null), baseUrl);
             }
             catch
             {
-                
+                // 连不上 / 超时 / 响应不是 JSON → 换下一个入口
             }
         }
         return (null, null);
@@ -948,7 +948,7 @@ public sealed partial class SubmitPage : Page
 
     private static void RememberEndpoint(string baseUrl) => Services.SubmitEndpoint.Remember(baseUrl);
 
-    
+    // ══════════ 本机草稿（提交失败后不丢内容） ══════════
     private static void SaveDraft(Dictionary<string, object?> payload)
     {
         try
@@ -956,7 +956,7 @@ public sealed partial class SubmitPage : Page
             System.IO.Directory.CreateDirectory(DataDir);
             System.IO.File.WriteAllText(DraftFile, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         }
-        catch {  }
+        catch { /* 写不进去就算了 */ }
     }
 
     private static Dictionary<string, object?>? LoadDraft()
@@ -972,7 +972,7 @@ public sealed partial class SubmitPage : Page
     private static void ClearDraft()
     {
         try { if (System.IO.File.Exists(DraftFile)) System.IO.File.Delete(DraftFile); }
-        catch {  }
+        catch { /* 忽略 */ }
     }
 
     private void RefreshDraftButton()
@@ -990,15 +990,15 @@ public sealed partial class SubmitPage : Page
         IconBox.Text = Text("icon");
         TaglineBox.Text = Text("tagline");
         DescBox.Text = Text("description");
-        
+        // 联系方式已加密提交，本地无法解密回填；旧版明文草稿仍按原样恢复
         var contact = Text("_联系方式");
         ContactBox.Text = contact.StartsWith("-----BEGIN AGE", StringComparison.Ordinal) ? "" : contact;
         VersionBox.Text = Text("version");
         SizeBox.Text = Text("size");
         SystemBox.Text = Text("system");
 
-        
-        
+        // 适用系统：草稿里存的是 platforms 数组。老草稿没有这个字段 → 保持全不勾，
+        // 与「没填过」等价（用户恢复草稿后会看到系统那一栏是空的，得自己补勾）。
         if (draft.TryGetValue("platforms", out var platsValue) && platsValue is JsonElement plats
             && plats.ValueKind == JsonValueKind.Array)
         {
@@ -1012,7 +1012,7 @@ public sealed partial class SubmitPage : Page
         }
         WebsiteBox.Text = Text("website");
         GithubBox.Text = Text("github");
-        
+        // 老草稿没有这两个字段 → 恢复成空白，与「没填过」等价
         AuthorBox.Text = Text("author");
         LicenseBox.Text = Text("license");
         NoticeBox.Text = Text("notice");
@@ -1024,7 +1024,7 @@ public sealed partial class SubmitPage : Page
             if (CategoryCombo.Items[i] is ComboBoxItem item && (item.Tag as string) == categoryKey)
                 CategoryCombo.SelectedIndex = i;
 
-        
+        // 下载项整段重建
         _downloads.Clear();
         _fields.Clear();
         _cards.Clear();
@@ -1042,7 +1042,7 @@ public sealed partial class SubmitPage : Page
                 item.Note = JsonText(element, "note");
                 item.Url = JsonText(element, "url");
                 item.Hash = JsonText(element, "hash");
-                
+                // 下载方式：草稿里没写 kind 就是「自动识别」（下拉回到未选状态，显示占位文案）
                 item.Kind = JsonText(element, "kind");
                 FillCard(_fields[^1], item);
             }
@@ -1057,7 +1057,7 @@ public sealed partial class SubmitPage : Page
     private static string JsonText(JsonElement element, string key)
         => element.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
 
-    
+    /// <summary>把下载项的值写回界面（恢复草稿 / 一键读取都用它）。</summary>
     private static void FillCard(DownloadFields fields, DownloadDraft draft)
     {
         fields.Platform.Text = draft.Platform;
@@ -1065,13 +1065,13 @@ public sealed partial class SubmitPage : Page
         fields.Note.Text = draft.Note;
         fields.Url.Text = draft.Url;
         fields.Hash.Text = draft.Hash;
-        
+        // 下载方式：空串（自动识别）落在 -1，下拉显示占位文案 —— 与网页端同一个观感
         fields.Kind.SelectedIndex = KindIndexOf(draft.Kind);
-        
+        // 本站上传回填的 `oss://` 键是服务端生成的，锁住别让人改坏
         fields.Url.IsReadOnly = draft.Url.Trim().StartsWith("oss://", StringComparison.OrdinalIgnoreCase);
     }
 
-    
+    // ══════════ 兜底：下载 / 复制 / 去 GitHub ══════════
     private static (string Name, string Text)? BuildSubmissionFile(Dictionary<string, object?>? data)
     {
         if (data is null) return null;

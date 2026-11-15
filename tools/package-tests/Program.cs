@@ -15,7 +15,7 @@ void Check(bool ok, string what)
     else { fail++; Console.WriteLine($"  FAIL  {what}"); }
 }
 
-
+// ── 1. 类型判定 ────────────────────────────────────────────────
 Console.WriteLine("== 1. 类型判定 PackageKind.Of ==");
 var cases = new (string? Name, PackageAction Want)[]
 {
@@ -42,7 +42,7 @@ var cases = new (string? Name, PackageAction Want)[]
 foreach (var c in cases)
     Check(PackageKind.Of(c.Name) == c.Want, $"{c.Name ?? "(null)"} → {PackageKind.Of(c.Name)}（期望 {c.Want}）");
 
-
+// ── 2. 目标目录命名 ────────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("== 2. 解压目标目录 TargetDirFor ==");
 Check(Path.GetFileName(PackageRunner.TargetDirFor(Path.Combine(root, "foo.zip"))) == "foo", "foo.zip → foo");
@@ -53,7 +53,7 @@ Directory.CreateDirectory(Path.Combine(root, "dup"));
 File.WriteAllText(Path.Combine(root, "dup", "occupied.txt"), "x");
 Check(Path.GetFileName(PackageRunner.TargetDirFor(Path.Combine(root, "dup.zip"))) == "dup (2)", "同名非空目录 → dup (2)");
 
-
+// ── 3. 造样本 ──────────────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("== 3. 造压缩样本 ==");
 var srcDir = Path.Combine(root, "src");
@@ -82,7 +82,7 @@ string Tar(string[] args, string outName)
     var tar = Path.Combine(Environment.SystemDirectory, "tar.exe");
     var psi = new ProcessStartInfo(tar) { UseShellExecute = false, CreateNoWindow = true };
     foreach (var a in args) psi.ArgumentList.Add(a);
-    psi.ArgumentList.Add("-C");       
+    psi.ArgumentList.Add("-C");       // ⚠️ -C 必须在打包目录之前，否则打的是当前目录
     psi.ArgumentList.Add(srcDir);
     psi.ArgumentList.Add(".");
     using var p = Process.Start(psi)!;
@@ -97,7 +97,7 @@ Check(new FileInfo(tgz).Length > 100, "t.tar.gz 已生成");
 Check(new FileInfo(txz).Length > 100, "t.tar.xz 已生成");
 Check(new FileInfo(sev).Length > 100, "t.7z 已生成");
 
-
+// ── 4. 逐个真解压 ──────────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("== 4. 真解压（走产品里的 ExtractAsync）==");
 foreach (var (file, label) in new[] { (zipPath, "zip(BCL)"), (tgz, "tar.gz(系统tar)"), (txz, "tar.xz(系统tar)"), (sev, "7z(系统tar)") })
@@ -119,7 +119,7 @@ foreach (var (file, label) in new[] { (zipPath, "zip(BCL)"), (tgz, "tar.gz(系�
     }
 }
 
-
+// ── 5. Zip Slip 防护 ───────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("== 5. Zip Slip 防护 ==");
 var evil = Path.Combine(root, "evil.zip");
@@ -143,7 +143,7 @@ catch (Exception ex)
 }
 Check(!Directory.Exists(Path.Combine(root, "evil")), "失败后半截产物已清掉");
 
-
+// ── 6. 自动删除 ────────────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("== 6. 删除源文件 TryDeleteAsync ==");
 var victim = Path.Combine(root, "to-delete.zip");
@@ -153,7 +153,7 @@ Check(gone && !File.Exists(victim), "普通文件删除成功");
 var missing = await PackageRunner.TryDeleteAsync(victim);
 Check(missing, "文件本就不存在 → 也算成功");
 
-
+// ── 7. RunAsync 编排（解压 + 自动删除 + 自动打开产物目录）──────
 Console.WriteLine();
 Console.WriteLine("== 7. 编排 RunAsync（解压 + 自动删除 + 自动打开）==");
 var shell = new ClassSoftwareHub.Desktop.MainWindowStub();
@@ -171,7 +171,7 @@ Check(task.WorkText.Contains("已删除压缩包"), $"卡片文案：{task.WorkT
 Check(shell.RevealCount == 1 && shell.LastRevealed == task.ExtractedDir,
     $"已按开关自动打开产物目录（调用 {shell.RevealCount} 次）");
 
-
+// 关掉自动打开 → 不该再开
 shell.RevealCount = 0;
 ClassSoftwareHub.Desktop.App.Settings.Current.AutoOpenExtractFolder = false;
 ClassSoftwareHub.Desktop.App.Settings.Current.AutoDeletePackage = false;

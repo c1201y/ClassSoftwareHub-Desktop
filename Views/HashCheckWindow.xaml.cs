@@ -21,31 +21,31 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 哈希校验悬浮窗（需求 1:16，2026-10-30）。
+///
+/// <para>
+/// 用途：核对下载到的安装包。拖进文件 → 立刻出四种哈希 → 粘贴官网给的校验值 → 自动比对。
+/// 原来这件事只能进「系统工具 → 编码 / 哈希工具」，为核对一个文件把整个应用拉出来太重，
+/// 所以单开一扇窗，可以一直摆在旁边。
+/// </para>
+///
+/// <para>
+/// ⚠️ 哈希计算用的是 <see cref="FileHash"/>（跟编码页同一份实现），本窗只负责界面与比对展示。
+/// </para>
+///
+/// <para>
+/// ⚠️ 关掉 = **真销毁**，跟学科工具窗一致：这扇窗没有"留着复用"的价值，
+///    真关最省事，也不会在退出链路上留一个没关的窗口把进程吊住。
+/// </para>
+/// </summary>
 public sealed partial class HashCheckWindow : Window
 {
     private const int DefaultWidthDip = 560;
-    
-    
-    
-    
+    /// <summary>
+    /// 首帧用的高度。**随后会按内容重算一次**（见 <see cref="ResizeToContent"/>）——
+    /// 原来写死 640，内容只有 450 左右，下面空出一大块（2026-10-30 Nick 报）。
+    /// </summary>
     private const int DefaultHeightDip = 480;
 
     private const string IdleTitle = "把文件拖到这里，或单击选择";
@@ -54,12 +54,12 @@ public sealed partial class HashCheckWindow : Window
 
     private AppWindow? _appWindow;
 
-    
+    /// <summary>四种算法各一行（顺序见 <see cref="FileHash.Algorithms"/>）。</summary>
     private readonly ObservableCollection<HashLine> _lines = new();
 
     private Dictionary<string, string> _hashes = new();
 
-    
+    /// <summary>用户换文件时作废上一轮计算（大文件算到一半再换，不能让它把新结果盖掉）。</summary>
     private CancellationTokenSource? _cts;
 
     private HashCheckWindow()
@@ -71,19 +71,19 @@ public sealed partial class HashCheckWindow : Window
         HashList.ItemsSource = _lines;
         SetRowsEmpty("—");
 
-        
+        // 内容排好之后按实际高度收一次窗口（只做一次：之后内容变化走滚动，不让窗口自己跳）
         ContentPanel.Loaded += (_, _) => ResizeToContent();
     }
 
-    
+    // ── 对外 ─────────────────────────────────────────────────────────────
 
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 摊开这扇窗；已经开着就把它调到前面（不重新建、不丢当前算好的结果）。
+    /// <para>
+    /// ⚠️ 方法名 <c>Show</c> 是约定：<c>ToolSidebarWindow</c> 打开「专用窗口」类模块时
+    ///    按名字反射调用它（见 <c>Data/SidebarModule.WindowType</c>），改名会静默失效。
+    /// </para>
+    /// </summary>
     public static void Show()
     {
         try
@@ -97,7 +97,7 @@ public sealed partial class HashCheckWindow : Window
         }
     }
 
-    
+    /// <summary>退出应用时真正销毁（由 MainWindow 的退出链路调用；没开过就什么都不做）。</summary>
     public static void CloseForExit()
     {
         var w = _instance;
@@ -105,7 +105,7 @@ public sealed partial class HashCheckWindow : Window
         try { w?.Close(); } catch { }
     }
 
-    
+    // ── 窗口配置 ─────────────────────────────────────────────────────────
 
     private void Configure()
     {
@@ -122,13 +122,13 @@ public sealed partial class HashCheckWindow : Window
                 p.IsMinimizable = false;
             }
 
-            
-            
+            // 标题栏只留「关闭」（2026-10-30 Nick 要）：小浮窗最小化没有意义、
+            // 最大化已被 presenter 关掉，两颗留在那里只是碍眼。
             WindowChrome.HideMinimizeMaximizeButtons(hwnd);
 
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
-            
+            // 跟应用主题（⛔ 不传 external：分体只作用于侧边栏与常用工具浮窗）
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 
@@ -170,34 +170,34 @@ public sealed partial class HashCheckWindow : Window
         }
     }
 
-    
+    /// <summary>是否已经按内容定过高度（只定一次，之后内容变化走滚动）。</summary>
     private bool _autoSized;
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 按内容实际高度把窗口收到合适大小（2026-10-30 Nick：「下面空出来很大一部分，挺浪费的」）。
+    ///
+    /// <para>
+    /// 算法：标题栏 32 + 上下留白 24 + 内容高 + 56 余量。
+    /// 那 56 是给「选了文件之后才出现」的两行（文件名 / 大小 / 路径 + 比对结论）预留的，
+    /// 不预留的话一选文件就得往下滚，反而更难用。
+    /// </para>
+    /// <para>
+    /// ⚠️ 只在首次 <c>Loaded</c> 后做一次：每次内容变化都重算会让窗口在用户眼前一跳一跳。
+    /// </para>
+    /// </summary>
     private void ResizeToContent()
     {
         if (_autoSized || _appWindow is null) return;
 
         try
         {
-            
-            
-            
+            // ⚠️ 用 ExtentHeight（内容真实范围），不用 ActualHeight：
+            //    ScrollViewer 会把内容纵向拉伸到视口高，ActualHeight 量到的是"视口有多高"，
+            //    于是 h 永远等于当前窗口高，窗口一次都缩不下去（2026-10-30 第一次改的教训）。
             var contentHeight = Math.Max(ContentScroll.ExtentHeight, ContentPanel.ActualHeight);
-            if (contentHeight <= 0) return;   
+            if (contentHeight <= 0) return;   // 还没排好，等下一次机会
 
-            
+            // 内容没占满窗口时 ExtentHeight 也等于视口高，这时用子元素累加兜底
             if (contentHeight >= ContentScroll.ActualHeight - 1 && ContentPanel.Children.Count > 0)
             {
                 var sum = 0.0;
@@ -212,10 +212,10 @@ public sealed partial class HashCheckWindow : Window
             var scale = Scale();
             var maxH = DisplayArea.Primary.WorkArea.Height / scale - 60;
 
-            
+            // 32 = 自绘标题栏那一行；4 / 20 = ScrollViewer 上下 Padding；16 = 底部留一点呼吸
             var h = 32 + 4 + contentHeight + 20 + 16;
-            
-            
+            // 下限只用来防止极端值 —— 原来写 460，内容只有 348 时被抬到 460，
+            // 底部因此多出四十来像素空白（2026-10-30 Nick 第二次报）。
             h = Math.Clamp(h, 360, Math.Max(360, maxH));
 
             _appWindow.ResizeClient(new SizeInt32(
@@ -262,9 +262,9 @@ public sealed partial class HashCheckWindow : Window
         }
     }
 
-    
+    // ── 选文件 ───────────────────────────────────────────────────────────
 
-    
+    /// <summary>整条都能点：少一层「我到底该点哪个按钮」的犹豫。</summary>
     private async void DropZone_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
         try
@@ -276,8 +276,8 @@ public sealed partial class HashCheckWindow : Window
             };
             picker.FileTypeFilter.Add("*");
 
-            
-            
+            // ⚠️ 必须用**本窗**的句柄：主窗口可能收在托盘里、根本没有可见窗口，
+            //    拿 App.MainWindow 的句柄初始化会直接抛异常。
             InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
 
             var file = await picker.PickSingleFileAsync();
@@ -345,7 +345,7 @@ public sealed partial class HashCheckWindow : Window
         }
         catch (OperationCanceledException)
         {
-            
+            // 换文件了，这一轮作废
         }
         catch (Exception ex)
         {
@@ -363,7 +363,7 @@ public sealed partial class HashCheckWindow : Window
         }
     }
 
-    
+    // ── 比对 ─────────────────────────────────────────────────────────────
 
     private void Expected_TextChanged(object sender, TextChangedEventArgs e) => RefreshMatch();
 
@@ -378,7 +378,7 @@ public sealed partial class HashCheckWindow : Window
 
         MatchText.Visibility = Visibility.Visible;
 
-        
+        // 还没算完 / 还没选文件：说清下一步是什么，别拿红字吓人
         if (_hashes.Count == 0)
         {
             var guess = FileHash.GuessAlgorithm(ExpectedBox.Text);
@@ -397,7 +397,7 @@ public sealed partial class HashCheckWindow : Window
             return;
         }
 
-        
+        // 不一致要分两种说：格式认得出来 → 大概率是版本不对；认不出来 → 多半粘错了东西。
         var kind = FileHash.GuessAlgorithm(ExpectedBox.Text);
         MatchText.Text = kind is null
             ? "✗ 与上面四种哈希值都不一致。这段文本不像是 MD5 / SHA-1 / SHA-256 / SHA-512，请确认粘的是校验值而不是网址或版本号。"
@@ -405,7 +405,7 @@ public sealed partial class HashCheckWindow : Window
         MatchText.Foreground = Res("SystemFillColorCriticalBrush");
     }
 
-    
+    // ── 复制 ─────────────────────────────────────────────────────────────
 
     private void CopyLine_Click(object sender, RoutedEventArgs e)
     {
@@ -425,7 +425,7 @@ public sealed partial class HashCheckWindow : Window
         }
     }
 
-    
+    // ── 小工具 ───────────────────────────────────────────────────────────
 
     private void SetRowsEmpty(string placeholder)
     {
@@ -450,7 +450,7 @@ public sealed partial class HashCheckWindow : Window
         catch { return 1.0; }
     }
 
-    
+    // ── Win32 ────────────────────────────────────────────────────────────
 
     private const int SW_SHOW = 5;
 
@@ -464,12 +464,12 @@ public sealed partial class HashCheckWindow : Window
     private static extern uint GetDpiForWindow(IntPtr hWnd);
 }
 
-
+/// <summary>哈希列表的一行：算法名 + 值。值的更新走属性通知，不在界面里逐个找控件改。</summary>
 public sealed class HashLine : INotifyPropertyChanged
 {
     public HashLine(string name) => Name = name;
 
-    
+    /// <summary>算法名（MD5 / SHA-1 / SHA-256 / SHA-512），构造后不变。</summary>
     public string Name { get; }
 
     private string _value = "";

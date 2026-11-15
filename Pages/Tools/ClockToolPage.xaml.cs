@@ -15,23 +15,23 @@ using Windows.System;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-
-
-
-
-
+/// <summary>
+/// 全屏时钟（对齐网页版 tools/ClockTool.vue）：
+/// 蒙版/材质（无 · 白 · 黑 · 亚克力 · 云母）、背景底色、文字颜色、5 种时间字体、字号缩放、12 小时制、
+/// 拖放设背景、全屏窗口、对时入口。
+/// </summary>
 public sealed partial class ClockToolPage : Page
 {
     private const string TimeIsUrl = "https://time.is/";
     private static readonly string[] ImageExts = { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" };
 
-    
-    
-    
-    
+    /// <summary>
+    /// 预设上限。⚠️ 2026-09-28（Nick）：20 → <b>5</b> —— 卡片列是"一眼挑一套"的陈列位，
+    /// 不是仓库；超过 5 张就得换行、越堆越高，反而挑不出来。
+    /// </summary>
     private const int MaxPresets = 5;
 
-    
+    /// <summary>卡片尺寸（不用大：预览 + 名字 + 两颗按钮，能一眼认出来就行）。</summary>
     private const double PresetCardWidth = 150;
     private const double PresetPreviewHeight = 84;
 
@@ -41,25 +41,25 @@ public sealed partial class ClockToolPage : Page
     private readonly List<ClockPreset> _presets = new();
     private bool _ready;
 
-    
+    /// <summary>当前"正在使用的那套预设"的名字；空 = 没在用预设（第一次启动 / 手调过 / 恢复过默认）。</summary>
     private string _activePreset = "";
 
-    
-    
-    
-    
+    /// <summary>
+    /// 正在程序化地改外观（套预设 / 恢复默认 / 构造铺初值）—— 这期间 <see cref="Apply"/>
+    /// **不许**把 _activePreset 清掉（那会把刚套上的预设判成"手调"）。
+    /// </summary>
     private bool _keepPreset = true;
 
     public ClockToolPage()
     {
         InitializeComponent();
 
-        
+        // 两侧留白 / 标题行上的滚轮也转给设置区（见 Core/WheelRelay.cs）
         Core.WheelRelay.Attach(this, RootScroll);
 
-        
-        
-        
+        // 先把上次的样子读回来（记忆），再铺控件初值。
+        // ⚠️ 2026-09-28（Nick）：「每次启动遵循上次」——上次在用某套预设，就按**那套预设**铺；
+        //    上次没在用预设（纯手调 / 默认），就按上次那个外观铺，**不强行套任何预设**。
         var state = ClockPresetStore.Load();
         _presets.AddRange(state.Presets);
 
@@ -69,7 +69,7 @@ public sealed partial class ClockToolPage : Page
 
         if (active is not null)
         {
-            _settings.CopyFrom(active.ToSettings());     
+            _settings.CopyFrom(active.ToSettings());     // 预设为准（那套后来改过也立刻生效）
             _activePreset = active.Name;
         }
         else if (state.LastUsed is not null)
@@ -81,9 +81,9 @@ public sealed partial class ClockToolPage : Page
         foreach (var label in ClockRender.ToneLabels) ToneBox.Items.Add(label);
         foreach (var label in ClockRender.InkLabels) InkBox.Items.Add(label);
         foreach (var label in ClockRender.FontLabels) FontBox.Items.Add(label);
-        SyncControls();     
+        SyncControls();     // 此刻还没挂事件，改控件不会回调
 
-        
+        // 事件在构造之后再接（XAML 里挂事件 + 初值会触发解析期回调崩溃）
         VeilBox.SelectionChanged += (_, _) => { if (_ready) { _settings.Veil = (ClockVeil)VeilBox.SelectedIndex; Apply(); } };
         ToneBox.SelectionChanged += (_, _) => { if (_ready) { _settings.Tone = (ClockTone)ToneBox.SelectedIndex; Apply(); } };
         InkBox.SelectionChanged += (_, _) => { if (_ready) { _settings.Ink = (ClockInk)InkBox.SelectedIndex; Apply(); } };
@@ -102,13 +102,13 @@ public sealed partial class ClockToolPage : Page
         _timer.IsRepeating = true;
         _timer.Tick += (_, _) => Tick();
 
-        
+        // 记忆用的落盘定时器：拖滑块时 ValueChanged 是连续的，攒一会儿再写一次文件
         _saveTimer = DispatcherQueue.CreateTimer();
         _saveTimer.Interval = TimeSpan.FromMilliseconds(600);
         _saveTimer.IsRepeating = false;
         _saveTimer.Tick += (_, _) => Persist();
 
-        
+        // 离开页面就停表（定时器的委托会把整个页面钉在内存里），顺手把攒着的改动落盘
         Unloaded += (_, _) =>
         {
             _timer.Stop();
@@ -119,19 +119,19 @@ public sealed partial class ClockToolPage : Page
         _ready = true;
         Apply();
         Tick();
-        _keepPreset = false;      
+        _keepPreset = false;      // 初值铺完了 —— 之后任何一次外观变化都算"用户手调"
         RefreshPresets();
         _timer.Start();
     }
 
-    
+    /// <summary>把时钟丢到工具浮窗里跑。</summary>
     private void OpenPalette_Click(object sender, RoutedEventArgs e)
         => Views.ToolPaletteWindow.ShowTool("clock");
 
     private bool Dark => ActualTheme == ElementTheme.Dark;
     private bool HasPhoto => !string.IsNullOrWhiteSpace(_settings.BackgroundImagePath);
 
-    
+    // ══════════ 渲染 ══════════
     private void Apply()
     {
         var face = new SolidColorBrush(ClockRender.FaceColor(_settings, Dark, HasPhoto));
@@ -155,16 +155,16 @@ public sealed partial class ClockToolPage : Page
         VeilStrengthLabel.Text = $"蒙版强度 {Math.Round(_settings.VeilStrength)}%";
         ScaleLabel.Text = $"字号大小 {Math.Round(_settings.Scale * 100)}%";
         ClearBgButton.IsEnabled = HasPhoto;
-        
+        // 文件名只占一行的一个格（右边还有「删除图片」），长了走省略号，全名挂在悬停提示上
         BgName.Text = HasPhoto
             ? System.IO.Path.GetFileName(_settings.BackgroundImagePath)
             : "未设置背景图（可拖入图片）";
         ToolTipService.SetToolTip(BgName, HasPhoto ? _settings.BackgroundImagePath : BgName.Text);
 
-        
+        // 记忆：外观一改就记下来（防抖）
         if (_ready)
         {
-            
+            // 手调过就不再算"正在用某套预设"（下次启动遵循的是"上次没用预设" → 保持这个外观）
             if (!_keepPreset) MarkCustomAppearance();
             ScheduleSave();
         }
@@ -172,10 +172,10 @@ public sealed partial class ClockToolPage : Page
         Tick();
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 用户手动改了外观 → 退出"正在使用预设"状态。只影响高亮和下次启动的判据，
+    /// **不会**动外观本身（外观就是用户刚调的那个）。
+    /// </summary>
     private void MarkCustomAppearance()
     {
         if (_activePreset.Length == 0) return;
@@ -186,11 +186,11 @@ public sealed partial class ClockToolPage : Page
     private Brush PhotoBrush()
         => PhotoBrushOf(_settings.BackgroundImagePath, ClockRender.BaseBrush(_settings, Dark));
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 背景图刷子。解不开就用 <paramref name="fallback"/>（底色刷），不会崩。
+    /// <paramref name="decodeWidth"/> &gt; 0 时缩着解 —— 预设卡只有 138 宽，没必要按原图尺寸解到内存里。
+    /// ⚠️ DecodePixelWidth 必须在 UriSource 之前设（设完 UriSource 就开始解码了）。
+    /// </summary>
     private static Brush PhotoBrushOf(string path, Brush fallback, int decodeWidth = 0)
     {
         try
@@ -216,7 +216,7 @@ public sealed partial class ClockToolPage : Page
         DateText.Visibility = _settings.ShowDate ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    
+    // ══════════ 背景图 ══════════
     private async void PickBg_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -263,14 +263,14 @@ public sealed partial class ClockToolPage : Page
                 return;
             }
         }
-        catch {  }
+        catch { /* 取不到大小就直接用 */ }
 
         _settings.BackgroundImagePath = path;
         Apply();
         Toast.Text = "";
     }
 
-    
+    // 直接把图片拖进预览框也能设为背景
     private void Stage_DragOver(object sender, DragEventArgs e)
     {
         e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
@@ -294,10 +294,10 @@ public sealed partial class ClockToolPage : Page
         }
     }
 
-    
+    // ══════════ 全屏 / 对时 ══════════
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
     {
-        
+        // 走统一入口：已经开着就就地换成这套设置（不会再叠出第二个全屏窗口）
         Views.ClockFullscreenWindow.Show(CopyOf(_settings), Dark);
     }
 
@@ -307,19 +307,19 @@ public sealed partial class ClockToolPage : Page
         catch (Exception ex) { Toast.Text = "无法启动浏览器：" + ex.Message; }
     }
 
-    
+    // ══════════ 外观预设 / 记忆（2026-09-27 Nick 提） ══════════
 
-    
+    /// <summary>把 _settings 的当前值回灌到控件上（套用预设、恢复默认之后要用）。</summary>
     private void SyncControls()
     {
         var wasReady = _ready;
-        _ready = false;   
+        _ready = false;   // 这段里改控件会触发 SelectionChanged / ValueChanged，别让它反过来再 Apply 一次
         try
         {
             VeilBox.SelectedIndex = (int)_settings.Veil;
             ToneBox.SelectedIndex = (int)_settings.Tone;
             InkBox.SelectedIndex = (int)_settings.Ink;
-            
+            // 先规范化再找下标：旧存档里的 Georgia 已从候选表剔除，不折一下会掉到默认项上去（丢用户的字体选择）
             var savedFont = ClockRender.NormalizeFont(_settings.FontFamily);
             var fontIndex = Array.IndexOf(ClockRender.FontFamilies, savedFont);
             FontBox.SelectedIndex = fontIndex < 0 ? 1 : fontIndex;
@@ -332,20 +332,20 @@ public sealed partial class ClockToolPage : Page
         finally { _ready = wasReady; }
     }
 
-    
+    /// <summary>防抖落盘：拖滑块时 ValueChanged 是连续的，攒 600ms 再写一次文件。</summary>
     private void ScheduleSave()
     {
-        
-        
+        // ⚠️ DispatcherQueueTimer 没有 Restart()（那是 WPF DispatcherTimer 的 API）——
+        // 先停再开就是"重新计时"，别再写 Restart 了。
         _saveTimer.Stop();
         _saveTimer.Start();
     }
 
     private void Persist()
     {
-        
-        
-        
+        // ⚠️ 先读回最新的一份再改：浮窗时钟也在写这个文件（它只动 LastUsed / LastUsedPreset）。
+        //    拿手上这份可能已经过期的快照去整份覆盖，会把浮窗刚写进去的改回去 ——
+        //    「共用存档整份覆盖抹掉另一边」这个坑这台机器上踩过，别再各写各的。
         var data = ClockPresetStore.Load();
         data.LastUsed = _settings.Clone();
         data.LastUsedPreset = _activePreset;
@@ -370,17 +370,17 @@ public sealed partial class ClockToolPage : Page
         foreach (var preset in _presets) PresetHost.Items.Add(BuildPresetCard(preset));
     }
 
-    
-    
-    
-    
+    /// <summary>
+    /// 一张预设卡：上半是**这套外观实际画出来的样子**（底色 · 背景图 · 蒙版 · 字色 · 字体 · 字号），
+    /// 下半是名字 + 「套用」「删除」。卡不大（150 宽），一眼认出是哪套。
+    /// </summary>
     private FrameworkElement BuildPresetCard(ClockPreset preset)
     {
         var ps = preset.ToSettings();
         var active = string.Equals(preset.Name, _activePreset, StringComparison.OrdinalIgnoreCase);
         var hasPhoto = !string.IsNullOrWhiteSpace(ps.BackgroundImagePath);
 
-        
+        // ── 预览：跟右边大预览同一套渲染（ClockRender），所以它长什么样、全屏就是什么样 ──
         var preview = new Grid { Height = PresetPreviewHeight };
         preview.Children.Add(new Border
         {
@@ -407,7 +407,7 @@ public sealed partial class ClockToolPage : Page
             FontFamily = font,
             Foreground = face,
         };
-        
+        // 卡片是"这套预设长什么样"的样板，得跟真身同一个字宽规则，否则缩略图上 `1` 的比例是假的
         Microsoft.UI.Xaml.Documents.Typography.SetNumeralAlignment(hourBlock, FontNumeralAlignment.Tabular);
         line.Children.Add(hourBlock);
         if (ps.ShowSeconds)
@@ -476,7 +476,7 @@ public sealed partial class ClockToolPage : Page
             Child = content,
         };
 
-        
+        // 名字给无障碍和自动化测试看（卡片本身不是按钮，光看 UIA 树认不出哪张是哪套）
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(card,
             active ? $"预设卡片「{preset.Name}」（使用中）" : $"预设卡片「{preset.Name}」");
         ToolTipService.SetToolTip(card, preset.Summary());
@@ -531,13 +531,13 @@ public sealed partial class ClockToolPage : Page
         var name = input.Text.Trim();
         if (name.Length == 0) name = $"预设 {_presets.Count + 1}";
 
-        
+        // 同名直接覆盖：老师多半是"改一改再存回去"，而不是想要两套一模一样名字的
         var preset = ClockPreset.From(name, _settings);
         var existing = _presets.FindIndex(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing >= 0) _presets[existing] = preset;
         else _presets.Add(preset);
 
-        
+        // 存完就算"正在使用这套" —— 这样关掉再进来，起来的还是它（Nick 要的「遵循上次」）
         _activePreset = preset.Name;
 
         Persist();
@@ -549,7 +549,7 @@ public sealed partial class ClockToolPage : Page
     {
         if ((sender as FrameworkElement)?.Tag is not ClockPreset preset) return;
 
-        _keepPreset = true;                       
+        _keepPreset = true;                       // 这一段是程序化换装，别被 Apply 判成"手调"
         _settings.CopyFrom(preset.ToSettings());
         SyncControls();
         Apply();
@@ -567,7 +567,7 @@ public sealed partial class ClockToolPage : Page
 
         _presets.Remove(preset);
         var wasActive = string.Equals(preset.Name, _activePreset, StringComparison.OrdinalIgnoreCase);
-        if (wasActive) _activePreset = "";        
+        if (wasActive) _activePreset = "";        // 删掉正在用的那套 → 外观留着，但不再是"在用预设"
 
         Persist();
         RefreshPresets();
@@ -582,7 +582,7 @@ public sealed partial class ClockToolPage : Page
         _settings.CopyFrom(new ClockSettings());
         SyncControls();
         Apply();
-        _activePreset = "";                       
+        _activePreset = "";                       // 恢复默认 = 明确"不用任何预设"
         _keepPreset = false;
 
         Persist();

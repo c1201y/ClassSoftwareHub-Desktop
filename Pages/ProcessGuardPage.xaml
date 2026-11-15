@@ -7,15 +7,15 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    
+    <!--
+      版式与「白板专杀」「本机核实」同源：三列 Grid 把内容钉在中间 960 宽。
+      ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列右甩。
 
-
-
-
-
-
-
-
+      卡片语言（2026-10-02 二改，向设置页看齐）：
+        · 圆角 4、卡片间距 4、内边距 16,12 —— 全部跟设置页 SettingsCard 组内节奏一致；
+        · 手写 Border 一律 Style="{StaticResource CshCardStyle}"，⛔ 别再写四件套；
+        · 标题块与首卡之间留 20（外层 Spacing=4 只管卡片之间，标题块的呼吸靠自己的 Margin）。
+    -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -26,7 +26,7 @@
 
             <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
-                
+                <!-- 标题 + 实验性标记 -->
                 <StackPanel Spacing="6" Margin="0,0,0,20">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="程序专杀" FontSize="28" FontWeight="Bold" />
@@ -36,7 +36,7 @@
                                Text="到点后结束仍驻留后台的进程，每条规则独立。" />
                 </StackPanel>
 
-                
+                <!-- 总开关：SettingsCard 原生控件（与设置页同一套），不再手叠 Border -->
                 <controls:SettingsCard Header="自动执行">
                     <controls:SettingsCard.Description>
                         <TextBlock x:Name="SwitchHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" Text="" />
@@ -45,7 +45,7 @@
                                   MinWidth="0" Toggled="EnableSwitch_Toggled" />
                 </controls:SettingsCard>
 
-                
+                <!-- 添加规则 -->
                 <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="添加程序" FontSize="14" />
@@ -60,7 +60,7 @@
                     </StackPanel>
                 </Border>
 
-                
+                <!-- 规则列表 -->
                 <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="已配置的程序" FontSize="14" />
@@ -68,7 +68,7 @@
                     </StackPanel>
                 </Border>
 
-                
+                <!-- 手动执行 -->
                 <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="立即执行一次" FontSize="14" />
@@ -80,7 +80,7 @@
                     </StackPanel>
                 </Border>
 
-                
+                <!-- 当前命中进程 -->
                 <Border Style="{StaticResource CshCardStyle}">
                     <StackPanel Spacing="8">
                         <StackPanel Orientation="Horizontal" Spacing="10">
@@ -92,12 +92,12 @@
                     </StackPanel>
                 </Border>
 
-                
-                
-
-
-
-
+                <!-- 页脚：说明判定依据与局限 -->
+                <!--
+                    常驻警示（2026-10-31 文案收敛）。原来是一块「执行依据与限制」+ 四条「·」，
+                    讲匹配规则、怎么判定"正在使用"、为什么权限不足 —— 那些是开发者要知道的；
+                    用户只需要知道"程序退了不生效"与"正在用的不会被关"。
+                -->
                 <InfoBar IsOpen="True" IsClosable="False" Severity="Warning"
                          Title="程序退出后不会执行"
                          Message="只结束没有窗口的后台进程，正在使用中的会跳过。" />

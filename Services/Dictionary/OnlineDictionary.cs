@@ -8,20 +8,20 @@ using ClassSoftwareHub.Desktop.Core.Dictionary;
 
 namespace ClassSoftwareHub.Desktop.Services.Dictionary;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 在线词源。两个接口，按可靠程度排队：先有道（有中文释义），再 Free Dictionary（只有英文释义）。
+///
+/// <para>
+/// <b>为什么不接官方 API。</b>有道开放平台要注册、要密钥、有配额；这里只是查一个词，
+/// 走的是它们词典网页自己用的那个查询接口（<c>dict.youdao.com/jsonapi</c>），返回的是完整 JSON，
+/// 不解析 HTML、不依赖页面结构。代价是它没有承诺 —— 哪天改了字段名，这边会查不到词，
+/// 所以下面每一层解析都做空值保护，任何一处对不上就整体判为"这个源没结果"，交给下一个源。
+/// </para>
+/// <para>
+/// ⚠️ 2026-11-01 实测两个接口在本机都直连可用（有道 ~55 KB、Free Dictionary ~2 KB）。
+///    日后若某个源长期不可用，把它的方法摘掉即可，调度层不用改。
+/// </para>
+/// </summary>
 public static class OnlineDictionary
 {
     private static readonly HttpClient Http = new()
@@ -32,20 +32,20 @@ public static class OnlineDictionary
     private const string YoudaoUrl = "https://dict.youdao.com/jsonapi?q=";
     private const string FreeUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/";
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 联网查一个词。查询串里有汉字就走中译英，否则走英译中（见 <see cref="LexiconFormat.HasChinese"/>）。
+    /// 两个源都没结果时 <see cref="DictResult.Found"/> 为 false；
+    /// 连不上或接口出错时 <see cref="DictResult.Error"/> 有值，界面据此提示"网络"而不是"没这个词"。
+    /// </summary>
     public static Task<DictResult> LookupAsync(string word) =>
         LexiconFormat.HasChinese(word) ? LookupChineseAsync(word) : LookupEnglishAsync(word);
 
-    
+    /// <summary>英译中：有道优先，Free Dictionary 兜底。</summary>
     private static async Task<DictResult> LookupEnglishAsync(string word)
     {
         var note = "";
 
-        
+        // ① 有道：有中文释义
         try
         {
             var entry = await QueryYoudaoAsync(word);
@@ -58,7 +58,7 @@ public static class OnlineDictionary
             note = "有道词典暂时连不上";
         }
 
-        
+        // ② Free Dictionary：几乎只有英文释义，作为兜底
         try
         {
             var entry = await QueryFreeAsync(word);
@@ -75,15 +75,15 @@ public static class OnlineDictionary
         return new DictResult { Note = note, Error = note };
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 中译英：有道的「中英」词典（<c>ce</c> 节点）。
+    ///
+    /// <para>
+    /// ⚠️ 这个节点里的英文词藏在 <c>trs[].tr[].l.i</c> 里，而且 <c>i</c> 既可能是纯字符串，
+    ///    也可能是 <c>{"#text":"apple","@action":"link"}</c> 这种对象 —— 两个形态都得认，
+    ///    否则一半词条只能拿到中文解释、拿不到英文词。
+    /// </para>
+    /// </summary>
     private static async Task<DictResult> LookupChineseAsync(string word)
     {
         string note;
@@ -111,7 +111,7 @@ public static class OnlineDictionary
 
         var words = new List<string>();
 
-        
+        // ① 词典正文：ce.word[].trs[].tr[].l.i[]
         if (root.TryGetProperty("ce", out var ce)
             && ce.TryGetProperty("word", out var ceWords)
             && ceWords.ValueKind == JsonValueKind.Array)
@@ -141,7 +141,7 @@ public static class OnlineDictionary
                             if (string.IsNullOrWhiteSpace(text)) continue;
                             text = text!.Trim();
 
-                            
+                            // 只收英文词，中文解释（#tran 里那种）不要 —— 那是给人看的，不是译词
                             if (!ContainsAsciiLetter(text)) continue;
                             if (words.Contains(text, StringComparer.OrdinalIgnoreCase)) continue;
 
@@ -153,7 +153,7 @@ public static class OnlineDictionary
             }
         }
 
-        
+        // ② 网络释义补台：词典没收的词（新词、专名）常常只有这一层
         if (words.Count < 3 && root.TryGetProperty("web_trans", out var web)
             && web.TryGetProperty("web-translation", out var webList)
             && webList.ValueKind == JsonValueKind.Array)
@@ -202,7 +202,7 @@ public static class OnlineDictionary
         return false;
     }
 
-    
+    // ─────────────────────────── 有道 ───────────────────────────
 
     private static async Task<DictEntry?> QueryYoudaoAsync(string word)
     {
@@ -213,7 +213,7 @@ public static class OnlineDictionary
         var phonetic = "";
         var senses = new List<DictSense>();
 
-        
+        // ① 英汉词条：ec.word[0] 下面 trs[] → tr[] → l.i[] 是一串 "词性. 释义"
         if (root.TryGetProperty("ec", out var ec)
             && ec.TryGetProperty("word", out var ecWords)
             && ecWords.ValueKind == JsonValueKind.Array
@@ -223,7 +223,7 @@ public static class OnlineDictionary
 
             try
             {
-                
+                // 美音优先：教室场景念出来的多半是美音
                 if (w.TryGetProperty("usphone", out var us) && us.GetString() is { Length: > 0 } usText)
                     phonetic = usText;
                 else if (w.TryGetProperty("ukphone", out var uk) && uk.GetString() is { Length: > 0 } ukText)
@@ -231,7 +231,7 @@ public static class OnlineDictionary
             }
             catch
             {
-                
+                // 音标字段缺失不影响查词
             }
 
             try
@@ -259,11 +259,11 @@ public static class OnlineDictionary
             }
             catch
             {
-                
+                // 释义结构对不上就当这个词没有中文释义
             }
         }
 
-        
+        // ② 简单词条（短语、专名常常只有这一层）：音标在这儿
         if (phonetic.Length == 0
             && root.TryGetProperty("simple", out var simple)
             && simple.TryGetProperty("word", out var simpleWords)
@@ -278,7 +278,7 @@ public static class OnlineDictionary
             }
             catch
             {
-                
+                // 同上
             }
         }
 
@@ -296,7 +296,7 @@ public static class OnlineDictionary
         };
     }
 
-    
+    /// <summary>双语例句：sentence（原文）+ sentence-translation（译文）。最多取五条。</summary>
     private static List<DictExample> ReadYoudaoSentences(JsonElement root)
     {
         var list = new List<DictExample>();
@@ -322,17 +322,17 @@ public static class OnlineDictionary
         }
         catch
         {
-            
+            // 例句是锦上添花，取不到就算了
         }
 
         return list;
     }
 
-    
+    /// <summary>例句里带 <c>&lt;b&gt;…&lt;/b&gt;</c> 高亮标记，界面上不显示标签，直接抹掉。</summary>
     private static string StripTags(string text) => text.Replace("<b>", "", StringComparison.OrdinalIgnoreCase)
                                                         .Replace("</b>", "", StringComparison.OrdinalIgnoreCase);
 
-    
+    // ────────────────────── Free Dictionary ──────────────────────
 
     private static async Task<DictEntry?> QueryFreeAsync(string word)
     {
@@ -365,7 +365,7 @@ public static class OnlineDictionary
         }
         catch
         {
-            
+            // 音标取不到不影响释义
         }
 
         try
@@ -392,7 +392,7 @@ public static class OnlineDictionary
         }
         catch
         {
-            
+            // 同上
         }
 
         if (senses.Count == 0) return null;

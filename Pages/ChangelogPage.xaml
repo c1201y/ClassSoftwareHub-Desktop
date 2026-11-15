@@ -6,16 +6,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
-    
-
-
-
-
-
-
-
-
-
+    <!--
+      ⛔⛔ 版式要点（2026-10-17 改版，Nick 的七条意见）：
+      1. 顶部那张「巨无霸版本卡」删了 —— 版本号 + 通道 + 数据来源压成标题下方一行副标题。
+      2. 操作栏不再左右分家：筛选、刷新、在浏览器打开全收进左栏列表正上方，
+         它们控制的就是这个列表，主次关系一目了然。单选按钮换成下拉（不用 RadioButton 占版面）。
+      3. 左侧列表用**原生 ListView**（系统自带的选中高亮、悬停、键盘导航），
+         条目是「主标题（版本号）+ 副标题（日期 · 通道）」两行文本，不自绘选中底色。
+      4. 右侧正文按 Markdown 的标题**分组**，组标题 14.5 SemiBold、组间留白，
+         版本之间用分隔线而不是层层卡片 —— 像读文档，不是往灰盒子里塞记事本。
+    -->
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -29,7 +29,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            
+            <!-- ===== 标题区（原来那张大卡的信息压缩成一行） ===== -->
             <StackPanel Spacing="5">
                 <TextBlock Text="更新日志" FontSize="28" FontWeight="Bold" />
                 <TextBlock x:Name="HeaderMeta" FontSize="12" Opacity="0.62"
@@ -42,7 +42,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                
+                <!-- ===== 左栏：工具栏 + 版本列表 + 计数 ===== -->
                 <Border Style="{StaticResource CshCardStyle}" Padding="0">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -51,7 +51,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        
+                        <!-- 工具栏：筛选在左，两个图标操作靠右，全部属于「这个列表」 -->
                         <Grid Margin="12,12,12,8" ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -59,7 +59,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            
+                            <!-- ⚠️ 必须给 SelectedIndex：不给的话框里是空的，看着像坏了 -->
                             <ComboBox x:Name="FilterBox" SelectedIndex="0" HorizontalAlignment="Stretch"
                                       SelectionChanged="Filter_Changed"
                                       ToolTipService.ToolTip="按发布通道筛选">
@@ -78,7 +78,7 @@
                             </Button>
                         </Grid>
 
-                        
+                        <!-- 原生 ListView：选中/悬停/键盘导航全交给系统默认视觉，不自绘 -->
                         <ListView x:Name="VersionList" Grid.Row="1"
                                   SelectionMode="Single" Margin="0,0,0,4"
                                   SelectionChanged="VersionList_SelectionChanged">
@@ -100,7 +100,7 @@
                     </Grid>
                 </Border>
 
-                
+                <!-- ===== 右栏：文档式正文（不套大边框） ===== -->
                 <Grid Grid.Column="1">
                     <ScrollViewer x:Name="ReleaseScroll" VerticalScrollBarVisibility="Auto"
                                   Padding="2,0,10,0">
@@ -108,7 +108,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="local:ReleaseRow">
                                     <StackPanel Spacing="0" Margin="0,0,0,26">
-                                        
+                                        <!-- 版本头：版本号 + 通道徽标 + 右对齐日期 -->
                                         <Grid ColumnSpacing="10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -135,7 +135,7 @@
                                         <Border Height="1" Margin="0,10,0,14"
                                                 Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                        
+                                        <!-- 按 Markdown 标题分组：组标题 + 组内条目 -->
                                         <ItemsControl ItemsSource="{x:Bind Blocks}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="local:NoteBlock">

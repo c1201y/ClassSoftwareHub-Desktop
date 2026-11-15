@@ -5,12 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives">
 
-    
-
-
-
-
-
+    <!--
+      触屏友好的数字步进器：[-] 数值 [+]
+      ⚠️ 数值故意**不放在 TextBox 里**：触屏点一下 TextBox 会选中全部文字并弹出"复制/粘贴"小菜单，
+        教室里用触屏特别难受。这里用 TextBlock，只靠两边的大按钮加减。
+      RepeatButton 自带长按连发（Delay 后按 Interval 重复），所以 1 加到 50 按住不放就行。
+    -->
     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
         <TextBlock x:Name="LabelText" FontSize="12.5" Opacity="0.7" VerticalAlignment="Center" />
 

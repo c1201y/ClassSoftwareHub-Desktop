@@ -3,22 +3,22 @@ using System.Runtime.InteropServices;
 
 namespace ClassSoftwareHub.Desktop.Services.Audio;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ══════════════════════════════════════════════════════════════════════════
+//  Windows Core Audio（WASAPI）互操作层 —— 手写 COM 声明，不依赖任何第三方包。
+//
+//  ⚠️⚠️ 这里有三个必须守住的规矩，错一个就是「莫名奇妙的 COM 异常」或者干脆崩：
+//    ① **方法顺序 = vtable 顺序**，不能调换、不能在中间漏掉任何一个。
+//       哪怕某个方法这辈子都不会调用，也必须占位写出来（漏掉后面全部错位）。
+//    ② 接口一律**平铺**声明（基接口的方法照抄在前面），**不要**在 C# 里写
+//       `interface IAudioSessionManager2 : IAudioSessionManager` ——
+//       ComImport + 接口继承的 vtable 布局在 .NET 上不可靠。
+//    ③ 参数类型要对得上原生签名（尤其 GUID 和 LPWStr），否则读出来是垃圾值。
+//
+//  用的就三组东西：
+//    · IMMDeviceEnumerator  → 找默认播放设备
+//    · IAudioEndpointVolume → 主音量 / 静音（= 任务栏那个喇叭）
+//    · IAudioSessionManager2→ 音量合成器（每个应用一条会话）
+// ══════════════════════════════════════════════════════════════════════════
 
 internal enum EDataFlow
 {
@@ -44,7 +44,7 @@ internal enum DeviceState
     All = 0xF,
 }
 
-
+/// <summary>会话状态。合成器只关心 Active（正在发声）。</summary>
 internal enum AudioSessionState
 {
     Inactive = 0,
@@ -57,7 +57,7 @@ internal static class ClsCtx
     public const int All = 0x17;
 }
 
-
+/// <summary>MMDeviceEnumerator 的 CoClass（拿来 new 出 IMMDeviceEnumerator）。</summary>
 [ComImport]
 [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
 internal class MMDeviceEnumeratorComObject
@@ -90,7 +90,7 @@ internal interface IMMDeviceCollection
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IMMDevice
 {
-    
+    // ⚠️ ppInterface 用 IUnknown 接，再在托管侧强转成要的接口
     [PreserveSig] int Activate(ref Guid iid, int clsCtx, IntPtr activationParams,
                                [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
     [PreserveSig] int OpenPropertyStore(int access, out IntPtr properties);
@@ -98,7 +98,7 @@ internal interface IMMDevice
     [PreserveSig] int GetState(out DeviceState state);
 }
 
-
+// ── 主音量（IID 5CDF2C82-…）─────────────────────────────────────────────
 [ComImport]
 [Guid("5CDF2C82-841E-4546-9722-0CF74078229A")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -124,8 +124,8 @@ internal interface IAudioEndpointVolume
     [PreserveSig] int GetVolumeRange(out float minDb, out float maxDb, out float incrementDb);
 }
 
-
-
+// ── 音量合成器（会话）────────────────────────────────────────────────────
+// IAudioSessionManager：基接口，两个方法必须占位在前（不调用也要写）。
 [ComImport]
 [Guid("BFA971F1-4D5E-40BB-935E-967039BFBEE4")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -137,19 +137,19 @@ internal interface IAudioSessionManager
                                            int streamFlags, out ISimpleAudioVolume audioVolume);
 }
 
-
+// IAudioSessionManager2：在 IAudioSessionManager 之后追加。
 [ComImport]
 [Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IAudioSessionManager2
 {
-    
+    // ↓↓ 前两个是 IAudioSessionManager 的方法，占位（顺序不能动）
     [PreserveSig] int GetAudioSessionControl([In, MarshalAs(UnmanagedType.LPStruct)] Guid sessionGuid,
                                              int streamFlags, out IAudioSessionControl sessionControl);
     [PreserveSig] int GetSimpleAudioVolume([In, MarshalAs(UnmanagedType.LPStruct)] Guid sessionGuid,
                                            int streamFlags, out ISimpleAudioVolume audioVolume);
 
-    
+    // ↓↓ IAudioSessionManager2 自己的
     [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessionEnum);
     [PreserveSig] int RegisterSessionNotification(IntPtr notification);
     [PreserveSig] int UnregisterSessionNotification(IntPtr notification);
@@ -163,7 +163,7 @@ internal interface IAudioSessionManager2
 internal interface IAudioSessionEnumerator
 {
     [PreserveSig] int GetCount(out int count);
-    
+    /// <summary>拿到的声明成 IAudioSessionControl，需要更多信息时再 QI 到 Control2（见 AudioSessions）。</summary>
     [PreserveSig] int GetSession(int index, out IAudioSessionControl session);
 }
 
@@ -183,13 +183,13 @@ internal interface IAudioSessionControl
     [PreserveSig] int UnregisterAudioSessionNotification(IntPtr client);
 }
 
-
+// IAudioSessionControl2：在 IAudioSessionControl 的 9 个方法之后追加（这里必须全部占位）。
 [ComImport]
 [Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IAudioSessionControl2
 {
-    
+    // ↓↓ IAudioSessionControl 的 9 个（顺序不能动）
     [PreserveSig] int GetState(out AudioSessionState state);
     [PreserveSig] int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string name);
     [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string value, ref Guid eventContext);
@@ -200,7 +200,7 @@ internal interface IAudioSessionControl2
     [PreserveSig] int RegisterAudioSessionNotification(IntPtr client);
     [PreserveSig] int UnregisterAudioSessionNotification(IntPtr client);
 
-    
+    // ↓↓ IAudioSessionControl2 自己的
     [PreserveSig] int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
     [PreserveSig] int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
     [PreserveSig] int GetProcessId(out uint processId);

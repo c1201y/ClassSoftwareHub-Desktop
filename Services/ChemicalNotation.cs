@@ -8,26 +8,26 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 化学式的排版：<c>H2O</c> 排成 H₂O（真下标）、<c>SO4^2-</c> 排成 SO₄²⁻（真上标）。
+///
+/// <para>
+/// ⛔⛔ 不能把 "H2O" 原样丢进 TextBlock —— 那是计算机写法，写在黑板上是错的。
+/// 这里按字符分类（元素符号正常、元素后面的数字下沉成下标、^ 之后是上标），
+/// 与函数图像页的数学排版是同一套思路。
+/// </para>
+/// </summary>
 public static class ChemicalNotation
 {
     public enum Kind { Normal, Sub, Super }
 
     public sealed record Piece(string Text, Kind Kind);
 
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 把化学式拆成片段。
+    /// 规则：元素符号后面的数字是下标；<c>·</c> 后面的数字是结晶水倍数（正常字号）；
+    /// <c>^</c> 之后到结尾是电荷上标。
+    /// </summary>
     public static List<Piece> Tokenize(string formula)
     {
         var pieces = new List<Piece>();
@@ -77,7 +77,7 @@ public static class ChemicalNotation
                 }
                 else
                 {
-                    normal.Append(ch);   
+                    normal.Append(ch);   // 行首系数：正常字号
                 }
 
                 continue;
@@ -89,7 +89,7 @@ public static class ChemicalNotation
             normal.Append(ch);
 
             if (ch is '·' or '*')
-                seenAtom = false;        
+                seenAtom = false;        // 结晶水倍数用正常字号
             else if (char.IsLetter(ch) || ch is ')' or ']')
                 seenAtom = true;
         }
@@ -99,14 +99,14 @@ public static class ChemicalNotation
         return pieces;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    /// <summary>
+    /// 纯文本版：把下标 / 上标换成 Unicode 上下标字符（<c>SO4^2-</c> → <c>SO₄²⁻</c>）。
+    ///
+    /// <para>
+    /// 用在**不能排版**的地方：按钮提示、复制到剪贴板、日志。
+    /// ⛔ 这些地方直接出 <c>^</c> 是计算机写法（Nick 2026-10-17 点名离子根上的 ^）。
+    /// </para>
+    /// </summary>
     public static string Plain(string formula)
     {
         var text = new StringBuilder(formula.Length);
@@ -143,9 +143,9 @@ public static class ChemicalNotation
         '+' => '\u207A', '−' => '\u207B', _ => null,
     };
 
-    
-    
-    
+    /// <summary>
+    /// 单个化学式（用于物质卡片）：横向排，下标/上标靠字号与位移做出来。
+    /// </summary>
     public static FrameworkElement Formula(string formula, double fontSize, Brush brush)
     {
         var panel = new StackPanel
@@ -178,9 +178,9 @@ public static class ChemicalNotation
         return panel;
     }
 
-    
-    
-    
+    /// <summary>
+    /// 整条方程式（会折行）：左 + 左 → 右 + 右，箭头上面写反应条件。
+    /// </summary>
     public static RichTextBlock Equation(
         IReadOnlyList<(string Formula, int Coeff)> reactants,
         IReadOnlyList<(string Formula, int Coeff)> products,
@@ -223,7 +223,7 @@ public static class ChemicalNotation
                     continue;
                 }
 
-                
+                // 上下标必须做成行内对象：Run 本身没有基线偏移能力
                 var script = new TextBlock
                 {
                     Text = piece.Text,
@@ -240,7 +240,7 @@ public static class ChemicalNotation
         }
     }
 
-    
+    /// <summary>反应箭头：条件写在箭头上方（化学式子里就是这么写的）。</summary>
     private static FrameworkElement ArrowElement(IReadOnlyList<string> conditions, double fontSize, Brush brush)
     {
         var panel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 1 };
@@ -266,7 +266,7 @@ public static class ChemicalNotation
             Margin = new Thickness(fontSize * 0.18, 0, fontSize * 0.18, 0),
         });
 
-        
+        // 行内对象是按底边贴基线摆的；带条件时整体会被顶高，往下推一点让箭头落在文字中间
         panel.RenderTransform = new TranslateTransform { Y = conditions.Count > 0 ? fontSize * 0.28 : fontSize * 0.1 };
         return panel;
     }

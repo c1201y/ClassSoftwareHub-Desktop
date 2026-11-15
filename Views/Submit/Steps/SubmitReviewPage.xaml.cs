@@ -19,21 +19,21 @@ using Windows.System;
 
 namespace ClassSoftwareHub.Desktop.Views.Submit.Steps;
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// <summary>
+/// 第 5 步：核对并提交。
+///
+/// <para>
+/// 提交逻辑沿用旧提交页：按 <see cref="SubmitEndpoint.Ordered"/> 逐个入口试，
+/// 第一个给出提交接口响应的就是结果；全不通则保留本机草稿并给出四条备用路径。
+/// </para>
+///
+/// <para>
+/// ⛔ 缺失项不要只写一句「带 * 的必填项未填完」：这里逐条列出来，每条都能跳回对应步骤。
+/// </para>
+/// </summary>
 public sealed partial class SubmitReviewPage : Page
 {
-    
+    // 投稿是受保护路由，必须带身份头 → 走认证处理器（见 Services/License/AuthHandler.cs）
     private static readonly HttpClient Http = new(new AuthHandler(new HttpClientHandler()));
 
     private static int SubmitTimeoutMs => SubmitEndpoint.TimeoutMs;
@@ -66,7 +66,7 @@ public sealed partial class SubmitReviewPage : Page
         BuildMissing();
     }
 
-    
+    // ── 摘要 ─────────────────────────────────────────────────────────────
 
     private void BuildSummary()
     {
@@ -131,7 +131,7 @@ public sealed partial class SubmitReviewPage : Page
         }
     }
 
-    
+    // ── 缺失项 ───────────────────────────────────────────────────────────
 
     private void BuildMissing()
     {
@@ -174,11 +174,11 @@ public sealed partial class SubmitReviewPage : Page
         MissingPanel.Visibility = missing.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    
+    // ── 提交 ─────────────────────────────────────────────────────────────
 
     private readonly record struct Reply(bool Success, string? Message, string? Error);
 
-    
+    /// <summary>由窗口底部的「提交」按钮调用。</summary>
     public async Task SubmitAsync()
     {
         if (_busy || _draft is null) return;
@@ -203,9 +203,9 @@ public sealed partial class SubmitReviewPage : Page
 
             if (reply is null)
             {
-                
-                
-                
+                // 所有入口都不通：草稿早已在本机，保留这次内容供兜底导出。
+                // ⚠️ 这里不再开红色提示条 —— 下面那块警告已经把事情说清楚了，
+                //    两条同时挂着只是把同一句话讲两遍。
                 _draft.Save();
                 _pending = payload;
                 ShowResult(false, "", "");
@@ -218,7 +218,7 @@ public sealed partial class SubmitReviewPage : Page
             if (reply.Value.Success)
             {
                 _pending = null;
-                
+                // ⚠️ 不能在这里再 Save()：MarkCompleted 会清草稿，先存后清等于白清
                 SubmitSession.Current?.MarkCompleted();
 
                 ShowResult(true, "已提交", string.IsNullOrWhiteSpace(reply.Value.Message)
@@ -244,7 +244,7 @@ public sealed partial class SubmitReviewPage : Page
         }
     }
 
-    
+    /// <summary>按顺序试每个入口，返回第一个「确实是提交接口」的响应；全不通返回 (null, null)。</summary>
     private static async Task<(Reply? reply, string? endpoint)> PostAsync(Dictionary<string, object?> payload)
     {
         foreach (var baseUrl in SubmitEndpoint.Ordered())
@@ -261,7 +261,7 @@ public sealed partial class SubmitReviewPage : Page
 
                 var hasSuccess = root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True;
                 var hasError = root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String;
-                if (!hasSuccess && !hasError) continue;   
+                if (!hasSuccess && !hasError) continue;   // 回源没生效时会返回 nginx 错误页
 
                 var message = root.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.String
                     ? msg.GetString()
@@ -271,7 +271,7 @@ public sealed partial class SubmitReviewPage : Page
             }
             catch
             {
-                
+                // 连不上 / 超时 / 响应不是 JSON → 换下一个入口
             }
         }
 
@@ -292,7 +292,7 @@ public sealed partial class SubmitReviewPage : Page
         ResultBar.IsOpen = true;
     }
 
-    
+    // ── 兜底：重试 / 下载 / 复制 / 去 GitHub ─────────────────────────────
 
     private async void Retry_Click(object sender, RoutedEventArgs e) => await SubmitAsync();
 
