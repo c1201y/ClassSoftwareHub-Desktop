@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml;
 
 namespace ClassSoftwareHub.Desktop.Data;
 
-/// <summary>全局搜索的结果类别。</summary>
+
 public enum SearchHitKind
 {
     App,
@@ -15,36 +15,36 @@ public enum SearchHitKind
     Page,
 }
 
-/// <summary>一条搜索结果。</summary>
+
 public sealed class SearchHit
 {
     public SearchHitKind Kind { get; init; }
 
-    /// <summary>同类内的去重键：软件 id / 工具 id / 页面 tag。</summary>
+    
     public string Key { get; init; } = "";
 
     public string Title { get; init; } = "";
 
     public string Subtitle { get; init; } = "";
 
-    /// <summary>工具与页面用的字形码；软件留空（界面改用首字色块）。</summary>
+    
     public string Glyph { get; init; } = "";
 
-    /// <summary>软件命中来源：true＝名称命中，false＝简介/介绍命中。其余类别不看它。</summary>
+    
     public bool MatchedName { get; init; }
 
-    /// <summary>点开要导航到的 tag（页面与工具用；软件走 id，见 <see cref="Key"/>）。</summary>
+    
     public string Target { get; init; } = "";
 
-    // ── 以下几项是给界面模板直接绑的 ──────────────────────────────
-    // 下拉列表用 AutoSuggestBox 的原生建议列表承载，ItemTemplate 里用 {Binding} 取属性；
-    // 绑定不认方法调用，所以"显隐""首字"这些都得在这儿先算好。
+    
+    
+    
 
-    /// <summary>
-    /// 右侧那行类型小字。
-    /// ⚠️ 与站点的取舍不同：站点是按组显示（组标题写着"软件/内置工具/页面"），
-    ///    桌面端走系统原生下拉，是个扁平列表、没有组标题，所以改由每行的这个小字交代类型。
-    /// </summary>
+    
+    
+    
+    
+    
     public string Badge => Kind switch
     {
         SearchHitKind.App => "软件",
@@ -53,10 +53,10 @@ public sealed class SearchHit
         _ => "页面",
     };
 
-    /// <summary>字形（工具与页面用；软件没有字形，界面改用首字色块）。</summary>
+    
     public string IconGlyph => Kind == SearchHitKind.App ? "" : Glyph;
 
-    /// <summary>首字（软件用 —— 搜索结果不等远程图标加载，与站点同）。</summary>
+    
     public string IconLetter => Kind == SearchHitKind.App ? FirstLetter(Title) : "";
 
     public Visibility GlyphVisibility =>
@@ -68,10 +68,10 @@ public sealed class SearchHit
     public Visibility SubtitleVisibility =>
         Subtitle.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>
-    /// ⛔ 别删：AutoSuggestBox 选中一项之后会把它 `ToString()` 的结果回填进输入框，
-    /// 没有这个重写，框里就会变成类型名。
-    /// </summary>
+    
+    
+    
+    
     public override string ToString() => Title;
 
     private static string FirstLetter(string title)
@@ -82,7 +82,7 @@ public sealed class SearchHit
     }
 }
 
-/// <summary>一组结果（界面按组显示，组标题见 <see cref="SearchIndex.GroupTitle"/>）。</summary>
+
 public sealed class SearchGroup
 {
     public SearchHitKind Kind { get; init; }
@@ -92,30 +92,30 @@ public sealed class SearchGroup
     public string Title => SearchIndex.GroupTitle(Kind);
 }
 
-/// <summary>
-/// 全局搜索（标题栏那个搜索框）的索引与匹配。
-/// 桌面端的对应物是站点的 <c>src/gallery/searchIndex.ts</c> —— **匹配规则逐条对齐**，改一处要想着另一处。
-///
-/// <para>搜索范围（结果按类别分组）：</para>
-/// <list type="number">
-/// <item>软件 —— 软件名 / 一句话简介 / 详细介绍（数据来自 <c>ContentStore</c>，即站点的「软件数据/apps/」）</item>
-/// <item>内置工具 —— 工具名 / 说明（清单只有 <see cref="ToolCatalog.All"/> 一份）</item>
-/// <item>文档库 —— 文章标题 / 简介 / 作者 / 标签（⛔ 不查正文，需求 1:15）</item>
-/// <item>页面 —— 导航栏的各个页面（见下面的页面注册表）</item>
-/// </list>
-/// <para>
-/// ⛔ 站点还有第 4 类「AI 导航」（站外站点）—— 桌面端没有这个页面，所以这里也没有，不是漏了。
-/// </para>
-///
-/// <para>
-/// 规则：不知道软件叫什么、只记得"它是干嘛的"也能搜到 ——
-/// 名称命中的结果排在同组的简介命中之前；组内不超过 <see cref="LimitPerKind"/> 条。
-/// 空关键词不走匹配，直接给"去哪儿"的页面快捷入口（与站点同）。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public static class SearchIndex
 {
-    /// <summary>每组最多几条（与站点一致；超了靠继续打字缩小范围）。</summary>
+    
     public const int LimitPerKind = 5;
 
     public static string GroupTitle(SearchHitKind kind) => kind switch
@@ -126,9 +126,9 @@ public static class SearchIndex
         _ => "页面",
     };
 
-    // ── ① 软件 ────────────────────────────────────────────────────
+    
 
-    /// <summary>软件：名称命中的排前面，简介/介绍命中排后面。</summary>
+    
     private static List<SearchHit> SearchApps(string q, string[] parts, int limit)
     {
         var byName = new List<SearchHit>();
@@ -158,9 +158,9 @@ public static class SearchIndex
         MatchedName = byName,
     };
 
-    // ── ② 内置工具 ────────────────────────────────────────────────
+    
 
-    /// <summary>内置工具：工具名命中优先，说明命中其次。</summary>
+    
     private static List<SearchHit> SearchTools(string q, string[] parts, int limit)
     {
         var byName = new List<SearchHit>();
@@ -185,13 +185,13 @@ public static class SearchIndex
         return byName.Concat(byDesc).Take(limit).ToList();
     }
 
-    // ── ③ 文档库 ──────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 文档库文章：只查**清单里的**标题 / 简介 / 作者 / 标签，⛔ 不读正文
-    /// （需求 1:15 明确要求"应用全局搜索不检索文章正文"）。
-    /// 清单没同步过时这里就是空表 —— 进一次「文档库」才有数据。
-    /// </summary>
+    
+    
+    
+    
+    
     private static List<SearchHit> SearchDocs(string q, string[] parts, int limit)
     {
         var byTitle = new List<SearchHit>();
@@ -219,20 +219,20 @@ public static class SearchIndex
         return byTitle.Concat(byMeta).Take(limit).ToList();
     }
 
-    // ── ④ 页面 ────────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 页面：标题 / 说明 / 关键词三处任一命中即可。
-    /// 空关键词时返回全部**顶层**页面（面板一开始的"去哪儿"快捷入口）。
-    /// </summary>
+    
+    
+    
+    
     private static List<SearchHit> SearchPages(string q, string[] parts, int limit)
     {
         var hits = new List<SearchHit>();
 
         foreach (var page in Pages)
         {
-            // 没有关键词＝快捷入口，只列导航栏上直接看得到的那几个（实验性子项不铺开，
-            // 不然一聚焦就是 15 条；子项留着靠打字搜）。
+            
+            
             if (q.Length == 0)
             {
                 if (!page.TopLevel) continue;
@@ -260,16 +260,16 @@ public static class SearchIndex
         return hits;
     }
 
-    /// <summary>页面注册表。顺序＝导航栏顺序（上半区 → 下半区），图标与导航项同码位。</summary>
+    
     private sealed class PageDef
     {
         public string Tag { get; init; } = "";
         public string Title { get; init; } = "";
         public string Desc { get; init; } = "";
         public string Glyph { get; init; } = "";
-        /// <summary>额外匹配词（中英都放，方便只记得英文/拼音时也能搜到）。</summary>
+        
         public string Keywords { get; init; } = "";
-        /// <summary>是不是导航栏上直接看得到的那一层（决定空关键词时列不列它）。</summary>
+        
         public bool TopLevel { get; init; }
     }
 
@@ -295,7 +295,7 @@ public static class SearchIndex
                 Keywords = "feedback 反馈 报错 出错 问题 bug 建议 意见 issue 修正 失效" },
         new() { Tag = "changelog", Title = "更新日志", Desc = "查看各版本的更新内容", Glyph = "\uE81C", TopLevel = true,
                 Keywords = "changelog 更新日志 版本 更新内容 新功能" },
-        // 2026-11-13：底部那颗「关于」——反馈/日志/回声洞/授权/条款的入口都收在这一页
+        
         new() { Tag = "about", Title = "关于", Desc = "版本、反馈与更新日志、回声洞、授权、条款", Glyph = "\uE946", TopLevel = true,
                 Keywords = "about 关于 版本 版权 许可 license 授权 激活 激活码 条款 隐私政策 用户协议 免责声明 回声洞 反馈 更新日志 作者" },
         new() { Tag = "settings", Title = "设置", Desc = "主题、材质、侧边栏、下载位置", Glyph = "\uE713", TopLevel = true,
@@ -317,18 +317,18 @@ public static class SearchIndex
                 Keywords = "repair 系统修复 修复 sfc dism chkdsk 网络重置 组件存储 磁盘 scannow" },
     };
 
-    // ── 汇总 ──────────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 全局搜索：返回已经分好组的结果（顺序＝软件 → 内置工具 → 页面）。
-    /// 空关键词只返回页面快捷入口；一条都没有时返回空表（界面据此显示"没找到"）。
-    /// </summary>
+    
+    
+    
+    
     public static List<SearchGroup> Query(string query, int limitPerKind = LimitPerKind)
     {
         var q = Normalize(query);
 
-        // 拆词只用于「顺序无关」那一档（见 Hit）：先按空白拆**原文**再各自归一化 ——
-        // q 里的空格已经被 Normalize 去掉了，没法再拆。
+        
+        
         var parts = (query ?? "")
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(Normalize)
@@ -355,13 +355,13 @@ public static class SearchIndex
         return groups.Where(g => g.Hits.Count > 0).ToList();
     }
 
-    /// <summary>
-    /// 单字段是否命中。两级判定：
-    /// ① 整串包含 —— 「7 zip」归一成「7zip」，命中「7-Zip」归一成的「7zip」；
-    /// ② 每个词都出现即可，**顺序无关** —— 「zip 7」也命中「7-Zip」。
-    ///
-    /// ⚠️ ② 只在输入多于一个词时启用；单字输入走 ① 就够，否则「a」这种会把整张表都捞出来。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private static bool Hit(string? text, string q, string[] parts)
     {
         var t = Normalize(text);
@@ -376,13 +376,13 @@ public static class SearchIndex
         return true;
     }
 
-    /// <summary>
-    /// 搜索用的归一化：转小写，**并去掉分隔符**。
-    ///
-    /// ⚠️ 去分隔符这一步是 2026-10-24 加的（Nick：搜「7 zip」找不到 7-Zip，加个横杠才搜到）。
-    ///    清单里带横杠/空格/点的名字很常见（7-Zip、Class Widgets 2、VLC media player），
-    ///    不去掉的话查询与目标永远差一个字符。中文名基本不涉及这些符号，不受影响。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private static string Normalize(string? value)
     {
         if (string.IsNullOrEmpty(value)) return "";
@@ -390,7 +390,7 @@ public static class SearchIndex
         var sb = new System.Text.StringBuilder(value.Length);
         foreach (var ch in value)
         {
-            // 只掐「词内连接用的符号」；括号、冒号之类保留，免得把语义也磨平了
+            
             if (ch is ' ' or '\t' or '-' or '_' or '.' or '/' or '\\' or '·' or '—' or '–') continue;
             sb.Append(char.ToLowerInvariant(ch));
         }
@@ -398,7 +398,7 @@ public static class SearchIndex
         return sb.ToString();
     }
 
-    /// <summary>简介太长时截断（卡片只显示一行，没必要拼一个长字符串）。与站点同：空白折叠成单空格，90 字封顶。</summary>
+    
     private static string Clip(string? value, int max = 90)
     {
         var text = System.Text.RegularExpressions.Regex.Replace(value ?? "", @"\s+", " ").Trim();

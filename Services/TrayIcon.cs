@@ -6,30 +6,30 @@ using System.Runtime.InteropServices;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>托盘右键菜单里的一项。</summary>
+
 public sealed class TrayMenuItem
 {
     public string Text { get; set; } = "";
 
-    /// <summary>点中后通过 <see cref="TrayIcon.CommandInvoked"/> 发出来的命令名。</summary>
+    
     public string Command { get; set; } = "";
 
-    /// <summary>true 就是一条分隔线（忽略 Text/Command）。</summary>
+    
     public bool Separator { get; set; }
 
-    /// <summary>双击托盘图标时默认执行的那项（生成本默认项，画粗体）。</summary>
+    
     public bool IsDefault { get; set; }
 }
 
-/// <summary>
-/// 系统托盘图标（自己 P/Invoke Shell_NotifyIcon，不引第三方包）。
-/// 做法：建一个不可见的普通顶层窗口当"消息窗口"，托盘消息都发到它；
-/// 左键单击 → <see cref="LeftClick"/>；右键 → 弹原生菜单 → <see cref="CommandInvoked"/>。
-/// 用法：new TrayIcon(path) → Setup(tip) → 事件挂上；不用了 Dispose。
-/// </summary>
+
+
+
+
+
+
 public sealed class TrayIcon : IDisposable
 {
-    // ── Win32 常量 ─────────────────────────────────────────────
+    
     private const uint WM_APP = 0x8000;
     private const uint WM_TRAY = WM_APP + 1;
     private const uint WM_DESTROY = 0x0002;
@@ -48,25 +48,25 @@ public sealed class TrayIcon : IDisposable
 
     private static readonly IntPtr HWND_TOP = IntPtr.Zero;
 
-    /// <summary>左键单击托盘图标（一般用来显示/隐藏主窗口）。</summary>
+    
     public event Action? LeftClick;
 
-    /// <summary>右键菜单选中某项，参数是菜单 id（show / palette / update / exit）。</summary>
+    
     public event Action<string>? CommandInvoked;
 
-    /// <summary>用户点了气泡通知（系统通知）本体。</summary>
+    
     public event Action? BalloonClicked;
 
-    /// <summary>
-    /// 右键菜单的呈现方式。参数 = 菜单项、选中某项后的回调；返回 true 表示已经弹出来了。
-    /// 没订阅、或订阅方返回 false / 抛异常时，退回 <see cref="ShowNativeMenu"/> 的 Win32 原生菜单。
-    /// </summary>
+    
+    
+    
+    
     public Func<IReadOnlyList<TrayMenuItem>, Action<string>, bool>? MenuRequested;
 
-    /// <summary>
-    /// 右键菜单内容（按顺序显示）。留空就用默认那几项。
-    /// 可以挂多个托盘图标实例，各自给自己的菜单。
-    /// </summary>
+    
+    
+    
+    
     public List<TrayMenuItem> MenuItems { get; } = new();
 
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -165,10 +165,10 @@ public sealed class TrayIcon : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string lpString);
 
-    // ── 实例状态 ───────────────────────────────────────────────
+    
     private readonly string _className = "CshTrayIconWnd_" + Guid.NewGuid().ToString("N")[..8];
     private readonly string _iconPath;
-    private readonly WndProcDelegate _proc;          // 必须留引用，否则委托被 GC 后回调直接崩
+    private readonly WndProcDelegate _proc;          
     private readonly uint _taskbarCreated;
     private IntPtr _hwnd = IntPtr.Zero;
     private IntPtr _hIcon = IntPtr.Zero;
@@ -194,7 +194,7 @@ public sealed class TrayIcon : IDisposable
         catch { }
     }
 
-    /// <summary>建窗口 + 把图标挂上托盘。失败返回 false（不会抛）。</summary>
+    
     public bool Setup(string tip)
     {
         _tip = tip;
@@ -211,7 +211,7 @@ public sealed class TrayIcon : IDisposable
             if (RegisterClassEx(ref wc) == 0)
                 Log($"RegisterClassEx 失败: {Marshal.GetLastWin32Error()}");
 
-            // 不可见的顶层窗口（不能用 message-only：那类窗口收不到 TaskbarCreated 广播）
+            
             _hwnd = CreateWindowEx(0, _className, "ClassSoftwareHub tray", 0,
                 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
             if (_hwnd == IntPtr.Zero)
@@ -263,7 +263,7 @@ public sealed class TrayIcon : IDisposable
         }
     }
 
-    /// <summary>改提示文字（鼠标悬停显示）。</summary>
+    
     public void SetTip(string tip)
     {
         _tip = tip;
@@ -285,10 +285,10 @@ public sealed class TrayIcon : IDisposable
         catch { }
     }
 
-    /// <summary>
-    /// 弹一条系统通知（托盘气泡）。主窗口没露脸的时候用它提醒"有新版本"。
-    /// 用户点通知 → <see cref="BalloonClicked"/>。
-    /// </summary>
+    
+    
+    
+    
     public void ShowBalloon(string title, string text)
     {
         if (!_added) return;
@@ -349,7 +349,7 @@ public sealed class TrayIcon : IDisposable
             }
             else if (_taskbarCreated != 0 && msg == _taskbarCreated)
             {
-                // 资源管理器重启 → 图标丢了，重新挂上
+                
                 _added = false;
                 AddIcon();
             }
@@ -362,9 +362,9 @@ public sealed class TrayIcon : IDisposable
         return DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
-    /// <summary>
-    /// 右键：先问宿主能不能用 WinUI 菜单画（路线图第 25 项），画不了再退回原生 Win32 菜单。
-    /// </summary>
+    
+    
+    
     private void ShowMenu()
     {
         var items = MenuItems.Count > 0 ? MenuItems : DefaultMenu();
@@ -385,7 +385,7 @@ public sealed class TrayIcon : IDisposable
         ShowNativeMenu(items);
     }
 
-    /// <summary>Win32 原生右键菜单（回退路径；没有 UI 框架参与，永远都能弹）。</summary>
+    
     private void ShowNativeMenu(IReadOnlyList<TrayMenuItem> items)
     {
         var menu = CreatePopupMenu();
@@ -408,7 +408,7 @@ public sealed class TrayIcon : IDisposable
             }
 
             GetCursorPos(out var pt);
-            SetForegroundWindow(_hwnd);   // 不设前台，菜单点外面不会消失
+            SetForegroundWindow(_hwnd);   
             var cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, pt.X, pt.Y, 0, _hwnd, IntPtr.Zero);
             PostMessage(_hwnd, WM_NULL, IntPtr.Zero, IntPtr.Zero);
 

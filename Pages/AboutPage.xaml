@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="ClassSoftwareHub.Desktop.Pages.AboutPage"
     NavigationCacheMode="Enabled"
@@ -7,17 +7,17 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    <!--
-      「关于」页（2026-11-13）。
+    
 
-      版式**与设置页同一套**：分组小标题（BodyStrong）+ 一列 SettingsCard，卡片间距 4、组间 24。
-      ⛔ 不用 SettingsExpander 堆层级：那会让每张卡多一层缩进，标题行右侧再挂个版本号，
-         整页看着忽左忽右（第一版就是这么被否的）。
-      ⛔ 只借 ClassIsland 的"顶部横幅 → 标题 → 分组"这个顺序，不搬它的卡片形态。
 
-      横幅铺满内容区宽度，下缘渐隐融进内容区；实现见 AboutPage.xaml.cs 的 LoadBanner
-      （WinUI 3 没有 UIElement.OpacityMask，只能走合成层遮罩）。
-    -->
+
+
+
+
+
+
+
+
 
     <ScrollViewer x:Name="RootScroll" VerticalScrollBarVisibility="Auto">
         <Grid>
@@ -26,10 +26,10 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- ===== 铺满顶部的横幅（图与渐隐在代码里挂合成视觉） ===== -->
+            
             <Grid x:Name="BannerHost" Grid.Row="0" Height="320" IsHitTestVisible="False" />
 
-            <!-- ===== 内容区（本站母版：三列，中间 960） ===== -->
+            
             <Grid Grid.Row="1" Margin="24,0,24,44">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="24" />
@@ -46,11 +46,11 @@
 
                     <TextBlock Text="关于 ClassSoftwareHub" FontSize="28" FontWeight="SemiBold" Margin="0,4,0,4" />
 
-                    <!-- ================= 应用信息 ================= -->
+                    
                     <TextBlock Text="应用信息" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,8" />
                     <StackPanel Spacing="4">
 
-                        <controls:SettingsCard Header="ClassSoftwareHub" Description="班级电教委员的装机与课堂工具集">
+                        <controls:SettingsCard x:Name="AppInfoCard" Header="ClassSoftwareHub" Description="班级电教委员的装机与课堂工具集">
                             <controls:SettingsCard.HeaderIcon>
                                 <ImageIcon x:Name="AppIcon" />
                             </controls:SettingsCard.HeaderIcon>
@@ -87,8 +87,8 @@
 
                     </StackPanel>
 
-                    <!-- ================= 帮助与反馈 ================= -->
-                    <!-- 反馈中心与更新日志原来各占一颗底部导航项，2026-11-13 收进这里 -->
+                    
+                    
                     <TextBlock Text="帮助与反馈" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                     <StackPanel Spacing="4">
 
@@ -115,11 +115,11 @@
 
                     </StackPanel>
 
-                    <!-- ================= 回声洞 ================= -->
-                    <!-- 2026-11-13 从设置页整块搬来，形态与文案一字未改：
-                         一个 SettingsExpander，默认折叠，展开区里只有一张卡片（字条 + 投稿）。
-                         ⚠️ 那句「请点击这里收看…」是 Nick 亲手定的（MustRead §2.2 的例外），⛔ 别改。
-                         ⚠️ CollapseEchoCave 那套「先拨 true 再拨 false」的收折手法原样保留。 -->
+                    
+                    
+
+
+
                     <TextBlock Text="回声洞" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                     <StackPanel Spacing="4">
 
@@ -170,8 +170,8 @@
 
                     </StackPanel>
 
-                    <!-- ================= 授权 ================= -->
-                    <!-- 2026-11-13 从设置页搬来，判定与文案未改：官方包不摆按钮；激活码激活的只报激活时间。 -->
+                    
+                    
                     <TextBlock Text="授权" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                     <StackPanel Spacing="4">
 
@@ -189,9 +189,9 @@
 
                     </StackPanel>
 
-                    <!-- ================= 条款与声明 ================= -->
-                    <!-- 三份文本与站点同源（站点 public/legal.json ⇒ Services/LegalTextSource），
-                         ⛔ 卡片标题与说明不许在 XAML 里写死，一律按数据刷（RefreshLegalCards）。 -->
+                    
+                    
+
                     <TextBlock Text="条款与声明" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                     <StackPanel Spacing="4">
 

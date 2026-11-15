@@ -8,15 +8,15 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Views.Submit.Steps;
 
-/// <summary>
-/// 第 1 步：选择起点。
-///
-/// <para>
-/// 这一页不填任何必填项，只做一件事 —— 有仓库就先把能自动填的填掉。
-/// 旧提交页把「从 GitHub 读取」做成表单顶上的一条工具，用户得先意识到它存在；
-/// 放到第一步之后，后面的填写量是可预期的。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
 public sealed partial class SubmitStartPage : Page
 {
     private static readonly (string Key, string Name)[] DefaultPlatforms =
@@ -29,7 +29,7 @@ public sealed partial class SubmitStartPage : Page
         ("web", "网页版"),
     };
 
-    /// <summary>上一次读取写进去的值：用来判断「现在这个值是用户改的，还是读取填的」。</summary>
+    
     private readonly Dictionary<string, string> _lastFilled = new();
 
     private string _lastDownloadUrls = "";
@@ -136,7 +136,7 @@ public sealed partial class SubmitStartPage : Page
             filled.Add(label);
         }
 
-        // ── 软件 ID：仓库名生成，撞车自动加序号；之后名称再变也不覆盖它 ──
+        
         var suggestedId = GithubImport.RepoToId(repo.Repo);
         if (suggestedId.Length > 0)
         {
@@ -147,7 +147,7 @@ public sealed partial class SubmitStartPage : Page
             Put("软件 ID", Draft.Id, unique, text =>
             {
                 Draft.Id = text;
-                // 读取得到的 id 视同「已确认」，之后改名称不再覆盖
+                
                 Draft.IdEdited = true;
             });
         }
@@ -158,7 +158,7 @@ public sealed partial class SubmitStartPage : Page
         Put("版本号", Draft.Version, release?.TagName ?? "", text => Draft.Version = text);
         Put("系统说明", Draft.System, result.System, text => Draft.System = text);
 
-        // 适用系统：接口给的是 "Windows / macOS / Linux"，按名字对到平台 key
+        
         var detected = result.System
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -189,7 +189,7 @@ public sealed partial class SubmitStartPage : Page
             Put("提示条", Draft.Notice, $"当前提交的为预发布版本（{release.TagName}），稳定版需等待正式发布。",
                 text => Draft.Notice = text);
 
-        // ── 图标：接口拿不到软件图标，先用仓库所有者头像顶上 ──
+        
         var icon = Draft.Icon.Trim();
         if (repo.OwnerAvatar.Length > 0 && icon != repo.OwnerAvatar
             && (icon.Length == 0 || _lastFilled.GetValueOrDefault("图标") == icon || overwrite))
@@ -204,7 +204,7 @@ public sealed partial class SubmitStartPage : Page
             kept.Add("图标");
         }
 
-        // ── 下载项 ──
+        
         var currentUrls = string.Join("\n", Draft.Downloads.Select(item => item.Url.Trim()).Where(url => url.Length > 0));
         var downloadsEdited = currentUrls.Length > 0 && currentUrls != _lastDownloadUrls;
 
@@ -252,7 +252,7 @@ public sealed partial class SubmitStartPage : Page
             }
         }
 
-        // ── 需注意的地方 ──
+        
         if (result.Facts.ReleaseFailed) warnings.Add("无法读取该仓库的版本信息（接口限流或网络异常），已填入仓库信息，版本号与安装包需手动补充。");
         if (result.Facts.NoRelease) warnings.Add("该仓库尚未发布任何 Release，版本号与安装包需手动填写。");
         if (result.Facts.NoAsset) warnings.Add("该 Release 中没有可下载的安装包（可能仅含源码包），需手动填写下载直链。");
@@ -307,7 +307,7 @@ public sealed partial class SubmitStartPage : Page
         Report.Visibility = Visibility.Visible;
     }
 
-    /// <summary>整段重建下载项（一键读取用）。</summary>
+    
     private void SetDownloads(List<(string Platform, string Note, string Size, string Url, string Hash)> items)
     {
         if (Draft is null) return;

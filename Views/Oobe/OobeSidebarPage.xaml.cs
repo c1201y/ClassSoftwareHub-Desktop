@@ -3,9 +3,9 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-/// <summary>
-/// 第 5 步：侧边工具栏（开关类）。只改草稿，真正的落盘（含侧边栏重建）留到窗口收尾。
-/// </summary>
+
+
+
 public sealed partial class OobeSidebarPage : Page
 {
     private bool _loading;
@@ -56,10 +56,10 @@ public sealed partial class OobeSidebarPage : Page
         if (session is not null) session.Draft.SidebarPinned = PinnedSwitch.IsOn;
     }
 
-    /// <summary>
-    /// 侧边栏关掉时，「按钮长名 / 常驻」没有意义 —— 用控件自带的禁用视觉置灰。
-    /// （「常用工具窗口置顶」管的是另一个浮窗，不受这个开关影响。）
-    /// </summary>
+    
+    
+    
+    
     private void UpdateEnabledState()
     {
         LongLabelCard.IsEnabled = SidebarSwitch.IsOn;

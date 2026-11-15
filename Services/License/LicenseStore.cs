@@ -5,53 +5,53 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.License;
 
-/// <summary>本机的授权凭证。</summary>
-/// <param name="Token">服务端签发的授权令牌，原样带在 <c>X-CSH-Lic</c> 头里。</param>
-/// <param name="ExpiresAt">到期时间（Unix 秒，0 = 长期）。</param>
-/// <param name="Device">签发时用的设备码。**换了设备码这份就作废**。</param>
-/// <param name="ActivatedAt">
-/// 本机首次激活这个令牌的时间（Unix 秒，0 = 旧存档没有记录）。
-/// <para>
-/// 为什么客户端自己记：服务端只下发 <c>expiresAt</c>，令牌里没有签发时间，
-/// 拿"到期日减一年"反推会因为闰年和服务端算法而不准。界面要显示的是**激活时间**而不是剩余天数
-/// （2026-11-06 Nick 定），所以这个值在本地落盘。
-/// </para>
-/// </param>
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed record LicenseTicket(string Token, long ExpiresAt, string Device, long ActivatedAt = 0)
 {
-    /// <summary>过期了没有。0 表示长期有效。</summary>
+    
     public bool IsExpired => ExpiresAt > 0
         && DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= ExpiresAt;
 
-    /// <summary>到期时间，0 给 null。</summary>
+    
     public DateTimeOffset? ExpiresAtLocal => ExpiresAt > 0
         ? DateTimeOffset.FromUnixTimeSeconds(ExpiresAt).ToLocalTime()
         : null;
 
-    /// <summary>激活时间，0（旧存档）给 null。</summary>
+    
     public DateTimeOffset? ActivatedAtLocal => ActivatedAt > 0
         ? DateTimeOffset.FromUnixTimeSeconds(ActivatedAt).ToLocalTime()
         : null;
 }
 
-/// <summary>
-/// 授权令牌的本地存放（<c>%LOCALAPPDATA%\ClassSoftwareHub\license.json</c>）。
-///
-/// <para>
-/// 两条规矩，都是从后端文档抄回来的：
-/// </para>
-/// <list type="number">
-///   <item><b>令牌和设备码绑死</b>：服务端验签时会比对设备码，换了机器令牌就无效。
-///         所以读的时候一定要核对，不能只看有没有文件 —— 否则换机之后会一直拿着废令牌去撞 403。</item>
-///   <item><b>写入要原子</b>：文档的故障表里有一条「官方包偶发 403，重启后恢复 —— 令牌被旧值覆盖」。
-///         先写临时文件再整体替换，避免半个 JSON 落盘。</item>
-/// </list>
-///
-/// <para>
-/// ⛔ 这里存的是**服务端给的凭证**，不是密钥，没有加密的必要 —— 加密了也挡不住本机用户，
-/// 反而会让"换机重新激活"这种事变得没法排查。2026-11-04。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public static class LicenseStore
 {
     private static readonly object Gate = new();
@@ -60,9 +60,9 @@ public static class LicenseStore
 
     private static string Path => System.IO.Path.Combine(AppPaths.DataDir, "license.json");
 
-    /// <summary>
-    /// 当前可用的令牌；没有、过期、或设备码对不上都返回 null。
-    /// </summary>
+    
+    
+    
     public static LicenseTicket? Current
     {
         get
@@ -89,10 +89,10 @@ public static class LicenseStore
         }
     }
 
-    /// <summary>有没有一份**能用的**令牌。</summary>
+    
     public static bool HasValid => Current is not null;
 
-    /// <summary>保存服务端下发的令牌。空值直接忽略（服务端没下发就别动已有的）。</summary>
+    
     public static bool Save(string? token, long expiresAt, string? device = null)
     {
         if (string.IsNullOrWhiteSpace(token)) return false;
@@ -103,8 +103,8 @@ public static class LicenseStore
             {
                 var trimmed = token.Trim();
 
-                // 同一个令牌再次下发（刷新、重连）时保留原来的激活时间；
-                // 换了令牌（更换激活码）才算一次新的激活。2026-11-06
+                
+                
                 var activatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var previous = ReadRaw();
                 if (previous is not null
@@ -125,7 +125,7 @@ public static class LicenseStore
                 var temp = Path + ".tmp";
                 File.WriteAllText(temp, JsonSerializer.Serialize(ticket, Json));
 
-                // 整体替换：写到一半崩了也不会留下半个文件
+                
                 File.Move(temp, Path, overwrite: true);
 
                 AppLog.Info("license", $"令牌已保存（到期 {ticket.ExpiresAtLocal:yyyy-MM-dd HH:mm}）");
@@ -139,7 +139,7 @@ public static class LicenseStore
         }
     }
 
-    /// <summary>清掉本地凭证（换激活码、或用户主动退出授权时用）。</summary>
+    
     public static void Clear()
     {
         lock (Gate)
@@ -160,14 +160,14 @@ public static class LicenseStore
 
             var ticket = JsonSerializer.Deserialize<LicenseTicket>(text);
 
-            // 字段缺失的旧文件当成没有
+            
             if (ticket is null || string.IsNullOrWhiteSpace(ticket.Token)) return null;
 
             return ticket;
         }
         catch (Exception ex)
         {
-            // 文件坏了不该让整个功能不可用，删掉重来
+            
             AppLog.Exception("license", ex, "读取授权令牌");
             try { File.Delete(Path); } catch { }
             return null;

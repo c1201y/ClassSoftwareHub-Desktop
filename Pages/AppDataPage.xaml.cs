@@ -15,18 +15,18 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-/// <summary>
-/// 列表里的一行。两种来源共用一个类型：
-///  - 体检行（<see cref="FromFolder"/>）：一级目录，**永远不可清理**（操作列显示"只读"）；
-///  - 清理行（<see cref="FromEntry"/>）：命中白名单的缓存目录。
-///
-/// ⚠️ 体积是**后台一个个填进来的**，所以 <c>SizeText</c>/<c>CountText</c>/<c>CanClean</c> 在 XAML 里
-///    必须写 <c>Mode=OneWay</c> —— <c>x:Bind</c> 在 DataTemplate 里默认是 OneTime，
-///    漏了就永远停在"统计中…"（本项目已经踩过一次）。
-/// </summary>
+
+
+
+
+
+
+
+
+
 public sealed partial class AppDataRow : INotifyPropertyChanged
 {
-    private long _bytes = -1;      // -1 = 还没统计
+    private long _bytes = -1;      
     private int _files;
     private bool _busy;
     private string _status = "";
@@ -43,14 +43,14 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
         MeasuredPath = measuredPath;
     }
 
-    /// <summary>体检行：一级目录，只读。</summary>
+    
     public static AppDataRow FromFolder(AppDataFolder f) => new(
         f.Name,
         AppDataLook.ZoneLabelOf(f.Zone) + " · 一级目录（只读体检，不提供清理）",
         "\uE8B7",
         cleanable: false, entry: null, AppDataKind.Temp, f.FullPath);
 
-    /// <summary>清理行：白名单命中的缓存目录。</summary>
+    
     public static AppDataRow FromEntry(AppDataEntry e) => new(
         e.RelPath, e.Note, AppDataLook.GlyphOf(e.Kind),
         cleanable: true, e, e.Kind, e.FullPath);
@@ -62,7 +62,7 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
     public AppDataEntry? Entry { get; }
     public AppDataKind Kind { get; }
 
-    /// <summary>统计体积时用的路径（概览行是一级目录本身，清理行是那个缓存目录）。</summary>
+    
     public string MeasuredPath { get; }
 
     public long Bytes
@@ -102,7 +102,7 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
         }
     }
 
-    /// <summary>清理完之后的一句状态（"已清空" / "已清空（跳过 N 项）"），压过文件数显示。</summary>
+    
     public string Status
     {
         get => _status;
@@ -122,7 +122,7 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
         : _files > 0 ? _files.ToString("N0") + " 个文件"
         : "";
 
-    /// <summary>⛔ 体积没统计完不给点：确认弹窗要写清"将释放多少"，没数字就没法交代。</summary>
+    
     public bool CanClean => Cleanable && !_busy && _bytes >= 0;
 
     public string ActionTip =>
@@ -133,20 +133,20 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
 
     public Visibility CleanVisibility => Cleanable ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>复选框只在可清理分类下出现（只读体检那一层没有删除入口）。</summary>
+    
     public Visibility CheckVisibility => Cleanable ? Visibility.Visible : Visibility.Collapsed;
 
     private bool _checked;
 
-    /// <summary>
-    /// 这一行有没有被勾上。
-    ///
-    /// ⚠️ 2026-10-16 起勾选状态**存在行自己身上**，不再借 `ListView.SelectedItems`：
-    ///    先前用的是系统多选（`SelectionMode=Multiple`）—— 那样勾选框由 `ListViewItemPresenter` 画，
-    ///    取的是 `ListViewItemCheckBoxBrush`（前景色系），深色下是"浅灰底 + 白勾"，
-    ///    既不是强调色、也与「应用卸载」页残留列表的标准 CheckBox 观感割裂。
-    ///    改回标准 CheckBox 后，勾选这件事就归行自己管，页面只读它。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public bool IsChecked
     {
         get => _checked;
@@ -164,18 +164,18 @@ public sealed partial class AppDataRow : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-/// <summary>
-/// AppData 管理（2026-10-13 新功能）。三层边界的定义全在 <see cref="AppDataScan"/> 的类注释里，
-/// 这一层只负责：**把体积一个个问出来、按分类摆好、把删除动作交给服务层**。
-///
-/// 扫描是**两段式**的（照 AppIconService 预热那个路子）：
-///  阶段 A：只读目录结构 —— 秒出，列表立刻有内容，体积先显示"统计中…"；
-///  阶段 B：后台逐个递归统计体积 —— 不冻 UI、可取消，填一个刷一个。
-/// 顺序是「本地一级目录 → 漫游一级目录 → 可清理项」，这样默认那页（概览 · 本地）的数字最先齐。
-/// </summary>
+
+
+
+
+
+
+
+
+
 public sealed partial class AppDataPage : Page
 {
-    /// <summary>下拉里的一项（只在本页用，所以是私有嵌套类 —— 不需要进 XAML）。</summary>
+    
     private sealed class CategoryOption
     {
         public CategoryOption(bool isOverview, AppDataZone zone, AppDataKind kind, string glyph, string label)
@@ -193,7 +193,7 @@ public sealed partial class AppDataPage : Page
         public string Glyph { get; }
         public string Label { get; }
 
-        /// <summary>下拉项里那个计数 TextBlock 的引用 —— 统计完要**就地**改它（重建下拉会把选中项弄丢）。</summary>
+        
         public TextBlock? CountBlock { get; set; }
     }
 
@@ -204,47 +204,47 @@ public sealed partial class AppDataPage : Page
     private CategoryOption? _category;
     private CancellationTokenSource? _cts;
 
-    private bool _ready;        // 目录结构到位了没（构造期的事件要忽略）
-    private bool _measuring;    // 正在统计体积
-    private bool _busy;         // 正在跑一次清理
+    private bool _ready;        
+    private bool _measuring;    
+    private bool _busy;         
 
     public AppDataPage()
     {
         InitializeComponent();
 
-        // 两侧留白 / 标题行上的滚轮也转给列表（Core/WheelRelay.cs）
+        
         WheelRelay.Attach(this, EntryList);
 
-        // AI 入口跟着「设置 → 启用 Hub AI」总闸走（与「软件下载」页一致）。
-        // ⚠️ 本页每次进来都是新实例（没有开导航缓存），所以构造时判一次就够。
+        
+        
         HubAiEntry.Visibility = App.Settings.Current.HubAiEnabled
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // 浮层每次提问都来取一份现场数据（见 BuildAiContext）
+        
         AiFlyout.ContextProvider = BuildAiContext;
 
-        // 构造期控件还没进可视化树，扫描放 Loaded（与其它页一致）
+        
         Loaded += (_, _) =>
         {
             if (!_ready && _cts is null) _ = ScanAsync();
         };
     }
 
-    /// <summary>
-    /// Hub AI 入口（2026-10-30，需求 1:23）：弹出提问浮层。
-    /// 浮层是公共控件（Controls/HubAiFlyout），与「软件下载」页同一份 —— 别在页面里再写一套。
-    /// </summary>
+    
+    
+    
+    
     private void HubAiEntry_Click(object sender, RoutedEventArgs e) => AiFlyout.Toggle();
 
-    /// <summary>
-    /// 给浮层准备这一页的现场数据（2026-10-30 二版，Nick：一句话摘要「这点信息够谁看」）。
-    ///
-    /// <para>
-    /// 每次发消息时现采：清单里的体积是后台一个个填进来的、勾选会变、分类会切，
-    /// 提前算好存着的必然是旧数。这里只做内存里的投影，不碰磁盘，开销可以忽略。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private PageContextDoc BuildAiContext()
     {
         var doc = new PageContextDoc(
@@ -281,7 +281,7 @@ public sealed partial class AppDataPage : Page
             },
         });
 
-        // 清单给 40 条：本机实测可清理 245 项，全塞把上下文顶爆；40 条已覆盖九成体积
+        
         const int take = 40;
         doc.Add("可清理项（按体积降序）", _clean.Take(take).Select(r => new
         {
@@ -324,7 +324,7 @@ public sealed partial class AppDataPage : Page
         return doc;
     }
 
-    /// <summary>离开页面就掐掉后台统计 —— 上百个目录逐个递归，别让它跟着跑到别的页去。</summary>
+    
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
@@ -347,7 +347,7 @@ public sealed partial class AppDataPage : Page
         }
     }
 
-    // ── 扫描 ──────────────────────────────────────────────────────────
+    
 
     private async void Rescan_Click(object sender, RoutedEventArgs e) => await ScanAsync();
 
@@ -368,7 +368,7 @@ public sealed partial class AppDataPage : Page
         EntryList.ItemsSource = null;
         CountLine.Text = "正在读取目录结构…";
 
-        // ── 阶段 A：只读目录结构（秒出）──
+        
         List<AppDataFolder> folders;
         List<AppDataEntry> clean;
 
@@ -404,7 +404,7 @@ public sealed partial class AppDataPage : Page
         AppLog.Info("appdata",
             $"目录结构读取完成：本地 {_foldersLocal.Count} 个一级目录、漫游 {_foldersRoaming.Count} 个、可清理 {_clean.Count} 项");
 
-        // ── 阶段 B：后台逐个统计体积 ──
+        
         var queue = new List<AppDataRow>(_foldersLocal.Count + _foldersRoaming.Count + _clean.Count);
         queue.AddRange(_foldersLocal);
         queue.AddRange(_foldersRoaming);
@@ -444,22 +444,22 @@ public sealed partial class AppDataPage : Page
             row.Files = measured.Files;
             RefreshCounts();
 
-            // 体积一到位这一行才「能清」（`CanClean` 要求统计完），所以动作条也要跟着重算 ——
-            // 否则「全选」勾完、后台又统计出几项，按钮上的数字会一直停在勾选那一刻。
-            // ⚠️ 只在可清理分类下才真干活（测量顺序是"两个概览在前、可清理在后"），开销可忽略。
+            
+            
+            
             UpdateActionBar();
         }
 
         if (cts.IsCancellationRequested) return;
 
-        // 统计完按体积重排一次 —— "谁在占地方"这个问题的答案本来就要按体积看
+        
         _foldersLocal = _foldersLocal.OrderByDescending(r => r.Bytes).ToList();
         _foldersRoaming = _foldersRoaming.OrderByDescending(r => r.Bytes).ToList();
         _clean = _clean.OrderByDescending(r => r.Bytes).ToList();
 
-        // 这一页的 AI 直接拿扫描结果说话：占用最大的几项就在手边，
-        // 用户问"哪个能清"时不必再让模型去扫一遍磁盘。
-        // ⚠️ 2026-10-30 二版：不再在这里拼一句话摘要 —— 改成提问时由 BuildAiContext 现采结构化数据。
+        
+        
+        
 
         var biggest = _foldersLocal.FirstOrDefault();
         if (biggest is not null && biggest.Bytes > 0)
@@ -467,7 +467,7 @@ public sealed partial class AppDataPage : Page
                 $"体积统计完成；本地最大的一个一级目录是「{biggest.Name}」（{AppLog.Size(biggest.Bytes)}）");
     }
 
-    // ── 分类 ──────────────────────────────────────────────────────────
+    
 
     private void FillCategories()
     {
@@ -483,7 +483,7 @@ public sealed partial class AppDataPage : Page
             options.Add(new(false, AppDataZone.Local, kind, AppDataLook.GlyphOf(kind),
                 "可清理 · " + AppDataLook.LabelOf(kind)));
 
-        // ⚠️ 选项内容在这里手建：`ComboBox.ItemTemplate` + `x:Bind` 会让 XamlCompiler 崩在 PageCodeGen
+        
         CategoryBox.Items.Clear();
         foreach (var option in options)
         {
@@ -514,7 +514,7 @@ public sealed partial class AppDataPage : Page
         RefreshCounts();
     }
 
-    /// <summary>刷新下拉里每一项的计数（统计中会变），顺带更新当前分类的计数文案。</summary>
+    
     private void RefreshCounts()
     {
         foreach (var option in CategoryBox.Items.OfType<ComboBoxItem>()
@@ -555,8 +555,8 @@ public sealed partial class AppDataPage : Page
     {
         if (CategoryBox.SelectedItem is ComboBoxItem { Tag: CategoryOption option })
         {
-            // 切分类就把勾清空：跨分类保留勾选只会让人记不清自己到底勾了哪一类。
-            // ⚠️ 以前是靠切 `SelectionMode` 顺带清掉的，改用标准 CheckBox 后得显式清。
+            
+            
             ClearAllChecks();
 
             _category = option;
@@ -564,7 +564,7 @@ public sealed partial class AppDataPage : Page
         }
     }
 
-    /// <summary>把当前分类的行摆上去。</summary>
+    
     private void ShowCategory()
     {
         if (!_ready || _category is null) return;
@@ -572,9 +572,9 @@ public sealed partial class AppDataPage : Page
         var rows = RowsOf(_category);
         var any = rows.Count > 0;
 
-        // ⛔ 复选框只给可清理分类：只读体检那一层**没有删除入口**，行模板里按 `CheckVisibility` 隐藏。
-        //    ⚠️ 勾选状态自 2026-10-16 起跟着**行对象**走（`AppDataRow.IsChecked`），
-        //       切分类不会自动清 —— 由 `Category_Changed` 显式清空。
+        
+        
+        
         EntryList.ItemsSource = rows;
         EntryList.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
 
@@ -589,7 +589,7 @@ public sealed partial class AppDataPage : Page
         UpdateActionBar();
     }
 
-    /// <summary>阶段 A 失败时的落地状态：收起转圈、给一句人话。</summary>
+    
     private void ShowEmpty(string text)
     {
         _ready = false;
@@ -601,27 +601,27 @@ public sealed partial class AppDataPage : Page
         CountLine.Text = "";
     }
 
-    // ── 批量选择（底部动作条） ──────────────────────────────────────────
-    //
-    // ⚠️ 勾选状态**只有 `AppDataRow.IsChecked` 那一份**，这里不另存一份。
-    //    自己再维护一个 `List<AppDataRow> _checked` 是这类界面最常见的错法 ——
-    //    列表一重建、行一重排，两份状态就会分家，最后出现"界面上没勾、程序却记着"。
+    
+    
+    
+    
+    
 
-    /// <summary>批量改写勾选时把逐行的刷新压住：几百项全选时不至于刷几百次动作条。</summary>
+    
     private bool _suppressCheckEvent;
 
-    /// <summary>
-    /// 某一行被勾上 / 取消。
-    ///
-    /// ⚠️⚠️ 这里**必须**把复选框当下的值显式写回行，不能只调 `UpdateActionBar()`。
-    ///    原因：`Checked` / `Unchecked` 事件**先于** `x:Bind` 的 TwoWay 回写触发 ——
-    ///    事件里读到的 `AppDataRow.IsChecked` 还是**上一拍**的值，计数就会永远慢一步。
-    ///    2026-10-16 Nick 抓到的正是它：「我没勾起来，为什么还能清理？」
-    ///    （勾上又取消之后，界面上没有勾、动作条却写着「已选 1 项」。）
-    ///
-    /// ⚠️ 用 `Click` 而不是 `Checked`/`Unchecked` 还有一层好处：`Click` 只在**用户交互**时触发，
-    ///    代码里批量改 `IsChecked`（全选 / 清空选择）不会反过来打进这里。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void RowCheck_Click(object sender, RoutedEventArgs e)
     {
         if (_suppressCheckEvent) return;
@@ -636,8 +636,8 @@ public sealed partial class AppDataPage : Page
     {
         if (_category is null || _category.IsOverview) return;
 
-        // 只勾**能清**的：体积还在统计的那些不进选择区，
-        // 否则按钮上那个数字里会混着清不掉的项，点下去才发现少清了几个。
+        
+        
         _suppressCheckEvent = true;
         try
         {
@@ -653,11 +653,11 @@ public sealed partial class AppDataPage : Page
 
     private void ClearSel_Click(object sender, RoutedEventArgs e) => ClearAllChecks();
 
-    /// <summary>
-    /// 把所有行上的勾清掉。
-    /// ⛔ 清的是**全部行**，不是当前分类那一屏 —— 切分类与清理收尾都要用它，
-    ///    跨分类留着勾只会让人记不清自己到底勾了哪一类。
-    /// </summary>
+    
+    
+    
+    
+    
     private void ClearAllChecks()
     {
         _suppressCheckEvent = true;
@@ -681,13 +681,13 @@ public sealed partial class AppDataPage : Page
         await CleanAsync(chosen);
     }
 
-    /// <summary>当前勾选里**真能清**的那些（还在统计体积、正在清理的不算）。</summary>
+    
     private List<AppDataRow> ChosenRows() =>
         _category is null
             ? new List<AppDataRow>()
             : RowsOf(_category).Where(r => r.IsChecked && r.CanClean).ToList();
 
-    /// <summary>刷新底部动作条。⛔ 只读体检分类、空分类、没准备好时整条藏起来。</summary>
+    
     private void UpdateActionBar()
     {
         var show = _ready
@@ -710,19 +710,19 @@ public sealed partial class AppDataPage : Page
             : $"已选 {chosen.Count} 项" + (size > 0 ? $" · 合计约 {AppLog.Size(size)}" : "");
     }
 
-    // ── 行尾菜单 ────────────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 行尾「⋯」—— 弹出这一行的操作。
-    ///
-    /// 顺序固定：**三项只读动作在前**（复制完整路径 / 打开文件夹 / 在网上搜索），
-    /// 分隔线之后才是「清理」（只有白名单命中的行有）。
-    /// 这样即使手快，落在最上面的也是不会改系统的那些。
-    ///
-    /// ⚠️ 菜单在这里**手建**，不把 `MenuFlyout` 写进 `DataTemplate`：Flyout 不在可视树里，
-    ///    模板内的 `{x:Bind}` 求值上下文很脆，而 XamlCompiler 对这个组合本身就有前科
-    ///    （本页踩过的 WMC9999 就是这一类）。手建时用闭包直接捕获这一行，最稳。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void More_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AppDataRow row) return;
@@ -733,14 +733,14 @@ public sealed partial class AppDataPage : Page
         copy.Click += (_, _) => _ = CopyPathAsync(row);
         flyout.Items.Add(copy);
 
-        // 「打开文件夹」对所有行都开放 —— 只读体检行尤其需要：
-        // 光看体积排行回答不了「里面到底装了什么」。
+        
+        
         var open = new MenuFlyoutItem { Text = "打开文件夹", Icon = new FontIcon { Glyph = "\uE838" } };
         open.Click += (_, _) => _ = OpenFolderAsync(row);
         flyout.Items.Add(open);
 
-        // 「搜索」同理：面对 Local 下七十个一级目录，最缺的就是"这名字到底是个啥"。
-        // ⛔ 查的是**完整路径**，不是目录名 —— 详见 `SearchOnline` 的注释。
+        
+        
         var search = new MenuFlyoutItem
         {
             Text = "在网上搜索完整路径", Icon = new FontIcon { Glyph = "\uE721" },
@@ -748,7 +748,7 @@ public sealed partial class AppDataPage : Page
         search.Click += (_, _) => _ = SearchAsync(row);
         flyout.Items.Add(search);
 
-        // 「清理」只有白名单命中的行才有（⛔ 只读项永远不出这一项）
+        
         if (row.CanClean && row.Entry is not null)
         {
             flyout.Items.Add(new MenuFlyoutSeparator());
@@ -761,9 +761,9 @@ public sealed partial class AppDataPage : Page
         flyout.ShowAt(fe);
     }
 
-    // ── 打开所在目录 / 复制路径 / 搜索（三个只读动作） ──────────────────
+    
 
-    /// <summary>在资源管理器里看一眼这个目录到底装了什么。**只读动作**。</summary>
+    
     private async Task OpenFolderAsync(AppDataRow row)
     {
         if (AppDataScan.OpenInExplorer(row.MeasuredPath)) return;
@@ -786,7 +786,7 @@ public sealed partial class AppDataPage : Page
             "本机可能没有可用的默认浏览器。可以手动复制路径后在搜索框里查：" + row.MeasuredPath);
     }
 
-    /// <summary>复制到剪贴板。⚠️ 必须带 <c>Flush()</c> —— 不加这句，本程序一退出剪贴板里就空了。</summary>
+    
     private static bool CopyText(string text)
     {
         try
@@ -804,22 +804,22 @@ public sealed partial class AppDataPage : Page
         }
     }
 
-    /// <summary>
-    /// 用**系统默认浏览器**去 Bing 搜这个目录。
-    ///
-    /// ⛔⛔ 查询词就是**完整路径本身，一个字都不加**（Nick 2026-10-15 定案）。
-    ///     曾经拼过 `名称 + " AppData 文件夹"`，看着"更懂搜索"，实际是在**替用户概括** ——
-    ///     概括就会失真：同一个名字挂在不同根下含义完全不同，而搜索结果页最擅长的恰好就是
-    ///     由整条路径反查到具体软件。加了后缀反而把原始线索冲淡，还会带偏到泛泛的"AppData 是什么"。
-    ///
-    /// ⛔ 这里**不内置 WebView2**（Nick 提过这个方案）：本机唯一那个 WebView2 是只读 `WebSheet`，
-    ///    再起一个实例要摊用户数据目录与生命周期，而这个动作本来就是"去互联网查资料" ——
-    ///    交给真浏览器能开标签、能带登录态、能继续点进去看，也不用我们常驻一个内核
-    ///    （本项目在内存上是激进派的：切页即收内存）。
-    ///
-    /// ⚠️ <c>UseShellExecute = true</c> 才会走 shell 的默认程序关联；不加这句会去 `PATH` 里
-    ///    找一个叫 `https://...` 的文件。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static bool SearchOnline(string fullPath)
     {
         var url = "https://www.bing.com/search?q=" + Uri.EscapeDataString(fullPath);
@@ -840,15 +840,15 @@ public sealed partial class AppDataPage : Page
         }
     }
 
-    // ── 清理 ──────────────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 清理一批目录。
-    ///
-    /// ⛔ 行菜单里的「清理」和底部动作条的「清理选中」**走的是同一个方法** ——
-    ///    两条入口各写一份的话，确认框规格、占用检测、结果统计迟早会分家。
-    ///    单行只是"这一批只有一个"的特例。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private async Task CleanAsync(IReadOnlyList<AppDataRow> rows)
     {
         if (_busy) return;
@@ -856,7 +856,7 @@ public sealed partial class AppDataPage : Page
         var work = rows.Where(r => r.CanClean && r.Entry is not null).ToList();
         if (work.Count == 0) return;
 
-        // 占用检测：这批涉及哪几类就问哪几类，别按行重复问
+        
         var running = work.Select(r => r.Entry!.Kind)
                           .Distinct()
                           .SelectMany(AppDataScan.RunningApps)
@@ -874,7 +874,7 @@ public sealed partial class AppDataPage : Page
             Content = BuildConfirmBody(work, total, fileCount, running),
             PrimaryButtonText = "清理",
             CloseButtonText = "取消",
-            // ⚠️ 默认落在「取消」：删的是别人的数据，别让一个回车就动手
+            
             DefaultButton = ContentDialogButton.Close,
         };
 
@@ -883,31 +883,31 @@ public sealed partial class AppDataPage : Page
         _busy = true;
         RescanButton.IsEnabled = false;
         CategoryBox.IsEnabled = false;
-        UpdateActionBar();                       // 让三颗按钮一起变灰
+        UpdateActionBar();                       
 
         var okCount = 0;
-        var partialCount = 0;   // 删掉了一部分、但有文件被占用跳过（2026-10-29 拆出来，见下面判定）
+        var partialCount = 0;   
         var failCount = 0;
         var skipped = 0;
         var freed = 0L;
         var notes = new List<string>();
-        var partialNotes = new List<string>();   // 「清掉一部分」的目录名，单独一张单子（别混进失败清单）
+        var partialNotes = new List<string>();   
 
-        // 登记一条清理任务，进度与结局都回报给「任务进行」（2026-10-29 加）。
-        // 为什么：清一个几百 MB 的缓存目录要几十秒，用户一旦切走页面，这边就只剩一个空壳，
-        // 既看不到跑到哪、也不知道有没有完成（Nick：「孤零零的在那里」）。
+        
+        
+        
         var totalBytes = Math.Max(1, work.Sum(r => Math.Max(0, r.Bytes)));
         var task = Services.DownloadManager.Current.TrackCleanup(
             work.Count == 1 ? $"清理「{work[0].Name}」" : $"清理 {work.Count} 个缓存目录", totalBytes);
 
-        // 只有清理线程在写这两个量，所以不需要 Interlocked；节流到 120ms 一次，
-        // 否则一个几万文件的小目录会把绑定刷爆。
+        
+        
         long deletedBytes = 0;
         long lastReportTick = 0;
 
-        // ⚠️ 用主窗口的调度器而不是页面自己的：清理跑起来之后用户很可能切去别的页面，
-        //    这一页一旦不在可视化树里，它自己的 DispatcherQueue 就不可靠了 —— 进度会停在半路，
-        //    而清理其实还在后台跑。主窗口活着的整个会话里都在。
+        
+        
+        
         var uiQueue = App.MainWindow?.DispatcherQueue ?? DispatcherQueue;
 
         void OnBytesDeleted(long n)
@@ -930,12 +930,12 @@ public sealed partial class AppDataPage : Page
 
             try
             {
-                // ⚠️ **串行**跑：这是秒级动作，几条并行没有意义，
-                //    而串行能保证同一父目录下的两条规则不会互相把对方刚重建的目录当成残留。
+                
+                
                 var entry = row.Entry!;
                 var outcome = await Task.Run(() => AppDataScan.Clean(entry, CancellationToken.None, OnBytesDeleted));
 
-                // 清完重新量一次，把新体积如实显示出来（而不是假报 0 或者留着旧数）
+                
                 var (bytes, files) = await Task.Run(() => AppDataScan.Measure(row.MeasuredPath, CancellationToken.None));
                 row.Bytes = bytes;
                 row.Files = files;
@@ -949,9 +949,9 @@ public sealed partial class AppDataPage : Page
                 }
                 else if (outcome.Cleaned > 0)
                 {
-                    // 「删掉了一部分，剩下几个正被占用」——这不是失败（2026-10-29 修）。
-                    // ⚠️ 以前一律算 failCount，于是一个清掉了 99% 的目录会把整条任务标成「未完成」，
-                    //    用户看到的就是「部分目录没清理成功」，再点重试又走进下载分支报 url 为空。
+                    
+                    
+                    
                     partialCount++;
                     skipped += outcome.Skipped;
                     freed += before - bytes;
@@ -982,16 +982,16 @@ public sealed partial class AppDataPage : Page
         RescanButton.IsEnabled = true;
         CategoryBox.IsEnabled = true;
 
-        // 任务收尾：清干净或「部分清掉」都算完成（剩下那几个被占用的文件，页面结果框里会说清），
-        // 只有整个目录一个文件都没删掉才算未完成。
+        
+        
         if (failCount == 0 && (okCount > 0 || partialCount > 0))
             Services.DownloadManager.Current.CompleteCleanup(task, freed);
         else
             Services.DownloadManager.Current.FailExternal(task,
                 failCount > 0 ? $"{failCount} 个目录未能完成" : "没有可清理的内容");
 
-        // ⛔ 走 ShowCategory 而不是就地改：清完体积变小，计数行、下拉里的数字、动作条都要跟着重算。
-        //    顺带把勾选清空 —— 已经清过的项留在勾选区里只会让人以为还能再清一次。
+        
+        
         ClearAllChecks();
         ShowCategory();
         RefreshCounts();
@@ -1015,8 +1015,8 @@ public sealed partial class AppDataPage : Page
             TextWrapping = TextWrapping.Wrap,
         });
 
-        // 清单单独给一块小字底 —— 确认框的意义就是让人看清到底动的是哪儿。
-        // 单项给**完整路径**；多项按「相对路径 + 体积」列，超过 10 行就滚起来（确认框不该比页面还长）。
+        
+        
         var lines = rows.Count == 1
             ? rows[0].MeasuredPath
             : string.Join("\n", rows.Take(10).Select(r => $"{r.Name}    {AppLog.Size(Math.Max(0, r.Bytes))}"))
@@ -1042,7 +1042,7 @@ public sealed partial class AppDataPage : Page
         if (subtle is not null) pathBorder.Background = subtle;
         panel.Children.Add(pathBorder);
 
-        // ⚠️ 这条**必须**是醒目的警示色，不能是灰小字：永久删除，没有回收站兜底（Nick 2026-10-14 定案）
+        
         var danger = new TextBlock
         {
             Text = "\uE7BA  内容是永久删除、不进回收站，删掉就找不回来了。\n"
@@ -1069,10 +1069,10 @@ public sealed partial class AppDataPage : Page
         return panel;
     }
 
-    /// <summary>
-    /// 清理结果的收尾说明。
-    /// ⚠️ 讲的必须是**实际结果**，不是"我们打算做的事" —— 跳过几项、失败几项都要如实报。
-    /// </summary>
+    
+    
+    
+    
     private static string BuildResultBody(
         int okCount, int partialCount, int failCount, long freed, int skipped,
         IReadOnlyList<string> notes, IReadOnlyList<string> partialNotes)
@@ -1087,7 +1087,7 @@ public sealed partial class AppDataPage : Page
                 ? $"已清理 1 个目录，释放约 {AppLog.Size(freed)}。"
                 : $"已清理 {cleared} 个目录，合计释放约 {AppLog.Size(freed)}。");
 
-        // 被占用的文件单独说：这不是出错，是程序正在用它们，关掉之后还能再清一次。
+        
         if (partialCount > 0)
         {
             sb.Append($"\n其中 {partialCount} 个目录有文件正被程序占用，只清掉了能删的部分"
@@ -1109,7 +1109,7 @@ public sealed partial class AppDataPage : Page
         return sb.ToString();
     }
 
-    /// <summary>拿主题画刷；拿不到就返回 null（⛔ 别写死 RGB —— 深色浅色两套主题都要对）。</summary>
+    
     private static Brush? Res(string key)
     {
         try
@@ -1136,7 +1136,7 @@ public sealed partial class AppDataPage : Page
         await dialog.ShowAsync();
     }
 
-    // ── 说明 ──────────────────────────────────────────────────────────
+    
 
     private async void About_Click(object sender, RoutedEventArgs e)
     {

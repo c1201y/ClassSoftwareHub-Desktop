@@ -3,9 +3,9 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-/// <summary>
-/// 第 11 步：Hub AI。
-/// </summary>
+
+
+
 public sealed partial class OobeAiPage : Page
 {
     private bool _loading;

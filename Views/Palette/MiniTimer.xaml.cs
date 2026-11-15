@@ -7,10 +7,10 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Views.Palette;
 
-/// <summary>
-/// 浮窗版课堂计时器（简版）：预设分钟 + 大号倒计时 + 开始/暂停/重置，到点响铃并闪烁。
-/// 状态只在内存里（和「内置工具 → 课堂计时器」页一样，两边各自独立）。
-/// </summary>
+
+
+
+
 public sealed partial class MiniTimer : UserControl
 {
     private readonly DispatcherQueueTimer _tick;
@@ -27,7 +27,7 @@ public sealed partial class MiniTimer : UserControl
     {
         InitializeComponent();
 
-        // 主题换了要重刷大号数字的颜色（代码里设的颜色不会自己跟着变）
+        
         ActualThemeChanged += (_, _) => UpdateDisplay();
 
         _tick = DispatcherQueue.CreateTimer();
@@ -40,7 +40,7 @@ public sealed partial class MiniTimer : UserControl
         _blink.IsRepeating = true;
         _blink.Tick += (_, _) => Display.Opacity = Display.Opacity < 0.9 ? 1 : 0.35;
 
-        // 自定义时长（时:分:秒 三列一体）：改一下就立刻生效（不用再点"应用"）
+        
         for (var i = 0; i < 24; i++) HourBox.Items.Add(i);
         for (var i = 0; i < 60; i++) { MinuteBox.Items.Add(i); SecondBox.Items.Add(i); }
         HourBox.SelectionChanged += (_, _) => TimeSettingChanged();
@@ -60,9 +60,9 @@ public sealed partial class MiniTimer : UserControl
     }
 
     private bool _pendingResume;
-    private bool _suppressTime;      // 构造 / 程序里改时长时不要再回头算一遍
+    private bool _suppressTime;      
 
-    /// <summary>自定义时长改了：没在跑就直接换成新时长。</summary>
+    
     private void TimeSettingChanged()
     {
         if (_suppressTime || _running) return;
@@ -81,7 +81,7 @@ public sealed partial class MiniTimer : UserControl
 
     private Brush Res(string key, Windows.UI.Color fallback) => Services.ThemeBrush.Get(this, key);
 
-    /// <summary>浮窗收起：停掉刷新（计时状态和剩余时间都留着，再打开接着走）。</summary>
+    
     public void Pause()
     {
         _tick.Stop();
@@ -95,7 +95,7 @@ public sealed partial class MiniTimer : UserControl
         Display.Opacity = 1;
     }
 
-    /// <summary>浮窗再打开：还在跑的话接着跑。</summary>
+    
     public void Resume()
     {
         if (!_pendingResume) return;
@@ -124,7 +124,7 @@ public sealed partial class MiniTimer : UserControl
             return;
         }
 
-        if (_totalMs <= 0) return;      // 时长是 0：先设个时间（按钮此时是灰的，这里兜个底）
+        if (_totalMs <= 0) return;      
 
         if (_finished || _remainMs <= 0)
         {
@@ -134,7 +134,7 @@ public sealed partial class MiniTimer : UserControl
 
         _endAtMs = _remainMs;
         _blink.Stop();
-        Services.TimerAlarm.Stop();     // 重新开始：把还在响的铃掐掉
+        Services.TimerAlarm.Stop();     
         _sw.Restart();
         _tick.Start();
         _running = true;
@@ -175,22 +175,22 @@ public sealed partial class MiniTimer : UserControl
         UpdateDisplay();
         SyncInputs();
         _blink.Start();
-        // 铃声与「内置工具 → 课堂计时器」共用同一个来源（默认内嵌那段，也能自定义），
-        // 别再各响各的 —— 见 Services/TimerAlarm.cs（2026-10-04）。
+        
+        
         Services.TimerAlarm.Play();
     }
 
     private void SyncInputs()
     {
-        // 跑起来之后不让改时间（改了也说不清是"这一轮"还是"下一轮"），要改先暂停
+        
         HourBox.IsEnabled = !_running;
         MinuteBox.IsEnabled = !_running;
         SecondBox.IsEnabled = !_running;
         StartButton.IsEnabled = _totalMs > 0 || _running;
 
         Display.Opacity = 1;
-        if (_finished) Display.Foreground = Services.ThemeBrush.AccentText(this);   // 计到点了：主题色
-        else Display.ClearValue(TextBlock.ForegroundProperty);                      // 平常：交回 XAML 里的 {ThemeResource ...}
+        if (_finished) Display.Foreground = Services.ThemeBrush.AccentText(this);   
+        else Display.ClearValue(TextBlock.ForegroundProperty);                      
     }
 
     private void UpdateDisplay()

@@ -12,10 +12,10 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-/// <summary>
-/// 「开机启动项」列表里的一行。⚠️ 与 <see cref="StartupPage"/> 同文件 —— 本项目的行类型都跟页面放一起
-/// （见 AppDataPage.xaml.cs 的 AppDataRow）。
-/// </summary>
+
+
+
+
 public sealed partial class StartupRow : INotifyPropertyChanged
 {
     private bool _enabled;
@@ -33,7 +33,7 @@ public sealed partial class StartupRow : INotifyPropertyChanged
 
     public string Name => Item.Name;
 
-    /// <summary>⚠️ 只认 E7/E8/E9 老码位的字形 —— ED 那段是新版图标字体，Win10 上会显示空框（见 MEMORY §6）。</summary>
+    
     public const string RowGlyph = "\uE945";
 
     public string Glyph => RowGlyph;
@@ -46,7 +46,7 @@ public sealed partial class StartupRow : INotifyPropertyChanged
         ? Item.Command + "\n\n命令行指向的文件已经不存在，多半是软件卸载后留下的死项。"
         : Item.Command;
 
-    /// <summary>该项当前是否处于"开机自启"状态。</summary>
+    
     public bool Enabled
     {
         get => _enabled;
@@ -59,7 +59,7 @@ public sealed partial class StartupRow : INotifyPropertyChanged
         }
     }
 
-    /// <summary>正在切换 —— 挡住重复操作，同时让开关自己变灰。</summary>
+    
     public bool Busy
     {
         get => _busy;
@@ -73,7 +73,7 @@ public sealed partial class StartupRow : INotifyPropertyChanged
 
     public bool CanToggle => !_busy;
 
-    /// <summary>「已禁用」这枚小标签只在关着的时候出现（开着不用再写一遍"已启用"）。</summary>
+    
     public Visibility StateVisibility => _enabled ? Visibility.Collapsed : Visibility.Visible;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -81,33 +81,33 @@ public sealed partial class StartupRow : INotifyPropertyChanged
     private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-/// <summary>
-/// 开机启动项：把"开机时会自己启动的东西"列全，并允许逐个关掉。
-/// 实现细节（状态位怎么写的、为什么不删值）见 <see cref="StartupItems"/> 的类注释。
-/// </summary>
+
+
+
+
 public sealed partial class StartupPage : Page
 {
     private List<StartupRow> _rows = new();
     private CancellationTokenSource? _cts;
     private bool _ready;
-    private bool _busy;          // 正在扫描
-    private bool _dialogOpen;    // 已经有一个提示框开着（ContentDialog 同时只能开一个）
+    private bool _busy;          
+    private bool _dialogOpen;    
 
     public StartupPage()
     {
         InitializeComponent();
 
-        // 两侧留白 / 标题行上的滚轮也转给列表（Core/WheelRelay.cs）
+        
         WheelRelay.Attach(this, EntryList);
 
-        // 构造期控件还没进可视化树，扫描放 Loaded（与其它页一致）
+        
         Loaded += (_, _) =>
         {
             if (!_ready && _cts is null) _ = ScanAsync();
         };
     }
 
-    /// <summary>离开页面就掐掉扫描 —— 读注册表 + 解析快捷方式，别让它跟着跑到别的页去。</summary>
+    
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
@@ -130,7 +130,7 @@ public sealed partial class StartupPage : Page
         }
     }
 
-    // ── 扫描 ──────────────────────────────────────────────────────────
+    
 
     private async void Rescan_Click(object sender, RoutedEventArgs e) => await ScanAsync();
 
@@ -165,7 +165,7 @@ public sealed partial class StartupPage : Page
         }
         catch (OperationCanceledException)
         {
-            // 页面切走了，正常
+            
         }
         catch (Exception ex)
         {
@@ -205,15 +205,15 @@ public sealed partial class StartupPage : Page
         CountLine.Text = text;
     }
 
-    // ── 启停 ──────────────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 拨动一行尾部的开关。
-    /// <para>
-    /// ⚠️ 两条早退判据都不能删：① 绑定回灌（我们改 `row.Enabled` 会把 `IsOn` 同步过去，
-    /// 那一次也会触发 `Toggled`）；② 值没变（只是绑定初始化）。少一条就会自己跟自己打架。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private async void Row_Toggled(object sender, RoutedEventArgs e)
     {
         if (sender is not ToggleSwitch toggle || toggle.DataContext is not StartupRow row) return;
@@ -234,8 +234,8 @@ public sealed partial class StartupPage : Page
             }
             else
             {
-                // ⛔ 必须**直接拨控件**，不能只写 `row.Enabled = !want` ——
-                //    那等于赋回旧值，setter 会早退、`IsOn` 就留在用户拨过去的位置上不动了。
+                
+                
                 toggle.IsOn = !want;
                 await ShowMessageAsync(want ? "启用未成功" : "禁用未成功", error);
             }
@@ -252,7 +252,7 @@ public sealed partial class StartupPage : Page
         }
     }
 
-    // ── 说明 ──────────────────────────────────────────────────────────
+    
 
     private async void About_Click(object sender, RoutedEventArgs e)
     {
@@ -303,7 +303,7 @@ public sealed partial class StartupPage : Page
         return panel;
     }
 
-    // ── 弹窗（ContentDialog 同时只能开一个，统一走这两个入口） ──────────
+    
 
     private async Task ShowDialogAsync(ContentDialog dialog)
     {

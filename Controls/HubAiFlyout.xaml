@@ -5,18 +5,18 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,20">
 
-    <!--
-      Hub AI 提问浮层（2026-10-30 从 Pages/SoftwarePage 抽出来变成公共控件）。
+    
 
-      来由：需求 1:23「在其他页面增加 AI 入口」。软件下载页那套浮层做得对 ——
-      它**不做对话**，只是"把问题带去完整页"的入口；再复制三份到别的页面，
-      就会出现四份各自维护的动画与发送逻辑（这正是代码审计里点过的毛病）。
-      抽成一个控件，各页只放一行 + 一个按钮。
 
-      ⚠️ 浮层与完整页的分工没变：浮层收集问题 → 交给 HubAiPage → 收起。
-         不要在浮层里做对话（2026-10-18 定，理由见 HubAiPage 的 PendingQuestion）。
-      ⚠️ 尺寸固定 380×420（2026-10-18 Nick：矮了「不那么让人注意到」）。
-    -->
+
+
+
+
+
+
+
+
+
 
     <Border x:Name="Card" Width="380" Height="420" Visibility="Collapsed"
             CornerRadius="14" BorderThickness="1"
@@ -24,7 +24,7 @@
             Background="{ThemeResource HubAiPanelBackground}"
             BorderBrush="{ThemeResource HubAiPanelBorder}">
         <Border.RenderTransform>
-            <!-- 2026-10-30：上浮那套换成「轻微放大 + 淡入」，更像系统 Flyout 的出场。 -->
+            
             <CompositeTransform x:Name="CardTransform" />
         </Border.RenderTransform>
 
@@ -70,7 +70,7 @@
 
             <ScrollViewer x:Name="MessagesScroll" Grid.Row="1" Padding="16,0,16,6" VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="Messages" Spacing="10">
-                    <!-- 开场提示：第一次提问之后就撤掉，别一直占着本来就窄的地方 -->
+                    
                     <Border x:Name="Intro" Background="{ThemeResource HubAiBubbleBackground}" CornerRadius="10"
                             Padding="14,11">
                         <StackPanel Spacing="6">
@@ -83,7 +83,7 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- 生成过程中的状态（"正在读取本机情况""正在检索工具"）—— 没有它用户不知道是不是卡住了 -->
+            
             <TextBlock x:Name="StatusLine" Grid.Row="2" Margin="16,0,16,6" FontSize="11.5"
                        Opacity="0.6" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
 
@@ -95,8 +95,8 @@
 
                 <TextBox x:Name="Input" PlaceholderText="描述你的需求" KeyDown="Input_KeyDown" />
 
-                <!-- 一颗按钮两种用途（2026-10-30）：空闲时发消息，生成中变成「停止」。
-                     380 宽的浮层里再塞一颗独立按钮，输入框就没法用了。 -->
+                
+
                 <Button x:Name="SendButton" Grid.Column="1" Padding="11,6"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="Send_Click" ToolTipService.ToolTip="发送">

@@ -7,21 +7,21 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Palette;
 
-/// <summary>
-/// 浮窗版秒表（正计时 + 全屏）：课堂上做限时活动、比赛计时用。
-/// 状态只在内存里，收起浮窗时暂停、再打开接着走（跟其它小工具一致）。
-///
-/// 2026-10-03（Nick）：**计次/分段取消**（原来最多记三次，实测教室里没人用，还占掉半屏）。
-/// 新增「全屏」—— 走 <see cref="StopwatchFullscreenWindow"/>，跟全屏时钟同一个套路。
-/// </summary>
+
+
+
+
+
+
+
 public sealed partial class MiniStopwatch : UserControl
 {
     private readonly DispatcherQueueTimer _tick;
     private readonly Stopwatch _sw = new();
 
-    private long _accMs;          // 暂停前累计的毫秒
+    private long _accMs;          
     private bool _running;
-    private bool _pendingResume;  // 收起时还在跑，再打开要接着跑
+    private bool _pendingResume;  
 
     public MiniStopwatch()
     {
@@ -37,7 +37,7 @@ public sealed partial class MiniStopwatch : UserControl
 
     private long ElapsedMs => _accMs + (_running ? _sw.ElapsedMilliseconds : 0);
 
-    // ── 控制 ────────────────────────────────────────────────
+    
 
     private void StartPause_Click(object sender, RoutedEventArgs e)
     {
@@ -78,13 +78,13 @@ public sealed partial class MiniStopwatch : UserControl
         UpdateDisplay();
     }
 
-    /// <summary>全屏：把当前秒表时间交给全屏窗口，跟着一起走（关闭全屏不影响这里的表）。</summary>
+    
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
         => StopwatchFullscreenWindow.Show(() => ElapsedMs, () => _running);
 
-    // ── 收起 / 再打开（浮窗隐藏时别白烧 CPU） ──────────────────
+    
 
-    /// <summary>浮窗收起：停表但留着状态。</summary>
+    
     public void Pause()
     {
         _tick.Stop();
@@ -98,7 +98,7 @@ public sealed partial class MiniStopwatch : UserControl
         UpdateDisplay();
     }
 
-    /// <summary>浮窗再打开：刚才在跑就接着跑。</summary>
+    
     public void Resume()
     {
         if (!_pendingResume) return;
@@ -106,7 +106,7 @@ public sealed partial class MiniStopwatch : UserControl
         StartInternal();
     }
 
-    // ── 显示 ────────────────────────────────────────────────
+    
 
     private void UpdateDisplay()
     {

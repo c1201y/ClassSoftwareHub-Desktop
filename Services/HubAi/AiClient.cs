@@ -15,38 +15,38 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.HubAi;
 
-/// <summary>
-/// 模型调用（2026-10-18）。只认 OpenAI 兼容协议，见 <see cref="AiProviders"/> 的说明。
-///
-/// <para>
-/// ⛔⛔ 三条铁律：
-/// <list type="number">
-///   <item><b>密钥不进日志</b>。任何分支都只记状态码与错误类型，⛔ 不把请求头、请求体打出去。</item>
-///   <item><b>错误要说人话</b>。<c>401</c> 不能原样甩给用户，要翻成"密钥无效"。</item>
-///   <item><b>流式必须可取消</b>。用户点「停止」要立刻停，不能等模型吐完。</item>
-/// </list>
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
 public static class AiClient
 {
-    /// <summary>
-    /// 单例 <see cref="HttpClient"/>。⛔ 别每次请求都 new —— 短连接会把端口耗光，
-    /// 而 AI 请求是长连接、多次往返的，复用收益很明显。
-    /// </summary>
+    
+    
+    
+    
     private static readonly HttpClient Http = new(new SocketsHttpHandler
     {
         ConnectTimeout = TimeSpan.FromSeconds(15),
         PooledConnectionLifetime = TimeSpan.FromMinutes(5),
     })
     {
-        // 思考型模型（如 deepseek-reasoner）首个 token 可能要等几十秒，给足余量
+        
         Timeout = TimeSpan.FromSeconds(120),
     };
 
-    /// <summary>
-    /// 连通性测试：发一个 <c>max_tokens=1</c> 的最小请求。
-    /// ⚠️ 只花一个 token 的钱，但足以分辨"密钥错 / 地址错 / 模型错 / 网络不通"。
-    /// </summary>
+    
+    
+    
+    
     public static async Task<AiTestResult> TestAsync(AiConfig cfg, CancellationToken ct = default)
     {
         if (!cfg.IsUsable) return AiTestResult.Fail("请先填写服务地址和模型名。");
@@ -96,19 +96,19 @@ public static class AiClient
         }
     }
 
-    /// <summary>
-    /// 走一轮对话：流式吐文本，同时把模型要求的工具调用收齐。
-    ///
-    /// <para>
-    /// ⛔ 这个函数**只解析、不执行**。工具由调用方（<c>AiChatService</c>）执行完再回灌，
-    /// 这样"模型能做什么"完全由宿主决定，模型没有任何直接能力。
-    /// </para>
-    /// <para>
-    /// ⚠️ 工具调用在 SSE 里是**分片**到达的：第一个 chunk 给 id 与函数名，后续 chunk 只追加
-    /// <c>arguments</c> 的字符串片段。必须按 <c>index</c> 累积，不能见到一个就跑一个。
-    /// </para>
-    /// </summary>
-    /// <param name="onDelta">每收到一段文本回调一次（UI 用它做逐字渲染）。</param>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public static async Task<AiTurn> StreamTurnAsync(
         AiConfig cfg,
         IReadOnlyList<AiMessage> messages,
@@ -145,7 +145,7 @@ public static class AiClient
             var line = await reader.ReadLineAsync(ct);
             if (line is null) break;
 
-            // SSE：只关心 data: 行，注释行（以 : 开头）与 event: 行一律跳过
+            
             if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
 
             var payload = line.AsSpan(5).Trim().ToString();
@@ -168,7 +168,7 @@ public static class AiClient
         return new AiTurn(content.ToString(), reasoning.ToString(), calls, usage);
     }
 
-    /// <summary>流式响应的一块增量：正文字 + 工具调用分片。</summary>
+    
     private sealed class ToolCallBuffer
     {
         public string Id = "";
@@ -176,7 +176,7 @@ public static class AiClient
         public StringBuilder Args = new();
     }
 
-    /// <summary>处理一块 SSE 数据。返回本块携带的用量（通常只有最后一块有，其余返回 null）。</summary>
+    
     private static AiUsage? AccumulateChunk(
         string json,
         StringBuilder content,
@@ -189,8 +189,8 @@ public static class AiClient
         {
             using var doc = JsonDocument.Parse(json);
 
-            // ⚠️ usage 要在看 choices 之前处理：带用量那一块的 choices 往往是**空数组**，
-            //    先判断 choices 就会把用量直接丢掉。
+            
+            
             AiUsage? usage = null;
             if (doc.RootElement.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
             {
@@ -209,7 +209,7 @@ public static class AiClient
             if (!choices[0].TryGetProperty("delta", out var delta))
                 return usage;
 
-            // 思考过程（DeepSeek / 通义 / Kimi / GLM 都叫 reasoning_content，字段名是统一的）
+            
             if (delta.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
             {
                 var think = rc.GetString();
@@ -220,7 +220,7 @@ public static class AiClient
                 }
             }
 
-            // 正文
+            
             if (delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
             {
                 var s = c.GetString();
@@ -231,7 +231,7 @@ public static class AiClient
                 }
             }
 
-            // 工具调用（分片）
+            
             if (delta.TryGetProperty("tool_calls", out var tcs) && tcs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var tc in tcs.EnumerateArray())
@@ -263,12 +263,12 @@ public static class AiClient
         }
         catch (JsonException)
         {
-            // 个别服务商会插非 JSON 的心跳，忽略即可
+            
             return null;
         }
     }
 
-    /// <summary>拼请求体。工具清单只在传了的时候才带，避免"没装工具包却收到空 tools 数组"。</summary>
+    
     private static Dictionary<string, object?> BuildBody(
         AiConfig cfg,
         IReadOnlyList<AiMessage> messages,
@@ -283,7 +283,7 @@ public static class AiClient
             ["temperature"] = cfg.Temperature,
         };
 
-        // 流式响应默认**不**返回用量，必须显式索取 —— 否则界面上"本次消耗 token"永远是 0。
+        
         if (stream) body["stream_options"] = new { include_usage = true };
 
         if (tools is { Count: > 0 })
@@ -305,24 +305,24 @@ public static class AiClient
         return body;
     }
 
-    /// <summary>
-    /// 按服务商翻译"思考开关"（2026-10-18，逐家对着官方文档核过）。
-    ///
-    /// <para>
-    /// ⚠️ 同一个能力，四家四种写法：
-    /// <list type="bullet">
-    ///   <item>DeepSeek / Kimi / GLM：嵌套 <c>thinking: { type }</c>，Kimi 要 <c>keep</c>、GLM 要 <c>clear_thinking</c>；</item>
-    ///   <item>通义：顶层布尔 <c>enable_thinking</c>，且**开启时必须带 <c>incremental_output</c>**，否则直接报错；</item>
-    ///   <item>OpenAI o 系列：没有开关，只有 <c>reasoning_effort</c>。</item>
-    /// </list>
-    /// ⛔ 别把用户选的值原样透传 —— 发错字段轻则无效，重则 400。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static void ApplyThinking(Dictionary<string, object?> body, AiConfig cfg)
     {
         var profile = cfg.ThinkingProfile;
 
-        // 强制思考的模型（glm-5.3 等）关不掉，传 disabled 会直接报错
+        
         var enabled = profile.ForcedThinking || cfg.Thinking;
 
         switch (profile.Style)
@@ -333,12 +333,12 @@ public static class AiClient
 
             case ThinkingStyle.EnableThinkingFlag:
                 body["enable_thinking"] = enabled;
-                // DashScope 在 enable_thinking=true 时不带这个参数会报错
+                
                 if (enabled) body["incremental_output"] = true;
                 break;
 
             case ThinkingStyle.ThinkingObjectKeep:
-                // keep=all：把历史思考留在上下文里，多步工具调用才连得上
+                
                 body["thinking"] = new { type = enabled ? "enabled" : "disabled", keep = "all" };
                 break;
 
@@ -356,7 +356,7 @@ public static class AiClient
             body["reasoning_effort"] = NormalizeEffort(cfg.Effort, cfg.ProviderId);
     }
 
-    /// <summary>强度取值各家不同：DeepSeek/GLM 认 max，OpenAI 最高只到 high。</summary>
+    
     private static string NormalizeEffort(string? effort, string providerId)
     {
         var value = (effort ?? "").Trim().ToLowerInvariant();
@@ -366,10 +366,10 @@ public static class AiClient
         return value;
     }
 
-    /// <summary>
-    /// 一条消息的线上格式。<c>assistant</c> 带工具调用时 <c>content</c> 必须是 null，
-    /// <c>tool</c> 消息必须带 <c>tool_call_id</c> —— 少一样服务端直接 400。
-    /// </summary>
+    
+    
+    
+    
     private static object ToPayload(AiMessage m, AiConfig cfg)
     {
         if (m.Role == "assistant")
@@ -390,8 +390,8 @@ public static class AiClient
                 }).ToList();
             }
 
-            // ⚠️ 带 tools 的思考模型（DeepSeek / Kimi / GLM）要求历史 reasoning 原样回传，
-            //    缺了会返回 400。不回传思考的服务商就别多塞这个字段。
+            
+            
             if (cfg.ThinkingProfile.RequiresReasoningEcho && !string.IsNullOrEmpty(m.Reasoning))
                 payload["reasoning_content"] = m.Reasoning;
 
@@ -406,9 +406,9 @@ public static class AiClient
         return new { role = m.Role, content = m.Content };
     }
 
-    // ══════════════════════════════════════════════════════
-    //  内部
-    // ══════════════════════════════════════════════════════
+    
+    
+    
 
     private static string EndpointOf(string baseUrl)
     {
@@ -426,14 +426,14 @@ public static class AiClient
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
 
-        // 本地模型通常不校验密钥，空着就不发 Authorization 头（有些实现见到空 Bearer 会报错）
+        
         if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
 
         return request;
     }
 
-    /// <summary>把 HTTP 状态码翻成用户能看懂的一句话。</summary>
+    
     private static string Explain(HttpStatusCode status, string? body)
     {
         var snippet = (body ?? "").Trim();

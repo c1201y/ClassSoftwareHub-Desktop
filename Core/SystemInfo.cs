@@ -9,16 +9,16 @@ using Microsoft.Win32;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>
-/// 首页「硬件信息 / 系统信息」用：抓一份**本机**快照。
-/// 全是本机只读查询（注册表 + SMBIOS + Win32），不联网、不落盘、不轮询。
-/// </summary>
+
+
+
+
 public static class SystemInfo
 {
-    /// <summary>一行信息：左标签 + 右值。</summary>
+    
     public sealed record InfoLine(string Label, string Value);
 
-    /// <summary>硬件信息 + 系统信息两个板块。</summary>
+    
     public sealed record QuickInfo(IReadOnlyList<InfoLine> Hardware, IReadOnlyList<InfoLine> System);
 
     private const string Dash = "—";
@@ -54,9 +54,9 @@ public static class SystemInfo
 
     private static bool Blank(string? s) => string.IsNullOrWhiteSpace(s);
 
-    // ══════════════════════════ 硬件信息 ══════════════════════════
+    
 
-    // ── 处理器：型号 + 核心数 / 线程数 + 频率 ───────────────────
+    
     private static string CpuText()
     {
         try
@@ -70,7 +70,7 @@ public static class SystemInfo
             }
 
             name = name.Replace("(R)", "").Replace("(TM)", "").Replace("CPU", "").Replace("  ", " ").Trim();
-            // 型号串里常自带 "@ 2.60GHz"；我们自己算频率，去掉它免得重复
+            
             name = System.Text.RegularExpressions.Regex.Replace(name, @"@\s*[\d.]+\s*GHz", "").Trim();
 
             var (cores, threads) = CpuCoreCounts();
@@ -86,7 +86,7 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    /// <summary>用 GetLogicalProcessorInformation 数物理核（Relationship 0 = ProcessorCore）。</summary>
+    
     private static (int cores, int threads) CpuCoreCounts()
     {
         try
@@ -106,7 +106,7 @@ public static class SystemInfo
                 for (var i = 0; i < count; i++)
                 {
                     var e = Marshal.PtrToStructure<SlpiEntry>(ptr + i * size);
-                    if (e.Relationship == 0) cores++;   // RelationProcessorCore
+                    if (e.Relationship == 0) cores++;   
                 }
                 return (cores, Environment.ProcessorCount);
             }
@@ -145,7 +145,7 @@ public static class SystemInfo
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetLogicalProcessorInformation(IntPtr buffer, ref uint length);
 
-    // ── 内存：厂家 + 型号 + 类型 + 频率 + 插槽（SMBIOS Type 17） ──
+    
     private static string MemoryText()
     {
         try
@@ -182,7 +182,7 @@ public static class SystemInfo
                 return string.Join(" · ", parts);
             }
 
-            // SMBIOS 解不出来：退回总量（至少容量是对的）
+            
             var mstat = new MemoryStatus();
             if (GlobalMemoryStatusEx(mstat) && mstat.TotalPhys > 0) return Size((long)mstat.TotalPhys);
             return "";
@@ -198,20 +198,20 @@ public static class SystemInfo
         var table = RawSmbios();
         if (table is null) return list;
 
-        var pos = 8;   // 头 8 字节：4 字节（含主版本）+ 4 字节长度
+        var pos = 8;   
         while (pos + 4 <= table.Length)
         {
             var type = table[pos];
             var length = table[pos + 1];
             if (length < 4) break;
-            if (type == 127) break;   // End-of-table
+            if (type == 127) break;   
 
             if (type == 17 && length >= 0x15 && pos + length <= table.Length)
             {
                 var sizeRaw = (ushort)(table[pos + 0x0C] | (table[pos + 0x0D] << 8));
                 long sizeMb;
-                if ((sizeRaw & 0x8000) != 0) sizeMb = (sizeRaw & 0x7FFF) / 1024;          // 最高位 = KB
-                else if (sizeRaw == 0 && length >= 0x20)                                   // Extended Size
+                if ((sizeRaw & 0x8000) != 0) sizeMb = (sizeRaw & 0x7FFF) / 1024;          
+                else if (sizeRaw == 0 && length >= 0x20)                                   
                     sizeMb = BitConverter.ToUInt32(table, pos + 0x1C) & 0x7FFFFFFF;
                 else sizeMb = sizeRaw;
 
@@ -219,7 +219,7 @@ public static class SystemInfo
 
                 int speed = length >= 0x17 ? (table[pos + 0x15] | (table[pos + 0x16] << 8)) : 0;
                 if (speed == 0 && length >= 0x58)
-                    speed = (int)(BitConverter.ToUInt32(table, pos + 0x54) & 0x7FFFFFFF);   // Extended Speed
+                    speed = (int)(BitConverter.ToUInt32(table, pos + 0x54) & 0x7FFFFFFF);   
 
                 var manufacturer = length > 0x17 ? SmbiosString(table, pos, length, table[pos + 0x17]) : "";
                 var partNumber = length > 0x1A ? SmbiosString(table, pos, length, table[pos + 0x1A]) : "";
@@ -227,7 +227,7 @@ public static class SystemInfo
                 list.Add(new MemoryModule(sizeMb, speed, MemoryTypeName(memType), Clean(manufacturer), Clean(partNumber)));
             }
 
-            // 跳过本结构：先跳格式化区，再跳字符串区（以 00 00 结束）
+            
             pos += length;
             while (pos + 1 < table.Length && !(table[pos] == 0 && table[pos + 1] == 0)) pos++;
             pos += 2;
@@ -243,7 +243,7 @@ public static class SystemInfo
         return sb.ToString().Trim();
     }
 
-    /// <summary>取 SMBIOS 结构字符串区里的第 index 个字符串（1 起）。</summary>
+    
     private static string SmbiosString(byte[] table, int formattedStart, int formattedLen, int index)
     {
         if (index <= 0) return "";
@@ -260,7 +260,7 @@ public static class SystemInfo
         return "";
     }
 
-    /// <summary>SMBIOS 规范 Table 7.18.2（Memory Device）的 Memory Type 取值。</summary>
+    
     private static string MemoryTypeName(byte code) => code switch
     {
         0x03 => "DRAM",
@@ -313,7 +313,7 @@ public static class SystemInfo
     {
         try
         {
-            const uint RSMB = 0x52534D42;   // 'RSMB'
+            const uint RSMB = 0x52534D42;   
             var size = GetSystemFirmwareTable(RSMB, 0, IntPtr.Zero, 0);
             if (size == 0 || size > 8 * 1024 * 1024) return null;
             var buf = new byte[size];
@@ -340,7 +340,7 @@ public static class SystemInfo
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx([In, Out] MemoryStatus buffer);
 
-    // ── 硬盘：型号（注册表 disk Enum，无需管理员）+ 已用 / 总容量 ──
+    
     private static string DiskText()
     {
         try
@@ -366,10 +366,10 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    /// <summary>
-    /// HKLM\SYSTEM\CurrentControlSet\Services\disk\Enum 里的值形如
-    /// <c>SCSI\Disk&amp;Ven_NVMe&amp;Prod_Samsung_SSD_980_PRO_1TB&amp;Rev_...</c>；拆成厂家 + 型号。
-    /// </summary>
+    
+    
+    
+    
     private static List<string> PhysicalDiskModels()
     {
         var result = new List<string>();
@@ -408,24 +408,24 @@ public static class SystemInfo
         return v.Replace('_', ' ').Trim();
     }
 
-    // ── 触摸：最大触控点数 ────────────────────────────────────
+    
     private static string TouchText()
     {
         try
         {
-            var n = GetSystemMetrics(95);   // SM_MAXIMUMTOUCHES
+            var n = GetSystemMetrics(95);   
             return n > 0 ? $"{n} 点触控" : "不支持触控";
         }
         catch { return ""; }
     }
 
-    // ── 显卡 ────────────────────────────────────────────────────
-    //
-    // ⛔⛔ 2026-10-21 修：**不能只看注册表 Class\{4d36e968...}**。
-    //    那里每个子键是一个"装过的显示适配器驱动"，**卸载后仍会留下残骸** ——
-    //    用户反馈：实际是 Radeon R7 430 / 2 GB，我们却读成「RTX 3060 ｜ Radeon 520」和 12 GB
-    //    （那台机器以前装过 3060，驱动残留还在注册表里，而 VramText 又取了所有子键的**最大值**）。
-    //    现在先用 WMI `Win32_VideoController` 拿到**当前真实存在**的适配器，再据此筛选。
+    
+    
+    
+    
+    
+    
+    
     private static List<(string Name, string Pnp)> RealAdapters()
     {
         var list = new List<(string, string)>();
@@ -442,7 +442,7 @@ public static class SystemInfo
                 var name = (item["Name"] as string)?.Trim() ?? "";
                 if (Blank(name)) continue;
 
-                // 有故障码的设备（掉驱动、被禁用）不算
+                
                 var error = item["ConfigManagerErrorCode"] is uint code ? code : 0u;
                 if (error != 0) continue;
 
@@ -454,7 +454,7 @@ public static class SystemInfo
                 list.Add((name, pnp));
             }
         }
-        catch { /* WMI 不可用时退回注册表（见下） */ }
+        catch {  }
 
         return list;
     }
@@ -467,7 +467,7 @@ public static class SystemInfo
             if (real.Count > 0)
                 return string.Join(" ｜ ", real.Select(r => r.Name).Distinct().Take(2));
 
-            // 兜底：WMI 不可用（极少数精简系统）时才回退注册表
+            
             using var cls = Registry.LocalMachine.OpenSubKey(
                 @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
             if (cls is null) return "";
@@ -495,11 +495,11 @@ public static class SystemInfo
         name.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Parsec", StringComparison.OrdinalIgnoreCase);
 
-    // ── 显存 ────────────────────────────────────────────────────
-    //
-    // ⛔ 只统计**真实适配器对应**的子键。以前遍历所有子键取最大值，
-    //    结果被卸载显卡的残留记录带偏（12 GB 的 3060 盖住了实际的 2 GB）。
-    // ⚠️ AdapterRAM（WMI）是 uint32，>4 GB 会溢出，所以显存一律走注册表的 qwMemorySize。
+    
+    
+    
+    
+    
     private static string VramText()
     {
         try
@@ -518,7 +518,7 @@ public static class SystemInfo
                 using var k = cls.OpenSubKey(sub);
                 if (k is null) continue;
 
-                // 没有 WMI 结果时（real 为空）退化成"全部子键"，至少还有个数
+                
                 var desc = (k.GetValue("DriverDesc") as string)?.Trim();
                 if (real.Count > 0 && (desc is null || !real.Contains(desc))) continue;
 
@@ -540,7 +540,7 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    // ── 显示器：厂家 + 型号 + 分辨率 + 刷新率 ──────────────────
+    
     private static string MonitorText()
     {
         try
@@ -574,7 +574,7 @@ public static class SystemInfo
         return @"\\.\DISPLAY1";
     }
 
-    /// <summary>从注册表里第一个有效 EDID 拿「厂家简称 + 型号」。</summary>
+    
     private static string MonitorModel()
     {
         try
@@ -592,7 +592,7 @@ public static class SystemInfo
 
                     var vendor = EdidVendor(edid);
                     var model = EdidModel(edid);
-                    if (model.Length == 0) model = mfg;   // 退回注册表键名（如 DEL4098）
+                    if (model.Length == 0) model = mfg;   
 
                     var text = (vendor + " " + model).Trim();
                     if (text.Length > 0) return text;
@@ -677,25 +677,25 @@ public static class SystemInfo
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
 
-    // ══════════════════════════ 系统信息 ══════════════════════════
+    
 
-    // ── 反馈中心「本机信息」要的三样（2026-09-30 Nick 指定）：型号 / 版本名 / 具体内部版本号 ──
+    
 
-    /// <summary>
-    /// 处理器**型号**：只要型号串，不带核数、不带频率（如「13th Gen Intel(R) Core(TM) i7-13700H」）。
-    /// 与首页那张「处理器」行刻意不同 —— 反馈正文里维护者要看的是"什么型号"，不是"几核几线程"。
-    /// </summary>
+    
+    
+    
+    
     public static string CpuModel()
     {
         try
         {
             using var k = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
             var name = (k?.GetValue("ProcessorNameString") as string)?.Trim() ?? "";
-            // 型号串常自带 "@ 2.60GHz"，删掉 —— 那是当前频率，跟型号无关
+            
             name = System.Text.RegularExpressions.Regex.Replace(name, @"\s*@\s*[\d.]+\s*GHz", "").Trim();
-            // Intel 的串尾巴上多半还挂一个 " CPU"（"…i7-9750H CPU"）—— 反馈正文里是噪声，去掉。
-            // ⚠️ 只删**结尾**那个，别全局替换：Xeon 的正式型号是 "Xeon(R) CPU E5-2670 v2"，
-            //    全局替换会把型号本身改掉。
+            
+            
+            
             name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+CPU$", "",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
             return name;
@@ -703,25 +703,25 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    /// <summary>操作系统的完整显示名（如「Windows 11 专业版 25H2」）—— 反馈正文里用。</summary>
+    
     public static string OsDisplay() => OsNameText();
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForSystem();
 
-    /// <summary>
-    /// 一行「显示器 / DPI」摘要（2026-10-11 加，日志横幅用）。
-    ///
-    /// ⚠️ 为什么要它：界面"错位 / 被截断 / 缩放发虚"这类问题**十有八九跟 DPI 和显示器数有关**，
-    ///    而这两个数用户从来不主动说 —— 每次启动自己记一行，出问题时就不用再问一遍。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     public static string DisplaySummary()
     {
         try
         {
-            var monitors = GetSystemMetrics(80);   // SM_CMONITORS：当前接了几台
-            var w = GetSystemMetrics(0);           // SM_CXSCREEN
-            var h = GetSystemMetrics(1);           // SM_CYSCREEN
+            var monitors = GetSystemMetrics(80);   
+            var w = GetSystemMetrics(0);           
+            var h = GetSystemMetrics(1);           
             var dpi = GetDpiForSystem();
             var scale = dpi > 0 ? dpi * 100 / 96 : 0;
             return $"{monitors} 台／{w}x{h}／缩放 {scale}%";
@@ -729,11 +729,11 @@ public static class SystemInfo
         catch { return "—"; }
     }
 
-    /// <summary>
-    /// **具体**的内部版本号：<c>CurrentBuildNumber</c> + <c>UBR</c>（如 <c>26220.1234</c>）。
-    /// ⚠️ 只给 <c>CurrentBuildNumber</c>（26220）是不够的 —— 同一个 build 上装没装某个累积更新
-    ///    就靠 UBR 区分，排查"打了某补丁之后才出问题"时缺了它根本对不上。
-    /// </summary>
+    
+    
+    
+    
+    
     public static string OsBuildEx()
     {
         try
@@ -742,7 +742,7 @@ public static class SystemInfo
             var build = (k?.GetValue("CurrentBuildNumber") as string)?.Trim() ?? "";
             if (build.Length == 0) return "";
 
-            // UBR 是 REG_DWORD；个别阉割系统上可能读不到，那就只给 build
+            
             var ubr = (k?.GetValue("UBR"))?.ToString()?.Trim() ?? "";
             return ubr.Length > 0 ? $"{build}.{ubr}" : build;
         }
@@ -751,15 +751,15 @@ public static class SystemInfo
 
     private static int? _osBuild;
 
-    /// <summary>
-    /// 系统 build 号（22000 是 Win11 的门槛）。读不到就给 0（= 当 Win10 处理）。
-    ///
-    /// ⛔⛔ 别用 <c>Environment.OSVersion.Version.Build</c> 判 Win11：.NET 5+ 上它返回的是
-    ///    **按应用清单声明支持的那个最高版本** —— 清单里没写 Win10/Win11 的 supportedOS，
-    ///    它就一直报 6.2（build 9200），判 Win11 会**恒为 false**，而且在本机根本试不出来
-    ///    （Win11 上跑也是 9200，看着"没启用"还以为是别的问题）。
-    ///    这里读注册表 <c>CurrentBuildNumber</c>（跟 <see cref="OsBuildEx"/> 同源），不受清单影响。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public static int OsBuild()
     {
         if (_osBuild.HasValue) return _osBuild.Value;
@@ -773,13 +773,13 @@ public static class SystemInfo
         return _osBuild.Value;
     }
 
-    /// <summary>
-    /// Win11 及以上（build ≥ 22000）。认不出（读到 0）时**保守按 Win10 算** ——
-    /// 走"自己给窗口裁圆角"那条路，最坏也只是圆角来源和 DWM 重复一次，不会缺圆角。
-    /// </summary>
+    
+    
+    
+    
     public static bool IsWin11 => OsBuild() >= 22000;
 
-    // ── 操作系统：名称 + 大版本号（如 Windows 11 专业版 24H2） ──
+    
     private static string OsNameText()
     {
         try
@@ -791,11 +791,11 @@ public static class SystemInfo
                           ?? (k?.GetValue("ReleaseId") as string)?.Trim() ?? "";
             var editionId = (k?.GetValue("EditionID") as string)?.Trim() ?? "";
 
-            // 注册表里 Win11 的 ProductName 仍写 Windows 10，按 build 纠正
+            
             var win = int.TryParse(build, out var b) && b >= 22000 ? "Windows 11" : "Windows 10";
 
             var edition = EditionZh(editionId);
-            if (edition.Length == 0)   // 认不出 EditionID：退回 ProductName 去掉 "Windows xx" 的部分
+            if (edition.Length == 0)   
                 edition = product.Replace("Windows 10", "").Replace("Windows 11", "").Trim();
 
             return $"{win} {edition} {display}".Trim();
@@ -803,7 +803,7 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    /// <summary>ProductName 在本机可能是英文，按 EditionID 换成中文版名。</summary>
+    
     private static string EditionZh(string id) => id switch
     {
         "Professional" => "专业版",
@@ -827,7 +827,7 @@ public static class SystemInfo
         _ => "",
     };
 
-    // ── 操作系统版本：10.0.26100.4188（64 位） ─────────────────
+    
     private static string OsVersionText()
     {
         try
@@ -845,7 +845,7 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    // ── 安装日期 ─────────────────────────────────────────────
+    
     private static string InstallDateText()
     {
         try
@@ -860,8 +860,8 @@ public static class SystemInfo
         return "";
     }
 
-    // ── 虚拟内存 / 分页文件 ───────────────────────────────────
-    // Windows 口径：虚拟内存总量 = 物理内存 + 分页文件（＝提交上限 CommitLimit）。
+    
+    
     private static string PageFileText()
     {
         try
@@ -870,8 +870,8 @@ public static class SystemInfo
             var page = (long)pi.PageSize;
             if (page <= 0) return "";
 
-            var limitBytes = (long)pi.CommitLimit * page;                  // 虚拟内存总量
-            var pageFileBytes = ((long)pi.CommitLimit - (long)pi.PhysicalTotal) * page;   // 分页文件大小
+            var limitBytes = (long)pi.CommitLimit * page;                  
+            var pageFileBytes = ((long)pi.CommitLimit - (long)pi.PhysicalTotal) * page;   
 
             var parts = new List<string> { $"共 {Size(limitBytes)}" };
             parts.Add(pageFileBytes > 0 ? $"分页文件 {Size(pageFileBytes)}" : "分页文件 未启用");
@@ -892,16 +892,16 @@ public static class SystemInfo
     [DllImport("psapi.dll", SetLastError = true)]
     private static extern bool GetPerformanceInfo(out PerformanceInformation info, uint size);
 
-    // ── 虚拟化是否开启 ────────────────────────────────────────
-    // 注意：Hyper-V / VBS 跑起来后，固件层的虚拟化位会被监控程序挡住
-    // （此时 IsProcessorFeaturePresent(PF_VIRT_FIRMWARE_ENABLED) 与 WMI 的
-    //  VirtualizationFirmwareEnabled 都会报 false，但机器实际是开着的，
-    //  任务管理器也会显示「已启用」）→ 所以要再把「监控程序在跑」当作已启用。
+    
+    
+    
+    
+    
     private static string VirtualizationText()
     {
         try
         {
-            if (IsProcessorFeaturePresent(21)) return "已启用";                     // PF_VIRT_FIRMWARE_ENABLED
+            if (IsProcessorFeaturePresent(21)) return "已启用";                     
             if (VbsEnabled() || HypervisorServicePresent()) return "已启用（Hyper-V 运行中）";
             return "未启用";
         }
@@ -922,7 +922,7 @@ public static class SystemInfo
         catch { return false; }
     }
 
-    /// <summary>Hyper-V 监控程序在跑时，VMBus / 虚拟化平台驱动是存在的。</summary>
+    
     private static bool HypervisorServicePresent()
     {
         try
@@ -941,7 +941,7 @@ public static class SystemInfo
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsProcessorFeaturePresent(uint feature);
 
-    // ── DirectX 版本 ─────────────────────────────────────────
+    
     private static string DirectXText()
     {
         try
@@ -959,7 +959,7 @@ public static class SystemInfo
         catch { return ""; }
     }
 
-    // ── 数值格式化 ────────────────────────────────────────────
+    
     private static string Mb(long mb) => mb >= 1024 ? (mb / 1024d).ToString("0.#") + " GB" : mb + " MB";
 
     private static string Size(long bytes)

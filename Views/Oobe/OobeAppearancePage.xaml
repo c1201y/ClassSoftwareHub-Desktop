@@ -6,20 +6,20 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <!--
-      第 4 步：外观。
+    
 
-      主题卡用三个 RadioButton 组成一组，把默认的圆点模板换成纯 ContentPresenter ——
-      选中态由外圈强调色描边表达，预览图不会被单选控件自己的底纹压脏。
 
-      预览图是 Nick 2026-10-31 给的三张图（跟随系统 / 浅色 / 深色），内嵌后由
-      EmbeddedAssets 释放到缓存再交给 Image —— 单文件发布也没有散落文件。
 
-      ⚠️ 三张卡用等分列铺满 600，和下面的 SettingsCard 左右对齐 ——
-         以前是 144 定宽横排、靠内容自然宽度居中，两侧比下面那张卡窄一截，看着很别扭。
 
-      下面三项与「设置 → 外观」同一套：窗口背景效果 / 桌面悬浮窗单独设置外观 / 外部组件外观。
-    -->
+
+
+
+
+
+
+
+
+
     <Grid>
         <StackPanel x:Name="ContentRoot" Width="600"
                     HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">

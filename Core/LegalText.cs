@@ -1,58 +1,58 @@
-// ══════════════════════════════════════════════════════════════════════
-//  ⚠️ 本文件由 tools/sync-legal.mjs 自动生成，⛔ 别手改（下次同步会被覆盖）。
-//
-//  条款的真源是**站点仓库根目录**的 `法律文本.ts`（中英双语，站点「条款」页
-//  #/agreement 用的就是它）。
-//
-//  ⚠️ 2026-11-01 起，这份是**兜底副本**，不再是界面的唯一来源：
-//     客户端启动后会从站点 `public/legal.json` 拉最新条款（Services/LegalTextSource），
-//     拉到就用它 —— 改条款不必再发版。只有离线 / 首装 / 六条线路全失败时才用这里。
-//     ⇒ 本文件的文字旧一点不影响使用，但⛔ 不能删（断网时全靠它）。
-//
-//  要刷新这份兜底：跑 `node tools/sync-legal.mjs`（同时重写 installer/Legal.rtf）。
-//
-//  ⚠️ 站点是双语的，桌面端界面全中文 ⇒ 这里只取 zh，没有 en。
-// ══════════════════════════════════════════════════════════════════════
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>一份法律文档里的一节：小节标题 + 该节下的条款（每条一行）。</summary>
+
 public sealed class LegalSection
 {
     public string Heading { get; init; } = "";
     public IReadOnlyList<string> Items { get; init; } = Array.Empty<string>();
 }
 
-/// <summary>一份法律文档（用户协议 / 隐私政策 / 免责声明之一）。</summary>
+
 public sealed class LegalDoc
 {
-    /// <summary>站点里的稳定标识：agreement / privacy / disclaimer。</summary>
+    
     public string Key { get; init; } = "";
 
-    /// <summary>版本号（如 v1.0）与生效日期（如 2026-10-05），站点改条款时会同步更新。</summary>
+    
     public string Version { get; init; } = "";
     public string Effective { get; init; } = "";
 
-    /// <summary>文档标题（也是设置页入口卡片与阅读窗口标签上显示的文字）。</summary>
+    
     public string Title { get; init; } = "";
 
-    /// <summary>标题下的引言段（站点允许留空 ⇒ 这里可能是空串）。</summary>
+    
     public string Intro { get; init; } = "";
 
     public IReadOnlyList<LegalSection> Sections { get; init; } = Array.Empty<LegalSection>();
 
-    /// <summary>「版本 v1.0 · 生效日期 2026-10-05」这种一行摘要（站点「条款」页副标题同款）。</summary>
+    
     public string VersionLine =>
         string.IsNullOrEmpty(Effective) ? Version : $"{Version} · 生效日期 {Effective}";
 }
 
-/// <summary>
-/// 桌面端内置的三份条款（由站点《法律文本.ts》同步而来，见本文件头的说明）。
-/// 用途：① 设置页「条款与声明」的三个入口 + 阅读窗口；② 安装程序那一页（installer/Legal.rtf）。
-/// </summary>
+
+
+
+
 public static class LegalText
 {
-    /// <summary>三份文档，顺序与站点「条款」页的标签一致（用户协议 → 隐私政策 → 免责声明）。</summary>
+    
     public static IReadOnlyList<LegalDoc> All { get; } = new LegalDoc[]
     {
         new()
@@ -121,7 +121,7 @@ public static class LegalText
         },
     };
 
-    /// <summary>按 key（agreement / privacy / disclaimer）取一份文档；找不到返回 null。</summary>
+    
     public static LegalDoc? Find(string key) =>
         All.FirstOrDefault(d => string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase));
 }

@@ -7,25 +7,25 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services.HubAi;
 
-/// <summary>安装结果。<see cref="Message"/> 直接拿去显示，已经是书面语。</summary>
+
 public sealed record ToolPackInstallResult(bool Ok, string Message, ToolPack? Pack);
 
-/// <summary>
-/// 工具包的远程安装（2026-10-18）。
-///
-/// <para>
-/// 走的是**和软件下载同一条线路**：<see cref="GithubRoute.ResolveAsync"/> 会按用户的设置生成
-/// 「GitHub 源 / 自建加速」多路候选，这里逐个试，第一个成功的即采用。
-/// ⛔ 别自己拼加速前缀 —— 旧方案（2026-10 之前）那样做过，已经作废。
-/// </para>
-/// <para>
-/// ⚠️ 下载下来的是 <b>JSON 声明</b>，不是代码。加载前必须过 <see cref="ToolPackStore.Parse"/>
-/// 的校验（格式版本、必填字段），校验不过就当没装。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
 public static class ToolPackInstaller
 {
-    /// <summary>包体上限。正常只有几 KB，超过这个数说明拿到的不是工具包（可能是网页或错误页）。</summary>
+    
     private const int MaxBytes = 512 * 1024;
 
     private static readonly HttpClient Http = new(new SocketsHttpHandler
@@ -80,7 +80,7 @@ public static class ToolPackInstaller
                 var pack = ToolPackStore.Parse(text);
                 if (pack is null)
                 {
-                    // 常见于线路返回了 404 网页或登录页：不是网络问题，是内容不对，换下一条
+                    
                     AppLog.Warn("hubai", $"线路 {candidate.Url} 返回的内容不是有效的工具包");
                     failures++;
                     continue;
@@ -97,8 +97,8 @@ public static class ToolPackInstaller
             }
             catch (OperationCanceledException ex)
             {
-                // ⚠️ 同一个异常类型要分两种情况：用户主动取消 → 往上抛（调用方要收摊）；
-                //    HttpClient.Timeout 触发的超时 → 记一条、换下一条线路。
+                
+                
                 if (ct.IsCancellationRequested) throw;
 
                 AppLog.Exception("hubai", ex, $"下载工具包超时 {candidate.Url}");
@@ -127,7 +127,7 @@ public static class ToolPackInstaller
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
 
-        // 自建加速节点的校验依赖这两个头（和软件下载保持一致）
+        
         if (!string.IsNullOrWhiteSpace(candidate.Referer))
             request.Headers.Referrer = new Uri(candidate.Referer);
 

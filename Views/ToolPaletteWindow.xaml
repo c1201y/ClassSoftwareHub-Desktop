@@ -5,13 +5,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:palette="using:ClassSoftwareHub.Desktop.Views.Palette">
 
-    <!--
-      常用工具窗口：**标准窗口 + 自绘标题栏**（ExtendsContentIntoTitleBar）——
-      外观是自己的（不是系统那根丑标题栏），但窗口框架还是系统的：
-      拖动/触屏拖动/阴影/圆角都交给 Windows，我们不用再自己算位移。
-      **不进任务栏**（入口是系统托盘里它自己那个图标，跟主界面那个图标分开）；
-      不能最大化/全屏、不能最小化；× / Esc = 收起来，托盘那个图标点一下就回来。
-    -->
+    
+
+
+
+
+
+
     <Grid x:Name="Root" IsTabStop="True" KeyDown="Root_KeyDown"
           Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
@@ -20,7 +20,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 自绘标题栏（SetTitleBar 就是这一块，整条都能拖，触屏也能拖） -->
+        
         <Grid x:Name="AppTitleBar" Height="32" Padding="12,0,0,0" ColumnSpacing="8">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE71D;" FontSize="13" Opacity="0.85" />
@@ -28,8 +28,8 @@
             </StackPanel>
         </Grid>
 
-        <!-- 快速打开对应页面：放在 AppTitleBar **外面**（SetTitleBar 的元素整条是拖拽区，
-             塞在里面收不到点击），叠在标题栏右边、系统 × 的左侧（这窗只有一个关闭钮 ≈48dip） -->
+        
+
         <Button x:Name="OpenPageButton" Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Center"
                 Width="34" Height="28" Margin="0,0,50,0" Padding="0" MinWidth="0" BorderThickness="0"
                 Background="Transparent"
@@ -39,10 +39,10 @@
             <FontIcon Glyph="&#xE8A7;" FontSize="13" />
         </Button>
 
-        <!-- 四个工具切换（2026-10-03 Nick 二轮：Pivot → SelectorBar）
-             ⛔ Pivot 的选中下划线是**滑动动画**（内容先切、下划线才滑过去），Nick 觉得"高光要等一会"；
-             SelectorBar 选中瞬时、又是 Win11 原生，还能直接 HorizontalAlignment=Center 居中，
-             不再需要 CenterPivotHeaders 那套垫偏移（那套还会让命中区错位）。 -->
+        
+
+
+
         <SelectorBar x:Name="ToolPivot" Grid.Row="1" HorizontalAlignment="Center"
                      SelectionChanged="ToolPivot_SelectionChanged">
             <SelectorBarItem x:Name="PivotPick" Tag="pick-number" Text="随机抽号" />
@@ -51,7 +51,7 @@
             <SelectorBarItem x:Name="PivotClock" Tag="clock" Text="全屏时钟" />
         </SelectorBar>
 
-        <!-- 当前工具 -->
+        
         <Grid Grid.Row="2" Padding="14,0,14,14">
             <Grid x:Name="PanePick">
                 <palette:MiniPickNumber x:Name="PickView" />

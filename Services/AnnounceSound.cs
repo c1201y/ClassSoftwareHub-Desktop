@@ -6,26 +6,26 @@ using Windows.Media.Playback;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// 喊话提示音（2026-10-25）。
-/// <para>
-/// 默认音是内嵌的 <c>announce-alert.wav</c>（Nick 给的那份），运行时释放到 <c>cache\</c> 再交给 MediaPlayer ——
-/// 单文件发布下旁边没有散落的 wav 可读，只能走内嵌这条路（与 <see cref="TimerAlarm"/> 同一套做法）。
-/// 用户可以在接收端自选音效，路径存 <c>AnnounceSoundPath</c>；文件不在了自动退回内嵌那份。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
 public static class AnnounceSound
 {
     private const string DefaultAsset = "announce-alert.wav";
 
-    /// <summary>选音效时允许的扩展名（都交给系统解码器）。</summary>
+    
     public static readonly string[] Extensions =
         { ".wav", ".mp3", ".m4a", ".wma", ".aac", ".flac", ".ogg" };
 
     private static MediaPlayer? _player;
     private static string? _defaultPath;
 
-    /// <summary>用户自定义音效的完整路径；空 = 用默认。直接读写 settings.json。</summary>
+    
     public static string CustomPath
     {
         get => App.Settings.Current.AnnounceSoundPath ?? string.Empty;
@@ -36,7 +36,7 @@ public static class AnnounceSound
         }
     }
 
-    /// <summary>界面上显示的名字。</summary>
+    
     public static string DisplayName
     {
         get
@@ -55,7 +55,7 @@ public static class AnnounceSound
         }
     }
 
-    /// <summary>当前该播哪个文件；自定义那份不在了就退回内嵌默认。</summary>
+    
     public static string? ResolvePath()
     {
         var custom = CustomPath;
@@ -66,7 +66,7 @@ public static class AnnounceSound
         return _defaultPath;
     }
 
-    /// <summary>响一次。已经在响就先停再从头放，连点不会叠成两遍。</summary>
+    
     public static void Play()
     {
         try

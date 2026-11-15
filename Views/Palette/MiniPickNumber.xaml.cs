@@ -9,12 +9,12 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Palette;
 
-/// <summary>
-/// 浮窗版随机抽号：号码 / 名单两种抽法 + 个数 + 是否重复 + 大号结果。
-/// ⚠️ 存档和「内置工具 → 随机抽号」是**同一个文件、同一个类型**（<see cref="PickNumberConfig"/>），
-/// 所以两边的范围/个数/不重复设置、抽过的号、导入的名单都是通的；每次显示时重新读一遍，避免两边各改各的。
-/// 名单本身在工具页导入（浮窗塞不下文件选择那一套），这里只负责抽。
-/// </summary>
+
+
+
+
+
+
 public sealed partial class MiniPickNumber : UserControl
 {
     private const int RollTicks = 10;
@@ -22,16 +22,16 @@ public sealed partial class MiniPickNumber : UserControl
     private readonly DispatcherQueueTimer _roll;
     private readonly List<int> _used = new();
 
-    // 名单模式（2026-09-27 加，与工具页共用同一份存档）
+    
     private readonly List<string> _roster = new();
     private readonly List<string> _usedNames = new();
-    private string _rosterSource = "";   // 浮窗不显示它，只是替工具页保管 —— 存档是整份覆盖的，丢了就找不回来
+    private string _rosterSource = "";   
 
     private List<int> _pending = new();
     private List<string> _pendingNames = new();
     private int _ticks;
     private bool _ready;
-    private bool _updating;      // 正在刷新提示（里面的夹取会触发 ValueChanged，要忽略掉）
+    private bool _updating;      
 
     public MiniPickNumber()
     {
@@ -42,10 +42,10 @@ public sealed partial class MiniPickNumber : UserControl
         _roll.IsRepeating = true;
         _roll.Tick += (_, _) => RollTick();
 
-        // 座号 / 名单：事件在 XAML 上挂；选中在 Reload 里按存档拨
-        // ⚠️ SelectorBar 在 Loaded 时会**自动选中第一项**，构造函数里拨的选中会被它盖乱
-        //    （高亮一个、下划线在另一个上，Nick 截图骂的就是这个脱节）。
-        //    所以加载后先等它挑完，再排一次队把存档的模式拨回去。
+        
+        
+        
+        
         PoolSelector.Loaded += (_, _) => DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
         {
             _ready = false;
@@ -66,8 +66,8 @@ public sealed partial class MiniPickNumber : UserControl
         OnPoolModeChanged();
     }
 
-    // 数字输入用 NumberBox（Inline 自增钮，触屏点得到；Nick 2026-10-03 换掉原来的小号自增钮）。
-    // 起始座号已砍：座号固定从 1 号开始，只留「终止范围」。
+    
+    
     private const int Lo = 1;
     private int To => double.IsNaN(ToNumberBox.Value) ? 0 : (int)Math.Floor(ToNumberBox.Value);
     private int Hi => Math.Max(Lo, To);
@@ -78,22 +78,22 @@ public sealed partial class MiniPickNumber : UserControl
 
     private bool UseRoster => ReferenceEquals(PoolSelector.SelectedItem, ModeRosterItem);
 
-    private bool? _lastRoster;   // 上一次的模式（null=刚加载）：真换了模式才清上一把的结果
-    private bool _pendingRoster; // 想要的模式：SelectorBar 加载完成后的排队回调按它拨
+    private bool? _lastRoster;   
+    private bool _pendingRoster; 
 
     private int UsedInRange => _used.Where(n => n >= Lo && n <= Hi).Distinct().Count();
 
-    /// <summary>每次浮窗显示 / 切到这个工具时调一次：重新读存档 + 刷新提示。</summary>
+    
     public void Reload()
     {
         var cfg = PickNumberConfig.Load();
 
         _ready = false;
-        ToNumberBox.Value = cfg.To;                                   // 终止范围
-        CountNumberBox.Value = Math.Clamp(cfg.Count, 1, 9999);        // 先给个宽上限，精确上限交给 RefreshHints 按模式夹
+        ToNumberBox.Value = cfg.To;                                   
+        CountNumberBox.Value = Math.Clamp(cfg.Count, 1, 9999);        
         NoRepeatBox.IsOn = cfg.NoRepeat;
-        // ⚠️ 拨选中一律走 SelectedItem 这个官方入口。之前直接摆弄 SelectorBarItem.IsSelected
-        //    （"先清两个再选一个"），结果高亮和下划线会分家 —— 看着像座号、实际选的是名单。
+        
+        
         _pendingRoster = cfg.Mode == 1;
         PoolSelector.SelectedItem = _pendingRoster ? ModeRosterItem : ModeRangeItem;
         _ready = true;
@@ -114,23 +114,23 @@ public sealed partial class MiniPickNumber : UserControl
     {
         if (!_ready) return;
         SyncPoolMode();
-        RefreshHints();   // 先按模式把「抽取个数」的上限夹好（超了会顺手把 Value 夹进去），再存
+        RefreshHints();   
         Save();
     }
 
-    /// <summary>按当前模式收起 / 放出对应的输入项。</summary>
+    
     private void SyncPoolMode()
     {
         var roster = UseRoster;
         ToNumberBox.Visibility = roster ? Visibility.Collapsed : Visibility.Visible;
         RosterInfoText.Visibility = roster ? Visibility.Visible : Visibility.Collapsed;
-        // 抽取个数两种模式共用同一个框，只是上限不同（RefreshHints 里按模式夹）
+        
 
         if (roster)
             RosterInfoText.Text = _roster.Count > 0 ? $"名单：{_roster.Count} 人" : "未导入名单";
 
-        // 真换了模式才清上一把的结果 —— 座号页面挂着个"李伟"会让人以为语义串了。
-        // 刚加载（_lastRoster 为 null）不清：浮窗收起再打开，上次抽的结果还在。
+        
+        
         if (_lastRoster is bool prev && prev != roster)
         {
             ResultText.Text = "—";
@@ -142,7 +142,7 @@ public sealed partial class MiniPickNumber : UserControl
 
     private void OnSettingChanged()
     {
-        if (!_ready || _updating) return;      // _updating：刷新提示时改 Maximum 会夹取 Value，别让它再回头存一遍
+        if (!_ready || _updating) return;      
         Save();
         RefreshHints();
     }
@@ -201,7 +201,7 @@ public sealed partial class MiniPickNumber : UserControl
 
     private static int RandInt(int n) => n <= 1 ? 0 : RandomNumberGenerator.GetInt32(n);
 
-    /// <summary>抽 k 个号码（Fisher–Yates，跟完整版页面同一套算法）。</summary>
+    
     private List<int>? PickOnce(int k)
     {
         var size = PoolSize;
@@ -227,7 +227,7 @@ public sealed partial class MiniPickNumber : UserControl
         return available.Take(k).ToList();
     }
 
-    /// <summary>抽 k 个人名（同一套洗牌）。</summary>
+    
     private List<string>? PickNamesOnce(int k)
     {
         if (_roster.Count == 0 || k > _roster.Count) return null;
@@ -357,10 +357,10 @@ public sealed partial class MiniPickNumber : UserControl
         }
     }
 
-    /// <summary>
-    /// 结果写成一行。字号先按数量收一档，再由外层 Viewbox（DownOnly）兜底：
-    /// 浮窗窄、内容长的时候整体等比缩小，保证**单行、不折行、不被裁**（2026-10-05 群反馈）。
-    /// </summary>
+    
+    
+    
+    
     private void ShowNumbers(IReadOnlyList<int> numbers, bool rolling)
     {
         ResultText.Text = string.Join("  ", numbers);
@@ -375,7 +375,7 @@ public sealed partial class MiniPickNumber : UserControl
         ResultText.Opacity = rolling ? 0.72 : 1;
     }
 
-    /// <summary>名字比数字占地方，字号整体收一档。</summary>
+    
     private void ShowNames(IReadOnlyList<string> names, bool rolling)
     {
         ResultText.Text = string.Join("  ", names);
@@ -403,7 +403,7 @@ public sealed partial class MiniPickNumber : UserControl
     {
         new PickNumberConfig
         {
-            From = Lo,        // 起始固定 1 号（座号从 1 开始）
+            From = Lo,        
             To = To,
             Count = WantCount,
             NoRepeat = NoRepeat,

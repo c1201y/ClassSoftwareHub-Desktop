@@ -6,19 +6,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    <!--
-      查阅单词（需求清单第 17 条，2026-11-01）。
+    
 
-      版式照母版 Pages/AutoShutdownPage.xaml：三列 Grid 把内容钉在中间 960 宽。
-      ⚠️ 别用 Stretch + MaxWidth —— 触发上限时 WinUI 会把整列右甩（MustRead §1.1）。
 
-      **查单词与翻译句子是两张独立的卡，各用各的输入框**（2026-11-01 Nick 定：
-      不要一个框又查词又翻句）。理由：查词是敲几个字母看候选，翻译是粘一整段句子；
-      挤在一个框里，补全列表在翻译时纯属碍事。
 
-      每张卡自己成一体：标题 → 输入 → 结果，结果与输入之间用一条淡分隔线断开。
-      结果一律在代码里逐条构造，⛔ 不用 ItemTemplate + x:Bind（MustRead §3）。
-    -->
+
+
+
+
+
+
+
+
+
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <Grid Margin="24,36,24,44">
@@ -30,7 +30,7 @@
 
                 <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
-                    <!-- ═════════ 页头 ═════════ -->
+                    
                     <Grid Margin="0,0,0,14" ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -48,7 +48,7 @@
                         </Button>
                     </Grid>
 
-                    <!-- ═════════ 一、查单词 ═════════ -->
+                    
                     <Border Style="{StaticResource CshCardStyle}" Padding="16,14">
                         <StackPanel Spacing="12">
 
@@ -57,11 +57,11 @@
                                 <TextBlock Text="查单词" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </StackPanel>
 
-                            <!--
-                              原生 AutoSuggestBox：边打字边给候选词，下拉列表、键盘上下选择、
-                              回车提交、右侧查询图标全是控件自带的（⛔ 别自己拼 TextBox + ListView 下拉）。
-                              ⚠️ 建议项只塞纯字符串，不设 ItemTemplate —— 见 MustRead §3。
-                            -->
+                            
+
+
+
+
                             <AutoSuggestBox x:Name="WordBox" FontSize="14"
                                             PlaceholderText="输入英文单词，边打边选"
                                             QueryIcon="Find"
@@ -72,13 +72,13 @@
                             <InfoBar x:Name="WordNotice" IsOpen="False" IsClosable="False"
                                      Severity="Informational" Message="" />
 
-                            <!-- 空状态：还没查过词时摆几个示例 -->
+                            
                             <StackPanel x:Name="WordEmpty" Spacing="8" Margin="0,6,0,2">
                                 <TextBlock Text="先查本地词库，没收录的再联网查" FontSize="12" Opacity="0.45" />
                                 <StackPanel x:Name="SamplePanel" Orientation="Horizontal" Spacing="8" />
                             </StackPanel>
 
-                            <!-- 词条 -->
+                            
                             <StackPanel x:Name="WordBlock" Spacing="12" Visibility="Collapsed">
 
                                 <Border Height="1" Opacity="0.08"
@@ -130,7 +130,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ═════════ 二、翻译句子 ═════════ -->
+                    
                     <Border Style="{StaticResource CshCardStyle}" Padding="16,14" Margin="0,14,0,0">
                         <StackPanel Spacing="12">
 
@@ -139,7 +139,7 @@
                                 <TextBlock Text="翻译句子" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </StackPanel>
 
-                            <!-- 多行输入：用控件自带的边框，跟上面那个 AutoSuggestBox 同一视觉语言 -->
+                            
                             <TextBox x:Name="SentenceBox" AcceptsReturn="True" TextWrapping="Wrap"
                                      FontSize="14" MinHeight="84" MaxHeight="150"
                                      PlaceholderText="粘贴或输入一段话，中文英文都可以" />
@@ -203,7 +203,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ═════════ 最近查过的词 ═════════ -->
+                    
                     <StackPanel x:Name="HistoryBlock" Spacing="2" Margin="2,20,2,0" Visibility="Collapsed">
                         <Grid Margin="0,0,0,2">
                             <TextBlock Text="最近查过的词" FontSize="12.5" FontWeight="SemiBold" Opacity="0.7"

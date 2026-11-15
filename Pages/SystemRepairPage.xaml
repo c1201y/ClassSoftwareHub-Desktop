@@ -6,24 +6,24 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:services="using:ClassSoftwareHub.Desktop.Services">
 
-    <!--
-      系统修复（1.2.0 第二批第二条，Nick 2026-10-16 定：**不建还原点，改为执行前二次确认**）。
+    
 
-      ⛔⛔ 这个页面只有**预设任务卡**，⛔ 没有命令输入框 —— 定位是"系统出毛病了修一下"，
-         不是"给个终端"。放开输入等于把风险全推给用户。
 
-      ⛔ 因为不建还原点，那道确认框就是**唯一的安全闸**，所以它不是一句"确定吗"：
-         具体命令、会发生什么、耗时、要不要授权全摆在同一屏（见 code-behind 的 ConfirmAsync）。
 
-      两态：卡片列表 ↔ 运行中（同一页靠 Visibility 换，与「应用卸载」页残留态一个做法）。
 
-      ⚠️ 版式沿用本项目的通用骨架：三列 24 / * / 24、内容列自身 MaxWidth="960"、
-         间距 24,36,24,44。⛔ 行模板里 `x:Bind` 的属性名别跟页面上的 `x:Name` 撞
-         （撞了 XamlCompiler 只报壳错误 WMC9999，没有行号）。
-    -->
+
+
+
+
+
+
+
+
+
+
     <Page.Resources>
-        <!-- 标题行的图标按钮。⚠️ 八行 Setter **照抄**而不是跨文件 `BasedOn`：
-             跨文件 BasedOn 会让 XAML 编译器在代码生成阶段崩掉（见 AppData 页文件头）。 -->
+        
+
         <Style x:Key="RowMoreButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
@@ -35,7 +35,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- 任务卡：照搬首页「快速开始」那套外观（CshNavCardStyle），只是多一行灰色元信息 -->
+        
         <DataTemplate x:Key="TaskCardTemplate" x:DataType="services:RepairTask">
             <Border Style="{StaticResource CshNavCardStyle}"
                     PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -63,7 +63,7 @@
         </DataTemplate>
     </Page.Resources>
 
-    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（Core/WheelRelay.cs）：两侧留白也要参与命中测试 -->
+    
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -78,7 +78,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- ── 标题行 ── -->
+            
             <Grid ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -103,18 +103,18 @@
                 </Button>
             </Grid>
 
-            <!-- ── 常驻风险提示 ──
-                 ⛔ 规约：会改动系统的功能一律常驻提示、不给关（Nick 2026-10-15 定）。
-                 话要说准：这七条里有几条是**只读扫描**，不是全部都危险 —— 提醒里点明这一点。 -->
+            
+
+
             <InfoBar x:Name="RiskBar" Grid.Row="1"
                      Severity="Error" IsOpen="True" IsClosable="False"
                      Title="这些操作会改动系统"
                      Message="每条任务执行前都会再确认一次，并把将要执行的命令原样列出；运行中可以随时中止。中止只是停下命令，不保证把已经做出的改动回滚。" />
 
-            <!-- ══ 内容区：两态 ══ -->
+            
             <Grid Grid.Row="2">
 
-                <!-- ── 态一：任务卡列表 ── -->
+                
                 <Grid x:Name="CardArea">
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
                                   VerticalScrollMode="Auto" HorizontalScrollMode="Disabled">
@@ -124,8 +124,8 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <!-- ⚠️ 两列手写（首页同款）：卡片宽度跟着列宽走，窗口再窄也不会掉成单列。
-                                 ⛔ 别改成 GridView + 运行时算 ItemWidth（窄窗口下不可靠，实验性功能页踩过）。 -->
+                            
+
                             <ItemsControl x:Name="CardColumnLeft" Grid.Column="0"
                                           ItemTemplate="{StaticResource TaskCardTemplate}">
                                 <ItemsControl.ItemsPanel>
@@ -147,7 +147,7 @@
                     </ScrollViewer>
                 </Grid>
 
-                <!-- ── 态二：运行中 ── -->
+                
                 <Grid x:Name="RunArea" Visibility="Collapsed" RowSpacing="10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -157,7 +157,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- 头部：图标 + 名称 + 状态行 | 右侧动作 -->
+                    
                     <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -182,15 +182,15 @@
                                 Click="Back_Click" VerticalAlignment="Center" IsEnabled="False" />
                     </Grid>
 
-                    <!-- 进度：拿不到百分比时切成不确定态（命令不一定都会报进度） -->
+                    
                     <ProgressBar x:Name="RunProgress" Grid.Row="1" Height="4"
                                  Minimum="0" Maximum="100" Value="0" IsIndeterminate="True" />
 
-                    <!-- 将要执行的命令原样列出 —— 透明度是这一页安全感的来源 -->
+                    
                     <TextBlock x:Name="RunCommand" Grid.Row="2" FontSize="11.5" Opacity="0.6"
                                FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
 
-                    <!-- 输出面板：标准只读 TextBox（能选中复制），等宽字体 -->
+                    
                     <TextBox x:Name="OutputBox" Grid.Row="3"
                              IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                              IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
@@ -200,7 +200,7 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
                              AutomationProperties.Name="命令输出" />
 
-                    <!-- 结束后的结论行 -->
+                    
                     <InfoBar x:Name="ResultBar" Grid.Row="4"
                              Severity="Success" IsOpen="False" IsClosable="False" />
                 </Grid>

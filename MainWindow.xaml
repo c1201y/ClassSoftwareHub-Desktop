@@ -11,10 +11,10 @@
 
     <Grid x:Name="RootGrid" Background="{x:Null}">
 
-        <!-- ============ 原生界面（全部页面 WinUI3 自绘，唯一的界面） ============ -->
+        
         <pages:ShellPage x:Name="NativeShell" />
 
-        <!-- ============ 缺少 WebView2 运行时（全局最上层） ============ -->
+        
         <Grid x:Name="RuntimePanel"
               Visibility="Collapsed"
               Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
@@ -35,7 +35,7 @@
                 </StackPanel>
             </StackPanel>
         </Grid>
-        <!-- ============ 应用内网页浮层（官网 / 网页版；由下往上淡入的「窗中窗」） ============ -->
+        
         <Grid x:Name="WebSheet" Visibility="Collapsed">
             <Rectangle Fill="#66000000" Tapped="WebSheetScrim_Tapped" />
 
@@ -55,7 +55,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- 小标题栏 -->
+                    
                     <Grid Grid.Row="0" Padding="16,10,10,10" ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />

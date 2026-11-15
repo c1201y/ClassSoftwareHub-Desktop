@@ -11,18 +11,18 @@ using ClassSoftwareHub.Desktop.Services.Docs;
 
 namespace ClassSoftwareHub.Desktop.Services.HubAi;
 
-/// <summary>模型从软件库里查到的一条候选。UI 用它渲染可点击的推荐卡。</summary>
+
 public sealed record SoftwareHit(string Id, string Name, string Tagline, string Category);
 
-/// <summary>
-/// 一轮对话里的工具上下文：累计本轮命中过的软件、记下调用轨迹（界面上显示"正在查看…"用）。
-/// </summary>
+
+
+
 public sealed class ToolSession
 {
     public List<SoftwareHit> SoftwareHits { get; } = new();
     public List<string> Trace { get; } = new();
 
-    /// <summary>模型建议放到回答末尾的动作（需求 27）。收尾时渲染成按钮，用户点了才生效。</summary>
+    
     public List<AiAction> Actions { get; } = new();
 
     public void Reset()
@@ -33,43 +33,43 @@ public sealed class ToolSession
     }
 }
 
-/// <summary>
-/// 工具执行器（2026-10-18）。
-///
-/// <para>
-/// ⛔⛔ <b>白名单就在这里</b>：只有 <see cref="ExecuteAsync"/> 的 switch 里写着的 id 能执行，
-/// 工具包里写别的 id 一律走 default 拒绝。模型没有直接能力，它只能"请求"，执行永远在宿主。
-/// </para>
-/// <para>
-/// ⛔ 全部**只读**。这里不允许出现任何删除、修改、注册表写入、进程结束的调用。
-/// 需要改东西时，工具只能返回"去哪个页面处理"，由用户自己点。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
 public static class ToolRunner
 {
-    /// <summary>
-    /// 磁盘扫描的时间预算（2026-10-18）。
-    ///
-    /// <para>
-    /// ⚠️ 这不是"超时失败"，是**软截止**：到点就停止递归，把已经统计到的部分交出去并标注不完整。
-    /// 整盘扫描动辄上百万文件，用户等 90 秒然后得到一句"超时"是最糟的体验；
-    /// 25 秒给一份"大致谁最占地方"的清单，通常已经足够回答用户的问题。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static readonly TimeSpan DiskBudget = TimeSpan.FromSeconds(25);
 
-    /// <summary>
-    /// 工具本身最多跑多久（兜底）。正常路径靠 <see cref="DiskBudget"/> 提前收工，
-    /// 这里只防"某个工具彻底卡死"。
-    /// ⚠️ 2026-10-30 起一轮对话不再限 5 次往返，改由 <see cref="Core.AiTimeBudget"/> 限 8 分钟总时长，
-    /// 所以真正决定"最多等多久"的是那个预算；本超时只管单个工具别把预算全吃掉。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(90);
 
-    /// <summary>给模型的单条结果最多多少字符。太长的清单它读不完，也浪费额度。</summary>
+    
     private const int MaxResultChars = 2400;
 
-    /// <summary>只读工具：随便调，不需要问人。</summary>
+    
     private static readonly HashSet<string> ReadOnlyTools = new(StringComparer.Ordinal)
     {
         "get_machine_snapshot",
@@ -79,28 +79,28 @@ public static class ToolRunner
         "list_startup_items",
         "web_search",
         "fetch_url",
-        // 只往回答末尾放按钮，用户点了才生效 —— 本身不改任何东西，所以不需要确认框
+        
         "suggest_actions",
-        // 文档库（需求 1:15）：读本机清单与缓存正文，不写任何东西
+        
         "list_documents",
         "read_document",
     };
 
-    /// <summary>
-    /// 会改动系统的工具。⛔ 目前**故意为空** —— 写操作通道没做好之前不加进来。
-    /// 加之前必须先确认 UI 侧的审批对话框已经通了（<see cref="RequiresApproval"/> 会拦住它）。
-    /// </summary>
+    
+    
+    
+    
     private static readonly HashSet<string> MutatingTools = new(StringComparer.Ordinal);
 
     public static bool IsReadOnly(string id) => ReadOnlyTools.Contains(id);
 
-    /// <summary>
-    /// 执行前是否必须问过用户。
-    /// 未知 id 返回 false —— 它反正会被 <see cref="ExecuteAsync"/> 的 default 分支拒绝。
-    /// </summary>
+    
+    
+    
+    
     public static bool RequiresApproval(string id) => MutatingTools.Contains(id);
 
-    /// <summary>白名单里认得的工具（只读 + 改动）。</summary>
+    
     public static bool IsKnown(string id) => ReadOnlyTools.Contains(id) || MutatingTools.Contains(id);
 
     public static async Task<string> ExecuteAsync(
@@ -124,14 +124,14 @@ public static class ToolRunner
                 "list_installed_apps" => await ListInstalledAsync(argumentsJson, timeout.Token),
                 "list_startup_items" => await ListStartupAsync(timeout.Token),
 
-                // 动作建议（需求 27）：只记下"回答末尾该放哪几个按钮"，真正的执行在用户点击时
+                
                 "suggest_actions" => SuggestActions(argumentsJson, session),
 
-                // 文档库（需求 1:15）：清单与正文都只读；正文没缓存就下到本机缓存再读
+                
                 "list_documents" => await ListDocumentsAsync(argumentsJson, timeout.Token),
                 "read_document" => await ReadDocumentAsync(argumentsJson, timeout.Token),
 
-                // 联网（2026-10-21）：自建实现，不依赖第三方 key
+                
                 "web_search" => await WebTools.SearchAsync(argumentsJson, timeout.Token),
                 "fetch_url" => await WebTools.FetchAsync(argumentsJson, timeout.Token),
                 _ => $"未知工具：{id}。只能使用工具清单中列出的工具。",
@@ -159,15 +159,15 @@ public static class ToolRunner
         }
     }
 
-    // ══════════════════════════════════════════════════════
-    //  各工具实现（全部只读）
-    // ══════════════════════════════════════════════════════
+    
+    
+    
 
     private static async Task<string> GetSnapshotAsync(CancellationToken ct)
     {
         var snapshot = await MachineProbe.CollectAsync(ct);
 
-        // ⚠️ 与首屏那份摘要保持一致：默认不带已装软件清单
+        
         var text = MachineDigest.ToPrompt(snapshot);
 
         var findings = MachineDiagnosis.Analyze(snapshot);
@@ -187,7 +187,7 @@ public static class ToolRunner
 
         using (var doc = JsonDocument.Parse(NormalizeArgs(argumentsJson)))
         {
-            // path 优先于 drive：整盘很慢，模型查 AppData 这类具体目录时应该直接给 path
+            
             if (doc.RootElement.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(p.GetString()))
             {
@@ -203,8 +203,8 @@ public static class ToolRunner
                 top = Math.Clamp(t.GetInt32(), 3, 20);
         }
 
-        // ⚠️ 路径什么写法都有：`C:` / `C` / `C:\` / **`C://`**（模型常把反斜杠转成正斜杠），
-        //    统一成正斜杠再补反斜杠，否则会拼出 `C://\` 这种扫不到的路径。
+        
+        
         target = target.Trim().Replace('/', '\\');
 
         if (target.Length == 1) target += ":\\";
@@ -245,7 +245,7 @@ public static class ToolRunner
 
         if (query.Length == 0) return "检索关键词为空。请给出更具体的需求，例如「解压」「PDF」。";
 
-        // 先拷一份再筛：本方法可能在后台线程跑，而 App.Content.Apps 会被同步流程整体替换
+        
         var apps = App.Content.Apps.ToList();
         var hits = apps
             .Where(a => a.Matches(query))
@@ -258,7 +258,7 @@ public static class ToolRunner
 
         foreach (var hit in hits)
         {
-            // 同一款可能被多次检索命中，去重后再交给界面
+            
             if (!session.SoftwareHits.Any(h => h.Id == hit.Id))
                 session.SoftwareHits.Add(hit);
         }
@@ -272,12 +272,12 @@ public static class ToolRunner
         return sb.ToString();
     }
 
-    // ── 文档库（需求 1:15） ──────────────────────────────────────
+    
 
-    /// <summary>
-    /// 列出文档库清单（标题 / id / 作者 / 简介）。只读元信息，不碰正文。
-    /// 本机没同步过就先补一次 —— <see cref="DocLibrary.SyncAsync"/> 自带十分钟节流。
-    /// </summary>
+    
+    
+    
+    
     private static async Task<string> ListDocumentsAsync(string argumentsJson, CancellationToken ct)
     {
         var query = "";
@@ -320,10 +320,10 @@ public static class ToolRunner
         return sb.ToString();
     }
 
-    /// <summary>
-    /// 读一篇文章的正文。已缓存直接读本机；没缓存就先下到本机缓存（无扩展名随机文件）。
-    /// PDF 没有文字层，如实说明读不了。
-    /// </summary>
+    
+    
+    
+    
     private static async Task<string> ReadDocumentAsync(string argumentsJson, CancellationToken ct)
     {
         var id = "";
@@ -377,16 +377,16 @@ public static class ToolRunner
         article.Title + "\n" + article.Summary + "\n" + article.Author + "\n"
         + string.Join(" ", article.Tags);
 
-    /// <summary>
-    /// 记下模型建议的动作（需求 27）。**不执行任何东西** —— 按钮由界面在回答末尾渲染，
-    /// 用户点了才走 <see cref="AiActionRunner"/>。
-    ///
-    /// <para>
-    /// ⛔ id 必须能在 <see cref="AiActionCatalog"/> 里找到，认不出的一律丢掉；
-    /// 已经是当前主题的那一条也丢掉，否则会出现「点了什么都不会发生」的按钮。
-    /// 丢掉的都要在回给模型的文字里说清楚 —— 它才知道结果里少了什么，不会在正文里继续描述那个按钮。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static string SuggestActions(string argumentsJson, ToolSession session)
     {
         var wanted = new List<string>();
@@ -406,7 +406,7 @@ public static class ToolRunner
 
         const int max = 4;
 
-        // 上限按「这一轮已经放上去的 + 这次要放的」一起算 —— 模型可以在同一条回答里调用两次
+        
         var room = Math.Max(0, max - session.Actions.Count);
 
         var shown = new List<AiAction>();
@@ -475,8 +475,8 @@ public static class ToolRunner
 
             var apps = InstalledApps.Enumerate();
 
-            // ⚠️ 没给过滤词时**只报数量与少量样本**：完整软件清单能推断使用者身份与喜好，
-            //    没必要为了回答"装没装某款软件"把整张单子交出去。
+            
+            
             if (filter.Length == 0)
             {
                 var sample = apps.Take(15).Select(a => a.Name).ToList();
@@ -512,11 +512,11 @@ public static class ToolRunner
         return sb.ToString();
     }
 
-    // ══════════════════════════════════════════════════════
-    //  辅助
-    // ══════════════════════════════════════════════════════
+    
+    
+    
 
-    /// <summary>模型可能给空串或空白，JsonDocument.Parse 会直接抛 —— 统一兜成空对象。</summary>
+    
     private static string NormalizeArgs(string json)
         => string.IsNullOrWhiteSpace(json) ? "{}" : json;
 

@@ -7,35 +7,35 @@
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls"
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
-    <!--
-      2026-10-14 第四版 —— 加了「卸载残留确认」这一个**页面内第二状态**。
+    
 
-      前情（第三版，同一天）：砍掉表格视图、标题下的解释话与工具条卡片一起删、分类/搜索/重新扫描/说明
-      并到标题行右侧、行尾大按钮改透明 ⋯ 图标钮 + 手建 MenuFlyout。
-      这一版往上加的是卸载之后的收尾：卸载器跑完 → 前后两份浅层快照求差集 → 摆出"这些是它留下的"，
-      让人勾选后一键清掉（清理走 Services/LeftoverCleaner，先备份再删，隔离区可还原）。
 
-      ⛔ 第二状态的版式刻意**沿用**第一状态的骨架，不另起一套：
-        · 标题行还是那一行，只是左边的标题换成「卸载残留」、计数行换成"卸载完成 · 发现 N 项残留"，
-          右侧把分类/搜索/重新扫描收起来、露出「返回列表」——同一行控件换岗，不是新加一条工具条；
-        · 内容区换成一个带勾选框的列表，底部一条**动作条**（左＝已选统计，右＝主按钮 + 取消）。
-          底部动作条是这个状态里唯一"新长出来"的东西，而它只在有东西可清的时候才出现 ——
-          没残留时整个状态根本不会进（直接回到列表 + 一行说明）。
 
-      ⛔ 一页仍然只有一个 Accent 主按钮：「清理选中」。它右边那颗「不用了」是普通按钮（等于放弃清理）。
-      ⛔ 行尾仍然只有一朵透明的 ⋯，菜单里才是「打开所在文件夹 / 复制路径」。
 
-      第五版（2026-10-15）：标题行下面加一条 `InfoBar`（Warning）当风险提示，两个状态共用、只换文案
-      （列表＝"会删东西、但能还原"；残留＝"没勾的不会删，勾之前自己想清楚"）。
-      ⛔ 用系统自带的 `InfoBar`，不自己画。
 
-      骨架仍是「24 / * / 24」三列，960 上限写在**中列内容自身**（⛔ 不是给根元素定宽 + 居中）。
-    -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     <Page.Resources>
-        <!-- 行尾的图标按钮（⋯ / 说明）。⚠️ 八个 Setter **照抄**而不是跨文件 `BasedOn`：
-             2026-10-13 实测 XAML 编译器在 Pass2 的代码生成阶段解析跨文件 BasedOn 时会直接崩掉
-             （报出来的是 WMC9999 壳错误 —— 它连自己的错误文本都格式化不出来，崩溃点停在 PageCodeGen）。
-             所以这里宁可重复。 -->
+        
+
+
+
         <Style x:Key="RowMoreButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
@@ -47,8 +47,8 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- 证据徽标（确定 / 很可能 / 不确定）的外形。颜色在代码里给 —— 三档各一种，
-             ⛔ 没法写死在 XAML 里（同一列要出现三种颜色）。这里只管形状。 -->
+        
+
         <Style x:Key="EvidencePillStyle" TargetType="Border">
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="5" />
@@ -57,8 +57,8 @@
         </Style>
     </Page.Resources>
 
-    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
-         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，列表纹丝不动（与首页手感不一致）。 -->
+    
+
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -73,9 +73,9 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- ── 标题行：左＝标题+标记+计数，右＝分类 / 搜索 / 重新扫描 / 说明 / 返回列表 ──
-                 两个状态**共用这一行**：切换状态只是换掉左边那两行文字、并让右边两组控件换岗，
-                 ⛔ 不另起一条工具条（那正是第三版被点名的"网页感"来源）。 -->
+            
+
+
             <Grid ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -94,22 +94,22 @@
                         <ui:ExperimentalBadge FeatureId="uninstaller" />
                     </StackPanel>
 
-                    <!-- 标题下面这一行原本是一段解释话（已移进「说明」弹窗），现在放**计数**。
-                         ⚠️ 界面里所有 TextBlock 都不用粗体（项目硬规约：卡片/正文里不出现粗体）。 -->
+                    
+
                     <TextBlock x:Name="CountLine" Text="正在扫描…" FontSize="12" Opacity="0.65"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <!-- ── 下面三件只在「应用列表」状态里出现（进残留状态时整组收起） ── -->
+                
 
-                <!-- 分类：**下拉单选**，一次只显示一个分类。
-                     ⚠️ 选项内容在代码里建（FillCategories）—— 试过在这里写 `ItemTemplate` + `x:Bind`，
-                        XamlCompiler 会在整页的代码生成阶段直接崩（WMC9999，见文件头注释）。 -->
+                
+
+
                 <ComboBox x:Name="CategoryBox" Grid.Column="1" MinWidth="170"
                           VerticalAlignment="Top" Margin="0,4,0,0"
                           SelectionChanged="Category_Changed" />
 
-                <!-- 搜索：AutoSuggestBox（系统自带的搜索控件）。不设 ItemsSource ⇒ 不会弹建议。 -->
+                
                 <AutoSuggestBox x:Name="SearchBox" Grid.Column="2" Width="196"
                                 VerticalAlignment="Top" Margin="0,4,0,0"
                                 PlaceholderText="搜索名称或发布者"
@@ -122,14 +122,14 @@
                 <Button x:Name="RescanButton" Grid.Column="3" Content="重新扫描" Click="Rescan_Click"
                         VerticalAlignment="Top" Margin="0,4,0,0" />
 
-                <!-- 说明按钮：图标钮。两个状态共用，只是弹出来的内容不一样（见 About_Click）。
-                     ⚠️ Content 是 FontIcon ⇒ UIA 拿不到按钮名，显式给一个（本项目老坑）。 -->
-                <!-- ⚠️ 列号：本行是 4，下面的「说明」被挪到 5、「返回列表」挪到 6（加这颗按钮时一起改的） -->
+                
 
-                <!-- 「残留与隔离区」：**主动进入**卸载残留界面的入口。
-                     ⚠️ 2026-10-16 加 —— 在此之前那个界面只能靠"卸载完自动跳过去"进入，用户平时
-                        根本看不到它，卸载之后也没法回头补清（Nick：「我卸完 ToDesk 根本不知道
-                        残留清没清，还以为是 bug」）。列表态与残留态都显示，残留态里也能直接进去。 -->
+                
+
+                
+
+
+
                 <Button x:Name="LeftoverEntryButton" Grid.Column="4" Content="残留与隔离区"
                         Click="LeftoverEntry_Click"
                         VerticalAlignment="Top" Margin="0,4,0,0" />
@@ -142,15 +142,15 @@
                     <FontIcon Glyph="&#xE946;" FontSize="15" />
                 </Button>
 
-                <!-- 「返回列表」：只在残留状态露出来（应用列表状态里它是收起的）。
-                     ⚠️ 这是**页面内的状态切换**，不是页面返回 —— 所以它是一颗普通按钮，
-                        ⛔ 不碰导航栏那个返回箭头（项目硬规约：页面级返回只用导航栏那个）。 -->
+                
+
+
                 <Button x:Name="BackButton" Grid.Column="6" Content="返回列表" Click="Back_Click"
                         Visibility="Collapsed"
                         VerticalAlignment="Top" Margin="0,4,0,0" />
 
-                <!-- Hub AI 入口（2026-10-30，需求 1:23）：这个软件能不能卸、卸完大概会留下什么，
-                     问一句比翻说明快。浮层只是提问入口，问题会带去 Hub AI 页继续。 -->
+                
+
                 <Button x:Name="HubAiEntry" Grid.Column="7" Padding="12,6" Click="HubAiEntry_Click"
                         VerticalAlignment="Top" Margin="0,4,0,0"
                         ToolTipService.ToolTip="打开 Hub AI 顾问">
@@ -161,21 +161,21 @@
                 </Button>
             </Grid>
 
-            <!-- ── 风险提示条（2026-10-15 加）──
-                 ⚠️ 用系统自带的 InfoBar：⛔ 别自己画一个"图标 + 文字 + 边框"的 Border ——
-                    配色、圆角、关闭动效都得自己补，补出来就是那股网页味。
-                 ⛔ 文案一律短句，只说「会发生什么」「能不能后悔」，
-                    ⛔ 不复述上面标题行那两行字（同一个意思说两遍正是第三版被点名的毛病）。
-                 ⚠️ 一条足够，两个状态**共用**，只换文案 —— ⛔ 不各放一条。 -->
+            
+
+
+
+
+
             <InfoBar x:Name="RiskBar" Grid.Row="1"
                      Severity="Error" IsOpen="True" IsClosable="False"
                      Title="此操作将删除文件与注册表项"
                      Message="清理卸载残留会移除文件与注册表项。被移除的内容均先行备份至隔离区，可在「隔离区」中查看并取回。" />
 
-            <!-- ── 内容区：两个状态各占一层，靠 Visibility 换 ── -->
+            
             <Grid Grid.Row="2">
 
-                <!-- ═══════════ 状态一：应用列表 ═══════════ -->
+                
                 <Grid x:Name="ListHost">
                     <ListView x:Name="AppList"
                               SelectionMode="None" IsItemClickEnabled="False"
@@ -191,9 +191,9 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- 图标：能掏到就用软件自己的（多数人认图不认字），掏不到退成分类占位字形。
-                                         ⚠️ 两个 x:Bind Visibility 都在 UninstallRow 里算好 —— 那里会顺带触发惰性取图标，
-                                            所以谁先求值都一样，不会出现"有图但显示占位"。 -->
+                                    
+
+
                                     <Grid Width="32" Height="32" VerticalAlignment="Center">
                                         <Image Source="{x:Bind Icon}" Width="32" Height="32" Stretch="Uniform"
                                                Visibility="{x:Bind IconVisibility}" />
@@ -213,8 +213,8 @@
                                     <TextBlock Grid.Column="2" Text="{x:Bind Version}" FontSize="12" Opacity="0.6"
                                                Margin="14,0,14,0" VerticalAlignment="Center" />
 
-                                    <!-- 行尾：一朵透明的 ⋯，点开才是「卸载」。
-                                         ⛔ 系统组件（ActionsVisibility = Collapsed）连这朵都不给。 -->
+                                    
+
                                     <Button Grid.Column="3" Style="{StaticResource RowMoreButtonStyle}"
                                             Click="More_Click"
                                             VerticalAlignment="Center"
@@ -228,7 +228,7 @@
                         </ListView.ItemTemplate>
                     </ListView>
 
-                    <!-- 扫描中 -->
+                    
                     <StackPanel x:Name="LoadingPanel" Spacing="12" HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                         <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
@@ -236,7 +236,7 @@
                                    HorizontalAlignment="Center" />
                     </StackPanel>
 
-                    <!-- 空状态 -->
+                    
                     <StackPanel x:Name="EmptyPanel" Spacing="10" Visibility="Collapsed"
                                 HorizontalAlignment="Center" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE74D;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
@@ -245,16 +245,16 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- ═══════════ 状态二：卸载残留确认 ═══════════ -->
+                
                 <Grid x:Name="LeftoverHost" Visibility="Collapsed" RowSpacing="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- 空态：**主动进来**（当前没有待处理的残留）时显示。
-                         ⚠️ 2026-10-16 加 —— 原先这个界面只有"卸载完自动跳进来"一条路，进去必然有内容；
-                            现在有了主动入口，就得说清"这里是什么、什么时候会有东西"，别让人对着空白发愣。 -->
+                    
+
+
                     <StackPanel x:Name="LeftoverEmpty" Visibility="Collapsed" Spacing="10"
                                 HorizontalAlignment="Center" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8B7;" FontSize="28" Opacity="0.45"
@@ -283,8 +283,8 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- ⚠️ CheckBox 必须挤掉它默认那圈内缩（MinWidth / Padding 归零），
-                                         否则整行会比其他列表行多缩进 20px 左右。 -->
+                                    
+
                                     <CheckBox Grid.Column="0" MinWidth="0" Padding="0" Margin="0,0,4,0"
                                               VerticalAlignment="Center"
                                               IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
@@ -302,12 +302,12 @@
                                                Margin="14,0,10,0" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
 
-                                    <!-- 证据徽标：三档各一色。
-                                         ⛔ 写成**三个 Border 各自显隐**，而不是"一个 Border + 代码里取画刷" ——
-                                           画刷必须走 ThemeResource 才会跟着系统主题变（换主题时重算），
-                                           在代码里 `Application.Current.Resources[...]` 取到的是一次性的值，
-                                           切到深色主题后这三颗徽标会停在浅色配色上（本项目主题是会运行时切的）。
-                                         ⚠️ 徽标里的字**不粗体**（项目硬规约）。 -->
+                                    
+
+
+
+
+
                                     <Grid Grid.Column="3">
                                         <Border Style="{StaticResource EvidencePillStyle}"
                                                 Visibility="{x:Bind StrongVisibility}"
@@ -346,9 +346,9 @@
                         </ListView.ItemTemplate>
                     </ListView>
 
-                    <!-- 动作条：左＝已选统计（不粗体），右＝唯一的主按钮 + 一颗放弃钮。
-                         ⛔ 故意**没有**"全选 / 反选 / 重置"那排钮：默认勾选已经把确定的那批勾好了，
-                           剩下的是"不确定"的，逐条看比一键全选安全。少一排按钮，也少一分网页感。 -->
+                    
+
+
                     <Grid x:Name="LeftoverBar" Grid.Row="1" ColumnSpacing="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

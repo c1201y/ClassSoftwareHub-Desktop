@@ -7,41 +7,41 @@ using ClassSoftwareHub.Desktop.Data;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>
-/// 软件数据加载器（原生版）。
-/// 逻辑与站点 src/gallery/data/index.ts 保持一致：
-///   逐文件容错解析 → 坏文件跳过并记一条 DataIssue → 必填 id/name 校验
-///   → id 重复跳过 → 按 JSON 里的 sort 排序 → 分类读取（坏了就从软件里现推）
-///
-/// 数据来源（**只有网络这一条**，安装包不自带内容包）：
-///   1) 正式：%LOCALAPPDATA%\ClassSoftwareHub\content（由 GithubContentSync 从站点仓库同步下来）
-///   2) 开发：ShellConfig.DevContentDir（站点工程产物目录，仅本机存在）
-/// 所以新装的机器首次启动必须联网 —— 拿不到就是空清单，界面会给出引导与重试入口。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
 public sealed class ContentStore
 {
-    /// <summary>
-    /// 内容被重新加载了（同步完成 / 手动刷新后触发）。界面订阅它就能在数据到手时立刻重建列表，
-    /// 而不是等用户切页 —— ⛔ 别去掉：安装包不再自带清单后，首启的"空 → 有"全靠这个通知。
-    /// ⚠️ 事件在 UI 线程上触发（Load 的调用点都在 UI 线程），订阅方若不确定请自行用 DispatcherQueue 兜一层。
-    /// </summary>
+    
+    
+    
+    
+    
     public event Action? Changed;
 
-    /// <summary>是否正在从网络同步内容（首启空清单时用来区分"正在获取"和"没取到"）。</summary>
+    
     public bool IsSyncing { get; private set; }
 
-    /// <summary>
-    /// 内容被重新读了几次。<see cref="Load"/> 每跑一次 +1。
-    ///
-    /// ⛔ 给界面做"内容真的变了没有"的判据用，别拿 <see cref="ContentVersion"/> 或
-    /// <see cref="Source"/> 代替（2026-10-05 踩到）：manifest.json 不再同步，ContentVersion 恒为空；
-    /// Source 又永远是同一个目录路径 —— 两者组合根本判不出"同步把 16 个补成了 84 个"，
-    /// 于是首启时页面会一直停在旧列表上，非等用户切页才刷新。
-    /// ⚠️ 它只在 <see cref="Load"/> 里涨，纯粹切页不会变 —— 所以不会破坏"切回来就别重建"的优化。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public int Revision { get; private set; }
 
-    /// <summary>同步状态变化（进入/退出同步中），界面据此切换"正在获取软件清单…"这类提示。</summary>
+    
     public void SetSyncing(bool value)
     {
         if (IsSyncing == value) return;
@@ -53,9 +53,9 @@ public sealed class ContentStore
     {
         "id", "name", "icon", "category", "tagline", "description", "version",
         "size", "system", "website", "github",
-        // ⚠️ 2026-11-01 加：详情页「详细信息」区要显示开发者与开源协议。
-        //    ⛔ 这是硬白名单 —— 漏一项，json 里写了也不会出现在界面上。
-        //    （文件同步下来、缓存里也有值，但界面空着，就是因为漏在这里。）
+        
+        
+        
         "author", "license",
         "notice", "store"
     };
@@ -63,21 +63,21 @@ public sealed class ContentStore
     public List<SoftwareApp> Apps { get; } = new();
     public List<DownloadCategory> Categories { get; } = new();
 
-    /// <summary>操作系统平台清单（platforms.json 顶层项，按文件顺序）。列表页的系统筛选下拉用它。</summary>
+    
     public List<DownloadPlatform> Platforms { get; } = new();
 
     public List<DataIssue> Issues { get; } = new();
 
-    /// <summary>站点文字（text/ui.json 里桌面版需要的标题 / 版本号）。</summary>
+    
     public UiText Ui { get; } = new();
 
-    /// <summary>本次数据来自哪儿（界面上显示一下，方便确认桌面版是不是最新内容）。</summary>
+    
     public string Source { get; private set; } = "";
 
-    /// <summary>来源类型："cache"（联网同步下来的内容） | "dev"（开发目录） | ""（还没拿到）。</summary>
+    
     public string SourceKind { get; private set; } = "";
 
-    /// <summary>来源的中文说明（设置页显示用）。</summary>
+    
     public string SourceLabel => SourceKind switch
     {
         "cache" => "本地内容（从站点仓库同步）",
@@ -95,7 +95,7 @@ public sealed class ContentStore
 
     public int CountInCategory(string key) => Apps.Count(a => a.Category == key);
 
-    /// <summary>某个平台下的软件数量（一个软件可能同时属于多个平台，故各平台数量之和会大于总数）。</summary>
+    
     public int CountInPlatform(string key) => Apps.Count(a => a.SupportsPlatform(key));
 
     public string PlatformName(string key) => Platforms.FirstOrDefault(p => p.Key == key)?.Name ?? key;
@@ -103,7 +103,7 @@ public sealed class ContentStore
 
     public void Load()
     {
-        Revision++;                     // 先涨再读：顺序不重要，重要的是"每次 Load 都换一个值"
+        Revision++;                     
         Apps.Clear();
         Categories.Clear();
         Platforms.Clear();
@@ -114,7 +114,7 @@ public sealed class ContentStore
         if (root is null)
         {
             Source = "（无数据源）";
-            Changed?.Invoke();          // 让"正在获取 / 没取到"的空清单提示能立刻刷出来
+            Changed?.Invoke();          
             return;
         }
         Source = root;
@@ -129,11 +129,11 @@ public sealed class ContentStore
         Changed?.Invoke();
     }
 
-    /// <summary>
-    /// 站点文字（拿不到就留空，界面用兜底文案）。
-    /// ⚠️ 站点仓库现在**没有放** text/ui.json（见 <see cref="Data.UiText"/> 的说明），
-    /// 所以正式环境走到这儿一定是空 —— 不是 bug，别去"修"它。
-    /// </summary>
+    
+    
+    
+    
+    
     private void LoadUi(string file)
     {
         try
@@ -148,21 +148,21 @@ public sealed class ContentStore
             Ui.HomeTitle = ReadString(root, "home.title");
             Ui.HomeSubtitle = ReadString(root, "home.subtitle");
 
-            // 其余文字（详情页标签、按钮文案…）整份留着，界面用 Ui.T(key, 兜底) 取
+            
             Ui.All.Clear();
             foreach (var prop in root.EnumerateObject())
                 if (prop.Value.ValueKind == JsonValueKind.String)
                     Ui.All[prop.Name] = prop.Value.GetString() ?? "";
         }
-        catch { /* 文字读不到不影响使用 */ }
+        catch {  }
     }
 
-    /// <summary>
-    /// 找一个可用的内容目录。**只有两个候选，没有"安装包自带"这一档**（2026-10-05 起）：
-    ///   · 正式版：本地缓存（%LOCALAPPDATA%\ClassSoftwareHub\content，由 GithubContentSync 同步）；
-    ///   · 开发机：站点工程产物目录（正式用户机器上不存在，自动跳过）。
-    /// DEBUG 把开发目录放最前面，方便改站点工程立刻看效果。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static string? ResolveContentRoot(out string kind)
     {
 #if DEBUG
@@ -189,7 +189,7 @@ public sealed class ContentStore
                     return dir;
                 }
             }
-            catch { /* 忽略，试下一个 */ }
+            catch {  }
         }
 
         kind = "";
@@ -210,7 +210,7 @@ public sealed class ContentStore
         foreach (var path in Directory.EnumerateFiles(appsDir, "*.json").OrderBy(p => p, StringComparer.Ordinal))
         {
             var file = Path.GetFileName(path);
-            if (file.StartsWith('_')) continue;                 // 模板 / 说明文件不参与
+            if (file.StartsWith('_')) continue;                 
 
             string text;
             try { text = File.ReadAllText(path); }
@@ -275,8 +275,8 @@ public sealed class ContentStore
                             Size = ReadString(d, "size"),
                             Url = ReadString(d, "url"),
                             Hash = ReadString(d, "hash"),
-                            // 维护者显式声明的落地方式（file / store / netdisk / page），
-                            // 不写就由 DownloadLinkKind 按域名与后缀推断
+                            
+                            
                             DeclaredKind = ReadString(d, "kind"),
                         };
                         if (item.Platform.Length > 0 || item.Url.Length > 0) app.Downloads.Add(item);
@@ -341,13 +341,13 @@ public sealed class ContentStore
             c.Display = $"{c.Name}  {CountInCategory(c.Key)}";
     }
 
-    /// <summary>
-    /// 读 platforms.json 的顶层平台（windows / macos / linux / android / ios / web）。
-    ///
-    /// 只取 key + name：<c>versions</c> 里那些细分版本（XP / 7 / 10 / 11…）是提交页「系统版本」多选用的，
-    /// 列表筛选不展开（与网页版 HomePage.vue 的下拉一致 —— 它也只列顶层平台）。
-    /// 文件缺失时**不报红条**：列表照样能用，只是系统下拉不出现（对齐网页版 <c>v-if="platformItems.length > 1"</c>）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private void LoadPlatforms(string file)
     {
         if (!File.Exists(file)) return;
@@ -383,7 +383,7 @@ public sealed class ContentStore
         }
     }
 
-    /// <summary>给每个软件补上分类显示名（卡片徽标用；分类缺失时就是 key 本身）。</summary>
+    
     private void ApplyCategoryDisplay()
     {
         foreach (var app in Apps)
@@ -398,7 +398,7 @@ public sealed class ContentStore
             using var doc = JsonDocument.Parse(File.ReadAllText(file));
             ContentVersion = ReadString(doc.RootElement, "contentVersion");
         }
-        catch { /* 版本号读不到就算了，不影响使用 */ }
+        catch {  }
     }
 
     private static string ReadString(JsonElement obj, string name)
@@ -412,7 +412,7 @@ public sealed class ContentStore
         };
     }
 
-    /// <summary>把 JSON 报错翻译成人话（与网页端 friendlyHint 一致）。</summary>
+    
     private static string FriendlyJsonHint(string raw)
     {
         if (raw.Contains("end of data") || raw.Contains("end of JSON") || raw.Contains("depth")) return "文件不完整：可能缺少结尾的 } 或 ]，或末尾存在多余逗号";

@@ -4,10 +4,10 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-/// <summary>
-/// 第 6 步：侧边栏位置。放置模式决定「贴哪条边」的可选项（贴靠：左右/左右两条；
-/// 自由：左上右下），两套边分开存在草稿里，来回切模式不会把对方的选择冲掉。
-/// </summary>
+
+
+
+
 public sealed partial class OobeSidebarPositionPage : Page
 {
     private bool _loading;
@@ -29,7 +29,7 @@ public sealed partial class OobeSidebarPositionPage : Page
         UpdateHints();
         UpdateEnabledState();
 
-        // 页面被缓存：从上一页改完开关再翻回来时，置灰状态要重算
+        
         Loaded += (_, _) => UpdateEnabledState();
     }
 
@@ -41,7 +41,7 @@ public sealed partial class OobeSidebarPositionPage : Page
         combo.SelectedItem = item ?? combo.Items.OfType<ComboBoxItem>().First();
     }
 
-    /// <summary>按当前放置模式重建「贴在哪条边」：贴靠 = 左 / 右 / 左右两条，自由 = 左 / 右 / 上 / 下。</summary>
+    
     private void RebuildEdgeCombo()
     {
         var draft = Draft;

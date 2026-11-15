@@ -2,28 +2,28 @@ using System.Linq.Expressions;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// 标准函数的**解析结论**（通式）。<para/>
-/// Nick 定：sin 这类函数的单调区间要给「(-π/2 + 2kπ, π/2 + 2kπ)」这种数学通式，
-/// 而不是把当前视口内的坐标值算出来 —— 前者是数学事实，后者只是采样观察。
-/// </summary>
-/// <param name="Fields">字段列表（标签, 值）。</param>
-/// <param name="Note">给用户的一句话说明（如 "区间中的 k 均为整数"）。</param>
+
+
+
+
+
+
+
 public sealed record ClosedForm(IReadOnlyList<(string Label, string Value)> Fields, string? Note = null);
 
-/// <summary>
-/// 把编译后的表达式树**匹配**到一组已知的标准形式，给出通式结论。<para/>
-/// ⛔ 匹配范围＝「线性包裹的标准形式」：<c>a·f(x) + c</c>，其中 f 是参数恰好为 x 的标准函数
-/// （sin/cos/tan/exp/ln/√/|x|/x²/x³/x）。加减常数、乘除系数都算线性包裹 ——
-/// Nick 点名过：sin(x)−6 这么简单的式子必须给通式（单调区间与 sin(x) 完全一致，
-/// 值域/极值平移，零点无解）。<para/>
-/// ⛔ 仍然不给的：复合（sin(2x)、sin(x²)）、非线性运算（sin(x)+x）、三角的相位平移
-/// （sin(x+π/3)，需要重推整个区间通式，等有真实需求再做）。给不出就落回数值观察 ——
-/// 宁可少给，不可给错。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
 public static class FunctionClosedForm
 {
-    /// <summary>尝试匹配。命中返回通式结论；没命中返回 null（调用方落回数值观察）。</summary>
+    
     public static ClosedForm? Match(LambdaExpression lambda, AngleMode mode)
     {
         var body = lambda.Body;
@@ -35,10 +35,10 @@ public static class FunctionClosedForm
 
         var (core, a, c) = w;
 
-        // a = 0 ⇒ 整个函数就是常数 y = c
+        
         if (Math.Abs(a) < 1e-12) return ConstantForm(c);
 
-        // 常数函数（core 本身是常数）：y = a·v + c
+        
         if (core is ConstantExpression { Value: double v } && double.IsFinite(v))
             return ConstantForm(a * v + c);
 
@@ -50,13 +50,13 @@ public static class FunctionClosedForm
         };
     }
 
-    // ────────────────────────── 匹配辅助 ──────────────────────────
+    
 
-    /// <summary>剥掉隐式数值转换（Expression.Convert 包着 int→double 那类）。</summary>
+    
     private static Expression StripConvert(Expression e)
         => e is UnaryExpression { NodeType: ExpressionType.Convert } u ? StripConvert(u.Operand) : e;
 
-    /// <summary>整个表达式树里只允许出现变量 x（可以出现多次，如 x·x）。</summary>
+    
     private static bool IsVariable(Expression e)
     {
         return e switch
@@ -70,11 +70,11 @@ public static class FunctionClosedForm
         };
     }
 
-    /// <summary>
-    /// 把 <paramref name="e"/> 分解成 <c>A·core + C</c>（A≠0）。
-    /// core 是"非线性部分"（函数调用、乘方、变量或常数）；纯加减乘除常数的线性外包裹
-    /// 全部折进 A 与 C。分不出（如 sin(x)·x）返回 null。
-    /// </summary>
+    
+    
+    
+    
+    
     private static (Expression Core, double A, double C)? LinearWrap(Expression e)
     {
         e = StripConvert(e);
@@ -92,7 +92,7 @@ public static class FunctionClosedForm
             var l = StripConvert(b.Left);
             var r = StripConvert(b.Right);
 
-            // 常数在右：core 不动，线性系数跟着运算走
+            
             if (r is ConstantExpression { Value: double rc })
             {
                 var lw = LinearWrap(l);
@@ -109,7 +109,7 @@ public static class FunctionClosedForm
                 };
             }
 
-            // 常数在左：core 取反的场合要同步翻 A 与 C
+            
             if (l is ConstantExpression { Value: double lc })
             {
                 var rw = LinearWrap(r);
@@ -125,18 +125,18 @@ public static class FunctionClosedForm
             }
         }
 
-        // 非线性部分就是 core 本身（sin(x)、x²、|x| …）
+        
         return (e, 1, 0);
     }
 
-    // ────────────────────────── 分派 ──────────────────────────
+    
 
     private static ClosedForm CallForm(MethodCallExpression call, AngleMode mode, double a, double c)
     {
         if (call.Object is not null) return null!;
         var name = call.Method.Name;
 
-        // x² / x³：解析器把 x^n 统一编译成 Math.Pow(x, n) —— 树里**没有** Power 节点。
+        
         if (name == nameof(Math.Pow) && call.Arguments.Count == 2
             && StripConvert(call.Arguments[0]) is ParameterExpression
             && StripConvert(call.Arguments[1]) is ConstantExpression { Value: double p })
@@ -149,19 +149,19 @@ public static class FunctionClosedForm
         if (call.Arguments.Count != 1) return null!;
         var arg = StripConvert(call.Arguments[0]);
 
-        // ⛔ **先按函数名分派，再看参数形状** —— 反过来 sin(x) 的纯参数会先落进
-        //    "严格参数"分支而那里没有 sin，直接落空（实测全盘翻车）。
+        
+        
         switch (name)
         {
-            // 非三角：参数必须**严格是 x**
+            
             case nameof(Math.Exp) when arg is ParameterExpression: return ExpForm(a, c);
             case nameof(Math.Log) when arg is ParameterExpression: return LnForm(a, c);
             case nameof(Math.Sqrt) when arg is ParameterExpression: return SqrtForm(a, c);
             case nameof(Math.Abs) when arg is ParameterExpression: return AbsForm(a, c);
 
-            // 三角：参数是 x 或 c·x（本版只认 c=1，见类型注释）。
-            // ⚠️ 角度制下解析器在参数外面包了 Multiply(x, π/180)（度转弧度）——不剥掉
-            //    系数判据看到 0.0175 而不是 1，角度制永远匹配不上。
+            
+            
+            
             case nameof(Math.Sin) or nameof(Math.Cos) or nameof(Math.Tan):
                 if (mode == AngleMode.Degrees
                     && arg is BinaryExpression { NodeType: ExpressionType.Multiply } wrap
@@ -188,7 +188,7 @@ public static class FunctionClosedForm
         return null!;
     }
 
-    /// <summary>提取「c·x」里的系数 c；不是这个形状返回 null。</summary>
+    
     private static double? CoefficientOf(Expression e)
     {
         e = StripConvert(e);
@@ -213,7 +213,7 @@ public static class FunctionClosedForm
         return null;
     }
 
-    // ────────────────────────── 数值格式化 ──────────────────────────
+    
 
     private static string Num(double v)
     {
@@ -224,8 +224,8 @@ public static class FunctionClosedForm
         var abs = Math.Abs(v);
         if (abs < 1e-9) return "0";
 
-        // 简单分数优先：结论里 −1/2 比 −0.5 像数学结论，而且分数会被排版成上下堆叠。
-        // ⚠️ 只认分母 2/3/4/6 且分子不太大 —— 再放宽就会把 0.618 这类实数值硬凑成怪分数。
+        
+        
         foreach (var den in new[] { 2, 3, 4, 6 })
         {
             var scaled = v * den;
@@ -241,13 +241,13 @@ public static class FunctionClosedForm
         if (abs >= 1e5 || abs < 1e-4)
             return v.ToString("0.###e+0", System.Globalization.CultureInfo.InvariantCulture).Replace('-', '−');
 
-        // ⛔ 负号统一用数学减号 −（U+2212）—— 界面上其他字段（值域、区间）都是 −，
-        //    同一张卡上混用 ASCII 连字符和数学负号会一眼看出"机器拼的"。
+        
+        
         return Math.Round(v, 4).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
             .Replace('-', '−');
     }
 
-    /// <summary>把 core 的值域 [lo, hi] 做线性变换 y = a·v + c 后重新排序并格式化。</summary>
+    
     private static string ScaledRange(double lo, double hi, double a, double c, string openLo, string openHi)
     {
         var v1 = a * lo + c;
@@ -255,16 +255,16 @@ public static class FunctionClosedForm
         return $"{openLo}{B(Math.Min(v1, v2))}, {B(Math.Max(v1, v2))}{openHi}";
     }
 
-    /// <summary>区间端点：±∞ 直接写符号。</summary>
+    
     private static string B(double v)
         => double.IsNegativeInfinity(v) ? "−∞" : double.IsPositiveInfinity(v) ? "+∞" : Num(v);
 
-    // ────────────────────────── 各类形式 ──────────────────────────
-    // ⛔ 每个 form 都接收线性包裹 (a, c)：y = a·f(x) + c。
-    //    值域/极值做线性变换；a < 0 时单调区间增减互换、极大极小互换；
-    //    奇偶性：c ≠ 0 时奇函数被破坏（sin(x)+6 非奇非偶），偶函数平移后仍是偶函数。
+    
+    
+    
+    
 
-    // ── x ──
+    
 
     private static ClosedForm XForm(AngleMode mode, double a, double c)
     {
@@ -285,7 +285,7 @@ public static class FunctionClosedForm
             .ToList());
     }
 
-    // ── 常数 ──
+    
 
     private static ClosedForm ConstantForm(double v)
     {
@@ -301,15 +301,15 @@ public static class FunctionClosedForm
         ]);
     }
 
-    // ── 三角 ──
+    
 
     private static ClosedForm TrigForm(string name, AngleMode mode, bool odd, double a, double c)
     {
         var sin = name == "sin";
         var deg = mode == AngleMode.Degrees;
 
-        // 单调区间用**开区间圆括号** —— 数学惯例（教材上单调区间一律写开区间）。
-        // 加减常数、乘除系数都不改变单调性（a<0 时增减互换）。
+        
+        
         (string Inc, string Dec, string? Max, string? Min) r = (sin, deg) switch
         {
             (true, false) => ("(-π/2 + 2kπ, π/2 + 2kπ)", "(π/2 + 2kπ, 3π/2 + 2kπ)",
@@ -328,7 +328,7 @@ public static class FunctionClosedForm
         var min = r.Min;
         if (a < 0)
         {
-            // 乘负系数：增减互换、极大极小互换
+            
             (inc, dec) = (dec, inc);
             (max, min) = (min, max);
         }
@@ -353,8 +353,8 @@ public static class FunctionClosedForm
 
     private static ClosedForm TanForm(AngleMode mode, double a, double c)
     {
-        // ⛔ 弧度和角度**分开写**，别用模板拼 —— 弧度制写 "kπ"（教科书写法），
-        //    角度制必须带 ·（"k180°" 不成话）。
+        
+        
         var inc = a > 0
             ? "每个区间内递增"
             : "每个区间内递减";
@@ -384,11 +384,11 @@ public static class FunctionClosedForm
             ], Note: "区间中的 k 均为整数。");
     }
 
-    /// <summary>
-    /// 解 sin(x)/cos(x)/tan(x) = t 的**精确通式**。特殊值（0、±1/2、±√2/2、±√3/2、±1 等）
-    /// 给 π 的分数形式；一般值给 arcsin/arccos/arctan 写法；|t| > 1 给「无」。
-    /// ⛔ 返回 null 表示给不出（调用方整体落回数值观察）—— 当前没有这种情况，留作扩展位。
-    /// </summary>
+    
+    
+    
+    
+    
     private static string TrigZeros(string fn, double t, AngleMode mode)
     {
         var deg = mode == AngleMode.Degrees;
@@ -418,7 +418,7 @@ public static class FunctionClosedForm
             return $"x = {alpha} + {per}";
         }
 
-        // sin / cos：|t| > 1 无解
+        
         if (Math.Abs(t) > 1 + 1e-12) return "无";
 
         var two = deg ? "k·360°" : "2kπ";
@@ -442,14 +442,14 @@ public static class FunctionClosedForm
             };
         }
 
-        // |t| < 1 的特殊值表（sin：两组解 α 与 π−α；cos：一组 α 与 −α）
+        
         (var a1, var a2) = SinCosSpecial(isSin, t, mode);
         if (a1 is not null)
             return isSin
                 ? $"x = {a1} + {two}、x = {a2} + {two}"
                 : $"x = {a1} + {two}、x = −{a1} + {two}";
 
-        // 一般值：arcsin / arccos 写法（数学上精确）
+        
         var inv = isSin ? $"arcsin {Num(t)}" : $"arccos {Num(t)}";
         var halfTurn = deg ? "180°" : "π";
         return isSin
@@ -457,13 +457,13 @@ public static class FunctionClosedForm
             : $"x = ±{inv} + {two}";
     }
 
-    /// <summary>sin/cos 在 |t| &lt; 1 时的特殊值表。负 t 直接取负 —— 两组解同步取负。</summary>
+    
     private static (string?, string?) SinCosSpecial(bool isSin, double t, AngleMode mode)
     {
         var deg = mode == AngleMode.Degrees;
         var d = deg ? "°" : "";
 
-        // (比值, sin 第一组, sin 第二组, cos)
+        
         (double V, string S1, string S2, string C)[] table =
         {
             (0.5,              $"π/6{d}",  $"5π/6{d}",  deg ? "60°" : "π/3"),
@@ -483,7 +483,7 @@ public static class FunctionClosedForm
         return (null, null);
     }
 
-    // ── 指数 / 对数 ──
+    
 
     private static ClosedForm ExpForm(double a, double c)
     {
@@ -524,7 +524,7 @@ public static class FunctionClosedForm
             .ToList());
     }
 
-    // ── 幂 / 根 / 绝对值 ──
+    
 
     private static ClosedForm SquareForm(double a, double c)
     {
@@ -609,9 +609,9 @@ public static class FunctionClosedForm
             .ToList());
     }
 
-    // ────────────────────────── 零点辅助 ──────────────────────────
+    
 
-    /// <summary>解 x² = t 或 √x = t 的零点（t = −c/a）。</summary>
+    
     private static string ZeroOfPower(double t)
     {
         if (t < -1e-12) return "无";
@@ -619,7 +619,7 @@ public static class FunctionClosedForm
         return $"x = ±√{Num(t)}";
     }
 
-    /// <summary>解 |x| = t 的零点。</summary>
+    
     private static string ZeroOfAbs(double t)
     {
         if (t < -1e-12) return "无";

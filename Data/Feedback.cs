@@ -7,52 +7,52 @@ using System.Text.Json;
 
 namespace ClassSoftwareHub.Desktop.Data;
 
-/// <summary>
-/// 反馈中心的纯逻辑（界面在 <c>Pages/FeedbackPage.*</c>）—— 最初照搬站点
-/// <c>FeedbackPage.vue</c> + <c>feedback.ts</c> 那一套做法。
-///
-/// **两条出口，默认那条不用登录**（2026-10-04 Nick 定）：
-///   ①（主）**服务端代提**：<c>POST {入口}/api/feedback</c> 交给自建服务，
-///      令牌在服务端，用户在应用里点一下就完事 —— 见 <see cref="Services.FeedbackSubmit"/>；
-///   ②（兜底）**GitHub 预填链接**：拼一个 Issue 新建页的链接丢给系统浏览器，
-///      用户在 GitHub 上点「Submit new issue」——服务端连不上 / 还没这条路由时用。
-/// 没有 GitHub 账号的用户走「在 Q 群中反馈」（2026-09-30 起）：
-/// 打开 Q 群卡片 → 提醒浮窗里点「复制」→ 按图文流程把反馈连同截图提交到**群相册**。
-///
-/// ⚠️ 目标仓库是**站点仓库**（<see cref="Core.ShellConfig.SiteRepoName"/>），**不是**桌面版自己的仓库
-///    —— 2026-10-04 从桌面仓库改过来：`用户反馈 / 报告问题 / 逻辑交互 …` 这套标签、
-///    以及 `submissions/` 那套草稿→审核管道都在站点仓库，桌面仓库里一个相关标签都没有
-///    （标签对不上时 GitHub 是**静默忽略**的，桌面版反馈因此一直没标签）。
-///    站点端的反馈本来也落在同一个列表里，桌面版的多带一个 <see cref="DesktopLabel"/> 用来区分。
-///
-/// ⚠️ <see cref="KindDef.Label"/> / <see cref="SubKindDef.Label"/> 必须与仓库 Labels
-///    里的名字**一字不差**（含空格）。对不上的标签会被 GitHub **静默忽略**——
-///    不打上也不报错，很难发现。改标签名时两边一起改。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public static class Feedback
 {
-    // ════════════════════════════════════════════════════════════════
-    // 目标仓库
-    // ════════════════════════════════════════════════════════════════
+    
+    
+    
 
-    /// <summary>站点仓库（标签与审核管道都在这里，站点端反馈也落同一个列表）。</summary>
+    
     public static string RepoUrl =>
         $"https://github.com/{Core.ShellConfig.SiteRepoOwner}/{Core.ShellConfig.SiteRepoName}";
 
-    /// <summary>
-    /// 公开议题列表（先查重再决定要不要提）。
-    /// ⚠️ 带了个 <c>q</c> 只筛本端反馈：站点仓库里还堆着成百上千条软件提交的 Issue/PR，
-    ///    不筛的话用户点进去是一堵墙。标签不存在时 GitHub 会当"搜不到"给空列表（不会报错）。
-    /// </summary>
+    
+    
+    
+    
+    
     public static string IssueListUrl =>
         RepoUrl + "/issues?q=" + Uri.EscapeDataString($"is:issue label:\"{DesktopLabel}\"");
 
-    // ════════════════════════════════════════════════════════════════
-    // 分类（两层）
-    //   一层 kind    ：report（报告问题） / suggestion（提出建议）
-    //   二层 subKind ：只有 report 才有
-    // 加/删类型只动下面两个数组 + 页面上的图标口径。
-    // ════════════════════════════════════════════════════════════════
+    
+    
+    
+    
+    
+    
 
     public const string KindReport = "report";
     public const string KindSuggestion = "suggestion";
@@ -62,11 +62,11 @@ public static class Feedback
         public string Key { get; init; } = "";
         public string Title { get; init; } = "";
         public string Desc { get; init; } = "";
-        /// <summary>卡片上的字形（Segoe Fluent Icons 码位，不是图片）。</summary>
+        
         public string Glyph { get; init; } = "";
-        /// <summary>GitHub 标签名（必须与仓库一字不差）。</summary>
+        
         public string Label { get; init; } = "";
-        /// <summary>标题前缀，让维护者一眼看出是哪一类（标签万一没了也还能分辨）。</summary>
+        
         public string Tag { get; init; } = "";
     }
 
@@ -83,23 +83,23 @@ public static class Feedback
         new()
         {
             Key = KindReport, Title = "报告问题",
-            // 文案跟网页版「文字设置.ts」的 feedback.kind-*-desc 对齐（2026-09-26）
+            
             Desc = "软件信息有误、下载链接失效，或页面无法正常使用。",
-            Glyph = "\uE7BA",                       // Warning（三角感叹号）—— 卡片现在用图片，这个留着兜底
+            Glyph = "\uE7BA",                       
             Label = "报告问题", Tag = "报告问题",
         },
         new()
         {
             Key = KindSuggestion, Title = "提出建议",
             Desc = "希望新增的功能，或对现有功能的改进建议。",
-            // 星形（不是灯泡）：灯泡 EA80 已经被「实验性功能」占了，同一页面上重复会串味；
-            // 星形在"想要这个功能"的语境里也是通用隐喻，且与警告三角一眼分得开。
+            
+            
             Glyph = "\uE734",
             Label = "提出建议", Tag = "提出建议",
         },
     };
 
-    /// <summary>「报告问题」下面的子类型；建议分支没有子类型（列表为空）。</summary>
+    
     public static readonly IReadOnlyList<SubKindDef> ReportSubKinds = new List<SubKindDef>
     {
         new() { Key = "interaction", Title = "逻辑交互问题", Label = "逻辑交互", Tag = "逻辑交互" },
@@ -107,13 +107,13 @@ public static class Feedback
         new() { Key = "other",       Title = "其他分类问题", Label = "其他问题", Tag = "其他问题" },
     };
 
-    /// <summary>所有反馈共用的总标签，用来把用户反馈和仓库里其它 Issue 分开。</summary>
+    
     public const string CommonLabel = "用户反馈";
 
-    /// <summary>
-    /// 桌面版专有的区分标签（站点仓库里站点端反馈也在同一个列表）。
-    /// ⚠️ 这个标签必须**在仓库里真实存在**，否则 GitHub 静默忽略、也就分不出来了。
-    /// </summary>
+    
+    
+    
+    
     public const string DesktopLabel = "桌面版";
 
     public static KindDef? FindKind(string key) =>
@@ -122,49 +122,49 @@ public static class Feedback
     public static SubKindDef? FindSubKind(string key) =>
         ReportSubKinds.FirstOrDefault(s => s.Key == key);
 
-    // ════════════════════════════════════════════════════════════════
-    // 长度上限
-    // ════════════════════════════════════════════════════════════════
+    
+    
+    
 
-    /// <summary>标题软上限：超过就拦下来让用户自己压（标题太长 Issue 列表里会很难看）。</summary>
+    
     public const int TitleMax = 80;
 
-    /// <summary>描述软上限（超过会在拼 URL 时被截断）。</summary>
+    
     public const int DetailMax = 1800;
 
-    /// <summary>
-    /// 整个预填 URL 的长度上限（保守值）。
-    /// ⚠️ 卡这个不是因为浏览器装不下，而是中间链路（代理、聊天软件转发、手工复制粘贴）
-    ///    会在某个长度上开始截断 —— 一旦截断，Issue 正文就是半句话，比主动截断更糟。
-    /// </summary>
+    
+    
+    
+    
+    
     public const int UrlMax = 7000;
 
-    // ════════════════════════════════════════════════════════════════
-    // 草稿
-    // ════════════════════════════════════════════════════════════════
+    
+    
+    
 
     public sealed class Draft
     {
         public string Kind { get; set; } = "";
         public string SubKind { get; set; } = "";
-        /// <summary>涉及的软件 id；空串 = 桌面版本身 / 未指定。</summary>
+        
         public string AppId { get; set; } = "";
         public string Title { get; set; } = "";
         public string Detail { get; set; } = "";
-        /// <summary>
-        /// 联系方式：选填，明文只留在本机（内存 + 本地草稿文件）。
-        /// 提交时由页面层在内存里加密成 age 密文，离开本机的那份永远是密文。
-        /// </summary>
+        
+        
+        
+        
         public string Contact { get; set; } = "";
-        /// <summary>是否在正文里附带本机环境信息（桌面版比网页版多的这一项）。</summary>
+        
         public bool IncludeEnv { get; set; } = true;
 
-        /// <summary>
-        /// 把另一份草稿整份拷进来（**就地改，不换实例**）。
-        ///
-        /// ⚠️ 必须就地拷：<see cref="FeedbackDraftStore.Current"/> 是长期被两个页面持有的同一个实例，
-        ///    若写成 <c>Current = saved</c> 那种"换个引用"，另一个页面手里还攥着旧对象，改了不生效。
-        /// </summary>
+        
+        
+        
+        
+        
+        
         public void CopyFrom(Draft other)
         {
             Kind = other.Kind;
@@ -177,10 +177,10 @@ public static class Feedback
         }
     }
 
-    /// <summary>一行环境信息（标签 + 值）。</summary>
+    
     public sealed record EnvRow(string Label, string Value);
 
-    /// <summary>取「大类 + 子类型」的中文标签，用于标题前缀与正文表格。</summary>
+    
     public static string KindTag(Draft draft)
     {
         var kind = FindKind(draft.Kind);
@@ -191,7 +191,7 @@ public static class Feedback
         return sub is null ? kind.Tag : $"{kind.Tag} · {sub.Tag}";
     }
 
-    /// <summary>这条反馈要用到的全部 GitHub 标签。</summary>
+    
     public static List<string> Labels(Draft draft)
     {
         var labels = new List<string> { CommonLabel };
@@ -202,15 +202,15 @@ public static class Feedback
             var sub = FindSubKind(draft.SubKind);
             if (sub is not null) labels.Add(sub.Label);
         }
-        labels.Add(DesktopLabel);      // 桌面版反馈与站点端反馈在同一个仓库，靠它分开
+        labels.Add(DesktopLabel);      
         return labels;
     }
 
-    /// <summary>把多行文本转成 Markdown 引用块（每行前加 `&gt; `），空行留空。</summary>
+    
     private static string Quote(string text) =>
         string.Join("\n", text.Split('\n').Select(line => line.Trim().Length > 0 ? "> " + line : ">"));
 
-    /// <summary>拼 Issue 正文（Markdown）。</summary>
+    
     public static string BuildBody(Draft draft, SoftwareApp? app, IReadOnlyList<EnvRow>? env)
     {
         var sb = new StringBuilder();
@@ -233,7 +233,7 @@ public static class Feedback
             sb.Append("| 涉及软件 | 桌面版本体 / 未指定 |\n");
         }
 
-        // 环境信息（可在表单里取消）：排查问题时最想知道的就是"你什么版本、什么系统"
+        
         if (env is not null)
         {
             foreach (var row in env)
@@ -242,9 +242,9 @@ public static class Feedback
 
         sb.Append('\n');
 
-        // 联系方式：传进来的是**本地加密后的 age 密文**（页面层加密，见 FeedbackFormPage.EncryptedDraft），
-        // 绝不是明文。密文是多行 ASCII armor，塞进 Markdown 表格会把表格撑破，
-        // 所以单列一段代码块 —— 顺带也好整段复制去用私钥解密。
+        
+        
+        
         if (draft.Contact.Trim().Length > 0)
         {
             sb.Append("### 联系方式（已在本地加密，仅维护者可用私钥解密）\n\n");
@@ -258,14 +258,14 @@ public static class Feedback
         return sb.ToString();
     }
 
-    /// <summary>
-    /// 服务端那条路（<see cref="Services.FeedbackSubmit"/>）要的「详细描述」：
-    /// 用户的描述原文；勾了「随反馈附上本机信息」时在末尾追加一行本机信息。
-    ///
-    /// ⚠️ 只给描述本身，**不要拼模板** —— 服务端会把这段套进引用块，再自己补
-    ///    「类型」「涉及软件」表格与联系方式代码块。在这里拼完整正文会导致议题里套两层。
-    /// ⚠️ 环境信息压成一行：引用块里渲染不了 Markdown 表格。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     public static string BuildSubmitDetail(Draft draft, IReadOnlyList<EnvRow>? env)
     {
         var sb = new StringBuilder();
@@ -280,7 +280,7 @@ public static class Feedback
         return sb.ToString();
     }
 
-    /// <summary>Issue 标题：<c>[报告问题 · 链接失效] 7-Zip 下载链接 404</c></summary>
+    
     public static string BuildTitle(Draft draft)
     {
         var tag = KindTag(draft);
@@ -300,13 +300,13 @@ public static class Feedback
 
     public sealed record IssueLink(string Url, string Body, bool Truncated);
 
-    /// <summary>
-    /// 构造 GitHub Issue 新建页的预填链接。
-    /// 返回实际用到的正文和「有没有被截断」—— 界面要据此显示提示条，
-    /// **绝不能悄悄截断**：维护者看到半句话比看到完整内容还难办。
-    ///
-    /// 截断策略（与站点一致）：优先砍描述，保留标题、类型、涉及软件 —— 这三样是分流必需的。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static IssueLink BuildIssueLink(Draft draft, SoftwareApp? app, IReadOnlyList<EnvRow>? env)
     {
         var title = BuildTitle(draft);
@@ -321,7 +321,7 @@ public static class Feedback
         const string note = "\n\n（描述过长，已截断；完整内容请使用页面上的「在 Q 群中反馈」。）";
         var detail = draft.Detail.Trim();
 
-        // 二分找「砍到多少字能让 URL 落进上限」，比逐字减快得多
+        
         var lo = 0;
         var hi = detail.Length;
         while (lo < hi)
@@ -347,11 +347,11 @@ public static class Feedback
         return new IssueLink(MakeUrl(title, cutBody, labels), cutBody, true);
     }
 
-    // ════════════════════════════════════════════════════════════════
-    // 校验
-    // ════════════════════════════════════════════════════════════════
+    
+    
+    
 
-    /// <summary>校验：返回第一条不满足的提示文案，全部通过返回空串。</summary>
+    
     public static string Validate(Draft draft)
     {
         if (draft.Kind.Length == 0) return "反馈类型为必填项。";
@@ -365,27 +365,27 @@ public static class Feedback
     }
 }
 
-/// <summary>
-/// 反馈草稿的本地持久化（%LOCALAPPDATA%\ClassSoftwareHub\feedback-draft.json）。
-///
-/// ⚠️ **走 GitHub 预填链接那条路时故意不清草稿**：打开的是浏览器里的 GitHub 页面，
-///    跨进程读不到那边到底提交没有。清掉反而危险 —— 用户以为提交了、其实没点，内容却没了。
-///    宁可下次进来多问一句「恢复上次填写」。
-/// ⚠️ 走服务端那条路（<see cref="Services.FeedbackSubmit"/>）时**成了就清**：接口明确回了
-///    <c>success</c>，不存在"以为提交了其实没提交"，留着草稿只会让用户以为没成功、
-///    再点一次又建一个重复 Issue（见 <c>FeedbackFormPage.Submit_Click</c>）。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
 public static class FeedbackDraftStore
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
-    /// <summary>
-    /// 正在填的这一份草稿（**进程内共享**，两个反馈页面拿到的永远是同一个实例）。
-    ///
-    /// ⚠️ 为什么不放在页面字段里：2026-09-30 起「选类型」与「填表单」拆成两个页面
-    ///    （<c>FeedbackPage</c> → <c>FeedbackFormPage</c>），页面实例会随 Frame 导航被丢掉重建，
-    ///    挂在页面上的字段过一趟就没了。落盘还是走 <see cref="Save"/>，这里只管进程内的那一份。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static Feedback.Draft Current { get; } = new();
 
     public static string FilePath { get; } =
@@ -396,7 +396,7 @@ public static class FeedbackDraftStore
         try
         {
             Directory.CreateDirectory(Core.AppPaths.DataDir);
-            // 原子替换：先写临时文件再整体换过去，避免写到一半留下半截 JSON
+            
             var tmp = FilePath + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(draft, JsonOpts));
             if (File.Exists(FilePath)) File.Replace(tmp, FilePath, null, true);
@@ -404,7 +404,7 @@ public static class FeedbackDraftStore
         }
         catch
         {
-            // 草稿存不下来不影响提交本身
+            
         }
     }
 
@@ -414,7 +414,7 @@ public static class FeedbackDraftStore
         {
             if (!File.Exists(FilePath)) return null;
             var draft = JsonSerializer.Deserialize<Feedback.Draft>(File.ReadAllText(FilePath), JsonOpts);
-            // 只有「填过东西」的草稿才值得恢复，空草稿等于没有
+            
             if (draft is null) return null;
             if (draft.Kind.Length == 0 && draft.Title.Trim().Length == 0 && draft.Detail.Trim().Length == 0)
                 return null;
@@ -431,13 +431,13 @@ public static class FeedbackDraftStore
         try { if (File.Exists(FilePath)) File.Delete(FilePath); } catch { }
     }
 
-    /// <summary>
-    /// 丢弃草稿：把**进程内那一份**就地清空 + 删掉本地草稿文件。
-    ///
-    /// ⚠️ 两件事都得做：只删文件的话，<see cref="Current"/> 里还留着刚填的内容，
-    ///    草稿条下次进页面照样会冒出来（页面判定它非空）—— 那就白点了。
-    /// ⚠️ 就地 <see cref="Feedback.Draft.CopyFrom"/> 重置，⛔ 不能换引用（两个页面共用同一个实例）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static void Discard()
     {
         Current.CopyFrom(new Feedback.Draft());

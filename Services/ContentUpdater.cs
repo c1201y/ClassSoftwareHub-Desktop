@@ -11,7 +11,7 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>一次内容同步的结果。</summary>
+
 public sealed record ContentSyncResult(
     bool Updated,
     int Downloaded,
@@ -27,18 +27,18 @@ public sealed record ContentSyncResult(
             : $"内容已是最新（{Total} 个文件）");
 }
 
-/// <summary>
-/// 软件数据的同步入口：
-///   ① 首选 **GitHub 仓库直读**（见 GithubContentSync：软件数据就在公开仓库里）
-///   ② 备胎：站点 content/manifest.json（列了每个文件的 path + sha256），逐个比对本地
-///      %LOCALAPPDATA%\ClassSoftwareHub\content 里的文件，只下载 sha256 不一致的
-///      （先落 .part，校验通过再改名）
-/// 两条都拿不到就安静地什么都不做 —— 此时 ContentStore 只能读到空目录（**没有自带内容包兜底**），
-/// 界面会显示"尚未获取到内容"并给出重试入口。
-/// </summary>
+
+
+
+
+
+
+
+
+
 public static class ContentUpdater
 {
-    /// <summary>本地缓存目录（ContentStore 优先读它）。</summary>
+    
     public static string Dir => ShellConfig.CachedContentDir;
 
     private static readonly HttpClient Http = CreateClient();
@@ -51,27 +51,27 @@ public static class ContentUpdater
         return client;
     }
 
-    /// <summary>
-    /// 同步软件数据。失败不抛异常，返回带 Error 的结果（界面自己决定要不要提示）。
-    ///
-    /// 顺序：
-    ///   ① **GitHub 仓库直读**（首选 —— 软件数据就在公开仓库里，永远最新，不依赖站点有没有发布清单）
-    ///   ② 站点 content/manifest.json（等站点以后发布了就走这条；GitHub 被墙时也是它的备胎）
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static async Task<ContentSyncResult> SyncAsync(
         IProgress<string>? progress = null,
         CancellationToken ct = default)
     {
-        // ① GitHub 仓库（一次 ref 请求就知道有没有变，没变一个文件都不下）
+        
         var repo = await GithubContentSync.SyncAsync(progress, ct).ConfigureAwait(false);
         if (repo.Ok)
             return new ContentSyncResult(repo.Updated, 0, repo.Files, null, GithubContentSync.RepoUrl, repo.Message);
 
-        // ② 站点清单（增量 sha256）
+        
         return await SyncFromManifestAsync(progress, ct).ConfigureAwait(false);
     }
 
-    /// <summary>老路子：按站点 content/manifest.json 的文件 sha256 增量拉。</summary>
+    
     private static async Task<ContentSyncResult> SyncFromManifestAsync(
         IProgress<string>? progress,
         CancellationToken ct)
@@ -140,9 +140,9 @@ public static class ContentUpdater
                 downloaded++;
             }
 
-            // 清单正文也留一份，方便排查本地是哪一版
+            
             try { await File.WriteAllTextAsync(Path.Combine(Dir, "manifest.json"), manifestText, Encoding.UTF8, ct).ConfigureAwait(false); }
-            catch { /* 写不下不影响内容 */ }
+            catch {  }
         }
         catch (Exception ex)
         {
@@ -152,7 +152,7 @@ public static class ContentUpdater
         return new ContentSyncResult(downloaded > 0, downloaded, manifest.Files.Count, null, baseUrl);
     }
 
-    // ── 内部 ────────────────────────────────────────────────────────
+    
 
     private sealed class Manifest
     {
@@ -182,7 +182,7 @@ public static class ContentUpdater
                 var hash = item.TryGetProperty("sha256", out var h) ? h.GetString() ?? "" : "";
                 if (path.Length == 0 || hash.Length == 0) continue;
 
-                // 只认识正经相对路径，别让清单里的 ../ 跳出目录
+                
                 if (path.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(path)) continue;
 
                 manifest.Files.Add(new ManifestFile { Path = path, Sha256 = hash });

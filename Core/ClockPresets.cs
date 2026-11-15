@@ -5,11 +5,11 @@ using System.Text.Json;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>
-/// 一套命名的时钟外观（2026-09-27 Nick 要的「预设」）。
-/// 字段与 <see cref="ClockSettings"/> 一一对应 —— 存的是值，不是引用，
-/// 所以预设之间互不影响。
-/// </summary>
+
+
+
+
+
 public sealed class ClockPreset
 {
     public string Name { get; set; } = "";
@@ -54,7 +54,7 @@ public sealed class ClockPreset
         Hour12 = Hour12,
     };
 
-    /// <summary>列表里那行小字：背景图 / 蒙版 / 底色 / 字体，让人一眼认出是哪套。</summary>
+    
     public string Summary()
     {
         var bits = new List<string>
@@ -72,11 +72,11 @@ public sealed class ClockPreset
     }
 }
 
-/// <summary>
-/// 预设与「上次使用的设置」的落盘（%LOCALAPPDATA%\ClassSoftwareHub\clock-presets.json）。
-/// 分两块：<see cref="Data.Presets"/> 是用户主动命名的多套方案；
-/// <see cref="Data.LastUsed"/> 是自动记忆 —— 关掉应用再进来，外观还是你上次调的样子。
-/// </summary>
+
+
+
+
+
 public static class ClockPresetStore
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -90,14 +90,14 @@ public static class ClockPresetStore
     {
         public ClockSettings? LastUsed { get; set; }
 
-        /// <summary>
-        /// 上次"正在使用的那套预设"的名字；空 = 上次没在用预设（外观是手调/默认的）。
-        ///
-        /// ⚠️ 2026-09-28（Nick）：用来实现"每次启动遵循上次"——
-        /// 非空且这套预设还在 → 启动就按**那套预设**铺（顺便把列表里那套标成"使用中"）；
-        /// 空 → 就按 <see cref="LastUsed"/> 那个外观铺，**不强行套任何预设**。
-        /// 用户手动改了外观就会把它清空（那时已经是"自定义"了）。
-        /// </summary>
+        
+        
+        
+        
+        
+        
+        
+        
         public string LastUsedPreset { get; set; } = "";
 
         public List<ClockPreset> Presets { get; set; } = new();
@@ -115,7 +115,7 @@ public static class ClockPresetStore
         }
         catch (Exception ex)
         {
-            // 文件坏了就当没存过 —— 不能让一个坏的 json 把工具页卡在启动阶段
+            
             Log("读取预设失败，按空处理：" + ex.Message);
             return new Data();
         }
@@ -126,7 +126,7 @@ public static class ClockPresetStore
         try
         {
             Directory.CreateDirectory(Dir);
-            // 先写临时文件再替换：写到一半被打断也不会留下半个 json
+            
             var tmp = FilePath + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(data, JsonOpts));
             File.Move(tmp, FilePath, overwrite: true);

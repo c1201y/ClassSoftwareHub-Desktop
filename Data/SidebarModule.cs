@@ -4,238 +4,242 @@ using System.Linq;
 
 namespace ClassSoftwareHub.Desktop.Data;
 
-/// <summary>模块怎么打开。</summary>
+
 public static class SidebarModuleKinds
 {
-    /// <summary>置顶小浮窗（ToolPaletteWindow），不占主界面。</summary>
+    
     public const string Palette = "palette";
-    /// <summary>主窗口里的整页工具（拉出主窗口并跳到那一页）。</summary>
+    
     public const string Page = "page";
-    /// <summary>
-    /// 独立窗口（2026-10-18）：单开一扇轻量窗，**不拉主界面**。
-    /// 目前只有三件学科工具用它 —— 函数图像 / 方程求解 / 化学配平那几页是"用完就走"的，
-    /// 为算一道题把整个应用调出来太重（见 <c>Views/SubjectToolsWindow</c>）。
-    /// 每个工具在侧边栏里是**各自独立的一项**（Nick 10-18 定：不要合并成一个「学科」入口）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     public const string Window = "window";
-    /// <summary>
-    /// 讲台动作：按一下就干活（不外跳、不抢焦点、不开新窗口）。
-    /// <para>
-    /// ⚠️ 少数几项不是"一按就干完"，而是**先弹一个二级菜单**让用户挑（目前是「安全选项」与
-    /// 「PPT 触控」）。它们同样记作 Action，只是 id 在 <c>ToolSidebarWindow.Tool_Click</c> 里
-    /// 单独分派 —— 刻意不为此加一个 Kind：二级菜单跟"按一下就干活"在清单、排序、
-    /// 侧边布局页里完全是同一套行为，只差点击那一瞬间。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public const string Action = "action";
 
-    /// <summary>
-    /// 单滑块浮窗（音量 / 屏幕亮度）：不外跳，在边条**挨着的那一侧**弹一栏浮窗。
-    ///
-    /// ⚠️ 早先的写法是让边条**自己往屏幕里侧多长出一栏**（面板内嵌在侧边栏窗口里）—— **已推翻**（2026-09-26 Nick 定）。
-    ///    内嵌那一栏会把侧边栏越撑越宽，而且贴上/下边时边条只有 112 高、根本塞不下垂直滑块，
-    ///    还得为横条单写一套布局，两套并存。
-    ///    现在统一成**独立浮窗**（<c>Views/VolumeWindow</c> + <c>Views/VolumeMixerWindow</c>）：
-    ///    浮窗挨着边条长、**边条不收起**（靠 <c>VolumeFlyoutGroup.HoldSidebar()</c> 持续续期压住自动收起），
-    ///    贴哪条边都由同一个窗口按 <c>EdgeGeometry</c> 算出该往哪边滑入。
-    /// </summary>
+    public const string Pinned = "pinned";
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public const string Panel = "panel";
 }
 
-/// <summary>
-/// 侧边栏里的一个"模块"。侧边布局页就是拿 <see cref="SidebarModules.All"/> 这份清单让用户勾选 + 排序，
-/// 侧边栏再按 AppSettings.SidebarModuleIds 动态拼出来。
-/// </summary>
+
+
+
+
 public sealed class SidebarModule
 {
-    /// <summary>模块 id（同时也是存取设置用的键；palette 类就是工具 id）。</summary>
+    
     public string Id { get; init; } = "";
 
-    /// <summary>完整名字（侧边布局页、鼠标悬停提示用）。</summary>
+    
     public string Name { get; init; } = "";
 
-    /// <summary>侧边栏按钮上的短名（那条很窄，只放得下两三个字）。</summary>
+    
     public string ShortName { get; init; } = "";
 
-    /// <summary>
-    /// 侧边栏按钮上的长名，**最多 4 个字**（2026-10-30 Nick 加：两三个字常常说不清这个按钮干什么）。
-    /// <para>
-    /// 由「侧边布局 → 用长名显示」开关决定用哪个（<c>AppSettings.SidebarLongLabels</c>）。
-    /// 空 = 没有更清楚的说法，两种情况都用 <see cref="ShortName"/>。
-    /// </para>
-    /// <para>
-    /// ⚠️ 超过 4 个字会被侧边栏截断（面板厚度只有 92 dip），所以写的时候自己数一下。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public string LongName { get; init; } = "";
 
-    /// <summary>Segoe Fluent Icons 字形。</summary>
+    
     public string Glyph { get; init; } = "";
 
-    /// <summary>SidebarModuleKinds.Palette / .Page / .Action。</summary>
+    
     public string Kind { get; init; } = SidebarModuleKinds.Palette;
 
-    /// <summary>kind = page 时要跳转的页面类型。</summary>
+    
     public Type? Page { get; init; }
 
-    /// <summary>
-    /// kind = window 时要在独立窗口里打开的工具 id（见 <c>SubjectToolsWindow.Tools</c>：
-    /// function-plot / equation / chemistry）。空 = 窗口自己决定（上次用的那个）。
-    /// </summary>
+    
+    
+    
+    
     public string? WindowTool { get; init; }
 
-    /// <summary>
-    /// kind = window 且**自己就是一扇专用窗口**时填它（2026-10-30 加，用于「哈希校验」）。
-    /// <para>
-    /// ⚠️ 那扇窗口必须提供 <c>public static void Show()</c>（单例 + 置前），
-    ///    <c>ToolSidebarWindow</c> 按名字反射调用 —— 这不是"写 case"，加新窗口不用改侧边栏。
-    /// 空 = 走 <c>SubjectToolsWindow</c> 那扇学科工具窗（<see cref="WindowTool"/> 指定工具）。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     public Type? WindowType { get; init; }
 
-    /// <summary>想给某个模块写更贴切的说明就填它（不填就用 Kind 的通用说法）。</summary>
+    
     public string? Note { get; init; }
 
-    /// <summary>给用户看的一句话说明。</summary>
+    
     public string Hint => Note ?? Kind switch
     {
         SidebarModuleKinds.Page => "打开主窗口中的该页面",
         SidebarModuleKinds.Window => "在独立窗口中打开，不必拉出主界面",
         SidebarModuleKinds.Action => "单击即执行，不切换窗口、不抢占焦点",
+        SidebarModuleKinds.Pinned => "显示已添加的快捷应用、快捷方式或文件",
         SidebarModuleKinds.Panel => "在侧边栏旁显示面板，不切换窗口、不占用主界面",
         _ => "显示浮窗，不占用主界面"
     };
 }
 
-/// <summary>侧边栏可拼的模块清单（改这里就能加新模块）。</summary>
+
 public static class SidebarModules
 {
     public static readonly IReadOnlyList<SidebarModule> All = new List<SidebarModule>
     {
+        new() { Id = "pinned-apps", Name = "快捷应用", ShortName = "快捷", LongName = "快捷应用", Glyph = "\uE731", Kind = SidebarModuleKinds.Pinned, Note = "在「侧边布局」里添加应用、快捷方式或文件，按侧边栏模块按钮的统一尺寸显示" },
         new() { Id = "pick-number", Name = "随机抽号", ShortName = "抽号", LongName = "随机抽号", Glyph = "\uE716", Kind = SidebarModuleKinds.Palette },
         new() { Id = "timer", Name = "课堂计时", ShortName = "计时", LongName = "课堂计时", Glyph = "\uE81C", Kind = SidebarModuleKinds.Palette },
         new() { Id = "stopwatch", Name = "秒表计时", ShortName = "秒表", LongName = "秒表计时", Glyph = "\uE916", Kind = SidebarModuleKinds.Palette },
         new() { Id = "clock", Name = "全屏时钟", ShortName = "时钟", LongName = "全屏时钟", Glyph = "\uE740", Kind = SidebarModuleKinds.Palette },
-        // 图片取色（2026-11-04 改）：这里开的是**小浮窗**（ImageColorWindow），
-        // 不是把主界面那整页拉出来 —— 讲课中途从课件截图里取个配色，不该盖住课件。
-        // 整页入口仍在「内置工具 → 图片取色」，那才是给它留的位置。
-        // ⚠️ 浮窗承载的就是那页本体（embedded: true），取色算法只有一份，别另写。
+        
+        
+        
+        
         new() { Id = "image-color", Name = "图片取色", ShortName = "取色", LongName = "图片取色", Glyph = "\uE790", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.ImageColorWindow), Note = "弹出小浮窗做取色：拖入图片即提取柔和配色（种子色 + 7 档明暗），单击色块复制色值" },
-        // 查单词（需求清单第 17 条，2026-11-01）。刻意**不**走 SidebarModulesRevision 自动补入 ——
-        // 侧边栏是老师上课时一直挂着的一排按钮，位置很贵，新功能默认塞进去反而添乱。
-        // 想要的人去「侧边布局」页自己勾，那里会看到这一项（Kind=Page，跳主窗口的那一页）。
-        // 查阅单词（需求清单第 17 条，2026-11-01）：侧边栏上这颗开的是**小浮窗**（QuickLookupWindow），
-        // 不是把主界面那整页拉出来 —— 讲课中途查一个词，不该盖住课件。
-        // 整页入口在左侧导航「查阅单词」（Tag=dictionary）。
-        // 刻意**不**走 SidebarModulesRevision 自动补入：侧边栏是上课时一直挂着的一排按钮，
-        // 位置很贵，新功能默认塞进去反而添乱；要用的人去「侧边布局」页自己勾。
+        
+        
+        
+        
+        
+        
+        
+        
         new() { Id = "dictionary", Name = "查阅单词", ShortName = "查阅", LongName = "查阅单词", Glyph = "\uE8F1", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.QuickLookupWindow), Note = "弹出小浮窗查阅单词：英译中、中译英都支持，先查本地词库，未收录的再联网" },
-        // 2026-10-30 定稿：这里开的是**小浮窗**（HashCheckWindow），不是把应用里那整页搬进窗口。
-        // 整页（编码 + 文本编解码）仍在「系统工具 → 编码 / 哈希工具」里，那才是给它留的位置。
+        
+        
         new() { Id = "encoding", Name = "编码 / 哈希转换", ShortName = "编码", LongName = "编码校验", Glyph = "\uE943", Kind = SidebarModuleKinds.Window, WindowType = typeof(Views.HashCheckWindow), Note = "弹出小浮窗做哈希校验：拖入文件即出 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴官方校验值自动比对" },
-        // 学科工具（2026-10-18 Nick 要）：函数图像 / 方程求解 / 化学配平**各占一项**，
-        // 点哪项就直接开那件工具，单开一扇窗、**不拉主界面** —— 这是重点。
-        // 以前点这类工具会把整个主窗口叫出来（Kind = Page），只想算一道题时太重。
-        // ⚠️ Nick 10-18 明确否过"合并成一个「学科」入口"：三个工具要有三个按钮。
-        // 字形与 Data/ToolDef.cs 里同一件工具保持一致，别一边一个样。
+        
+        
+        
+        
+        
         new() { Id = "subject-function", Name = "函数图像", ShortName = "函数", LongName = "函数图像", Glyph = "\uE9D2", Kind = SidebarModuleKinds.Window, WindowTool = "function-plot", Note = "在独立窗口中打开函数图像，不必打开主界面" },
         new() { Id = "subject-equation", Name = "方程求解", ShortName = "方程", LongName = "方程求解", Glyph = "\uE8EF", Kind = SidebarModuleKinds.Window, WindowTool = "equation", Note = "在独立窗口中打开方程求解，不必打开主界面" },
         new() { Id = "subject-chemistry", Name = "化学方程式配平", ShortName = "化学", LongName = "化学配平", Glyph = "\uE80A", Kind = SidebarModuleKinds.Window, WindowTool = "chemistry", Note = "在独立窗口中打开化学方程式配平，不必打开主界面" },
-        // ⚠️ 原来这里还有一项「系统镜像下载（mirror-download）」：2026-10-09 该功能整体下线，一并删除。
-        //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
+        
+        
 
-        // ── 挨着边条弹浮窗的单滑块面板 ──
-        // 音量：点一下在边条内侧弹一栏（边条不收起）—— 竖向排「数值 + 垂直滑块 + 静音 + 展开」，
-        // 「展开」再弹一个横向的音量合成器浮窗，可以给每个正在发声的应用单独调音量。
+        
+        
+        
         new() { Id = "volume", Name = "音量调节", ShortName = "音量", LongName = "音量调节", Glyph = "\uE767", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节系统主音量（带刻度的垂直滑块）。面板中的「展开」可显示音量合成器，为各发声应用单独调节音量" },
-        // 屏幕亮度：跟音量同一套（同一个浮窗控件，点哪个就换成哪一栏）。下面那颗键是「自动亮度」，
-        // **没有二级浮窗**；机器没有环境光传感器时那颗键是灰的（系统自带的自动亮度同样用不了）。
+        
+        
         new() { Id = "brightness", Name = "屏幕亮度", ShortName = "亮度", LongName = "屏幕亮度", Glyph = "\uE706", Kind = SidebarModuleKinds.Panel, Note = "单击后在侧边栏旁显示面板，调节屏幕亮度（笔记本内屏可用，外接显示器通常不可用）。面板中的「自动亮度」按钮需设备具备环境光传感器才能使用" },
 
-        // ── 讲台动作：按一下就干活，不外跳、不抢焦点 ──
+        
 
-        // 常用系统入口四件套（2026-11-08 Nick 要）：文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑。
-        // **四颗各自独立的按钮**放在动作组最前面 —— 上课时随手就要用，比下面那几颗更常用。
-        // ⚠️ 「锁定电脑」原本只在「安全选项」的弹出菜单里（那条是 Ctrl+Alt+Del 界面的平移），
-        //    但锁屏是最高频的一个，Nick 要一颗直接按的，所以单列（动作 id 仍复用 TeachingActions 的 lock）。
+        
+        
+        
+        
         new() { Id = "explorer", Name = "文件资源管理器", ShortName = "文件", LongName = "资源管理", Glyph = "\uE8B7", Kind = SidebarModuleKinds.Action, Note = "打开文件资源管理器，等同按 Win+E" },
         new() { Id = "run", Name = "运行", ShortName = "运行", LongName = "运行命令", Glyph = "\uE756", Kind = SidebarModuleKinds.Action, Note = "打开「运行」对话框，等同按 Win+R；可输入 ms-settings:、cmd、devmgmt.msc 等" },
-        // ⚠️ 屏幕键盘是系统自带的 osk.exe，不是应用自己画的 —— 它本身就带 UIAccess，
-        //    在锁屏界面之外的地方都能用；本程序只负责把它叫起来。
+        
+        
         new() { Id = "osk", Name = "屏幕键盘", ShortName = "键盘", LongName = "屏幕键盘", Glyph = "\uE765", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 自带的屏幕键盘（触摸设备上替代实体键盘输入）" },
         new() { Id = "lock", Name = "锁定电脑", ShortName = "锁屏", LongName = "锁定电脑", Glyph = "\uE72E", Kind = SidebarModuleKinds.Action, Note = "立即锁定屏幕，等同按 Win+L；解锁需输入当前账户的密码或 PIN" },
 
-        // 系统快捷三件套（2026-10-11 Nick 要）：任务管理器 / 安全选项 / 剪贴板历史。
-        // 都插在动作组最前面（跟 rev1 递音量同一个位置约定），紧挨着工具组下沿，好找。
-        // ⚠️ 图标用 E9D9（框内折线图，跟 Windows 自家任务管理器那个图标一个意思）。
-        //    ⛔ 原来用的是 E9F3 —— 那字形是"虚线圈 + 箭头"（同步/刷新），放这儿让人莫名其妙（Nick 2026-10-12 报）。
+        
+        
+        
+        
         new() { Id = "taskmgr", Name = "任务管理器", ShortName = "管理器", LongName = "任务管理", Glyph = "\uE9D9", Kind = SidebarModuleKinds.Action, Note = "打开 Windows 任务管理器，查看内存 / CPU 占用、结束没有响应的程序（等同 Ctrl+Shift+Esc）" },
-        // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起
-        //    （否则钓鱼程序可以伪造一个一模一样的界面骗密码）。这里给的是它上面的那几个操作本身。
-        // ⚠️ 短名用「安全项」不用「安全」（2026-10-12 Nick：只写「安全」两个字别人看不懂是干什么的）。
+        
+        
+        
         new() { Id = "security", Name = "安全选项", ShortName = "安全项", LongName = "安全选项", Glyph = "\uEA18", Kind = SidebarModuleKinds.Action, Note = "等同 Ctrl+Alt+Del 那个界面上能做的事：锁定电脑 / 切换用户 / 注销（该界面的本体属系统安全桌面，普通程序无法直接调起，这里给的是其中的各个操作）" },
         new() { Id = "clipboard", Name = "剪贴板历史", ShortName = "剪贴板", LongName = "剪贴板", Glyph = "\uE8C8", Kind = SidebarModuleKinds.Action, Note = "等同 Win+V：打开剪贴板历史，挑一条粘到刚才那个窗口里（需先在系统「设置 → 系统 → 剪贴板」里打开剪贴板历史）" },
 
         new() { Id = "mag", Name = "放大镜", ShortName = "放大", LongName = "放大镜", Glyph = "\uE71E", Kind = SidebarModuleKinds.Action, Note = "调用系统放大镜（跟随鼠标区域）；再次单击关闭" },
-        // ⚠️ 原来这里还有一项「打开键盘（keyboard）」：2026-10-09 虚拟键盘整体下线，一并删除。
-        //    老存档里的 id 由 SettingsStore 的 SidebarModulesRevision 4 负责剔除。
+        
+        
         new() { Id = "screenshot", Name = "截屏贴图", ShortName = "截屏", LongName = "截屏贴图", Glyph = "\uE722", Kind = SidebarModuleKinds.Action, Note = "框选区域后在编辑窗中标注：画笔 / 荧光笔 / 箭头 / 矩形 / 椭圆 / 文字 / 马赛克，并支持撤销与重做；随后可复制到剪贴板 / 保存到本地 / 钉图（钉图按 1:1 显示，拖动边框可缩放，双击或右键关闭）" },
         new() { Id = "taskview", Name = "任务视图", ShortName = "任务", LongName = "任务视图", Glyph = "\uE7C4", Kind = SidebarModuleKinds.Action, Note = "等同 Win+Tab" },
         new() { Id = "showdesktop", Name = "回到桌面", ShortName = "桌面", LongName = "回到桌面", Glyph = "\uE7F4", Kind = SidebarModuleKinds.Action, Note = "最小化所有窗口以显示桌面；再次单击即可还原（不关闭任何程序）" },
         new() { Id = "closefg", Name = "关闭前台应用", ShortName = "关前台", LongName = "关闭前台", Glyph = "\uE8BB", Kind = SidebarModuleKinds.Action, Note = "关闭当前活动窗口（等同单击标题栏 ×，会提示是否保存，不强制结束）" },
         new() { Id = "closeall", Name = "关闭全部窗口", ShortName = "关全部", LongName = "关闭全部", Glyph = "\uE74D", Kind = SidebarModuleKinds.Action, Note = "关闭任务栏中的所有窗口（含最小化窗口）。防误触：首次单击仅计数，再次单击才会执行；均为正常关闭，不强制结束" },
-        // 「关机」（2026-10-18 Nick 要）：侧边栏一颗「关机」按钮，按设置里的「关机方式」执行。
-        // · 默认＝手动关机：调系统的 SlideToShutDown.exe（下滑滑块才真关，本身即确认步骤，不滑就一直停着）；
-        // · 直接关机：立刻 shutdown /s /f /t 0。
-        // ⚠️ 这是破坏性操作，点下去先弹确认（danger 红键），手动模式再叠加滑动界面的二次确认；
-        //    auto-add 走 revision 9（跟任务管理器 / 杀希沃那批动作同样默认进侧边栏）。
-        // ⚠️ 字形用 E7E8（系统电源键 ⏻）—— 与「取消关机」同一个字形；若想区分两者，
-        //    把「取消关机」换成 E7A7（撤销箭头）即可，两边一起改。
+        
+        
+        
+        
+        
+        
+        
         new() { Id = "shutdown", Name = "关机", ShortName = "关机", Glyph = "\uE7E8", Kind = SidebarModuleKinds.Action, Note = "关闭计算机：先弹窗确认；按设置中的「关机方式」执行（手动关机＝系统滑动关机界面，需下滑确认；直接关机＝立即关机）" },
 
-        // ⚠️ 取消关机：只在用户**自己把它加到侧边栏**之后才出现。刻意**不**走 SidebarModulesRevision 补入 ——
-        //    「自动关机」是实验性功能且默认关闭，往所有人侧边栏上塞一颗多数人用不上的按钮不合理。
-        //    添加入口在「自动关机」页上（一个按钮追加到末尾），也可以在「侧边布局」页里手动勾。
+        
+        
+        
         new() { Id = "cancelshutdown", Name = "取消关机", ShortName = "撤关机", LongName = "取消关机", Glyph = "\uE7E8", Kind = SidebarModuleKinds.Action, Note = "撤回还没执行的自动关机（等同系统的取消关机命令）。当前没有待执行的关机时，只会提示一句" },
 
-        // 「结束希沃白板」（2026-10-12 Nick 要）：白板5 残留进程**立刻**清一次，不带时间点。
-        // 到点自动清那一套在「实验性功能 → 白板专杀」页里；这颗是"现在就清"，
-        // 就是那页上「立即结束」那颗按钮的侧边栏版（同一个 EasiNoteGuard.RunOnce）。
-        // ⚠️ 图标 EA99（扫帚）跟实验性页那条「白板专杀」同源 —— 换图标记得两边一起换，别一边一个样。
-        // ⚠️ 安全闸在 EasiNoteGuard 里：**有可见窗口的一律放过**（老师正开着白板讲课就不动它）。
+        
+        
+        
+        
+        
         new() { Id = "killseewo", Name = "结束希沃白板", ShortName = "杀希沃", LongName = "结束希沃", Glyph = "\uEA99", Kind = SidebarModuleKinds.Action, Note = "立刻结束希沃白板5 后台滞留的残留进程（等同「白板专杀」页上的「立即结束」）。有可见窗口的一律放过，不会打断正在讲课的白板。按时间点自动清理那套在「实验性功能 → 白板专杀」里设置" },
 
-        // 「PPT 触控」（2026-11-08 Nick 要）：一颗**随时关掉**的保险，单击弹出二级菜单，
-        // 菜单里是那两个开关（触控手势总开关、长按菜单）。
-        //
-        // 来由：这功能改的是全局输入行为（放映时轻点翻页、长按弹菜单），靠触屏实测才能验证，
-        // 现在还谈不上广泛验证过。真在课堂上出岔子，老师得能在**不离开放映、不开设置页**的
-        // 前提下立刻关掉 —— 打开「PPT 触控优化」页去关，那一步在讲课中途太远了。
-        //
-        // 为什么是「弹菜单」而不是像别的动作那样一按就切换：
-        //   · 这里有两个开关（总开关 / 长按菜单），一颗按钮只能表达一个状态，按一下该切哪个说不清；
-        //   · 二级菜单里两个都能看到当前状态，也省得为"按钮亮着到底代表哪个开关"再解释一遍。
-        // 菜单本体在 <c>Views/ToolSidebarWindow.ShowPptTouchFlyout</c>（原生 Flyout + 原生 ToggleSwitch）。
-        //
-        // ⚠️ 它的 Kind 仍是 Action，没有单独一类 —— 清单、排序、侧边布局页都按普通动作处理，
-        //    只有点击那一下走弹菜单分支（按 id 分派，与「安全选项」同一个做法）。
-        // ⚠️ 放动作组**最末尾**：它是"出问题才去按"的按钮，不该占常用位置。
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         new() { Id = "ppttouch", Name = "PowerPoint 触控", ShortName = "PPT", LongName = "PPT 触控", Glyph = "\uE786", Kind = SidebarModuleKinds.Action, Note = "单击弹出菜单，开启或关闭放映时的触控手势与长按菜单（两者都关掉就不会再干扰 PowerPoint 本身）；同一组开关也在「PowerPoint 触控优化」页里" },
 
-        // 「最小化全部窗口」已删（2026-09-25）：「回到桌面」在 Windows 上做的事跟它一模一样（都是把窗口全收起来、再按一次还原），
-        // 两个按钮一个效果，留着只会让人问「有区别吗」。要恢复就把这行抄回去。
+        
+        
     };
 
-    /// <summary>恢复默认时用的清单（就是老版本侧边栏的那四个）。</summary>
+    
     public static readonly string[] DefaultIds = { "pick-number", "timer", "stopwatch", "clock" };
 
-    /// <summary>按 id 找模块；找不到（比如设置里存了已经删掉的模块）返回 null，调用方直接跳过。</summary>
+    
     public static SidebarModule? Find(string? id) =>
         string.IsNullOrEmpty(id) ? null : All.FirstOrDefault(m => m.Id == id);
 }
 
-/// <summary>「侧边布局」页里的一行（给 ItemsControl 用）。</summary>
+
 public sealed class SidebarModuleRow
 {
     public SidebarModuleRow(SidebarModule m, bool enabled)
@@ -252,6 +256,6 @@ public sealed class SidebarModuleRow
     public string Hint { get; }
     public string Glyph { get; }
 
-    /// <summary>这个模块当前在不在侧边栏上（开关绑它）。</summary>
+    
     public bool Enabled { get; set; }
 }

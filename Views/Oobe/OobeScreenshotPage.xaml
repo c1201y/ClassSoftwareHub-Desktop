@@ -6,7 +6,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <!-- 第 8 步：截图。与「侧边布局 → 截图」同源，只是初次上手先把最常用的两项问一遍。 -->
+    
     <Grid>
         <StackPanel x:Name="ContentRoot" Width="600"
                     HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">

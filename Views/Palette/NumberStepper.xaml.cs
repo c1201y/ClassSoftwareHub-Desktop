@@ -4,14 +4,14 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Palette;
 
-/// <summary>
-/// 触屏友好的数字步进器：[-] 数值 [+]
-/// 数值用 TextBlock 显示（不是 TextBox），触屏点它不会全选、不会弹复制粘贴菜单；
-/// 加减按钮是 RepeatButton，按住不放会连续加减（1 → 50 不用点 49 下）。
-/// </summary>
+
+
+
+
+
 public sealed partial class NumberStepper : UserControl
 {
-    /// <summary>值变化（含程序里改 Value；改 Minimum/Maximum 触发夹取时也会发）。</summary>
+    
     public event EventHandler? ValueChanged;
 
     private int _value;
@@ -25,7 +25,7 @@ public sealed partial class NumberStepper : UserControl
         UpdateState();
     }
 
-    /// <summary>左边那个小标签，比如"范围""个数""分""秒"。</summary>
+    
     public string Label
     {
         get => LabelText.Text;
@@ -44,7 +44,7 @@ public sealed partial class NumberStepper : UserControl
         set { _maximum = value; Value = _value; }
     }
 
-    /// <summary>按一下加减多少（至少 1）。</summary>
+    
     public int Step
     {
         get => _step;

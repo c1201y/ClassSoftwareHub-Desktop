@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="ClassSoftwareHub.Desktop.Pages.SettingsPage"
     NavigationCacheMode="Enabled"
@@ -8,23 +8,23 @@
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls"
     Background="{x:Null}">
 
-    <!--
-      设置页版式遵循 WinUI 3 / WinUI Gallery 的设置页规范（2026-09-28 重构）：
-        · 整页背景透明 —— 窗口的 Mica / 亚克力从 MainWindow 的 SystemBackdrop 透上来，
-          不允许再出现纯黑、纯灰的实心底色（旧版是一整块自绘 Border，把材质全盖死了）。
-        · 每一项 = 一张 SettingsCard：左侧 HeaderIcon + Header（BodyStrong）+ Description（Caption
-          + TextFillColorSecondary，由卡片模板自动套），右侧放开关 / 下拉 / 按钮。
-          卡片自带 16px 内边距，右侧控件与卡片右边缘的间距天然统一，不要自己再加外边距。
-        · 同一组内的卡片间距 4px（StackPanel Spacing），组标题距上一组 24px。
-        · 折叠区用 SettingsExpander，外观与 SettingsCard 一致，不再混用原生 Expander（圆角/描边不一样）。
-      ⚠️ 卡片模板对 Header / Description 的字体样式是写死在控件模板里的，别再手工指定，
-         否则会和工具栏那套 TextBlock 样式打架。
-    -->
+    
+
+
+
+
+
+
+
+
+
+
+
 
     <Page.Resources>
-        <!-- 快捷入口模板（同首页）：颜色全走 {ThemeResource}，浅色/深色自己会变。
-             ⚠️ 原来还有第二套「主题色底 + 反白字」专给「赞助作者」那颗用（Accent 模板 + QuickLinkSelector），
-                2026-10-12 Nick 嫌那底色越看越丑，整套去掉了 —— 五颗一视同仁。 -->
+        
+
+
         <DataTemplate x:Key="QuickLinkNormal">
             <Border CornerRadius="4" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -42,12 +42,12 @@
         </DataTemplate>
     </Page.Resources>
 
-    <!-- ⛔ 不写 Background：App.xaml 给全站 ScrollViewer 设了 Transparent（见那里的注释）——
-         写 `{x:Null}` 会盖掉它，标题上方的缝隙又会滚不动。 -->
-    <!-- ⛔ 间距写在内部 Grid 的 Margin 上（同首页）：ScrollViewer.Padding 的底部不参与
-         滚动范围计算，滚到底最后一条内容仍被裁（WinUI 3 已知坑，2026-10-01 实测）。 -->
+    
+
+    
+
     <ScrollViewer x:Name="RootScroll" VerticalScrollBarVisibility="Auto">
-        <!-- 和首页同一套版式：三列 Grid 把内容钉在中间 960 宽，导航展开/收起都不动 -->
+        
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24" />
@@ -56,7 +56,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="1" MaxWidth="960">
-                <!-- 折叠区展开/收起会顶动下面的分组，让它们滑过去而不是瞬间跳（路线图第 26 项） -->
+                
                 <StackPanel.ChildrenTransitions>
                     <TransitionCollection>
                         <RepositionThemeTransition />
@@ -65,7 +65,7 @@
 
                 <TextBlock Text="设置" FontSize="28" FontWeight="Bold" />
 
-                <!-- ===== 关于（最上，不要卡片底，自成一块区域） ===== -->
+                
                 <StackPanel Spacing="4" Margin="0,10,0,0">
                     <StackPanel Orientation="Horizontal" Spacing="14">
                         <Image x:Name="AboutIcon" Width="44" Height="44" VerticalAlignment="Center" />
@@ -77,7 +77,7 @@
                     <TextBlock x:Name="AboutSiteVersion" FontSize="12" Opacity="0.75" />
                 </StackPanel>
 
-                <!-- 相关链接（在版本号下面，跟首页那行同款） -->
+                
                 <GridView x:Name="SettingsQuickGrid" Margin="0,6,0,0" Padding="0" SelectionMode="None"
                           IsItemClickEnabled="True" ItemClick="Quick_ItemClick"
                           ItemTemplate="{StaticResource QuickLinkNormal}"
@@ -90,7 +90,7 @@
                     </GridView.ItemsPanel>
                 </GridView>
 
-                <!-- ================= 外观 ================= -->
+                
                 <TextBlock Text="外观" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <StackPanel.ChildrenTransitions>
@@ -135,6 +135,16 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
+                    <controls:SettingsCard Header="显示器适配"
+                                           Description="当前窗口所在显示器的缩放、分辨率与高级颜色能力，跨屏拖动后自动刷新。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE7F4;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <TextBlock x:Name="DisplayInfoText" TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </controls:SettingsCard>
+
                     <controls:SettingsCard Header="窗口背景效果"
                                            Description="截图框选层与钉图不参与。">
                         <controls:SettingsCard.HeaderIcon>
@@ -149,14 +159,23 @@
 
                 </StackPanel>
 
-                <!-- ================= 侧边栏导航 ================= -->
-                <!--
-                  2026-11-04 Nick：常用的东西被收在二级菜单里、不常用的却占着一级。
-                  这里只决定"显不显示在一级"，**分类不给改**（查阅单词永远算课堂、文档库永远算系统），
-                  否则两个工具总览页会变成两不像的东西。判定与写入全在 Data/NavLayout.cs。
-                -->
+                
+                
+
+
+
+
+
                 <TextBlock Text="侧边栏导航" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
+
+                    <controls:SettingsCard Header="设置迁移向导"
+                                           Description="导出外观、侧边栏、快捷应用与 AI 模板；换机导入恢复。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8B7;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <Button Content="打开向导" Click="Migration_Click" />
+                    </controls:SettingsCard>
                     <controls:SettingsCard Header="导航栏项目"
                                            Description="选择哪些页面单独放在导航栏上，其余的收进「课堂工具」或「系统工具」。">
                         <controls:SettingsCard.HeaderIcon>
@@ -166,7 +185,7 @@
                     </controls:SettingsCard>
                 </StackPanel>
 
-                <!-- ================= 窗口 ================= -->
+                
                 <TextBlock Text="窗口" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <StackPanel.ChildrenTransitions>
@@ -217,9 +236,73 @@
 
                 </StackPanel>
 
-                <!-- ================= Hub AI ================= -->
-                <!-- 2026-10-18：Nick 要求放在「诊断」上方 —— 它是诊断类功能里唯一需要配置的那个，
-                     单独成组而不是塞进诊断组：关掉总闸时整组可以一起处理，也不会让诊断组继续膨胀。 -->
+                
+                
+
+                <TextBlock Text="课堂快捷键" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
+                <StackPanel Spacing="4">
+                    <controls:SettingsExpander x:Name="HotkeyExpander" Header="全局快捷键"
+                                               Description="在任何窗口按下组合键都能用，主界面收进托盘时同样有效。"
+                                               IsExpanded="False">
+                        <controls:SettingsExpander.HeaderIcon>
+                            <FontIcon Glyph="&#xE92E;" />
+                        </controls:SettingsExpander.HeaderIcon>
+                        <controls:SettingsExpander.Items>
+
+                            <controls:SettingsCard Header="启用全局快捷键">
+                                <controls:SettingsCard.Description>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="关掉之后组合键全部还给其他程序。"
+                                                   TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="HotkeyStatusText" TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </controls:SettingsCard.Description>
+                                <ToggleSwitch x:Name="HotkeysSwitch" OnContent="开" OffContent="关" MinWidth="0"
+                                              Toggled="HotkeysSwitch_Toggled" />
+                            </controls:SettingsCard>
+
+                            <controls:SettingsCard Header="显示主界面" Description="把收进托盘的窗口叫回来。">
+                                <Button x:Name="HotkeyShowButton" Click="HotkeyShow_Click" KeyDown="HotkeyButton_KeyDown" LostFocus="HotkeyButton_LostFocus"
+                                        MinWidth="132" HorizontalContentAlignment="Center" FontFamily="Consolas"
+                                        Content="Ctrl+Alt+0"
+                                        ToolTipService.ToolTip="点一下，然后直接按新的组合键" />
+                            </controls:SettingsCard>
+
+                            <controls:SettingsCard Header="教室喊话" Description="直接跳到喊话页。">
+                                <Button x:Name="HotkeyAnnounceButton" Click="HotkeyAnnounce_Click" KeyDown="HotkeyButton_KeyDown" LostFocus="HotkeyButton_LostFocus"
+                                        MinWidth="132" HorizontalContentAlignment="Center" FontFamily="Consolas"
+                                        Content="Ctrl+Alt+1"
+                                        ToolTipService.ToolTip="点一下，然后直接按新的组合键" />
+                            </controls:SettingsCard>
+
+                            <controls:SettingsCard Header="课堂计时器" Description="弹出计时器浮窗，压在 PPT 上面；不叫主界面。">
+                                <Button x:Name="HotkeyTimerButton" Click="HotkeyTimer_Click" KeyDown="HotkeyButton_KeyDown" LostFocus="HotkeyButton_LostFocus"
+                                        MinWidth="132" HorizontalContentAlignment="Center" FontFamily="Consolas"
+                                        Content="Ctrl+Alt+2"
+                                        ToolTipService.ToolTip="点一下，然后直接按新的组合键" />
+                            </controls:SettingsCard>
+
+                            <controls:SettingsCard Header="PPT 触控优化" Description="直接跳到触控优化页。">
+                                <Button x:Name="HotkeyPptButton" Click="HotkeyPpt_Click" KeyDown="HotkeyButton_KeyDown" LostFocus="HotkeyButton_LostFocus"
+                                        MinWidth="132" HorizontalContentAlignment="Center" FontFamily="Consolas"
+                                        Content="Ctrl+Alt+3"
+                                        ToolTipService.ToolTip="点一下，然后直接按新的组合键" />
+                            </controls:SettingsCard>
+
+                            <controls:SettingsCard Header="恢复默认组合" Description="改乱了可以一键回到 Ctrl+Alt+0 ~ 3。">
+                                <Button Content="恢复默认" Click="HotkeyReset_Click" />
+                            </controls:SettingsCard>
+
+                        </controls:SettingsExpander.Items>
+                    </controls:SettingsExpander>
+                </StackPanel>
+
+                
+                
+
                 <TextBlock Text="Hub AI" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
@@ -229,14 +312,26 @@
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8F2;" />
                         </controls:SettingsCard.HeaderIcon>
-                        <!-- 右侧留空：IsClickEnabled=True 时 SettingsCard 自带一颗 Chevron，别自己再放箭头 -->
+                        
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard Header="助手模板" Description="一键切换课件、解题、代码等系统提示词预设。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE945;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <ComboBox x:Name="AiTemplateCombo" MinWidth="170" SelectionChanged="AiTemplate_Changed">
+                            <ComboBoxItem Content="通用助手" Tag="default" />
+                            <ComboBoxItem Content="课件助手" Tag="course" />
+                            <ComboBoxItem Content="解题助手" Tag="solver" />
+                            <ComboBoxItem Content="代码助手" Tag="coder" />
+                        </ComboBox>
                     </controls:SettingsCard>
 
                 </StackPanel>
 
-                <!-- ================= 查阅单词 ================= -->
-                <!-- 2026-11-01（需求第 17 条）：两个词源都做，优先级交给用户选。
-                     默认「离线优先」——查词是高频短动作，先问本地能立刻出结果，教室里网络时好时坏。 -->
+                
+                
+
                 <TextBlock Text="查阅单词" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
@@ -245,8 +340,8 @@
                             <FontIcon Glyph="&#xE8F1;" />
                         </controls:SettingsCard.HeaderIcon>
 
-                        <!-- ⛔ 不用 ComboBox.ItemTemplate + x:Bind（MustRead §3：这份 XamlCompiler 会崩），
-                             四项都是纯文本，直接写 ComboBoxItem 就够 -->
+                        
+
                         <ComboBox x:Name="DictSourceCombo" MinWidth="128"
                                   SelectionChanged="DictSource_SelectionChanged">
                             <ComboBoxItem Content="离线优先" Tag="offline-first" />
@@ -258,10 +353,10 @@
 
                 </StackPanel>
 
-                <!-- ================= 诊断 ================= -->
-                <!-- 2026-10-02：日志查看从实验性分组挪来这儿（Nick：不是实验功能，设置里给个正式入口）。
-                     位置他指定：窗口之后、软件内容之前。SettingsCard 继承 ButtonBase，
-                     IsClickEnabled=True 整卡可点（系统控件观感，别自己叠 Border 画假按钮）。 -->
+                
+                
+
+
                 <TextBlock Text="诊断" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
@@ -271,21 +366,21 @@
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE7C3;" />
                         </controls:SettingsCard.HeaderIcon>
-                        <!--
-                          ⚠️ 右侧**不要**自己放箭头：IsClickEnabled=True 时 SettingsCard 自带一颗
-                             Chevron（系统尺寸/颜色/动画），再叠一个就是两颗箭头（2026-10-02 截到过）。
-                             内容留空 = 只有系统那颗。
-                        -->
+                        
+
+
+
+
                     </controls:SettingsCard>
 
                 </StackPanel>
 
-                <!-- ================= 存储 ================= -->
-                <!-- 2026-10-10：素材缓存改成「按版本分目录」（cache\dv{版本}-{yyyyMMddHHmm}\）。
-                     2026-10-11：日志改成「启动一次一个目录」（logs\{启动时间}\）——
-                     两套都在这儿给一个看得见的入口 + 保留策略，做法完全同构。
-                     ⚠️「本地缓存」「本地日志」必须保持 IsExpanded="False" —— 实测置 True 会让 Expander 在
-                        XAML 解析途中就展开、抢跑 Expanded 事件，那时 x:Name 字段还没绑完 ⇒ 空引用崩页。 -->
+                
+                
+
+
+
+
                 <TextBlock Text="存储" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <StackPanel.ChildrenTransitions>
@@ -313,7 +408,17 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
-                    <!-- 本地缓存：列表在展开时现读（平时折叠，不占加载时间）。 -->
+                    
+
+                    <controls:SettingsCard Header="清除缓存"
+                                           Description="删掉旧版本的素材缓存，只保留当前正在用的那一个。">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE894;" />
+                        </controls:SettingsCard.HeaderIcon>
+                        <Button Content="立即清除" Click="ClearCache_Click" />
+                    </controls:SettingsCard>
+
+                    
                     <controls:SettingsExpander x:Name="CacheExpander" Header="本地缓存"
                                                Description="可打开目录，也可删除旧版本。"
                                                IsExpanded="False"
@@ -335,9 +440,9 @@
                                             <Button Content="打开缓存目录" Click="OpenCacheDir_Click" />
                                         </StackPanel>
                                         <StackPanel x:Name="CacheList" Spacing="6" />
-                                        <!-- 2026-10-11 Nick：展开后的列表太长，改成分页，每页最多 10 条。
-                                             ⚠️ 不用自己画页码条 —— 就是系统 Button + 一行说明文字，
-                                                条数不超一页时整条 Collapsed（见 RenderPagedList）。 -->
+                                        
+
+
                                         <StackPanel x:Name="CachePager" Orientation="Horizontal" Spacing="8"
                                                     Margin="0,4,0,0" Visibility="Collapsed">
                                             <Button x:Name="CachePrevButton" Content="上一页" Click="CachePrev_Click" />
@@ -366,7 +471,7 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
-                    <!-- 本地日志：列表在展开时现读（平时折叠，不占加载时间）。 -->
+                    
                     <controls:SettingsExpander x:Name="LogExpander" Header="本地日志"
                                                Description="可展开查看，也可删除某一次。"
                                                IsExpanded="False"
@@ -388,7 +493,7 @@
                                             <Button Content="打开日志目录" Click="OpenLogDir_Click" />
                                         </StackPanel>
                                         <StackPanel x:Name="LogList" Spacing="6" />
-                                        <!-- 同「本地缓存」：日志一多就摊成一大片，这里也是每页 10 条。 -->
+                                        
                                         <StackPanel x:Name="LogPager" Orientation="Horizontal" Spacing="8"
                                                     Margin="0,4,0,0" Visibility="Collapsed">
                                             <Button x:Name="LogPrevButton" Content="上一页" Click="LogPrev_Click" />
@@ -405,9 +510,9 @@
 
                 </StackPanel>
 
-                <!-- ================= 软件内容 ================= -->
-                <!-- 2026-10-01：原「常用工具」整组（浮窗置顶 / 屏幕边缘侧边栏 / 放置模式 / 贴哪条边）
-                     与「截图」两项，都搬去了「侧边布局」页 —— 那页本就是侧边栏与常用工具的布置中心。 -->
+                
+                
+
                 <TextBlock Text="软件内容" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
 
@@ -438,11 +543,11 @@
                         </controls:SettingsCard.Description>
                     </controls:SettingsCard>
 
-                    <!-- GitHub 下载体验优化（2026-10-05 Nick）：下载路径的**全局默认**。
-                         和详情页那条「加速通道」分工不同：那条是逐条链接手动挑公益镜像，
-                         这里是用户定一次、之后所有 GitHub 下载都按它走；两者不打架 ——
-                         手动挑过的链接域名已经不是 github.com，不会再被这里改写一遍。
-                         (Experimental) 按 Nick 指定走 WinUI 的警告色（SystemFillColorCautionBrush）。 -->
+                    
+
+
+
+
                     <controls:SettingsCard Header="GitHub 下载体验优化">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE945;" />
@@ -464,11 +569,11 @@
                                 <TextBlock Text="自动" />
                             </ComboBoxItem>
                             <ComboBoxItem Tag="selfhosted">
-                                <!--
-                                  2026-10-22 Nick：自建加速**不稳定**（签名接口在部分网络下拿不到），
-                                  右侧挂一个 Exp（Experimental）标记，用 WinUI 的警告色提示用户。
-                                  ⚠️ 标记只在选项里，不参与 Tag 判断。
-                                -->
+                                
+
+
+
+
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="自建加速服务" />
                                     <TextBlock Text="Exp"
@@ -483,10 +588,10 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
-                    <!-- 下载文件夹（2026-11-01，GitHub Issue #322「下载可否自定义下载路径」）：
-                         管的是下载**存到哪儿**，与上面那条「从哪儿取」分工明确、别合并。
-                         细节放这儿而不是每次下载都问：定一次就够；临时换地方走详情页
-                         下载按钮右半边的「下载到其他文件夹…」。 -->
+                    
+
+
+
                     <controls:SettingsCard Header="下载文件夹">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8B7;" />
@@ -508,7 +613,7 @@
 
                 </StackPanel>
 
-                <!-- ================= 更新 ================= -->
+                
                 <TextBlock x:Name="UpdateSectionHeader" Text="更新" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,24,0,8" />
                 <StackPanel Spacing="4">
                     <StackPanel.ChildrenTransitions>
@@ -548,10 +653,10 @@
                                       Toggled="AutoCheckSwitch_Toggled" />
                     </controls:SettingsCard>
 
-                    <!--
-                      ⚠️ 2026-10-22：Description 写得太长会把 Header 挤成**竖排**（一个字一行）——
-                      SettingsCard 的 Header 列是自适应宽度，内容区一宽就没地方了。改成短句 + 内容区限宽。
-                    -->
+                    
+
+
+
                     <controls:SettingsCard Header="检查更新" Description="发现新版本先询问，不会自动安装。">
                         <controls:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE896;" />
@@ -565,19 +670,19 @@
                             <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <!--
-                              ⛔ 2026-10-26 删掉了内嵌的「更新说明」RichTextBlock（原 x:Name=UpdateNotes）。
-                                 原因：它把发版正文整段渲染进设置卡，配图语法 `![…](https://github.com/…)`、
-                                 大标题、下载提示全被当正文显示，卡片被撑很高 —— 用户反馈"排版该改一改"，
-                                 自己也觉得丑。正文不是没有地方看：检查完会弹更新对话框，那里有整理好的
-                                 「本次更新内容」；要读全文去「更新日志」页。
-                              ⛔ 别再把它加回来。这一格只留：按钮 + 进度条 + 一行状态。
-                            -->
+                            
+
+
+
+
+
+
+
                         </StackPanel>
                     </controls:SettingsCard>
 
-                    <!-- 安装包自动清理：updates 目录只留最近 N 个，更早的启动时删除（InstallerCleanup）。
-                         留下的包给「版本记录 → 装回旧版本」用：本地有同名包且校验通过就不再下载。 -->
+                    
+
                     <controls:SettingsCard Header="安装包保留数量"
                                            Description="保留最近几个安装包，便于装回旧版。">
                         <controls:SettingsCard.HeaderIcon>
@@ -597,8 +702,8 @@
                         </ComboBox>
                     </controls:SettingsCard>
 
-                    <!-- 本地安装包：列表在展开时现读（平时折叠，不占加载时间）。
-                         ⚠️ 内容走 Items / Description —— ContentAlignment="Vertical" 实测无效（§K.6） -->
+                    
+
                     <controls:SettingsExpander x:Name="InstallerExpander" Header="本地安装包"
                                                Description="可直接覆盖安装当前或更旧版本。"
                                                IsExpanded="False"
@@ -614,7 +719,7 @@
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <StackPanel x:Name="InstallerList" Spacing="6" />
-                                        <!-- 分页同「本地缓存」「本地日志」：见 RenderPagedList（每页 10 条）。 -->
+                                        
                                         <StackPanel x:Name="InstallerPager" Orientation="Horizontal" Spacing="8"
                                                     Margin="0,4,0,0" Visibility="Collapsed">
                                             <Button x:Name="InstallerPrevButton" Content="上一页" Click="InstallerPrev_Click" />
@@ -629,8 +734,8 @@
                         </controls:SettingsExpander.Items>
                     </controls:SettingsExpander>
 
-                    <!-- 版本记录：内容走 Items（渲染在标题下方的整行区域），
-                         不能塞进默认的 Content 位 —— 那样会挤在标题右侧，展开后成为一条窄长的右栏列表 -->
+                    
+
                     <controls:SettingsExpander x:Name="HistoryExpander" Header="版本记录"
                                                Description="本机运行过哪些版本，以及可以从仓库装回的旧版本。"
                                                IsExpanded="False"
@@ -648,7 +753,7 @@
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <StackPanel x:Name="LocalHistoryList" Spacing="6" />
-                                        <!-- 本机版本记录会一直攒（每次启动一条），最容易长到翻页。 -->
+                                        
                                         <StackPanel x:Name="LocalHistoryPager" Orientation="Horizontal" Spacing="8"
                                                     Margin="0,4,0,0" Visibility="Collapsed">
                                             <Button x:Name="LocalHistoryPrevButton" Content="上一页" Click="LocalHistoryPrev_Click" />
@@ -675,8 +780,8 @@
                                                           IsActive="False" Visibility="Collapsed" />
                                         </StackPanel>
                                         <StackPanel x:Name="HistoryList" Spacing="6" />
-                                        <!-- 「从仓库装回旧版本」列表：一次最多拉 20 条 ⇒ 分两页。
-                                             ⚠️ 翻页**不再打网络**，用的是一次加载缓存在 _historyReleases 里的那份。 -->
+                                        
+
                                         <StackPanel x:Name="HistoryPager" Orientation="Horizontal" Spacing="8"
                                                     Margin="0,4,0,0" Visibility="Collapsed">
                                             <Button x:Name="HistoryPrevButton" Content="上一页" Click="HistoryPrev_Click" />

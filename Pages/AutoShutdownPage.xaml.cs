@@ -8,26 +8,26 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-/// <summary>
-/// 「自动关机」页（内置工具，tag = <c>autoshutdown</c>）。
-///
-/// ⚠️ 2026-10-12 从「实验性功能」转正，搬进「内置工具」分组
-///    （入口 = <c>Data/ToolDef.cs</c> 的 ToolCatalog；页头那颗「实验性功能」徽标已去掉）。
-///
-/// 上半是总开关，中间是按星期排的时间表（周一~周日一列一天），
-/// 下半是「把取消关机加到侧边栏」的快捷入口 + 限制说明。
-///
-/// ⚠️ 页面只负责**改配置**，真正到点执行在 <see cref="Data.AutoShutdown"/> 的定时巡检里；
-///    这里绝不自己发关机命令（改完存盘即可，引擎每次 Tick 都重新读配置）。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class AutoShutdownPage : Page
 {
-    /// <summary>侧边栏那颗「取消关机」的模块 id（与 Data/SidebarModule.cs 一致）。</summary>
+    
     private const string CancelModuleId = "cancelshutdown";
 
     private AutoShutdownConfig _config = new();
 
-    /// <summary>程序化改控件值时用它挡住 Toggled，别把"回显"当成"用户改的"。</summary>
+    
     private bool _loading;
 
     public AutoShutdownPage()
@@ -36,7 +36,7 @@ public sealed partial class AutoShutdownPage : Page
         Loaded += (_, _) => Reload();
     }
 
-    // ── 载入 / 回显 ─────────────────────────────────────────
+    
 
     private void Reload()
     {
@@ -68,7 +68,7 @@ public sealed partial class AutoShutdownPage : Page
     private static bool HasCancelModule() =>
         (App.Settings.Current.SidebarModuleIds ?? Array.Empty<string>()).Contains(CancelModuleId);
 
-    // ── 时间表 ──────────────────────────────────────────────
+    
 
     private void BuildSchedule()
     {
@@ -94,8 +94,8 @@ public sealed partial class AutoShutdownPage : Page
             for (var index = 0; index < points.Count; index++)
                 column.Children.Add(BuildPointButton(day, index, points[index]));
 
-            // 列底：加号 + 它右边那颗「套用前一天」。
-            // ⚠️ 两颗并排放在一个横向 StackPanel 里（Nick 2026-10-12 指明"在加号右边再加一个"）。
+            
+            
             var actions = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -111,7 +111,7 @@ public sealed partial class AutoShutdownPage : Page
         }
     }
 
-    /// <summary>一颗关机点按钮：上行是时间，下行是方式（+延迟）。</summary>
+    
     private Button BuildPointButton(int dayIndex, int pointIndex, ShutdownPoint point)
     {
         var caption = AutoShutdownConfig.NormalizeMethod(point.Method) == ShutdownMethods.Slide
@@ -137,7 +137,7 @@ public sealed partial class AutoShutdownPage : Page
         return button;
     }
 
-    /// <summary>那一列的「+」。</summary>
+    
     private Button BuildAddButton(int dayIndex)
     {
         var button = new Button
@@ -155,13 +155,13 @@ public sealed partial class AutoShutdownPage : Page
         return button;
     }
 
-    /// <summary>
-    /// 加号右边那颗「套用前一天」：把**前一天**那一列整列拷到本列（周一取周日）。
-    ///
-    /// ⚠️ 语义是**覆盖**不是追加 —— "套用"就是把这一天排成前一天的样子；
-    ///    本列已有关机点时先弹一句确认，不做无声覆盖。
-    /// ⚠️ 前一天是空的就只提示、不动手 —— 否则"套用"会退化成"把本列清空"，那不是用户要的。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private Button BuildCopyPrevButton(int dayIndex)
     {
         var prev = PreviousDay(dayIndex);
@@ -172,7 +172,7 @@ public sealed partial class AutoShutdownPage : Page
             Padding = new Thickness(0),
             Width = 30,
             Height = 30,
-            // E8C8（Copy）是 MDL2 里的老码位，Win10 也有字形
+            
             Content = new FontIcon { Glyph = "\uE8C8", FontSize = 12 },
         };
         ToolTipService.SetToolTip(button,
@@ -183,7 +183,7 @@ public sealed partial class AutoShutdownPage : Page
         return button;
     }
 
-    /// <summary>本列的"前一天"（周一取周日）。</summary>
+    
     private static int PreviousDay(int dayIndex) => (dayIndex + 6) % 7;
 
     private async Task CopyPreviousDayAsync(int dayIndex)
@@ -214,7 +214,7 @@ public sealed partial class AutoShutdownPage : Page
             if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
         }
 
-        // ⚠️ 必须**深拷**：直接把同一批对象塞过去，之后改其中一天会连带改到另一天
+        
         target.Clear();
         foreach (var p in source)
             target.Add(new ShutdownPoint
@@ -229,18 +229,18 @@ public sealed partial class AutoShutdownPage : Page
             $"已把{AutoShutdownConfig.DayNames[prev]}的 {source.Count} 个关机点套用到{AutoShutdownConfig.DayNames[dayIndex]}。");
     }
 
-    /// <summary>时间表那块自己的提示行（套用结果 / 没什么可套用）。</summary>
+    
     private void ShowScheduleHint(string text)
     {
         if (ScheduleHint is not null) ScheduleHint.Text = text;
     }
 
-    // ── 增 / 改 / 删 ────────────────────────────────────────
+    
 
     private async Task AddPointAsync(int dayIndex)
     {
-        // 默认值：**沿用上次保存过的那个点**（时间 / 方式 / 延迟），没存过才退回内置默认
-        // （放学时段 + 直接关机 + 一分钟延迟）。Nick 2026-10-12：一个一个配太麻烦。
+        
+        
         var last = _config.LastPoint;
         var draft = last is null
             ? new ShutdownPoint { Time = "17:30", Method = ShutdownMethods.Shutdown, DelaySeconds = 60 }
@@ -253,7 +253,7 @@ public sealed partial class AutoShutdownPage : Page
         SaveAndRefresh();
     }
 
-    /// <summary>把"用户刚填好的这一份"记进存档，供下次新增关机点时当默认值。</summary>
+    
     private void RememberLast(ShutdownPoint point) =>
         _config.LastPoint = new ShutdownPoint
         {
@@ -266,7 +266,7 @@ public sealed partial class AutoShutdownPage : Page
     {
         var current = _config.Days[dayIndex][pointIndex];
 
-        // ⚠️ 先拷一份草稿进去编辑，用户点「取消」时原对象一个字段都不该被改过
+        
         var draft = new ShutdownPoint
         {
             Time = current.Time,
@@ -282,7 +282,7 @@ public sealed partial class AutoShutdownPage : Page
                 current.Time = draft.Time;
                 current.Method = draft.Method;
                 current.DelaySeconds = draft.DelaySeconds;
-                RememberLast(current);      // 改过的这份也算"上次填的"，下次新增照它来
+                RememberLast(current);      
                 SaveAndRefresh();
                 break;
 
@@ -291,7 +291,7 @@ public sealed partial class AutoShutdownPage : Page
                 SaveAndRefresh();
                 break;
 
-            // Cancel：草稿丢掉，原样不动
+            
         }
     }
 
@@ -302,24 +302,24 @@ public sealed partial class AutoShutdownPage : Page
         UpdateHints();
     }
 
-    // ── 关机点配置弹层 ──────────────────────────────────────
+    
 
     private enum PointDialogOutcome { Save, Delete, Cancel }
 
-    /// <summary>弹配置框。返回值 =「保存 / 删除 / 取消」（删除只在编辑既有时间点时才有这个键）。</summary>
+    
     private async Task<PointDialogOutcome> ShowPointDialogCoreAsync(ShutdownPoint draft, bool isNew)
     {
         var (hour, minute) = SplitTime(draft.Time);
 
-        // ⚠️ 时间用两个 NumberBox（时 / 分），不用 TimePicker：
-        //    TimePicker 三列默认宽度大（塞进对话框会挤），弹出列表还会朝上盖住上面的内容 ——
-        //    计时器页已经因为这个把 TimePicker 撤过一回（见 Pages/Tools/TimerToolPage.xaml 的注释）。
-        //    NumberBox 用 Inline 步进：Compact 的浮层在触屏上取消不掉，也点不动（同 TimerToolPage）。
-        // ⚠️ 宽度不能照抄计时器页的 124：NumberBox **获得焦点时会插进一颗「清除 ×」按钮**，
-        //    而 Inline 步进的两个箭头是常驻的 —— 124 宽下这三颗按钮刚好把文字区挤成 0 宽，
-        //    于是「17」这种两位数会整片看不见（看着像空框，其实值一直在；失焦立刻又出现）。
-        //    2026-10-10 实拍确认：同一时刻「时」框失焦显示 17、「分」框一获焦它的 30 就消失。
-        //    ⇒ 160 是让"焦点态下仍留得下三位数"的最小值；动它之前先截图复核。
+        
+        
+        
+        
+        
+        
+        
+        
+        
         var hourBox = new NumberBox
         {
             Value = hour, Minimum = 0, Maximum = 23, SmallChange = 1,
@@ -339,7 +339,7 @@ public sealed partial class AutoShutdownPage : Page
         timeRow.Children.Add(minuteBox);
         timeRow.Children.Add(new TextBlock { Text = "分", FontSize = 12, Opacity = 0.8, VerticalAlignment = VerticalAlignment.Center });
 
-        // 方式：两颗原生 RadioButton（⚠️ MinWidth 必须清零，默认 120 会把这一行撑开）
+        
         var radioShutdown = new RadioButton
         {
             Content = "直接关机", GroupName = "ShutdownMethod", MinWidth = 0,
@@ -355,7 +355,7 @@ public sealed partial class AutoShutdownPage : Page
         methodRow.Children.Add(radioShutdown);
         methodRow.Children.Add(radioSlide);
 
-        // 延迟：只有「直接关机」用得上
+        
         var delayBox = new NumberBox
         {
             Value = draft.DelaySeconds, Minimum = 0, Maximum = AutoShutdownConfig.MaxDelaySeconds, SmallChange = 10,
@@ -377,12 +377,12 @@ public sealed partial class AutoShutdownPage : Page
         void SyncDelayVisibility() =>
             delaySection.Visibility = radioShutdown.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
 
-        // ⚠️ 事件必须在控件都建好之后再挂 —— 初始化 IsChecked 时 Checked 就会触发一次
+        
         radioShutdown.Checked += (_, _) => SyncDelayVisibility();
         radioSlide.Checked += (_, _) => SyncDelayVisibility();
         SyncDelayVisibility();
 
-        // 内容宽 380：时间行 = 160 + 8 +「时」+ 8 + 160 + 8 +「分」≈ 369，留一点余量给字体度量差异
+        
         var root = new StackPanel { Spacing = 16, Width = 380 };
         root.Children.Add(Section("时间", timeRow));
         root.Children.Add(Section("方式", methodRow));
@@ -405,7 +405,7 @@ public sealed partial class AutoShutdownPage : Page
 
         if (result == ContentDialogResult.Secondary) return PointDialogOutcome.Delete;
 
-        // 保存：把控件里的值写回草稿（用 Clamp 挡掉 NaN / 越界）
+        
         draft.Time = $"{ReadNumber(hourBox, hour, 0, 23):00}:{ReadNumber(minuteBox, minute, 0, 59):00}";
         draft.Method = radioSlide.IsChecked == true ? ShutdownMethods.Slide : ShutdownMethods.Shutdown;
         draft.DelaySeconds = ReadNumber(delayBox, draft.DelaySeconds, 0, AutoShutdownConfig.MaxDelaySeconds);
@@ -420,7 +420,7 @@ public sealed partial class AutoShutdownPage : Page
         return panel;
     }
 
-    /// <summary>NumberBox 取整数：NaN（用户清空过）和越界都退回兜底值。</summary>
+    
     private static int ReadNumber(NumberBox box, int fallback, int min, int max)
     {
         var value = box.Value;
@@ -428,7 +428,7 @@ public sealed partial class AutoShutdownPage : Page
         return Math.Clamp((int)Math.Round(value), min, max);
     }
 
-    /// <summary>"HH:mm" → (时, 分)；认不出就给 17:30。</summary>
+    
     private static (int Hour, int Minute) SplitTime(string? text)
     {
         if (!string.IsNullOrWhiteSpace(text)
@@ -438,7 +438,7 @@ public sealed partial class AutoShutdownPage : Page
         return (17, 30);
     }
 
-    // ── 顶部开关 / 侧边栏 ───────────────────────────────────
+    
 
     private void EnableSwitch_Toggled(object sender, RoutedEventArgs e)
     {
@@ -455,10 +455,10 @@ public sealed partial class AutoShutdownPage : Page
 
         if (!ids.Contains(CancelModuleId))
         {
-            ids.Add(CancelModuleId);                       // 追加到末尾
+            ids.Add(CancelModuleId);                       
             App.Settings.Current.SidebarModuleIds = ids.ToArray();
             App.Settings.Save();
-            Views.ToolSidebarWindow.ApplyModules();        // 真侧边栏立刻重建
+            Views.ToolSidebarWindow.ApplyModules();        
         }
 
         SidebarHint.Text = App.Settings.Current.SidebarEnabled

@@ -6,10 +6,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
-         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，页面纹丝不动（与首页手感不一致）。
-         2026-10-13：曾把 ScrollViewer 提到最外层当页面根，实测这一页滚动反而更卡（顶区元素密），
-         已改回「中列滚动容器 + 接力」。 -->
+    
+
+
+
     <Grid x:Name="WorkspaceRoot" Background="Transparent">
 
         <Grid.ColumnDefinitions>
@@ -18,8 +18,8 @@
             <ColumnDefinition Width="24" />
         </Grid.ColumnDefinitions>
 
-        <!-- 整页可滚：内容长得超过窗口时靠它，别再用小滚动区裁掉东西（拖动时会误会"模块消失"）
-             右边留 18 的空：不然页面滚动条会压在预览条上，很难看 -->
+        
+
         <ScrollViewer x:Name="PageScroll" Grid.Column="1" MaxWidth="960" VerticalScrollBarVisibility="Auto"
                       VerticalScrollMode="Auto">
             <Grid RowSpacing="14" Margin="0,36,18,44">
@@ -42,9 +42,10 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- 左：模块库 -->
+                    
                     <Grid RowSpacing="10">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
@@ -56,9 +57,28 @@
                         </StackPanel>
 
                         <StackPanel x:Name="LibraryPanel" Grid.Row="1" Spacing="10" Margin="0,2,0,0" />
+
+                        <StackPanel Grid.Row="2" Spacing="8" Margin="0,14,0,0">
+                            <TextBlock Text="快捷应用" FontSize="16" FontWeight="Bold" />
+                            <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                       Text="先在上方模块库把「快捷应用」加入侧边栏，再在这里添加应用、快捷方式或文件。" />
+                            <StackPanel x:Name="PinnedAppsPanel" Spacing="5" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="添加应用" Click="AddPinnedApp_Click" />
+                                <Button Content="添加快捷方式" Click="AddPinnedShortcut_Click" />
+                                <Button Content="添加文件" Click="AddPinnedFile_Click" />
+                            </StackPanel>
+                            <TextBlock x:Name="PinnedStatusText" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+
+                            <TextBlock Text="全局快捷键" FontSize="16" FontWeight="Bold" Margin="0,16,0,0" />
+                            <TextBlock FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                                       Text="为侧边栏里的快捷应用录制独立的全局组合键；应用移除后对应快捷键自动失效。" />
+                            <StackPanel x:Name="AppHotkeyPanel" Spacing="5" />
+                            <TextBlock x:Name="AppHotkeyStatusText" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                        </StackPanel>
                     </Grid>
 
-                    <!-- 右：侧边栏预览（宽度照真实侧边栏来，所见即所得） -->
+                    
                     <StackPanel Grid.Column="1" Spacing="8">
                         <TextBlock Text="侧边栏预览" FontSize="16" FontWeight="Bold" />
 
@@ -66,14 +86,14 @@
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                             <Grid>
-                                <!-- 让位的"空档"画在这一层：它**不参与布局**，所以空档挪位置时不会有哪一行被布局瞬间顶走
-                                     （之前是往下面的 StackPanel 里插/移一个 spacer，跨过一行那一行就跳一格）。
-                                     放在行**下面**，行滑过去时正好把空档盖住，看着就是"缝被填上了"。 -->
+                                
+
+
                                 <Canvas x:Name="HoleLayer" IsHitTestVisible="False" />
 
-                                <!-- 模块那一摞。行的位置**固定不动**，让位靠每行自己的 Margin 偏移补间。
-                                     侧边栏自带的那三个键（收起/位置复原/隐藏）这里不画 —— 它们本来就不能拼、不能删，
-                                     摆在这儿只会挤位置、也是多余的。 -->
+                                
+
+
                                 <StackPanel x:Name="PreviewPanel" Spacing="3" />
                             </Grid>
                         </Border>
@@ -83,13 +103,13 @@
                     </StackPanel>
                 </Grid>
 
-                <!--
-                  ============ 常用工具 / 侧边栏开关 ============
-                  2026-10-01：这四项原本在「设置 → 常用工具」，搬到这里 —— 它们本就是侧边栏
-                  与常用工具浮窗自己的开关，跟模块库、预览摆在一页才顺。（截图那两项留在设置页。）
-                  ⚠️ 版式一律照设置页那套：SettingsCard + HeaderIcon + 4px 组内间距，
-                     不许自己叠 Border / 写死颜色。
-                -->
+                
+
+
+
+
+
+
                 <StackPanel Grid.Row="2">
 
                     <TextBlock Text="常用工具" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,8" />
@@ -113,8 +133,8 @@
                                           Toggled="SidebarSwitch_Toggled" />
                         </controls:SettingsCard>
 
-                        <!-- 按钮文字：短名（两三个字）还是长名（最多四个字，2026-10-30 Nick 要）。
-                             ⚠️ 只影响**侧边栏按钮上那行字**，悬停提示和「侧边布局」这里的名字一直用全名。 -->
+                        
+
                         <controls:SettingsCard Header="按钮使用长名"
                                                Description="最多四个字，便于辨认。">
                             <controls:SettingsCard.HeaderIcon>
@@ -124,7 +144,7 @@
                                           Toggled="LongLabelSwitch_Toggled" />
                         </controls:SettingsCard>
 
-                        <!-- 两项都用 ComboBox：与「颜色模式」「窗口背景效果」同一套交互，不做成一排单选按钮 -->
+                        
                         <controls:SettingsCard Header="侧边栏放置模式">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE7C4;" />
@@ -150,7 +170,7 @@
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </controls:SettingsCard.Description>
-                            <!-- 选项按放置模式动态重建（贴靠 = 左/右/左右两边，自由 = 左/右/上/下） -->
+                            
                             <ComboBox x:Name="SidebarEdgeCombo" MinWidth="170"
                                       SelectionChanged="SidebarEdge_SelectionChanged" />
                         </controls:SettingsCard>
@@ -198,13 +218,13 @@
                                 <FontIcon Glyph="&#xE740;" />
                             </controls:SettingsCard.HeaderIcon>
                             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <!--
-                                  ⛔⛔ 2026-10-22：**必须写 Value**。
-                                      只写 Minimum=45 时 Slider 初始值就是 45，解析 XAML 就触发一次 ValueChanged；
-                                      那会儿 _toolSync 还没置 true，于是存档里的比例被直接写成 0.45
-                                      —— 用户每次更新后打开这一页，下次就看到默认 45%。
-                                      这里写上 75 只是兵底：真值仍由 LoadAsync 按存档回填。
-                                -->
+                                
+
+
+
+
+
+
                                 <Slider x:Name="HeightRatioSlider" Width="190"
                                         Minimum="45" Maximum="95" Value="75"
                                         StepFrequency="5" TickFrequency="5"
@@ -243,12 +263,12 @@
 
                     </StackPanel>
 
-                    <!--
-                      ============ 截图 ============
-                      2026-10-01：原在「设置 → 截图」，整组搬来这里，紧接「常用工具」下面 ——
-                      与浮窗 / 侧边栏同属外部组件那套行为设置，摆在一栏里才顺（设置页那一组已删干净）。
-                      ⚠️ 版式照旧：SettingsCard + HeaderIcon + 4px 组内间距。
-                    -->
+                    
+
+
+
+
+
                     <TextBlock Text="截图" Style="{StaticResource BodyStrongTextBlockStyle}"
                                Margin="0,24,0,8" />
                     <StackPanel Spacing="4">
@@ -282,14 +302,14 @@
 
                     </StackPanel>
 
-                    <!--
-                      侧边栏自带的那排底部按钮（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用）——
-                      **五颗各自一张卡片、一行一个**（2026-10-01：原来横排五个 ToggleSwitch，
-                      挤在一起既不好点也不像系统设置）。开关只管显示与否，不改变它们在侧边栏里的先后。
-                      ⚠️ IsOn 一律**不在 XAML 里写死**（这版 WinUI 对 XAML 里的布尔字面量不老实），
-                         由 Refresh() 从设置同步过来。
-                      ⚠️ 五颗的 `Tag` 必须跟 SidebarFooterKeys 里的字面量一致（那是存档格式的一部分）。
-                    -->
+                    
+
+
+
+
+
+
+
                     <TextBlock Text="侧边栏底部按钮" Style="{StaticResource BodyStrongTextBlockStyle}"
                                Margin="0,24,0,8" />
                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
@@ -340,11 +360,11 @@
 
                     </StackPanel>
 
-                    <!--
-                      ============ 关机 ============
-                      2026-10-18 Nick 要：侧边栏「关机」按钮的两种方式在这里选。
-                      ⚠️ 版式照旧：组标题 + Caption 说明 + SettingsCard + 4px 组内间距。
-                    -->
+                    
+
+
+
+
                     <TextBlock Text="关机" Style="{StaticResource BodyStrongTextBlockStyle}"
                                Margin="0,24,0,8" />
                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
@@ -367,12 +387,12 @@
 
                     </StackPanel>
 
-                    <!--
-                      ============ 动画方案 ============
-                      2026-10-01 Nick：两种落位收尾都做出来之后觉得都挺好，索性都留给用户自己挑。
-                      ⚠️ 版式照旧：组标题 + Caption 说明 + SettingsCard + 4px 组内间距，不许自己叠 Border。
-                      ⚠️ 两项都用 ComboBox：与「颜色模式」「侧边栏放置模式」同一套交互，不做成一排单选按钮。
-                    -->
+                    
+
+
+
+
+
                     <TextBlock Text="动画方案" Style="{StaticResource BodyStrongTextBlockStyle}"
                                Margin="0,24,0,8" />
                     <StackPanel Spacing="4">
@@ -413,7 +433,7 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- 把预览里的模块拖到空白处时浮出来的提示 -->
+        
         <Border x:Name="RemoveHint" Visibility="Collapsed" Grid.ColumnSpan="3"
                 CornerRadius="4" Padding="16,10"
                 HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
@@ -429,7 +449,7 @@
             </StackPanel>
         </Border>
 
-        <!-- 拖着走的那张卡就放在这层上面（不吃点击） -->
+        
         <Canvas x:Name="DragLayer" Grid.ColumnSpan="3" IsHitTestVisible="False" />
     </Grid>
 </Page>

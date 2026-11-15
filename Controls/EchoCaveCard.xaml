@@ -4,27 +4,27 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!--
-      回声洞「正文区」—— 只管一句话（+ 取数时的转圈），**自己不带卡片、不带边框、不带悬停底色**。
+    
 
-      2026-10-03 三次改版（Nick：正文外面有一圈很明显的框，别弄框，整张卡片可点，照 ClassIsland）：
-        · 原来正文是个压平的 Button（借它的悬停/键盘可达性）—— 悬停底色在文字外圈画了个方框，
-          正是他说的「一圈很明显的框」。撤掉，正文退回**纯 TextBlock**；
-        · 「点一下换一条」改由**外面那张 SettingsCard 整卡承接**
-          （Pages/SettingsPage.xaml 里 IsClickEnabled="True" + Click="EchoCave_Click"），
-          悬停底色铺满整行 —— ClassIsland 也是这个做法（SettingsExpanderItem IsClickEnabled）。
-        · 字号不写，跟卡片走标准正文（14px 主色）。ClassIsland 的 TypingControl 同样不设字号。
 
-      2026-10-03 四次改版（Nick：把状态那行删了、永远不要显示，要最纯粹的回声洞）：
-        · 原来正文下面还有一行 12px 小字（「共 N 条」/「先显示上次取到的内容」/「读取失败…」）——
-          整块撤掉。这里**除了字条本身不许有任何文字**：取数状态、条数、报错一律不上界面
-          （失败只写 `ScreenCapture.Log`），投稿回执改在「投稿」弹层里就地显示。
-        · ⛔ 别再往这里加第二行字（包括"点击换一条"之类的提示）。
 
-      2026-10-03 五次改版（Nick：再加个「正在加载」的转圈）：取数期间显示一枚 20px 的
-        ProgressRing（纯图形，不算"文字"，不违反上面那条）。放 Grid 第一列而不是
-        StackPanel(Orientation=Horizontal) —— 后者给 TextBlock 传无限宽，长字条就不换行了。
-    -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -32,12 +32,12 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- 取数中：细一圈的进度环，跟首行对齐；取到东西就收起 -->
+        
         <ProgressRing x:Name="LoadingRing" Grid.Column="0"
                       Width="20" Height="20" Margin="0,1,8,0"
                       VerticalAlignment="Top" IsActive="True" />
 
-        <!-- 正文：整句就是一段普通文本，点击由外层卡片接 -->
+        
         <TextBlock x:Name="MessageText" Grid.Column="1" TextWrapping="Wrap" />
     </Grid>
 </UserControl>

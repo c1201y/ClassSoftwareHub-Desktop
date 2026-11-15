@@ -4,9 +4,9 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-/// <summary>
-/// 第 10 步：下载与存储。线路切换要等收尾时才让下载器换线（草稿里只记选择）。
-/// </summary>
+
+
+
 public sealed partial class OobeDownloadsPage : Page
 {
     private bool _loading;
@@ -25,7 +25,7 @@ public sealed partial class OobeDownloadsPage : Page
         };
         AutoCheckSwitch.IsOn = draft.AutoCheckUpdate;
 
-        // 存档里可能是 1~10 任意值，界面上只给 3 / 5 / 10 三档，就近归位
+        
         CacheCombo.SelectedIndex = draft.CacheKeepCount >= 10 ? 2 : draft.CacheKeepCount >= 5 ? 1 : 0;
         _loading = false;
     }

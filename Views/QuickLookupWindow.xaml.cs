@@ -13,22 +13,22 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>
-/// 查阅单词的小浮窗（2026-11-01）。
-///
-/// <para>
-/// 侧边栏「查阅」按钮走的就是这扇窗（<c>SidebarModule.WindowType</c>）。之所以单开一扇，
-/// 是因为讲课时把整扇主窗口拉出来会盖住课件；这扇只有 480×640，能一直摆在角落。
-/// </para>
-/// <para>
-/// 跟主页面一样分两块：上面查单词、下面翻译句子，各有各的输入框。
-/// 词源调度、双向翻译、本地词库全部复用 <see cref="DictionaryService"/> —— 这里只摆界面，
-/// ⛔ 不要在这扇窗里另写一套查询逻辑，否则主界面和浮窗查出来的东西会不一样。
-/// </para>
-/// <para>
-/// ⚠️ 关掉 = 真销毁，跟哈希校验窗一致：没有"留着复用"的价值，也别在退出链路上留窗口。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class QuickLookupWindow : Window
 {
     private const int WidthDip = 480;
@@ -47,17 +47,17 @@ public sealed partial class QuickLookupWindow : Window
         InitializeComponent();
         Configure();
 
-        // ⚠️ Window 本身没有 Loaded 事件，要挂到根元素上
+        
         Root.Loaded += (_, _) => WordBox.Focus(FocusState.Programmatic);
     }
 
-    /// <summary>
-    /// 摊开这扇窗；已经开着就调到前面。
-    /// <para>
-    /// ⚠️ 方法名 <c>Show</c> 是约定：<c>ToolSidebarWindow</c> 打开「专用窗口」类模块时按名字反射调用
-    ///    （见 <c>Data/SidebarModule.WindowType</c>），改名会静默失效。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static void Show()
     {
         try
@@ -71,7 +71,7 @@ public sealed partial class QuickLookupWindow : Window
         }
     }
 
-    /// <summary>退出应用时真正销毁（由 MainWindow 的退出链路调用；没开过就什么都不做）。</summary>
+    
     public static void CloseForExit()
     {
         var w = _instance;
@@ -79,7 +79,7 @@ public sealed partial class QuickLookupWindow : Window
         try { w?.Close(); } catch { }
     }
 
-    // ── 窗口配置 ─────────────────────────────────────────────────────────
+    
 
     private void Configure()
     {
@@ -100,7 +100,7 @@ public sealed partial class QuickLookupWindow : Window
 
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
-            // 跟应用主题（⛔ 不传 external：分体只作用于侧边栏与常用工具浮窗）
+            
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 
@@ -175,7 +175,7 @@ public sealed partial class QuickLookupWindow : Window
     {
         try
         {
-            // 第一次显示才居中：之后用户自己挪过位置就不要动它了
+            
             if (!_placed)
             {
                 CenterOnScreen();
@@ -191,7 +191,7 @@ public sealed partial class QuickLookupWindow : Window
         }
     }
 
-    // ── 一、查单词 ───────────────────────────────────────────────────────
+    
 
     private async void WordBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
@@ -305,7 +305,7 @@ public sealed partial class QuickLookupWindow : Window
         return stack;
     }
 
-    // ── 二、翻译句子 ─────────────────────────────────────────────────────
+    
 
     private async void Translate_Click(object sender, RoutedEventArgs e)
     {
@@ -374,7 +374,7 @@ public sealed partial class QuickLookupWindow : Window
         }
     }
 
-    // ── 公用 ─────────────────────────────────────────────────────────────
+    
 
     private static void ShowNote(InfoBar bar, string note, InfoBarSeverity severity, string extra = "")
     {

@@ -2,55 +2,55 @@ using System.Linq.Expressions;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// 函数分析的**精确结论**入口。原则只有一条（Nick 定）：
-/// <b>给出的每一项都必须是函数本身的性质，不随视窗移动而变</b>。
-///
-/// <para>
-/// ⛔⛔ 曾经的「数值观察（当前视口内）」是错的：老师上课把视图拖一下，定义域、值域、单调区间
-/// 全跟着变 —— 那不是函数性质，是采样窗口的坐标。现在**整条数值观察链路已删除**，
-/// 拆不出来的项宁可不列，并在末尾说明为什么没列。
-/// </para>
-/// <para>
-/// 覆盖面按"能证明才说"扩展：
-/// <list type="number">
-/// <item>标准形式与线性包裹（sin(x)、x²、ln(x)、sin(x)−6 …）→ 交给 <see cref="FunctionClosedForm"/>。</item>
-/// <item>商式 <c>N(x)/D(x)</c>（D 为一次式）：定义域、零点、竖直渐近线、与 y 轴交点、奇偶性 —— 全部闭式。</item>
-/// <item>其余：只给能严格确证的定义域（整条式子处处有定义时为 ℝ），证不出就返回 null。</item>
-/// </list>
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public static class FunctionExact
 {
-    /// <summary>尝试给出精确结论；给不出返回 null（调用方显示"无解析结论"，绝不落回采样）。</summary>
+    
     public static ClosedForm? Match(LambdaExpression lambda, AngleMode mode)
     {
-        // ① 标准形式与线性包裹
+        
         var standard = FunctionClosedForm.Match(lambda, mode);
         if (standard is not null) return standard;
 
         var param = lambda.Parameters[0];
         var body = Strip(lambda.Body);
 
-        // ② 商式 N/D
+        
         if (body is BinaryExpression { NodeType: ExpressionType.Divide } div)
         {
             var quotient = Quotient(Strip(div.Left), Strip(div.Right), param, mode);
             if (quotient is not null) return quotient;
         }
 
-        // ③ 兜底：只说得清"处处有定义"这一件事
+        
         return IsTotal(body, param)
             ? new ClosedForm(Prune(new List<(string Label, string? Value)> { ("定义域", "x ∈ ℝ") }),
                 "本式没有可解析给出的其他结论；为避免给出随视窗变化的近似值，这里不作数值猜测。")
             : null;
     }
 
-    // ────────────────────────── 商式 ──────────────────────────
+    
 
     private static ClosedForm? Quotient(Expression num, Expression den, ParameterExpression param, AngleMode mode)
     {
-        // 分母必须是一次式：这是能给出**精确**零点/渐近线的前提，否则整段不做
+        
         if (LinearIn(den) is not { } d || Math.Abs(d.A) < 1e-12) return null;
         if (!IsTotal(num, param) || !IsTotal(den, param)) return null;
 
@@ -62,7 +62,7 @@ public static class FunctionExact
             ("定义域", $"x ≠ {rootText}"),
         };
 
-        // 零点：分子为零处；若该点同时是分母的零点则是**可去间断点**，不算零点
+        
         var removable = Math.Abs(EvalAt(num, param, root)) < 1e-9;
         var zeros = ZerosOf(num, param, mode);
 
@@ -75,7 +75,7 @@ public static class FunctionExact
 
         fields.Add(("渐近线", removable ? "无" : $"x = {rootText}"));
 
-        // 与 y 轴交点
+        
         if (Math.Abs(root) > 1e-12)
         {
             var y = EvalAt(num, param, 0) / EvalAt(den, param, 0);
@@ -83,7 +83,7 @@ public static class FunctionExact
                 fields.Add(("与 y 轴交点", $"(0, {ExactNum(y)})"));
         }
 
-        // 奇偶性：分母是一次式 ⇒ 只有当它的零点在原点（定义域才对称）时才可能奇/偶
+        
         fields.Add(("奇偶性", Math.Abs(root) > 1e-12
             ? "非奇非偶"
             : CombineParity(ParityOf(num, param, mode), ParityOf(den, param, mode))));
@@ -92,7 +92,7 @@ public static class FunctionExact
             "值域、单调性、极值、拐点需要求导后的闭式，本式未给出解析结论，故不列出。");
     }
 
-    /// <summary>把分子的「零点」结论借过来（标准形式能力内可得闭式）。</summary>
+    
     private static string? ZerosOf(Expression expr, ParameterExpression param, AngleMode mode)
     {
         if (Strip(expr) is ConstantExpression { Value: double v })
@@ -118,7 +118,7 @@ public static class FunctionExact
         return null;
     }
 
-    /// <summary>两个因子的奇偶性合成商（奇/奇=偶，偶/偶=偶，奇/偶=奇，偶/奇=奇）。</summary>
+    
     private static string CombineParity(string? num, string? den)
     {
         var n = num?.StartsWith('奇') == true;
@@ -133,12 +133,12 @@ public static class FunctionExact
         return "非奇非偶";
     }
 
-    // ────────────────────────── 形状判定 ──────────────────────────
+    
 
     private static Expression Strip(Expression e)
         => e is UnaryExpression { NodeType: ExpressionType.Convert } u ? Strip(u.Operand) : e;
 
-    /// <summary>把式子拆成 a·x + b；不是一次式返回 null。</summary>
+    
     private static (double A, double B)? LinearIn(Expression e)
     {
         e = Strip(e);
@@ -170,11 +170,11 @@ public static class FunctionExact
         return null;
     }
 
-    /// <summary>
-    /// 整个式子是否**对一切实数有定义**（只认能一眼看穿的运算：
-    /// 加减乘、除以非零常数、sin/cos/exp/abs、非负整数次幂）。
-    /// 出现对数、开方、变量作除数、tan 一律判 false —— 那些定义域不能只说 "x ∈ ℝ"。
-    /// </summary>
+    
+    
+    
+    
+    
     private static bool IsTotal(Expression e, ParameterExpression param)
     {
         e = Strip(e);
@@ -206,7 +206,7 @@ public static class FunctionExact
                     nameof(Math.Sin) or nameof(Math.Cos) or nameof(Math.Exp) or nameof(Math.Abs)
                         => c.Arguments.All(x => IsTotal(x, param)),
 
-                    // 幂：只有非负整数次才在全实轴有定义（x^0.5 在负数处无定义）
+                    
                     nameof(Math.Pow) when c.Arguments.Count == 2
                         => IsTotal(c.Arguments[0], param)
                            && Strip(c.Arguments[1]) is ConstantExpression { Value: double p }
@@ -219,7 +219,7 @@ public static class FunctionExact
         }
     }
 
-    // ────────────────────────── 取值与数字写法 ──────────────────────────
+    
 
     private static double EvalAt(Expression expr, ParameterExpression param, double x)
     {
@@ -233,11 +233,11 @@ public static class FunctionExact
         }
     }
 
-    /// <summary>
-    /// 精确数字写法：**先试 π 的整数/分数倍，再试简单分数，最后才退回小数**。
-    /// ⛔ 分母为 2、3、4、6 的 π 倍数写成 π/2、2π/3 这种，是教科书写法；
-    /// 一律写成 1.5708 会立刻显得"机器算的"（Nick 反复点过这一点）。
-    /// </summary>
+    
+    
+    
+    
+    
     private static string ExactNum(double v)
     {
         if (double.IsNaN(v)) return "NaN";
@@ -248,7 +248,7 @@ public static class FunctionExact
         var sign = v < 0 ? "−" : "";
         var abs = Math.Abs(v);
 
-        // π 的分数倍
+        
         foreach (var den in new[] { 1, 2, 3, 4, 6 })
         {
             var num = abs / Math.PI * den;
@@ -261,7 +261,7 @@ public static class FunctionExact
             }
         }
 
-        // 普通分数
+        
         foreach (var den in new[] { 2, 3, 4, 5, 6, 8 })
         {
             var num = abs * den;

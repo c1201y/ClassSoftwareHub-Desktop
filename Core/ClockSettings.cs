@@ -9,12 +9,12 @@ public enum ClockVeil { None, White, Black, Acrylic, Mica }
 public enum ClockTone { Theme, Light, Dark }
 public enum ClockInk { Auto, White, Black }
 
-/// <summary>全屏时钟的外观设置（对齐网页版 tools/ClockTool.vue）。</summary>
+
 public sealed class ClockSettings
 {
     public string BackgroundImagePath { get; set; } = "";
     public ClockVeil Veil { get; set; } = ClockVeil.None;
-    /// <summary>0 ~ 100</summary>
+    
     public double VeilStrength { get; set; } = 55;
     public ClockTone Tone { get; set; } = ClockTone.Theme;
     public ClockInk Ink { get; set; } = ClockInk.Auto;
@@ -24,12 +24,12 @@ public sealed class ClockSettings
     public bool ShowDate { get; set; } = true;
     public bool Hour12 { get; set; }
 
-    /// <summary>
-    /// 把另一份设置的值整体拷进来。
-    ///
-    /// ⚠️ 2026-09-28：这段以前在工具页和浮窗各写了一份（字段列表容易漏同步）。
-    /// 现在只有这一处 —— 加字段就改这里，别在调用方再手抄一遍。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     public void CopyFrom(ClockSettings other)
     {
         if (other is null) return;
@@ -45,7 +45,7 @@ public sealed class ClockSettings
         Hour12 = other.Hour12;
     }
 
-    /// <summary>复制一份。存"上次使用的样子"时要的是**快照**，不是引用。</summary>
+    
     public ClockSettings Clone()
     {
         var copy = new ClockSettings();
@@ -54,35 +54,35 @@ public sealed class ClockSettings
     }
 }
 
-/// <summary>把设置翻译成颜色 / 画刷 / 文字（页面预览与全屏窗口共用，保证两边一致）。</summary>
+
 public static class ClockRender
 {
     public static readonly string[] VeilLabels = { "无", "白色蒙版", "黑色蒙版", "亚克力（Acrylic）", "云母（Mica）" };
     public static readonly string[] ToneLabels = { "跟随应用主题", "白色", "黑色" };
     public static readonly string[] InkLabels = { "自动（跟随底色）", "白色字", "黑色字" };
 
-    /// <summary>
-    /// 时间字体候选。⛔ **每一个都必须能显示等宽数字**，否则大号时间居中显示时，
-    /// 每跳一秒整行宽度就变一次（`1` 比 `0` 窄）⇒ 屏幕上就是"数字一直左右抖"（2026-10-11 Nick 反馈）。
-    ///
-    /// 靠 <c>Typography.NumeralAlignment="Tabular"</c> 打开字体自带的 `tnum` 特性来拉平；
-    /// 实测（Windows 11 / 本机字体文件，GDI 步进宽度 + OpenType 表）：
-    ///   · Consolas / Cascadia Mono —— 本来等宽，无需处理；
-    ///   · Bahnschrift —— 比例字宽（`1`=681、`4`=1165），`tnum` 后全部 1090 ✅；
-    ///   · Segoe UI Variable Display —— `1`=776 其余 1104，`tnum` 后全部 1104 ✅；
-    ///   · Cambria —— 数字本身就是等宽的 1134 ✅。
-    /// ⛔ **Georgia 已剔除**：它的 `tnum` 只重映射货币符号、不碰数字（`1`=880 vs `0`=1257），
-    ///    OpenType 层面根本拉不平，用它这个抖动修不掉；换成同为"优雅衬线"、数字天生等宽的 Cambria。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public static readonly string[] FontLabels = { "等宽 · 与课堂计时器一致", "工业风 · Bahnschrift", "现代等宽 · Cascadia", "系统 UI · Segoe", "优雅衬线 · Cambria" };
     public static readonly string[] FontFamilies = { "Consolas", "Bahnschrift", "Cascadia Mono", "Segoe UI Variable Display", "Cambria" };
 
-    /// <summary>
-    /// 把一个字体名规范化成候选表里认识的那个。
-    /// 主要用来兜**旧存档**：老版本存过 `Georgia`（已剔除，见 <see cref="FontFamilies"/> 的说明），
-    /// 直接拿它去 new FontFamily 会让那台机器继续抖 —— 这里统一折成 Cambria。
-    /// 空值 / 不认识的一律回默认的 Bahnschrift。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     public static string NormalizeFont(string? family)
     {
         if (string.IsNullOrWhiteSpace(family)) return FontFamilies[1];
@@ -102,7 +102,7 @@ public static class ClockRender
         _ => darkTheme ? Black : Paper,
     };
 
-    /// <summary>文字颜色：强制 > 有背景图（白蒙版给深色字，其余白字）> 跟随底色。</summary>
+    
     public static Color FaceColor(ClockSettings s, bool darkTheme, bool hasPhoto)
     {
         if (s.Ink == ClockInk.White) return Paper;
@@ -116,7 +116,7 @@ public static class ClockRender
     public static Brush BaseBrush(ClockSettings s, bool darkTheme)
         => new SolidColorBrush(BaseColor(s.Tone, darkTheme));
 
-    /// <summary>蒙版 / 材质。亚克力、云母用 AcrylicBrush（真的会模糊底下的背景图）；资源不支持时退回半透明纯色。</summary>
+    
     public static Brush VeilBrush(ClockSettings s)
     {
         var a = Math.Clamp(s.VeilStrength / 100.0, 0, 1);
@@ -154,7 +154,7 @@ public static class ClockRender
         }
     }
 
-    /// <summary>时间文字（网页版：12 小时制不带前导零，24 小时制补零）。</summary>
+    
     public static string TimeText(DateTime now, bool hour12)
     {
         var h = hour12 ? (now.Hour % 12 == 0 ? 12 : now.Hour % 12) : now.Hour;

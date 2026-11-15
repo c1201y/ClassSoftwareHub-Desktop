@@ -13,17 +13,17 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>
-/// 钉图（贴纸）：把一张图钉在屏幕上。
-///
-/// 规矩（都是踩出来的）：
-///   · **1:1**：初始就是图片的原始像素大小，绝不拉伸铺满屏幕（大图就是大图，小图就是小图）；
-///   · 窗口尺寸**就等于**图片尺寸（不再 +2 留边），配合深色底 → 没有白边；
-///   · 拖四条边/四个角 = 等比缩放（对角/对边锚住不动），拖中间 = 挪位，滚轮也能缩；
-///   · **触屏/笔另走一条路**：XAML Manipulation —— 单指拖 = 挪位、单指从边缘/角拖 = 改大小（判定放宽到 30dip）、
-///     双指捏 = 缩放；**不能**用鼠标那套（`GetCursorPos` 在手指拖动时拿到的还是鼠标位置，等于拖不动）；
-///   · 双击或右键（长按）关掉；`WS_EX_NOACTIVATE` 不抢焦点（上课时别把 PPT 顶掉）。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class StickerWindow : Window
 {
     private const int GwlExStyle = -20;
@@ -32,8 +32,8 @@ public sealed partial class StickerWindow : Window
     private const int SwShowNoActivate = 4;
     private const double MinSide = 48;
     private const double MaxSide = 8000;
-    private const double EdgeDip = 10;                 // 鼠标：离边多近算"要拖边框"
-    private const double TouchEdgeDip = 30;            // 触屏/笔：手指比光标粗，判定放宽
+    private const double EdgeDip = 10;                 
+    private const double TouchEdgeDip = 30;            
 
     private static readonly List<StickerWindow> Keep = new();
 
@@ -50,21 +50,21 @@ public sealed partial class StickerWindow : Window
         Resize,
     }
 
-    // zone：0=身体 1=左 2=右 3=上 4=下 5=左上 6=右上 7=左下 8=右下
+    
     private Mode _mode = Mode.None;
     private int _zone;
-    private POINT _startCursor;                        // 物理屏幕坐标（只给鼠标用）
+    private POINT _startCursor;                        
     private RectInt32 _startRect;
 
-    // —— 触屏/笔那条路（XAML Manipulation，全走"增量"，不读绝对坐标，不会自激）——
+    
     private bool _manActive;
     private bool _manPinch;
     private int _manZone;
     private RectInt32 _manStartRect;
-    private double _manDx;                             // 累计位移（DIP）
+    private double _manDx;                             
     private double _manDy;
-    private double _manK = 1.0;                        // 累计缩放倍数
-    private double _manPx;                             // 缩放锚点（窗口内 DIP）
+    private double _manK = 1.0;                        
+    private double _manPx;                             
     private double _manPy;
 
     private StickerWindow(int pxW, int pxH, int screenX, int screenY)
@@ -90,7 +90,7 @@ public sealed partial class StickerWindow : Window
 
         _oldExStyle = GetWindowLongPtr(_hwnd, GwlExStyle);
         SetWindowLongPtr(_hwnd, GwlExStyle, new IntPtr(_oldExStyle.ToInt64() | WsExNoActivate | WsExToolWindow));
-        KillSystemBorder(_hwnd);                       // 去掉系统给无边框窗画的那 1px 边（浅色底上看着就是"黑边"）
+        KillSystemBorder(_hwnd);                       
 
         Root.PointerPressed += Root_PointerPressed;
         Root.PointerMoved += Root_PointerMoved;
@@ -100,8 +100,8 @@ public sealed partial class StickerWindow : Window
         Root.DoubleTapped += (_, _) => CloseSticker();
         Root.RightTapped += (_, _) => CloseSticker();
 
-        // 触屏/笔：交给 XAML 的 Manipulation（单指拖 = 挪位 / 边缘拖 = 改大小 / 双指捏 = 缩放）。
-        // 鼠标那条路（绝对光标）保持原样，两条路按 PointerDeviceType 分工，不会打架。
+        
+        
         Root.ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY | ManipulationModes.Scale;
         Root.ManipulationStarted += Root_ManipulationStarted;
         Root.ManipulationDelta += Root_ManipulationDelta;
@@ -113,7 +113,7 @@ public sealed partial class StickerWindow : Window
         Closed += (_, _) => Keep.Remove(this);
     }
 
-    /// <summary>钉一张图。<paramref name="bmp"/> 可以是 PNG 或 BMP 字节（BitmapImage 会自己认）。</summary>
+    
     public static void Pin(byte[] bmp, int screenX, int screenY, int pxW, int pxH)
     {
         try
@@ -122,8 +122,8 @@ public sealed partial class StickerWindow : Window
             Keep.Add(w);
             _ = w.LoadAsync(bmp);
 
-            w.Activate();                              // 先把窗口和内容层建起来（WinUI 没有 Show()）
-            ShowWindow(w._hwnd, SwShowNoActivate);     // NOACTIVATE 的窗口只能这样显示出来
+            w.Activate();                              
+            ShowWindow(w._hwnd, SwShowNoActivate);     
             UpdateWindow(w._hwnd);
 
             ScreenCapture.Log($"贴图已出: {pxW}x{pxH} @{screenX},{screenY}（当前共 {Keep.Count} 张）");
@@ -158,7 +158,7 @@ public sealed partial class StickerWindow : Window
         return 1.0;
     }
 
-    /// <summary>把窗口摆到 (x,y) 并设成 w×h **物理像素**（1:1 时 w/h 就是图片原始像素）。</summary>
+    
     private void ApplyRect(int x, int y, int w, int h)
     {
         try
@@ -173,11 +173,11 @@ public sealed partial class StickerWindow : Window
         }
     }
 
-    // ── 指针 ─────────────────────────────────────────────────
+    
 
     private void Root_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (e.Pointer.PointerDeviceType.ToString() != "Mouse") return;   // 触屏/笔走 Manipulation 那条路
+        if (e.Pointer.PointerDeviceType.ToString() != "Mouse") return;   
         var dip = e.GetCurrentPoint(Root).Position;
         _zone = ZoneOf(dip);
         _mode = _zone == 0 ? Mode.Move : Mode.Resize;
@@ -209,7 +209,7 @@ public sealed partial class StickerWindow : Window
 
     private void Root_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (e.Pointer.PointerDeviceType.ToString() != "Mouse") return;   // 触屏/笔走 Manipulation 那条路
+        if (e.Pointer.PointerDeviceType.ToString() != "Mouse") return;   
         if (_mode == Mode.None)
         {
             ShowHover(ZoneOf(e.GetCurrentPoint(Root).Position));
@@ -231,7 +231,7 @@ public sealed partial class StickerWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>等比缩放：角 = 沿主导轴，边 = 只按那条边的方向；锚住对面（边则锚对面边 + 另一轴居中）。</summary>
+    
     private void ResizeBy(int zone, int dx, int dy)
     {
         double w0 = _startRect.Width;
@@ -252,7 +252,7 @@ public sealed partial class StickerWindow : Window
         }
         else
         {
-            // 角：哪个方向动得多按哪个
+            
             var dw = zone is 6 or 8 ? dx : -dx;
             var dh = zone is 7 or 8 ? dy : -dy;
             if (Math.Abs(dw) >= Math.Abs(dh)) { w = w0 + dw; h = w / aspect; }
@@ -262,33 +262,33 @@ public sealed partial class StickerWindow : Window
         w = Math.Clamp(w, MinSide, MaxSide);
         h = Math.Clamp(h, MinSide, MaxSide);
 
-        // 定位：锚住"对面"
+        
         double x = _startRect.X;
         double y = _startRect.Y;
         var right = _startRect.X + w0;
         var bottom = _startRect.Y + h0;
 
-        if (zone is 1 or 5 or 7) x = right - w;                       // 左边动 → 右边锚住
-        else if (zone is 2 or 6 or 8) x = _startRect.X;               // 右边动 → 左边锚住
-        else x = _startRect.X + (w0 - w) / 2;                        // 上下边动 → 水平居中
+        if (zone is 1 or 5 or 7) x = right - w;                       
+        else if (zone is 2 or 6 or 8) x = _startRect.X;               
+        else x = _startRect.X + (w0 - w) / 2;                        
 
-        if (zone is 3 or 5 or 6) y = bottom - h;                     // 上边动 → 下边锚住
-        else if (zone is 4 or 7 or 8) y = _startRect.Y;              // 下边动 → 上边锚住
-        else y = _startRect.Y + (h0 - h) / 2;                        // 左右边动 → 垂直居中
+        if (zone is 3 or 5 or 6) y = bottom - h;                     
+        else if (zone is 4 or 7 or 8) y = _startRect.Y;              
+        else y = _startRect.Y + (h0 - h) / 2;                        
 
         ApplyRect((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(w), (int)Math.Round(h));
     }
 
-    // ── 触屏 / 笔（XAML Manipulation）──────────────────────────
-    // 为什么不用鼠标那套：手指拖动时 `GetCursorPos` 拿到的是**鼠标**位置（手指走了鼠标没走）
-    // → 位移恒为 0，贴图"拖不动"；而 Manipulation 给的是"相对上一次的增量"，跟绝对光标无关，
-    // 也不会像"读回手指相对窗口的位置"那样自激震荡。
+    
+    
+    
+    
 
     private void Root_ManipulationStarted(object sender, ManipulationStartedRoutedEventArgs e)
     {
-        if (e.PointerDeviceType.ToString() == "Mouse") return;   // 鼠标走指针那条路
+        if (e.PointerDeviceType.ToString() == "Mouse") return;   
         ResetManipulation(e.Position);
-        if (_manZone != 0) ShowHover(_manZone);                       // 手指没有 hover，给个视觉反馈
+        if (_manZone != 0) ShowHover(_manZone);                       
         e.Handled = true;
     }
 
@@ -299,7 +299,7 @@ public sealed partial class StickerWindow : Window
         var pinch = Math.Abs(e.Delta.Scale - 1.0f) > 0.001f;
         if (pinch && !_manPinch)
         {
-            // 手指刚变多：基准挪到"现在"，别把上一段单指拖的位移带进来
+            
             _manPinch = true;
             _manZone = 0;
             _manDx = _manDy = 0;
@@ -314,7 +314,7 @@ public sealed partial class StickerWindow : Window
 
         if (_manZone != 0 && !_manPinch)
         {
-            // 手指按在边缘/角上：跟鼠标一样等比改大小（增量喂给同一套 ResizeBy）
+            
             ResizeBy(_manZone, (int)Math.Round(_manDx * _scale), (int)Math.Round(_manDy * _scale));
             e.Handled = true;
             return;
@@ -324,9 +324,9 @@ public sealed partial class StickerWindow : Window
 
         var w = Math.Clamp(_manStartRect.Width * _manK, MinSide, MaxSide);
         var h = Math.Clamp(_manStartRect.Height * _manK, MinSide, MaxSide);
-        var k = w / _manStartRect.Width;                              // 夹过之后的真实倍数
+        var k = w / _manStartRect.Width;                              
 
-        // 缩放锚点：捏合中心那个点在屏幕上尽量别跑
+        
         var x = _manStartRect.X + _manDx * _scale + _manPx * _scale * (1 - k);
         var y = _manStartRect.Y + _manDy * _scale + _manPy * _scale * (1 - k);
 
@@ -377,7 +377,7 @@ public sealed partial class StickerWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>悬停在边上时把那一边亮一下（WinUI 不让外部改鼠标指针样式，只能给视觉反馈）。</summary>
+    
     private void ShowHover(int zone)
     {
         if (zone == 0 || _mode != Mode.None)
@@ -416,8 +416,8 @@ public sealed partial class StickerWindow : Window
 
     private static POINT CursorNow() => GetCursorPos(out var p) ? p : default;
 
-    /// <summary>去掉系统给无边框窗画的那 1px 边框（DWMWA_BORDER_COLOR = 34 / DWMWA_COLOR_NONE = 0xFFFFFFFE）。
-    /// 不去的话，浅色底上那一圈就是肉眼看到的"黑边"。</summary>
+    
+    
     internal static void KillSystemBorder(IntPtr hwnd)
     {
         try

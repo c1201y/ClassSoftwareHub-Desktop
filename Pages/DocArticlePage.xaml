@@ -4,16 +4,16 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!--
-      文档正文页（需求 15）。正文由 Controls/DocView 现场渲染：
-      Markdown / 纯文本 / docx 自己解析，PDF 用系统 PdfDocument 逐页画。
-      正文文件来自本机缓存（无扩展名），首次打开时才下载。
+    
 
-      版式（2026-11-02 改）：照 AutoShutdownPage / WelcomePage 的骨架 ——
-      ScrollViewer 在最外层，里面放带 Margin 的 Grid，再用「三列 Grid」把正文钉在中间 960 宽。
-      ⛔ 别写成「Grid 包 ScrollViewer」：那样正文会被 ScrollViewer 居中，宽屏下整块右移；
-        也别给正文 StackPanel 写 HorizontalAlignment="Left"：Left 会把它收缩到内容自然宽度。
-    -->
+
+
+
+
+
+
+
+
     <Grid Background="Transparent">
         <ScrollViewer x:Name="BodyScroll" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">

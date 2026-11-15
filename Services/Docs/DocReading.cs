@@ -8,14 +8,14 @@ using System.Threading.Tasks;
 
 namespace ClassSoftwareHub.Desktop.Services.Docs;
 
-/// <summary>
-/// 把已缓存的正文转成纯文本（给 Hub AI 的 <c>read_document</c> 用）。
-///
-/// <para>
-/// Markdown / 纯文本原样交出（模型读得懂 Markdown）；docx 由解析结果拼回带标题层级的文字；
-/// PDF 是版式页面、没有可提取的文字层，如实说明读不了，不硬编内容。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
 public static class DocReading
 {
     public static async Task<string> ToTextAsync(DocContent content, CancellationToken ct = default)
@@ -60,7 +60,7 @@ public static class DocReading
                     {
                         text.Append(' ', item.Level * 2);
 
-                        // 任务列表的 Marker 是空的（界面上画勾选框），转文字时要还原成 - [ ] / - [x]
+                        
                         if (item.Checked is bool done)
                             text.Append(done ? "- [x] " : "- [ ] ");
                         else
@@ -72,7 +72,7 @@ public static class DocReading
                     break;
 
                 case DocTableBlock table:
-                    // 交回 Markdown 表格形式：模型对这种结构最熟，也不会丢掉列与列的对应关系
+                    
                     foreach (var row in table.Rows)
                     {
                         text.Append("| ");

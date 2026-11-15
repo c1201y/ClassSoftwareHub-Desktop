@@ -8,10 +8,10 @@ using Windows.Graphics;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>
-/// ⚠️ 遗留：网页版「提交软件」小窗口。提交页早已原生化（Pages/SubmitPage），这里现在没有入口调用，只作兜底。
-/// 用系统标题栏（不搞自绘），打开就是站点 #/submit，填完直接提交。
-/// </summary>
+
+
+
+
 public sealed partial class SubmitWindow : Window
 {
     private readonly WebViewRuntimeService _runtime = new();
@@ -27,7 +27,7 @@ public sealed partial class SubmitWindow : Window
             if (!System.IO.File.Exists(icon)) icon = Environment.ProcessPath ?? "";
             if (icon.Length > 0 && System.IO.File.Exists(icon)) AppWindow.SetIcon(icon);
         }
-        catch { /* 尺寸设不上不影响使用 */ }
+        catch {  }
 
         _ = InitAsync();
     }
@@ -55,7 +55,7 @@ public sealed partial class SubmitWindow : Window
 
     private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
-        // 外链一律交给系统浏览器，别在这个小窗口里乱开
+        
         e.Handled = true;
         try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(e.Uri)); } catch { }
     }
@@ -71,12 +71,12 @@ public sealed partial class SubmitWindow : Window
         }
         else if (!_everLoaded)
         {
-            // 首次加载失败才整屏报错
+            
             ShowError(DescribeWebError(e.WebErrorStatus));
         }
         else
         {
-            // 已经打开过页面：站内的失败（比如提交接口返回错误）由网页自己提示
+            
             LoadingPanel.Visibility = Visibility.Collapsed;
             Web.Opacity = 1;
         }
@@ -101,7 +101,7 @@ public sealed partial class SubmitWindow : Window
         catch (Exception ex) { ShowError(ex.Message); }
     }
 
-    /// <summary>兜底：这个窗口打不开（缺 WebView2 / 网络问题）时，去系统浏览器打开提交页。</summary>
+    
     private void Browser_Click(object sender, RoutedEventArgs e)
     {
         try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(ShellConfig.SubmitPageUrl)); } catch { }

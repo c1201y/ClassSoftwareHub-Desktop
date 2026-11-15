@@ -7,7 +7,7 @@ using ClassSoftwareHub.Desktop.Core;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>一条"这台电脑运行过的版本"记录。</summary>
+
 public sealed class VersionRecord
 {
     public string Version { get; set; } = "";
@@ -16,10 +16,10 @@ public sealed class VersionRecord
     public DateTime LastSeen { get; set; }
 }
 
-/// <summary>
-/// 本机版本记录：更新页的「历史版本」读的就是它 —— 不是仓库的 Release 列表。
-/// 应用每次启动调一次 Record()：新版本记一条，老版本只刷新"最近一次运行"时间。
-/// </summary>
+
+
+
+
 public static class VersionHistory
 {
     public static string FilePath => Path.Combine(AppPaths.DataDir, "version-history.json");
@@ -72,11 +72,11 @@ public static class VersionHistory
         }
         catch
         {
-            /* 记不上不影响使用 */
+            
         }
     }
 
-    /// <summary>界面上显示的版本号：带 dv 前缀。</summary>
+    
     public static string Display(VersionRecord record)
         => ShellConfig.VersionPrefix + record.Version;
 }

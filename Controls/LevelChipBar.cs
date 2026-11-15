@@ -8,30 +8,30 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace ClassSoftwareHub.Desktop.Controls;
 
-/// <summary>
-/// 一排「级别」筛选芯片 —— 借鉴 ClassIsland 日志窗顶部那条筛选栏。
-///
-/// 形态：<c>[⌕ 调试 2] [ⓘ 信息 27] [⚠ 警告 0] [⊗ 错误 0]</c>
-///
-///   · **多选**：每个芯片是一个独立开关，"勾上 = 显示该级别"。四个全勾 = 全显示。
-///     ⚠️ 2026-10-11 Nick 要求把单选取掉（原话：「我不想它只能单切」）：
-///        单选看不了"调试 + 警告一起"，而这正是排障时最常用的配法。
-///     同时**删掉了「全部」芯片** —— 全勾就等价于它，多留一个只占位置。
-///   · **带计数**：每个芯片右侧挂该级别的条数，这是排查时最先要看的东西。
-///   · 一个都不勾 = 一条也不显示（字面语义）。页面会用空表提示引导勾回来，
-///     所以这里不需要"至少留一个"的兜底，也不需要在按钮上做禁用态。
-///
-/// ⛔ 别改回 <c>SelectorBar</c> / <c>Pivot</c>（Nick 2026-10-11 明确否掉）：
-///   那两个控件外观是"页签 / 段控"，带底部指示条与容器语义，跟"筛选器"不是一回事，
-///   而且吃不下"图标 + 文字 + 计数"这种三段内容。⛔ 也别改回单选。
-///
-/// 选中态**不走 Accent**：四个 Accent 药丸排一排既刺眼，又违反"一页 Accent 一到两处"（§3）。
-/// 所以把 <see cref="ToggleButton"/> 的 on/off 画刷就地换成浅填充/透明
-/// —— 看得见"开着"，但不抢戏。实现的还是系统原生控件（§2：能用系统控件就不自己画）。
-///
-/// 勾选态只驱动**观感**，筛选逻辑走 <c>Click</c>：
-/// 程序里改 <c>IsChecked</c> 不会触发 <c>Click</c>，所以不需要"抑制标志"。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed class LevelChipBar
 {
     private sealed class Chip
@@ -45,23 +45,23 @@ public sealed class LevelChipBar
 
     private readonly List<Chip> _chips = new();
 
-    /// <summary>勾选状态变了（用户点芯片才会触发）。</summary>
+    
     public event Action? SelectionChanged;
 
-    /// <summary>把四个芯片建进 <paramref name="host"/>（它得是横向排列的 Panel）。默认全开。</summary>
+    
     public LevelChipBar(Panel host)
     {
-        Add(host, LogLevel.Debug, "调试", "\uE721");    // 放大镜（诊断）
-        Add(host, LogLevel.Info, "信息", "\uE946");     // 信息圆标
-        Add(host, LogLevel.Warning, "警告", "\uE7BA");  // 警告三角
-        Add(host, LogLevel.Error, "错误", "\uE783");    // 错误圆标
+        Add(host, LogLevel.Debug, "调试", "\uE721");    
+        Add(host, LogLevel.Info, "信息", "\uE946");     
+        Add(host, LogLevel.Warning, "警告", "\uE7BA");  
+        Add(host, LogLevel.Error, "错误", "\uE783");    
 
-        // 出厂全开 = 显示全部（原来那颗「全部」芯片的语义）。
-        // ⛔ 不要在 XAML 里写 IsChecked="True" —— "解析到那一行就触发事件"的经典抢跑坑。
+        
+        
         foreach (var c in _chips) c.Button.IsChecked = true;
     }
 
-    /// <summary>当前勾着的级别（可能是空列表）。</summary>
+    
     public List<LogLevel> SelectedLevels
     {
         get
@@ -73,7 +73,7 @@ public sealed class LevelChipBar
         }
     }
 
-    /// <summary>四个都勾着（= 不按级别筛）。</summary>
+    
     public bool AllOn
     {
         get
@@ -83,7 +83,7 @@ public sealed class LevelChipBar
         }
     }
 
-    /// <summary>一个都没勾。</summary>
+    
     public bool AllOff
     {
         get
@@ -93,14 +93,14 @@ public sealed class LevelChipBar
         }
     }
 
-    /// <summary>
-    /// 交给 <see cref="LogReader.Filter"/> 的级别集合。
-    /// 全开时返回 <c>null</c> = 不按级别筛 —— 省掉"逐条比 4 个级别"的那点开销，
-    /// 语义上也更贴切（没有限制，而不是"限制为四种"）。
-    /// </summary>
+    
+    
+    
+    
+    
     public IReadOnlyCollection<LogLevel>? FilterLevels => AllOn ? null : SelectedLevels;
 
-    /// <summary>刷新各芯片右侧的计数（只统计当前文件的**全量**，不随筛选变化）。</summary>
+    
     public void SetCounts(LogStats stats)
     {
         foreach (var c in _chips)
@@ -115,9 +115,9 @@ public sealed class LevelChipBar
 
             c.CountText.Text = n.ToString("N0");
 
-            // 这一档本次没有内容 ⇒ 整颗压暗。⛔ 但**不禁用**：禁用了点不动，
-            // 反而像"按钮坏了"；压暗只是提示"这次没这一档"。
-            // ⚠️ 压暗幅度别太狠：0.55 实拍下来几乎读不出字，0.7 才既"退后"又看得清。
+            
+            
+            
             c.Button.Opacity = n == 0 ? 0.7 : 1.0;
             ToolTipService.SetToolTip(c.Button, n == 0 ? $"{c.Label}：本次没有" : $"{c.Label}：{n:N0} 条");
         }
@@ -152,11 +152,11 @@ public sealed class LevelChipBar
         {
             Content = content,
             MinWidth = 0,
-            // 比默认 Button 收紧一圈：这排是"筛选器"，不该有按钮那种体量
+            
             Padding = new Thickness(9, 3, 9, 3),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        // 安静版观感抽在 ChipLook 里（2026-10-13）—— 与「应用卸载」页的分类芯片共用一份
+        
         ChipLook.Quiet(button);
 
         var chip = new Chip { Level = level, Label = label, Button = button, Content = content, CountText = count };

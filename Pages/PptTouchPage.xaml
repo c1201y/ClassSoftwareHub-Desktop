@@ -7,13 +7,13 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls">
 
-    <!--
-      PowerPoint 触控优化（需求清单第 2 条）。
+    
 
-      版式照「白板专杀」/「系统功能」那一套：三列 Grid 把内容钉在中间 960 宽。
-      ⚠️ 别用 Stretch + MaxWidth —— 触发上限后 WinUI 会把整列右甩。
-      卡片只用 controls:SettingsCard，不手搭 Border。
-    -->
+
+
+
+
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -59,7 +59,7 @@
                                   Toggled="MenuSwitch_Toggled" />
                 </controls:SettingsCard>
 
-                <!-- 额外菜单项：清单来自 PptMenu.Extras（唯一真源），这里只负责铺出来。 -->
+                
                 <controls:SettingsExpander x:Name="ExtraExpander" Header="菜单项目"
                                            Description="长按菜单默认只放最常用的几项，其余可以在这里单独打开。"
                                            IsExpanded="False">

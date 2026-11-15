@@ -4,26 +4,26 @@ using System.Text;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// age v1（X25519）客户端加密 —— 只加密，绝不解密。
-/// 完全复刻 age-encryption.org/v1 规范，产出标准 ASCII armor 密文，可被标准 age 工具用私钥解密。
-/// <para>
-/// 私钥仅开发者本地持有，绝不进入任何客户端代码或版本库；本类只持有接收方公钥、只做加密。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
 public static class AgeEncryption
 {
-    /// <summary>「提交软件」联系方式字段的接收方公钥（age1...）。私钥绝不在客户端。</summary>
+    
     public const string RecipientPublicKey = "age1l9axcy0sxu6eeanapg0maughsv380fh8nhd4unf9p8d7x20rjqfsgz4dxa";
 
     private const string V1 = "age-encryption.org/v1";
     private const string X25519Label = "age-encryption.org/v1/X25519";
 
-    /// <summary>用内置接收方公钥加密 UTF-8 明文，返回 ASCII armor 密文。</summary>
+    
     public static string EncryptToArmor(string plaintext)
         => EncryptToArmor(RecipientPublicKey, plaintext);
 
-    /// <summary>用 age 公钥（age1...）加密 UTF-8 明文，返回 ASCII armor 密文。</summary>
+    
     public static string EncryptToArmor(string recipient, string plaintext)
     {
         byte[] recipientPub = Bech32Decode(recipient);
@@ -33,13 +33,13 @@ public static class AgeEncryption
 
     private static byte[] Encrypt(byte[] recipientPub, byte[] plaintext)
     {
-        // 1. file key（16 字节随机）
+        
         byte[] fileKey = RandomNumberGenerator.GetBytes(16);
 
-        // 2. X25519 stanza：包装 file key
+        
         byte[] ephemeralSecret = RandomNumberGenerator.GetBytes(32);
-        byte[] ephemeralShare = X25519(ephemeralSecret, Basepoint);   // 32 字节临时公钥
-        byte[] sharedSecret = X25519(ephemeralSecret, recipientPub);  // 32 字节
+        byte[] ephemeralShare = X25519(ephemeralSecret, Basepoint);   
+        byte[] sharedSecret = X25519(ephemeralSecret, recipientPub);  
 
         byte[] salt = new byte[64];
         ephemeralShare.CopyTo(salt, 0);
@@ -47,23 +47,23 @@ public static class AgeEncryption
         byte[] wrapKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, sharedSecret, 32,
             salt, Encoding.ASCII.GetBytes(X25519Label));
 
-        byte[] body = ChaChaEncrypt(wrapKey, fileKey);              // 32 字节（密文 16 + tag 16）
+        byte[] body = ChaChaEncrypt(wrapKey, fileKey);              
 
-        // 3. header（无 MAC 部分）
+        
         string headerNoMac = $"{V1}\n-> X25519 {B64NoPad(ephemeralShare)}\n{B64NoPad(body)}\n---";
         byte[] hmacKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, fileKey, 32,
             null, Encoding.ASCII.GetBytes("header"));
-        byte[] mac = new HMACSHA256(hmacKey).ComputeHash(Encoding.ASCII.GetBytes(headerNoMac)); // 32 字节
+        byte[] mac = new HMACSHA256(hmacKey).ComputeHash(Encoding.ASCII.GetBytes(headerNoMac)); 
 
         byte[] header = Encoding.ASCII.GetBytes(headerNoMac + " " + B64NoPad(mac) + "\n");
 
-        // 4. payload
+        
         byte[] payloadNonce = RandomNumberGenerator.GetBytes(16);
         byte[] streamKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, fileKey, 32,
             payloadNonce, Encoding.ASCII.GetBytes("payload"));
         byte[] payload = ChaChaEncryptStream(streamKey, plaintext);
 
-        // 5. 拼接：header + payloadNonce + payload
+        
         var output = new byte[header.Length + payloadNonce.Length + payload.Length];
         header.CopyTo(output, 0);
         payloadNonce.CopyTo(output, header.Length);
@@ -71,7 +71,7 @@ public static class AgeEncryption
         return output;
     }
 
-    /// <summary>ChaCha20-Poly1305 加密（nonce 12 字节全 0，无 AAD），返回 密文||tag。</summary>
+    
     private static byte[] ChaChaEncrypt(byte[] key, byte[] plaintext)
     {
         using var cipher = new ChaCha20Poly1305(key);
@@ -85,7 +85,7 @@ public static class AgeEncryption
         return result;
     }
 
-    /// <summary>payload 流式加密：64 KiB 分块，nonce = 11 字节大端计数器 + 1 字节末尾标志。</summary>
+    
     private static byte[] ChaChaEncryptStream(byte[] key, byte[] plaintext)
     {
         const int chunkSize = 64 * 1024;
@@ -106,14 +106,14 @@ public static class AgeEncryption
             output.Write(tag);
             offset += n;
 
-            // 大端计数器 +1（索引 10 是最低位）
+            
             for (int i = 10; i >= 0; i--)
                 if (++nonce[i] != 0) break;
         }
         return output.ToArray();
     }
 
-    // ── X25519（RFC 7748，用 BigInteger 实现；只用于"公钥加密"，无常数时间要求）──
+    
     private static readonly byte[] Basepoint = { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
@@ -122,7 +122,7 @@ public static class AgeEncryption
         BigInteger p = (BigInteger.One << 255) - 19;
         BigInteger a24 = 121665;
 
-        // clamp 标量
+        
         byte[] k = (byte[])scalar.Clone();
         k[0] &= 248;
         k[31] &= 127;
@@ -166,7 +166,7 @@ public static class AgeEncryption
 
     private static BigInteger LittleEndian(byte[] bytes)
     {
-        // 小端字节序 → 无符号大整数：反转后按无符号大端读
+        
         var rev = (byte[])bytes.Clone();
         Array.Reverse(rev);
         return new BigInteger(rev, isUnsigned: true, isBigEndian: true);
@@ -183,7 +183,7 @@ public static class AgeEncryption
 
     private static string B64NoPad(byte[] data) => Convert.ToBase64String(data).TrimEnd('=');
 
-    // ── armor（PEM 风格：每 48 字节 raw → 64 字符标准 base64 一行）──
+    
     private static string ArmorEncode(byte[] file)
     {
         var sb = new StringBuilder();
@@ -197,7 +197,7 @@ public static class AgeEncryption
         return sb.ToString();
     }
 
-    // ── bech32 解码（age1... → 32 字节公钥）──
+    
     private static readonly char[] Bech32Charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l".ToCharArray();
     private static readonly uint[] Bech32Gen = { 0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3 };
 

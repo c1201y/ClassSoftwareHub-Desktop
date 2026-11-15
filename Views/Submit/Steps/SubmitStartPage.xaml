@@ -5,7 +5,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- 第 1 步：起点。读取是可选的，跳过不影响后续填写。 -->
+    
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,28,24,24">
             <StackPanel Width="600" HorizontalAlignment="Center" Spacing="12">

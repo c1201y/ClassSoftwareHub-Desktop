@@ -3,52 +3,52 @@ using System.Collections.Generic;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>
-/// 防火墙规则库里的一条规则。
-///
-/// <para>
-/// 注册表 <c>HKLM\SYSTEM\…\FirewallPolicy\FirewallRules</c> 下每条规则是一个明文串，形如：
-/// <c>v2.33|Action=Allow|Active=TRUE|Dir=In|Protocol=6|Profile=Domain|Profile=Private|LPort=47821|Name=…|</c>
-/// </para>
-///
-/// <para>
-/// ⚠️ **同一个键可以出现多次**（上例的 <c>Profile</c> 写了三遍，表示规则同时作用于两个网络类型），
-/// 所以解析时值要收集成列表，不能"后者覆盖前者" —— 那就只剩最后一种网络，判「是否覆盖公用」会误判成否。
-/// </para>
-///
-/// <para>
-/// 这个类**只做字符串解析、不碰注册表**，所以能脱离 Windows 单独测
-/// （测试工程链接的是这一份，见 <c>E:/Classsoftwarehub测试</c>）。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed class FirewallRule
 {
-    /// <summary>Allow / Block。</summary>
+    
     public string? Action { get; private init; }
 
-    /// <summary>规则显示名（用户在「高级安全 Windows 防火墙」里看到的那一列）。</summary>
+    
     public string? Name { get; private init; }
 
-    /// <summary>程序级规则的程序路径；端口级规则没有这一项。</summary>
+    
     public string? App { get; private init; }
 
-    /// <summary>这条规则是不是「已启用 + 入站」—— 不成立的话其余判断都没意义。</summary>
+    
     public bool ActiveInbound { get; private init; }
 
-    /// <summary>
-    /// 是否覆盖「公用」网络。
-    /// 校园网、机房网、没设过家庭网络的机器，Windows 多半判成「公用」；
-    /// 只写域/专用的规则在那种网络下等于没加（包被静默丢弃，表现成超时而不是拒绝连接）。
-    /// </summary>
+    
+    
+    
+    
+    
     public bool CoversPublic { get; private init; }
 
-    /// <summary>
-    /// 解析一条规则。不是 v2 格式、或解析不出任何键值对时返回 null（调用方跳过即可）。
-    /// </summary>
+    
+    
+    
     public static FirewallRule? Parse(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
-        if (!text.StartsWith("v2.", StringComparison.Ordinal)) return null;   // 同键下还有 PolicyVersion 之类的非规则值
+        if (!text.StartsWith("v2.", StringComparison.Ordinal)) return null;   
 
         var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -77,13 +77,13 @@ public sealed class FirewallRule
         };
     }
 
-    /// <summary>这些值里有没有「任何网络」的表示法。Windows 在不同版本里写法不一，全都认。</summary>
+    
     private static bool ProfileCoversPublic(Dictionary<string, List<string>> map)
     {
-        // ⚠️ **没有 Profile 字段 = 所有网络**（2026-10-28 实测）。
-        //    `netsh advfirewall firewall add rule … profile=any` 建出来的规则串里**根本没有 Profile=**
-        //    —— any 是默认值，序列化时被省略；而 `Get-NetFirewallRule` 查出来报的是 `Profile : Any`。
-        //    以前这里「没有就返回 false」，结果修复明明成功、界面却一直说没放行，用户点了四次。
+        
+        
+        
+        
         if (!map.TryGetValue("Profile", out var profiles) || profiles.Count == 0) return true;
 
         foreach (var profile in profiles)

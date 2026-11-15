@@ -9,21 +9,21 @@ using Windows.UI;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// 把快捷入口那几个 SVG 图标按**当前主题色**染出来。
-///
-/// ⚠️ 为什么不是直接 <c>SvgImageSource(uri)</c> 原样加载：
-///    那三个 SVG 是单色图标（GitHub/QQ 是填充、主页是描边），原色是黑 / <c>#141520</c>，
-///    深色界面上直接糊成一片看不见。所以这里把 SVG 里的 <c>__C__</c> 占位符替换成主题文字色
-///    （跟同页 FontIcon 用的 <c>TextFillColorPrimaryBrush</c> 同一套），浅色/深色各自一套，
-///    结果按「资源名 + 颜色」缓存，主题切换时换一张即可。
-/// </summary>
+
+
+
+
+
+
+
+
+
 public static class QuickLinkIconLoader
 {
     private static readonly object Gate = new();
     private static readonly System.Collections.Generic.Dictionary<string, SvgImageSource> Cache = new();
 
-    /// <summary>取染好色的图标源；资源缺失或染不出来返回 <c>null</c>（调用方退回 FontIcon）。</summary>
+    
     public static ImageSource? GetIcon(string assetName, Color color)
     {
         var hex = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");

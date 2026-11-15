@@ -10,19 +10,19 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClassSoftwareHub.Desktop.Pages.Tools;
 
-/// <summary>
-/// 方程编辑器（浮层里那块）。
-///
-/// <para>
-/// 与化学式编辑器同一套思路（Nick 2026-10-17）：
-/// **不让用户对着空白框回忆语法**，而是把数字、变量、运算符、函数做成大按钮点出来；
-/// 预览按数学排版显示、边输边校验，「确定」只在式子真的能被求解器理解时才亮。
-/// </para>
-/// <para>
-/// ⛔ 但比化学式多留一个口子：方程式子长、种类多，老师常常是从题目里**复制粘贴**过来的，
-/// 所以顶栏给「键盘输入」开关，随时能切成直接打字。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal sealed class EquationEditor
 {
     private readonly StringBuilder _raw = new();
@@ -47,12 +47,12 @@ internal sealed class EquationEditor
 
     private readonly ToggleButton _typingToggle;
 
-    /// <summary>打字模式下 TextChanged 与预览刷新会互相触发，用它挡住回环。</summary>
+    
     private bool _syncing;
 
     public Grid View { get; }
 
-    /// <summary>内容变了，参数 = 当前是否合法（控制「确定」能不能点）。</summary>
+    
     public event Action<bool>? Changed;
 
     public bool IsValid { get; private set; }
@@ -114,8 +114,8 @@ internal sealed class EquationEditor
         Grid.SetColumnSpan(preview, 2);
         root.Children.Add(preview);
 
-        // ⛔ 两列都进滚动区：浮层高度受窗口限制，装不下时只能滚 ——
-        //    直接塞进 StackPanel 的话最后一行会被压成一条缝（实测未知数那排只剩 11px）。
+        
+        
         var left = WrapScroll(BuildNumberPad());
         Grid.SetRow(left, 1);
         root.Children.Add(left);
@@ -129,7 +129,7 @@ internal sealed class EquationEditor
         Refresh();
     }
 
-    // ── 预览（数学排版）+ 删除 / 清空 / 键盘输入 ──
+    
     private Border BuildPreviewCard()
     {
         var content = new StackPanel { Spacing = 3 };
@@ -254,10 +254,10 @@ internal sealed class EquationEditor
         _previewHost.Children.Add(rendered);
     }
 
-    /// <summary>
-    /// 把内部写法换成黑板上的写法：<c>pi → π</c>、<c>sqrt( → √(</c>、<c>* → ×</c>。
-    /// ⛔ 只影响显示，<see cref="Value"/> 交出去的仍是求解器认的写法。
-    /// </summary>
+    
+    
+    
+    
     private static string Pretty(string raw)
     {
         var text = Regex.Replace(raw, @"\bpi\b", "π");
@@ -265,7 +265,7 @@ internal sealed class EquationEditor
         return text.Replace("*", "×");
     }
 
-    // ── 左：数字与变量 ──
+    
     private FrameworkElement BuildNumberPad()
     {
         var panel = new StackPanel { Spacing = 6 };
@@ -277,7 +277,7 @@ internal sealed class EquationEditor
         for (var r = 0; r < 3; r++)
             digits.RowDefinitions.Add(new RowDefinition { Height = new GridLength(42) });
 
-        // 1~9 之后是 0 与小数点；删除键在预览卡上，不在这里重复
+        
         var keys = new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "." };
         for (var i = 0; i < keys.Length; i++)
         {
@@ -311,8 +311,8 @@ internal sealed class EquationEditor
         {
             var name = names[i];
 
-            // ⛔ 这里必须用字符串 Content：用自定义 TextBlock 当内容时（斜体变量）实测整块空白，
-            //    走 Control 自带的 FontSize/FontStyle 才稳。
+            
+            
             var button = new Button
             {
                 Content = name,
@@ -338,10 +338,10 @@ internal sealed class EquationEditor
 
         panel.Children.Add(vars);
 
-        // ⛔ 常用式子放**左**列：右列（运算 + 函数）本来就快占满一屏，
-        //    再往下塞一块就只能滚动才看得见（Nick 视角：藏起来等于没有）。
-        // 只留三类最常用的：幂、指数、三角各一个。⛔ 铺满两行会让浮层在默认窗口下就装不下，
-        // 用户得滚动才看得见 —— 藏起来的按钮等于没有。
+        
+        
+        
+        
         panel.Children.Add(SectionTitle("常用"));
         panel.Children.Add(Grid3x2(new[]
         {
@@ -351,7 +351,7 @@ internal sealed class EquationEditor
         return panel;
     }
 
-    // ── 右：运算 / 函数 / 常用 ──
+    
     private FrameworkElement BuildOperatorPanel()
     {
         var panel = new StackPanel { Spacing = 6 };
@@ -374,7 +374,7 @@ internal sealed class EquationEditor
         return panel;
     }
 
-    /// <summary>竖向可滚（横向禁掉，否则滚轮会和外层抢）。</summary>
+    
     private static ScrollViewer WrapScroll(FrameworkElement content) => new()
     {
         Content = content,
@@ -389,7 +389,7 @@ internal sealed class EquationEditor
 
     private FrameworkElement Grid3x2((string Label, string Insert)[] items) => GridOf(items, 3, 40);
 
-    /// <summary>等宽按键网格：列用星号均分，窗口多宽都摆得正。</summary>
+    
     private FrameworkElement GridOf((string Label, string Insert)[] items, int columns, double height)
     {
         var rows = (items.Length + columns - 1) / columns;
@@ -404,7 +404,7 @@ internal sealed class EquationEditor
         {
             var (label, insert) = items[i];
 
-            // ⛔ 按键上显示的是黑板写法（x²、√），插进去的必须是求解器认的写法（x^2、sqrt(）。
+            
             var button = KeyButton(label, $"插入 {label}", label.Length > 1 ? 14 : 17,
                                    () => Append(insert));
 
@@ -436,7 +436,7 @@ internal sealed class EquationEditor
             Tag = label,
         };
 
-        // 给自动化/读屏一个稳定标识（按键上显示的可能是 ×、√ 这类记号，名字不好匹配）
+        
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, "eq-key:" + label);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, tip);
 

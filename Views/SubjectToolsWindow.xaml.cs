@@ -10,31 +10,31 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>
-/// 学科工具窗 —— 独立 AppWindow，把函数图像 / 方程求解 / 化学方程式配平三件工具单拎出来。
-///
-/// <para>
-/// 来由（Nick 2026-10-18）：这三件工具是"用完就走"的，但原来只能先进主界面再导航过去；
-/// 用户只想算一道题时，打开整个应用太重。这扇窗让侧边栏点一下就直接用，
-/// 主窗口可以一直收在托盘里。
-/// </para>
-///
-/// <para>
-/// ⚠️ 三个工具页都是纯 <see cref="Page"/>，不依赖 <c>ShellPage</c> / <c>Frame</c> / <c>App.MainWindow</c>
-/// （已逐页核过），所以能直接塞进本窗右侧的 Frame 里。
-/// </para>
-///
-/// <para>
-/// ⚠️ 关掉 = **真销毁**（不像工具浮窗那种"收起来"）：学科窗没有留着复用的价值，
-/// 真关最省事，也不会在退出链路上留下没关掉的窗口把进程吊住（§V）。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class SubjectToolsWindow : Window
 {
     private const int DefaultWidthDip = 1180;
     private const int DefaultHeightDip = 780;
 
-    /// <summary>三件工具（顺序 = 左侧紧凑栏从上到下的顺序）。</summary>
+    
     private static readonly (string Id, string Name, Type Page)[] Tools =
     {
         ("function-plot", "函数图像", typeof(Pages.FunctionPlotPage)),
@@ -46,14 +46,14 @@ public sealed partial class SubjectToolsWindow : Window
 
     private AppWindow? _appWindow;
 
-    /// <summary>
-    /// 程序化改选中项时的闸门。**初值就是 true**：
-    /// NavigationView 在 Loaded 时会自己选中第一项，那一次不能当成"用户切换了工具"
-    /// （否则会把上次用的工具覆盖成函数图像）。真正的选中在 Root.Loaded 里做。
-    /// </summary>
+    
+    
+    
+    
+    
     private bool _suppress = true;
 
-    /// <summary>本次希望停在哪个工具（ShowTool 传入 / 存档里上次用的那个）。</summary>
+    
     private string? _wantId;
 
     private SubjectToolsWindow()
@@ -61,8 +61,8 @@ public sealed partial class SubjectToolsWindow : Window
         InitializeComponent();
         Configure();
 
-        // NavigationView 加载完会自选第一项（LegalWindow 的 SelectorBar 也踩过同样的坑）⇒
-        // 这时按真正想的那个工具再拨一次；之前那次已经被 _suppress 挡掉了。
+        
+        
         Root.Loaded += (_, _) =>
         {
             _suppress = false;
@@ -70,10 +70,10 @@ public sealed partial class SubjectToolsWindow : Window
         };
     }
 
-    // ── 对外 ─────────────────────────────────────────────────────────────
+    
 
-    /// <summary>摊开这扇窗；已经开着就切到指定工具，再把它调到前面。</summary>
-    /// <param name="toolId">function-plot / equation / chemistry；null 或认不出 = 上次用的那个。</param>
+    
+    
     public static void ShowTool(string? toolId)
     {
         try
@@ -91,7 +91,7 @@ public sealed partial class SubjectToolsWindow : Window
         }
     }
 
-    /// <summary>退出应用时真正销毁（见 <see cref="MainWindow"/> 的 FinishExit）。</summary>
+    
     public static void CloseForExit()
     {
         var w = _instance;
@@ -100,9 +100,9 @@ public sealed partial class SubjectToolsWindow : Window
         AppLog.Info("subject-tools", "学科工具窗口实例已请求 Close");
     }
 
-    // ── 选中工具 ─────────────────────────────────────────────────────────
+    
 
-    /// <summary>把左侧栏拨到指定工具并导航过去；会把这次选择记进存档（下次打开停在这儿）。</summary>
+    
     private void SelectTool(string? toolId)
     {
         var id = Normalize(toolId) ?? Tools[0].Id;
@@ -138,17 +138,17 @@ public sealed partial class SubjectToolsWindow : Window
 
     private void NavigateTo(Type nativePage, string? toolId)
     {
-        // Web 优先：这个工具有网页版、且本机跑得动 → 交给宿主页（与主页同一套渲染）；
-        // 否则走原生页。⛔ 不弹任何提示：降级对用户是无感的（与 ToolHostPage 一致，Nick 定）。
+        
+        
         if (toolId is not null && ToolCarrier.RequestFor(toolId, nativePage, null) is { } request)
         {
-            // 已经在网页版上就别重建（否则会把用户刚画的东西清掉）
+            
             if (ContentFrame.Content is Pages.ToolHostPage) return;
             ContentFrame.Navigate(typeof(Pages.ToolHostPage), request);
             return;
         }
 
-        // 已经停在这一页就别再 Navigate 一次（会白重建一遍页面、把用户刚输入的内容清掉）
+        
         if (ContentFrame.Content?.GetType() == nativePage) return;
         ContentFrame.Navigate(nativePage);
     }
@@ -174,7 +174,7 @@ public sealed partial class SubjectToolsWindow : Window
         return Array.Exists(Tools, t => t.Id == key) ? key : null;
     }
 
-    // ── 窗口本身 ─────────────────────────────────────────────────────────
+    
 
     private void Configure()
     {
@@ -191,17 +191,17 @@ public sealed partial class SubjectToolsWindow : Window
                 p.IsMinimizable = true;
             }
 
-            // 自绘标题栏（2026-10-19）：不再用系统那根标题条，改成内容延伸样式
+            
             ModernWindow.ApplyTitleBar(this, TitleBarHost, Root);
 
-            // ⛔ 跟应用主题（2026-10-29 Nick 定：分体只管「常用工具」浮窗，数学工具窗不算）
+            
             BackdropHost.Apply(this, Root, App.Settings.Current.Backdrop);
             ThemeHost.Apply(Root);
 
             ApplySize();
             CenterOnScreen();
 
-            // 真关掉 ⇒ 清掉单例，下次 Show 重新建
+            
             Closed += (_, _) => { _instance = null; };
         }
         catch (Exception ex)
@@ -210,7 +210,7 @@ public sealed partial class SubjectToolsWindow : Window
         }
     }
 
-    /// <summary>按逻辑像素（dip）定客户区大小，并夹进当前屏幕（小屏上别长出屏幕外）。</summary>
+    
     private void ApplySize()
     {
         if (_appWindow is null) return;
@@ -222,7 +222,7 @@ public sealed partial class SubjectToolsWindow : Window
             var maxW = work.Width / scale - 40;
             var maxH = work.Height / scale - 60;
 
-            // 函数图像那页是三栏铺满（左 272 + 中 ≥300 + 右 332），太窄会把它压变形
+            
             var w = Math.Clamp(DefaultWidthDip, 960, Math.Max(960, maxW));
             var h = Math.Clamp(DefaultHeightDip, 560, Math.Max(560, maxH));
 
@@ -277,7 +277,7 @@ public sealed partial class SubjectToolsWindow : Window
         }
     }
 
-    // ── Win32 ────────────────────────────────────────────────────────────
+    
 
     private const int SW_SHOW = 5;
 

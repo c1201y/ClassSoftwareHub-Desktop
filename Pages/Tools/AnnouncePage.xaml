@@ -7,13 +7,13 @@
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages.Tools"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <!--
-      教室喊话（2026-10-25 第六版：两个分页 + 局域网通道）。
-      分页 = SelectorBar 原生控件；卡片 = SettingsCard / CshCardStyle；列表 = ListView + DataTemplate。
-      局域网通道（Nick 提）：同一网段的机器互相广播发现，发送端直接勾选目标，不经过服务器；
-      对方不在同一网段（或直连失败）时自动回落服务器。接收端可设「本机标识」（高28班），
-      发送端列表里直接显示，一眼知道是哪台机。
-    -->
+    
+
+
+
+
+
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -24,7 +24,7 @@
 
             <StackPanel Grid.Column="1" MaxWidth="960" Spacing="4">
 
-                <!-- 页头 -->
+                
                 <StackPanel Spacing="6" Margin="0,0,0,12">
                     <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
@@ -45,16 +45,16 @@
 
                 </StackPanel>
 
-                <!-- 分页：WinUI 原生 SelectorBar
-                     ⚠️ 这里**不写** IsSelected：默认停在哪一页由「打开时默认显示」决定，
-                        写在 XAML 里会和构造期的选中互相覆盖（2026-10-27 修的就是这个：
-                        选了「发送」，打开仍然停在「接收」）。-->
+                
+
+
+
                 <SelectorBar x:Name="Tabs" SelectionChanged="Tabs_SelectionChanged">
                     <SelectorBarItem Text="接收" Tag="receive" />
                     <SelectorBarItem Text="发送" Tag="send" />
                 </SelectorBar>
 
-                <!-- ═══════════ 第一页：接收 ═══════════ -->
+                
                 <StackPanel x:Name="ReceiveView" Spacing="4" Margin="0,8,0,0">
 
                     <controls:SettingsCard Header="接收喊话">
@@ -93,7 +93,7 @@
                                             <TextBlock Text="复制" FontSize="12" />
                                         </StackPanel>
                                     </Button>
-                                    <!-- 预览：本机直接弹示例，不联网（部署时确认样式 / 声音用） -->
+                                    
                                     <DropDownButton Content="预览" ToolTipService.ToolTip="在本机弹一条示例消息">
                                         <DropDownButton.Flyout>
                                             <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -117,9 +117,9 @@
                                       Toggled="Lan_Changed" />
                     </controls:SettingsCard>
 
-                    <!-- 防火墙：只在检测到真的拦住了才出现（见 FirewallGateway）。
-                         ⚠️ 以前这里常驻 + 每次都要点一次「放行」再弹一次 UAC，
-                            根因是检测逻辑把中文输出按错误编码解码，永远判成「没放行」。 -->
+                    
+
+
                     <controls:SettingsCard x:Name="FirewallCard" Header="局域网通道被 Windows 防火墙拦截">
                         <controls:SettingsCard.Description>
                             <TextBlock x:Name="FirewallDesc" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
@@ -128,7 +128,7 @@
                         <Button x:Name="FirewallButton" Content="修复" Click="Firewall_Click" />
                     </controls:SettingsCard>
 
-                    <!-- 谁保存了本机配对码（2026-10-25 Nick：防滥用，可查看与删除） -->
+                    
                     <Border Style="{StaticResource CshCardStyle}">
                         <StackPanel Spacing="8">
                             <Grid ColumnSpacing="12">
@@ -220,10 +220,10 @@
                     </controls:SettingsCard>
                 </StackPanel>
 
-                <!-- ═══════════ 第二页：发送 ═══════════ -->
+                
                 <StackPanel x:Name="SendView" Spacing="4" Margin="0,8,0,0" Visibility="Collapsed">
 
-                    <!-- 局域网里的电脑：勾选即发 -->
+                    
                     <Border Style="{StaticResource CshCardStyle}">
                         <StackPanel Spacing="8">
                             <Grid ColumnSpacing="12">
@@ -266,10 +266,10 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 或者直接填配对码 -->
+                    
                     <Border Style="{StaticResource CshCardStyle}">
                         <StackPanel Spacing="10">
-                            <!-- 手动填码 + 保存（2026-10-25 Nick：填过的存下来，下次直接勾选） -->
+                            
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -282,7 +282,7 @@
                                         ToolTipService.ToolTip="把这个配对码存进下面的「已保存的电脑」" />
                             </Grid>
 
-                            <!-- 已保存的电脑：勾选即发 -->
+                            
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <TextBlock Text="已保存的电脑" FontSize="13" FontWeight="SemiBold" />

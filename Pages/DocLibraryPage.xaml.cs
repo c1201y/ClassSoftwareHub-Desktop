@@ -10,17 +10,17 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-/// <summary>
-/// 文档库列表页（需求 15）。
-///
-/// <para>
-/// 这一页只读**清单**（标题 / 作者 / 简介 / 标签），正文要等点开某篇时才下载 ——
-/// 见 <see cref="DocLibrary"/> 的两层缓存说明。
-/// </para>
-/// <para>
-/// 搜索框只在清单里查（标题、简介、标签、作者）；应用全局搜索同样只查这些，不碰正文。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class DocLibraryPage : Page
 {
     private bool _syncing;

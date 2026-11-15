@@ -6,7 +6,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:submit="using:ClassSoftwareHub.Desktop.Views.Submit">
 
-    <!-- 第 2 步：软件信息。必填项都在这页，填完即可继续。 -->
+    
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,28,24,24">
             <StackPanel Width="600" HorizontalAlignment="Center" Spacing="14">

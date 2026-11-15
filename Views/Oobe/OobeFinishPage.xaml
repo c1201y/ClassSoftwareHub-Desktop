@@ -5,14 +5,14 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!--
-      第 12 步：完成。照 ClassIsland 的 FinishPage：三张卡横滑轮播，
-      没到最后一张时「下一步」在，到最后一张换成「完成」；第一张再往回就退回上一步。
+    
 
-      每一屏都是「图标 + 标题 + 一句说明 + 应用截图」（Nick 2026-10-31 定的口径：
-      光摆文字太生硬）。前两屏用两张窗口截图叠着摆，最后一屏换成版本大图 dv1.2。
-      ⚠️ 截图有深色 / 浅色两套，按本页 ActualTheme 取 —— 深浅色主题下都不会突兀。
-    -->
+
+
+
+
+
+
     <Grid>
         <StackPanel x:Name="ContentRoot" Width="600"
                     HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">

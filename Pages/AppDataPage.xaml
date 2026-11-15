@@ -7,50 +7,50 @@
     xmlns:ui="using:ClassSoftwareHub.Desktop.Controls"
     xmlns:local="using:ClassSoftwareHub.Desktop.Pages">
 
-    <!--
-      AppData 管理（2026-10-13 新功能，Nick：「实验性功能就是 AppData 文件夹管理」）。
+    
 
-      ⛔⛔ 三层边界（界面上就是这么分的，改版式时别把它们揉回去）：
-        第 1 层 **只读体检**（概览 · 本地 / 概览 · 漫游）—— 一级目录体积排行，**没有清理入口**
-        第 2 层 **白名单清理**（可清理 · 系统临时 / 浏览器 / 商店应用 / 开发工具 / 图形）—— 永久删除
-        第 3 层 **禁碰区** —— 一级目录整目录删除这条路上的按钮**压根不存在**（见 Services/AppDataScan 类注释）
 
-      2026-10-14 与「应用卸载」页一起做过一次去网页感的改版（Nick 的第三轮反馈，两页同罪）：
-        · **砍掉表格视图**（⛔ 不是改成下拉）—— 与列表内容一模一样，纯粹是凑出来的选择；
-        · 标题下的解释长句删掉、包着工具条的卡片删掉，标题下方改成**动态计数**；
-        · 分类下拉 / 重新扫描 / 说明 并到标题行右侧（原先孤零零占一整行，还套了个卡片）；
-        · **行尾不再摆按钮**：改成一朵透明的「⋯」（`E712`），点开是**手建**的 `MenuFlyout`
-          —— 里面是「打开文件夹」，可清理的行多一项「清理」。原先行尾并排两个按钮
-          （`打开` + `清理`），几十行下来也是一面按钮墙。
 
-      2026-10-15 加（Nick：「可清理项可以加一个复选框，可以统一管理。还有一件事，可以再增加一个按钮
-      一个是复制文件路径。第二个功能是搜索……现在用户看到这么多文件夹，不知道是干啥的」）：
-        · 可清理行加**复选框**，底部随之多出一条**批量动作条**。
-          ⚠️ 2026-10-16 改过一次实现（Nick：「这钩子钩得很奇怪、颜色很奇怪，为什么那个选出来的框是直角」）：
-             起初借的是系统多选（`SelectionMode=Multiple` + 那枚 `SelectionCheckBox`），
-             但它的填充取 `ListViewItemCheckBoxBrush`（**前景色系**），深色下呈"浅灰底 + 白勾"——
-             既不是强调色，也和「应用卸载」页残留列表的标准 CheckBox 观感割裂；再加上
-             `ItemContainerStyle` 把默认样式里那条 `CornerRadius` 顶掉了，选中底色还是直角。
-             ⇒ 改为**行模板里的标准 `CheckBox`**（强调色勾），勾选状态落在 `AppDataRow.IsChecked` 上，
-                `SelectionMode` 保持 `None`。两页的复选框从此是同一套观感。
-        · 行尾「⋯」菜单扩到四项：复制完整路径 / 打开文件夹 / 在网上搜索完整路径 / 清理。
-          ⛔ 搜索走**系统默认浏览器**（`UseShellExecute=true` 调 Bing），不内置 WebView2 ——
-             本机唯一那个 WebView2 是只读 WebSheet，再起一个实例要摊用户数据目录与生命周期，
-             而这个动作本来就是"去互联网查资料"，交给真浏览器能开标签、能继续点进去看。
-          ⛔⛔ 检索词就是**完整路径原样**，不附加「AppData」「文件夹」之类的后缀
-             （Nick 2026-10-15 定案：擅自概括会失真，同一个目录名挂在不同根下含义完全不同）。
-        · 顶部加**常驻红条**（与「应用卸载」页同一条规则：永久删除类功能一律常驻风险提示，不可关闭）。
 
-      ⚠️ 三个已踩过的编译坑，别在这里复现（都是同一个壳错误 `WMC9999`，没有行号）：
-        · `ComboBox.ItemTemplate` + `x:Bind` 会让 XamlCompiler 崩在 PageCodeGen ⇒ 选项在代码里手建。
-        · `Page.Resources` 里跨文件 `BasedOn` 同样会崩 ⇒ 八行 Setter 照抄。
-        · ⛔⛔ 控件 `x:Name` **撞上行类型的属性名**（本页 `x:Name="CountText"` 曾撞 `AppDataRow.CountText`，
-          行模板里又有 `{x:Bind CountText}`）⇒ 崩在 PageCodeGen。改名 `CountLine` 后立刻 0 错误。
-          排查法：读 `obj\…\output.json` 的 `MSBuildLogEntries` 找到崩在哪一页，再**掏空法二分**。
-    -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     <Page.Resources>
-        <!-- 行尾的图标按钮（⋯ / 说明）。⚠️ 八行 Setter **照抄**而不是跨文件 `BasedOn`：
-             跨文件 BasedOn 会让 XAML 编译器在 Pass2 的代码生成阶段崩掉（见文件头注释）。 -->
+        
+
         <Style x:Key="RowMoreButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
@@ -63,7 +63,7 @@
         </Style>
     </Page.Resources>
 
-    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（Core/WheelRelay.cs）：两侧留白也要参与命中测试 -->
+    
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="24" />
@@ -78,8 +78,8 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- ── 标题行：左＝标题+计数，右＝分类 / 重新扫描 / 说明（全部并排）
-                 （2026-10-29 转正进「系统工具」，标题旁那枚「实验性功能」标记已摘掉） ── -->
+            
+
             <Grid ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -94,14 +94,14 @@
                         <TextBlock Text="AppData 管理" FontSize="28" FontWeight="Bold" />
                     </StackPanel>
 
-                    <!-- 标题下面这一行原本是一段解释话（已移进「说明」弹窗），现在放**计数**。
-                         ⚠️ 名字必须叫 CountLine —— 「CountText」会撞行类型的 AppDataRow.CountText（见文件头） -->
+                    
+
                     <TextBlock x:Name="CountLine" Text="" FontSize="12" Opacity="0.65"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <!-- 分类：**下拉单选**，一次只显示一个分类。
-                     ⚠️ 选项内容在代码里建（FillCategories）—— `ItemTemplate` + `x:Bind` 会让编译器崩 -->
+                
+
                 <ComboBox x:Name="CategoryBox" Grid.Column="1" MinWidth="200"
                           VerticalAlignment="Top" Margin="0,4,0,0"
                           SelectionChanged="Category_Changed" />
@@ -109,7 +109,7 @@
                 <Button x:Name="RescanButton" Grid.Column="2" Content="重新扫描" Click="Rescan_Click"
                         VerticalAlignment="Top" Margin="0,4,0,0" />
 
-                <!-- ⚠️ Content 是 FontIcon ⇒ UIA 拿不到按钮名，显式给一个 -->
+                
                 <Button x:Name="AboutButton" Grid.Column="3" Click="About_Click"
                         Style="{StaticResource RowMoreButtonStyle}"
                         VerticalAlignment="Top" Margin="0,4,0,0"
@@ -118,8 +118,8 @@
                     <FontIcon Glyph="&#xE946;" FontSize="15" />
                 </Button>
 
-                <!-- Hub AI 入口（2026-10-30，需求 1:23）：缓存该不该清、某个目录是干什么的，
-                     问一句比翻说明快。浮层只是提问入口，问题会带去 Hub AI 页继续。 -->
+                
+
                 <Button x:Name="HubAiEntry" Grid.Column="4" Padding="12,6" Click="HubAiEntry_Click"
                         VerticalAlignment="Top" Margin="0,4,0,0"
                         ToolTipService.ToolTip="打开 Hub AI 顾问">
@@ -130,17 +130,17 @@
                 </Button>
             </Grid>
 
-            <!-- ── 常驻风险提示 ──
-                 ⛔ 与「应用卸载」页同一条规约：**永久删除类功能一律常驻红色提示、不给关**
-                    （Nick 2026-10-15 定：「页面警告，常驻红色警告」）。
-                 ⚠️ Severity 用 Error 而不是 Warning：这一层是**不入回收站**的直接删除，
-                    比"改动系统"更重，配色上也要区分得开。 -->
+            
+
+
+
+
             <InfoBar x:Name="RiskBar" Grid.Row="1"
                      Severity="Error" IsOpen="True" IsClosable="False"
                      Title="此操作将永久删除文件"
                      Message="清理不会进入回收站，删除后无法恢复。仅清空缓存目录的内容，目录本身保留。" />
 
-            <!-- ── 内容区 ── -->
+            
             <Grid Grid.Row="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
@@ -162,13 +162,13 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- ⛔⛔ 用**标准 CheckBox**，不用 ListView 自带的多选勾。
-                                     2026-10-16 Nick 反馈：「这钩子钩得很奇怪、颜色很奇怪」——
-                                     真因是系统那枚 SelectionCheckBox 的填充取的是 `ListViewItemCheckBoxBrush`
-                                     （前景色系），深色下呈"浅灰底 + 白勾"，既不是强调色、也和本页其它强调色元素对不上；
-                                     而「应用卸载」页的残留列表用的正是标准 CheckBox（强调色勾），两页观感割裂。
-                                     ⛔ 配套：`EntryList.SelectionMode="None"`，勾选状态改由行自己扛（见 AppDataRow.IsChecked）。
-                                     ⚠️ MinWidth / Padding 必须归零，否则整行会莫名多缩进 20px 左右（照抄残留列表那处）。 -->
+                                
+
+
+
+
+
+
                                 <CheckBox Grid.Column="0" MinWidth="0" Padding="0" Margin="0,0,4,0"
                                           VerticalAlignment="Center"
                                           IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
@@ -187,7 +187,7 @@
                                                ToolTipService.ToolTip="{x:Bind Sub}" />
                                 </StackPanel>
 
-                                <!-- 体积 + 文件数：等宽数字（Typography.NumeralAlignment），否则统计过程中数字一跳整行抖 -->
+                                
                                 <StackPanel Grid.Column="3" VerticalAlignment="Center" Spacing="2"
                                             HorizontalAlignment="Right">
                                     <TextBlock Text="{x:Bind SizeText, Mode=OneWay}" FontSize="13"
@@ -198,8 +198,8 @@
                                                Typography.NumeralAlignment="Tabular" />
                                 </StackPanel>
 
-                                <!-- 行尾：一朵透明的「⋯」。菜单里有「打开文件夹」，可清理的行多一项「清理」
-                                     （⛔ 只读体检行永远不出「清理」）。 -->
+                                
+
                                 <Button Grid.Column="4" Style="{StaticResource RowMoreButtonStyle}"
                                         Click="More_Click"
                                         VerticalAlignment="Center"
@@ -212,7 +212,7 @@
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <!-- 扫描中 -->
+                
                 <StackPanel x:Name="LoadingPanel" Grid.Row="0" Spacing="12" HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                     <ProgressRing IsActive="True" Width="34" Height="34" HorizontalAlignment="Center" />
@@ -220,7 +220,7 @@
                                HorizontalAlignment="Center" />
                 </StackPanel>
 
-                <!-- 空状态 -->
+                
                 <StackPanel x:Name="EmptyPanel" Grid.Row="0" Spacing="10" Visibility="Collapsed"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE8B7;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
@@ -228,11 +228,11 @@
                                HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
                 </StackPanel>
 
-                <!-- ── 批量动作条 ──
-                     只在「可清理 · ×××」分类下出现（⛔ 只读体检没有删除入口，别让它露出来）。
-                     ⚠️ 全选 / 清空选择 都在代码里操作 `EntryList.SelectedItems`，不额外维护一份勾选状态 ——
-                        勾选状态只有列表自己那一份，才不会出现"界面上没勾、其实记着"。
-                     ⛔ 这里**没有**反选：这一页的动作全是删除，少一个花样少一次误删。 -->
+                
+
+
+
+
                 <Grid x:Name="CleanBar" Grid.Row="1" Visibility="Collapsed" ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -256,8 +256,8 @@
                 </Grid>
             </Grid>
         </Grid>
-        <!-- ⛔ 不要写 Grid.Row：根 Grid 只有列定义、没有行定义，
-             写 Grid.Row="1" 会被放到一个不存在的第 2 行 → 浮层永远画不出来（2026-10-30 踩过）。 -->
+        
+
         <ui:HubAiFlyout x:Name="AiFlyout" Grid.Column="1" />
     </Grid>
 </Page>

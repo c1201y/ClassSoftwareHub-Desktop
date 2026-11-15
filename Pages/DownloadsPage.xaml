@@ -6,11 +6,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:svc="using:ClassSoftwareHub.Desktop.Services">
 
-    <!-- 和首页 / 设置同一套版式：ScrollViewer 在外（滚动条贴窗口最右）+ 内容钉在中间 960 宽。
-         ⛔ 必须加 VerticalContentAlignment="Stretch"：ScrollViewer 的内容默认**不拉伸**，
-            内容矮的时候（空状态）整块只占内容自然高，下面的视口空间吃不到 ——
-            表现就是底部按钮行悬在半空（Nick 2026-10-03：「这个按钮位置为什么这么奇怪」）。
-            拉伸后 `*` 行才吸收得到剩余高度，按钮才会落在页面底部。 -->
+    
+
+
+
+
     <ScrollViewer VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
         <Grid Margin="24,36,24,44">
             <Grid.ColumnDefinitions>
@@ -22,9 +22,9 @@
             <Grid Grid.Column="1" MaxWidth="960" RowSpacing="14">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <!-- 列表 / 空状态：必须是 `*` —— 它吸收"标题与按钮行之间"的全部剩余高度，
-                         空状态才会竖直居中、按钮行才会落在页面底部。
-                         ⛔ 写 Auto 会让这块只有内容自然高，按钮行跟着浮在半空（2026-10-03）。 -->
+                    
+
+
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -34,12 +34,12 @@
                     <TextBlock x:Name="SummaryText" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
                 </StackPanel>
 
-                <!-- 任务列表：不用 ListView —— 这里不需要选中，用 ItemsControl 省掉一整套容器 chrome -->
+                
                 <ItemsControl x:Name="TaskList" Grid.Row="1" Padding="0,2,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="svc:DownloadTask">
-                            <!-- 2026-10-30 重排：圆角、图标落位、间距三处对齐到其他页面。
-                                 ⚠️ 间距只留两档：卡片内 8（行与行）、8（卡片之间）；原来是 2/6/10/12 四种混着用。 -->
+                            
+
                             <Border Style="{StaticResource CshCardStyle}" Padding="16,14" Margin="0,0,0,8"
                                     CornerRadius="8">
                                 <Grid ColumnSpacing="14" RowSpacing="8">
@@ -54,7 +54,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <!-- 图标与标题第一行对齐（Top + 2px 视觉修正）；24 宽固定，换字形也不左右跳 -->
+                                    
                                     <FontIcon Grid.Row="0" Grid.Column="0" Glyph="{x:Bind HeaderGlyph}" FontSize="18"
                                               Width="24" HorizontalAlignment="Center"
                                               VerticalAlignment="Top" Margin="0,2,0,0" />
@@ -63,7 +63,7 @@
                                         <TextBlock Text="{x:Bind Title}"
                                                    FontSize="14" FontWeight="Bold"
                                                    TextTrimming="CharacterEllipsis" />
-                                        <!-- 更新包才有的一行说明：这条是应用更新、装在哪一步走 -->
+                                        
                                         <TextBlock Text="{x:Bind Note}" FontSize="12" Opacity="0.65"
                                                    TextWrapping="Wrap"
                                                    Visibility="{x:Bind NoteVisibility}" />
@@ -73,20 +73,20 @@
                                                 VerticalAlignment="Center">
                                         <Button Content="取消" Padding="12,5" Tag="{x:Bind}" Click="Cancel_Click"
                                                 Visibility="{x:Bind RunningVisibility, Mode=OneWay}" />
-                                        <!-- 普通下载下完后的那一步：安装包写「安装」、压缩包写「解压」（文案由类型决定）。
-                                             和更新包的「安装」互斥出现，所以同屏不会有两颗强调按钮。 -->
+                                        
+
                                         <Button Content="{x:Bind ActionText, Mode=OneWay}" Padding="12,5" Tag="{x:Bind}"
                                                 Click="PackageAction_Click"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{x:Bind ActionVisibility, Mode=OneWay}" />
-                                        <!-- 解压过之后顶替「解压」的那颗：产物已经在硬盘上了，下一步就是去拿。
-                                             和「打开文件夹」不同 —— 那颗定位的是压缩包本身，解压后就不需要了。 -->
+                                        
+
                                         <Button Content="打开解压后的文件夹" Padding="12,5" Tag="{x:Bind}"
                                                 Click="OpenExtracted_Click"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{x:Bind ExtractFolderVisibility, Mode=OneWay}" />
-                                        <!-- 更新包下完 → 唯一正解是走这条「安装」：应用先退、安装程序后起。
-                                             ⛔ 不给「打开」（双击安装包会被单实例 Mutex 拦成静默失败）。 -->
+                                        
+
                                         <Button Content="安装" Padding="12,5" Tag="{x:Bind}" Click="Install_Click"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{x:Bind InstallVisibility, Mode=OneWay}" />
@@ -96,10 +96,10 @@
                                                 Visibility="{x:Bind OpenVisibility, Mode=OneWay}" />
                                         <Button Content="打开文件夹" Padding="12,5" Tag="{x:Bind}" Click="Reveal_Click"
                                                 Visibility="{x:Bind RevealVisibility, Mode=OneWay}" />
-                                        <!-- 行尾「⋯」：从列表移除 / 删除文件。
-                                             ⚠️ 2026-10-16 起改成菜单 —— 以前这里只有"从列表移除"，
-                                                文件留在硬盘上，用户想删得自己摸到下载文件夹里找
-                                                （Nick：「删除已下载安装程序（即使未安装）」）。 -->
+                                        
+
+
+
                                         <Button Tag="{x:Bind}" Click="More_Click" Padding="8,4"
                                                 AutomationProperties.Name="更多操作"
                                                 ToolTipService.ToolTip="更多操作"
@@ -117,9 +117,9 @@
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
 
-                                    <!-- 解压中 / 解压完：
-                                         解压时上面那条下载进度条会收起来（它已经停在 100%），只留这条不确定进度条。
-                                         解压没有可靠的百分比可报（系统 bsdtar 不给），所以不给数字。 -->
+                                    
+
+
                                     <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Spacing="6"
                                                 Visibility="{x:Bind WorkTextVisibility, Mode=OneWay}">
                                         <ProgressBar Minimum="0" Maximum="100" IsIndeterminate="True"
@@ -133,11 +133,11 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- 空状态：一条任务都没有的时候。
-                     ⛔ 不再写 MinHeight 硬撑居中 —— 那是在 Row1 还是 Auto 时的权宜之计
-                        （撑出一个假高度，让按钮行往下掉一截）。现在 Row1 是 `*`，
-                        这块竖直居中在"标题与按钮行之间"就是自然的，加 MinHeight 反而会在
-                        窗口很矮时把内容顶出滚动区。 -->
+                
+
+
+
+
                 <StackPanel x:Name="EmptyPanel" Grid.Row="1" Spacing="12" Visibility="Collapsed"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE896;" FontSize="28" Opacity="0.45" HorizontalAlignment="Center" />
@@ -147,9 +147,9 @@
                                Text="在软件下载页开始下载后，任务会显示在这里。" />
                 </StackPanel>
 
-                <!-- 底部：左边是页面级操作，右边是「完成后自动删除」开关。
-                     开关放在这一行而不是藏进设置页 —— 它跟这一页的行为绑得死死的，
-                     用户在这儿下完东西，想的就是在哪儿能顺手改它。 -->
+                
+
+
                 <Grid Grid.Row="2" ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

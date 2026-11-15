@@ -4,25 +4,25 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!--
-      全屏喊话窗（2026-10-25 第三版：动画与音效）。
-      结构：变暗层 → 强调色顶条 → 顶栏标记 → 正文（单块 / 分行两种载体）→ 右下署名 → 底部进度。
-      ⚠️ 底色带 alpha：窗口挂 DesktopAcrylicBackdrop，半透明深色盖在模糊的桌面上，
-         观感就是「屏幕变暗」；取不到亚克力时退化成接近纯黑，不影响可读性。
-      出场方式见设置项 AnnounceAnimation：none / typewriter / slide / pop。
-    -->
+    
+
+
+
+
+
+
     <Grid x:Name="Root" IsTabStop="True" KeyDown="Root_KeyDown" Background="Transparent">
 
-        <!-- 变暗层：入场 0→1，出场 1→0（「屏幕变暗/变回去」就是它） -->
-        <!-- ⛔ 初始 Opacity=1（不透明）：窗口刚显示的那一两帧如果透明，
-             就会直接透出背后的主界面 —— 用户看到的是「半透明一坨 + 里面是软件界面」。
-             开场时由 PlayIntro 从 1 淡到 0.30，视觉上就是「屏幕慢慢暗下来」。 -->
+        
+        
+
+
         <Border x:Name="DimLayer" Background="#000000" Opacity="1" />
 
-        <!-- 顶部强调色窄条 -->
+        
         <Border x:Name="AccentBar" VerticalAlignment="Top" Height="8" Opacity="0" />
 
-        <!-- 顶栏：身份标记 + 关闭 -->
+        
         <Grid x:Name="TopBar" VerticalAlignment="Top" Margin="40,30,26,0" Opacity="0">
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left" VerticalAlignment="Center">
                 <FontIcon x:Name="AccentIcon" Glyph="&#xE720;" FontSize="17" VerticalAlignment="Center" />
@@ -36,7 +36,7 @@
             </Button>
         </Grid>
 
-        <!-- 正文：一个宿主，两种载体 —— 单块（打字机/弹入/无动画）或分行（交错划入） -->
+        
         <Grid x:Name="BodyHost" HorizontalAlignment="Center" VerticalAlignment="Center"
               Margin="140,120,140,150">
             <TextBlock x:Name="BodyText" FontSize="88" Foreground="#FFF7F8FA"
@@ -46,13 +46,13 @@
                         VerticalAlignment="Center" Visibility="Collapsed" />
         </Grid>
 
-        <!-- 署名：右下角（2026-10-25 Nick：直接显示「教务处」，不要「教务处说」） -->
+        
         <TextBlock x:Name="FromText" FontSize="26" Foreground="#CCF7F8FA" Opacity="0"
                    FontFamily="ms-appx:///Assets/Fonts/HarmonyOS_Sans_SC_Light.ttf#HarmonyOS Sans SC"
                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
                    Margin="0,0,64,58" TextAlignment="Right" />
 
-        <!-- 底部：剩余时间进度 + 说明 -->
+        
         <StackPanel x:Name="Footer" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                     Spacing="12" Margin="0,0,0,52" Opacity="0">
             <ProgressBar x:Name="RemainBar" Width="460" Height="4" Minimum="0" Maximum="100" Value="100"

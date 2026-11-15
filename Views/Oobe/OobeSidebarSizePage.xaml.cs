@@ -6,14 +6,14 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace ClassSoftwareHub.Desktop.Views.Oobe;
 
-/// <summary>
-/// 第 7 步：侧边栏大小。收起条 / 展开面板分别选样式；高度上限与自适应只对单列（紧凑模式）有意义。
-/// 只改草稿，收尾时统一重建侧边栏。
-/// </summary>
+
+
+
+
 public sealed partial class OobeSidebarSizePage : Page
 {
-    // 必须是 true：XAML 里 Slider.Value="75" 在 InitializeComponent 期间就会触发 ValueChanged，
-    // 那时若守卫是 false，会把草稿里的高度比例改写成默认值。
+    
+    
     private bool _loading = true;
 
     public OobeSidebarSizePage()
@@ -33,7 +33,7 @@ public sealed partial class OobeSidebarSizePage : Page
 
         UpdateEnabledState();
 
-        // 页面被缓存：从上一页改完开关再翻回来时，置灰状态要重算
+        
         Loaded += (_, _) => UpdateEnabledState();
     }
 
@@ -83,7 +83,7 @@ public sealed partial class OobeSidebarSizePage : Page
     {
         if (_loading) return;
 
-        // XAML 已把范围限在 45~95，这里再夹一道并吸到 5 的整数倍
+        
         var percent = Math.Clamp(
             (int)Math.Round(e.NewValue / 5.0, MidpointRounding.AwayFromZero) * 5, 45, 95);
 
@@ -102,9 +102,9 @@ public sealed partial class OobeSidebarSizePage : Page
         if (draft is not null) draft.SidebarHeightAuto = HeightAutoSwitch.IsOn;
     }
 
-    /// <summary>
-    /// 侧边栏关掉 → 全部置灰；选了舒展模式（每行三个）→ 高度上限与自适应没有意义，单独置灰。
-    /// </summary>
+    
+    
+    
     private void UpdateEnabledState()
     {
         var draft = Draft;

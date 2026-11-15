@@ -15,24 +15,24 @@ using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>
-/// 截屏的**框选层**，照抄 Windows 自带「截图工具」的套路：
-///   点「截屏」→ 整屏冻住压暗 + **顶上弹一条工具栏**（矩形 / 窗口 / 全屏 / 取消）→ 选一块 → 进剪贴板 + 出贴图。
-///
-/// 套路（重要，别再改成"透明窗口盖在屏幕上实时抓"）：
-///   ① 打开时**先把整屏抓成 ScreenFrame 冻住**，用这张图当窗口背景 → 用户看到的是"暂停住的画面"；
-///   ② 框选只是在这张**已经抓好的图**上裁 —— 不用 live BitBlt，也就完全绕开
-///      "覆盖层会不会把自己照进图里 / 要不要 WDA_EXCLUDEFROMCAPTURE"那一堆坑；
-///   ③ 也不用把窗口做成真透明（WinUI 3 里很难做干净），因为背景本来就是那张图。
-///
-/// 三种方式：
-///   * 矩形：拖拽框一块；
-///   * 窗口：鼠标移到哪个窗口就高亮哪个，点一下截它（z 序枚举找光标下的**别人家**窗口，不用 WindowFromPoint
-///           —— 覆盖层铺满全屏，WindowFromPoint 只会返回我们自己）；
-///   * 全屏：点一下直接截整个虚拟桌面。
-///
-/// ⚠️ 全程**必须异步**：曾经在 UI 线程上 `.GetAwaiter().GetResult()` 同步等建图 → 死锁、整个程序卡死。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class SnipOverlayWindow : Window
 {
     private enum SnipMode
@@ -47,14 +47,14 @@ public sealed partial class SnipOverlayWindow : Window
     private static bool _starting;
 
     private ScreenFrame? _frame;
-    private double _scale = 1.0;                 // DIP → 物理像素
+    private double _scale = 1.0;                 
 
     private SnipMode _mode = SnipMode.None;
     private bool _dragging;
     private Point _startDip;
     private Point _currentDip;
 
-    /// <summary>「窗口」方式下，光标底下那个窗口的框（DIP，相对本窗口）。</summary>
+    
     private Rect? _hoverDip;
 
     private static readonly SolidColorBrush ActiveFill = new(Windows.UI.Color.FromArgb(40, 0x4C, 0xC2, 0xFF));
@@ -78,8 +78,8 @@ public sealed partial class SnipOverlayWindow : Window
             p.IsAlwaysOnTop = true;
         }
 
-        StickerWindow.KillSystemBorder(hwnd);           // 无边框窗那一圈系统边也去掉（跟贴图一致）
-        ThemeHost.Apply(Root);                          // 跟应用主题（分体只管常用工具浮窗）
+        StickerWindow.KillSystemBorder(hwnd);           
+        ThemeHost.Apply(Root);                          
 
         Root.PointerPressed += Root_PointerPressed;
         Root.PointerMoved += Root_PointerMoved;
@@ -87,9 +87,9 @@ public sealed partial class SnipOverlayWindow : Window
         Root.PointerCaptureLost += (_, _) => _dragging = false;
         Root.KeyDown += Root_KeyDown;
         Root.RightTapped += (_, _) => Cancel();
-        Root.Loaded += (_, _) => Reset();               // 窗口真上屏后再铺一次暗化层
+        Root.Loaded += (_, _) => Reset();               
 
-        // 工具栏上的按下别当成"开始框选"
+        
         Toolbar.PointerPressed += (_, e) => e.Handled = true;
 
         ApplyMode(SnipMode.None);
@@ -100,9 +100,9 @@ public sealed partial class SnipOverlayWindow : Window
         };
     }
 
-    /// <summary>
-    /// 打开框选层。<paramref name="delayMs"/> 给边条收起留点时间 —— 别把边条一起照进图里。
-    /// </summary>
+    
+    
+    
     public static void Begin(int delayMs = 0) => _ = BeginAsync(delayMs);
 
     private static async Task BeginAsync(int delayMs)
@@ -117,7 +117,7 @@ public sealed partial class SnipOverlayWindow : Window
 
             _starting = true;
 
-            if (delayMs > 0) await Task.Delay(delayMs);      // 等边条收起来
+            if (delayMs > 0) await Task.Delay(delayMs);      
 
             var (vx, vy, vw, vh) = ScreenCapture.VirtualScreen();
             var frame = ScreenCapture.Grab(vx, vy, vw, vh);
@@ -134,7 +134,7 @@ public sealed partial class SnipOverlayWindow : Window
             w.AppWindow.MoveAndResize(new RectInt32(vx, vy, vw, vh));
             _instance = w;
 
-            // 冻屏背景：整屏图铺满窗口（**await**，不能同步等）
+            
             var bmp = ScreenCapture.ToBmp(frame);
             if (bmp is not null)
             {
@@ -143,7 +143,7 @@ public sealed partial class SnipOverlayWindow : Window
             }
 
             w.Reset();
-            w.Activate();                                  // WinUI 的窗口靠 Activate 显示（没有 Show()）
+            w.Activate();                                  
             try { w.KeyCatcher.Focus(FocusState.Programmatic); } catch { }
 
             Log($"框选层已开: 虚拟屏={vx},{vy} {vw}x{vh} 缩放={w._scale:0.##}");
@@ -158,7 +158,7 @@ public sealed partial class SnipOverlayWindow : Window
         }
     }
 
-    // ── 顶部工具栏：切方式 ───────────────────────────────────
+    
 
     private void Mode_Click(object sender, RoutedEventArgs e)
     {
@@ -176,7 +176,7 @@ public sealed partial class SnipOverlayWindow : Window
 
             case "full":
                 ApplyMode(SnipMode.Full);
-                CommitFullscreen();                        // 全屏不用框，直接拍
+                CommitFullscreen();                        
                 break;
         }
     }
@@ -201,11 +201,11 @@ public sealed partial class SnipOverlayWindow : Window
         Highlight(ModeWindow, mode == SnipMode.Window);
         Highlight(ModeFull, mode == SnipMode.Full);
 
-        // 2026-09-27（Nick）：工具栏挪到屏幕正中之后，选完方式还不收就会正好压住要框的那块。
-        // 只在"还没选方式"时留着；收起来后 Esc / 右键仍可取消（见 Root_KeyDown / Root_Tapped）。
+        
+        
         Toolbar.Visibility = mode == SnipMode.None ? Visibility.Visible : Visibility.Collapsed;
 
-        Reset();                                           // 换方式就清掉上一坨框
+        Reset();                                           
     }
 
     private static void Highlight(Button b, bool on)
@@ -228,7 +228,7 @@ public sealed partial class SnipOverlayWindow : Window
         catch { }
     }
 
-    // ── 指针 ─────────────────────────────────────────────────
+    
 
     private void Root_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
@@ -253,7 +253,7 @@ public sealed partial class SnipOverlayWindow : Window
                 break;
 
             default:
-                break;                                     // 还没选方式：点哪儿都没用
+                break;                                     
         }
     }
 
@@ -299,7 +299,7 @@ public sealed partial class SnipOverlayWindow : Window
         }
     }
 
-    // ── 画框 ─────────────────────────────────────────────────
+    
 
     private void Reset()
     {
@@ -309,7 +309,7 @@ public sealed partial class SnipOverlayWindow : Window
         SizeBadge.Visibility = Visibility.Collapsed;
     }
 
-    /// <summary>按当前选区重画：暗化层挖洞 + 选中框 + 尺寸标。</summary>
+    
     private void Redraw()
     {
         var r = _mode == SnipMode.Window ? _hoverDip : SelectionDip();
@@ -321,7 +321,7 @@ public sealed partial class SnipOverlayWindow : Window
 
         var rect = r.Value;
 
-        // 奇偶填充：外面一整块 + 里面选中块 → 中间挖出透明的"洞"
+        
         var group = new GeometryGroup { FillRule = FillRule.EvenOdd };
         group.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, Root.ActualWidth, Root.ActualHeight) });
         group.Children.Add(new RectangleGeometry { Rect = rect });
@@ -333,7 +333,7 @@ public sealed partial class SnipOverlayWindow : Window
         SelBorder.Height = rect.Height;
         SelBorder.Visibility = Visibility.Visible;
 
-        // 物理像素尺寸（老师关心的是"我截了多大一块"）
+        
         var pxW = (int)Math.Round(rect.Width * _scale);
         var pxH = (int)Math.Round(rect.Height * _scale);
         SizeText.Text = $"{pxW} × {pxH}";
@@ -360,7 +360,7 @@ public sealed partial class SnipOverlayWindow : Window
         return new Rect(x, y, w, h);
     }
 
-    /// <summary>「窗口」方式：找光标底下那个窗口的框（DIP）。</summary>
+    
     private void UpdateHover(Point ptDip)
     {
         var frame = _frame;
@@ -391,7 +391,7 @@ public sealed partial class SnipOverlayWindow : Window
         Redraw();
     }
 
-    // ── 落地：裁剪 + 进剪贴板 + 贴图 ─────────────────────────
+    
 
     private void CommitRect(Rect selDip)
     {
@@ -426,7 +426,7 @@ public sealed partial class SnipOverlayWindow : Window
         CommitRegion(0, 0, frame.Width, frame.Height, "全屏");
     }
 
-    /// <summary>裁 frame 上的一块（帧内物理像素）→ 剪贴板 + 贴图，然后关掉框选层。</summary>
+    
     private void CommitRegion(int px, int py, int pw, int ph, string how)
     {
         var frame = _frame;
@@ -452,7 +452,7 @@ public sealed partial class SnipOverlayWindow : Window
     {
         try
         {
-            // 截完直接进编辑窗（涂鸦/几何/文字/马赛克 → 复制 / 保存 / 钉图）
+            
             SnipEditorWindow.Open(frame, cropX, cropY, cropW, cropH);
             await Task.CompletedTask;
             TeachingActions.RefocusPrevious();

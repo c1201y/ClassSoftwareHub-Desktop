@@ -16,14 +16,14 @@ using Windows.UI;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-/// <summary>
-/// 软件详情页（原生）。版式照站点 DownloadDetailPage.vue：
-/// 头部（图标 / 名称 / 标语 / 分类徽标）→ 应用介绍 → 详细信息（版本·体积·系统·官网·GitHub）
-/// → 小提示 → 下载（应用商店卡 + 下载项：平台·备注·体积·类型说明·校验值 + 主按钮 + GitHub 加速）。
-/// 所有链接都交给系统或应用内浮层。
-/// 主按钮的文案与行为随链接类型变（Data/DownloadLinkKind.cs，与站点 downloadLink.ts 同源）：
-/// 直链才写「下载」，网盘 / 官网下载页分别写「前往网盘」「前往官网」。
-/// </summary>
+
+
+
+
+
+
+
+
 public sealed partial class DetailPage : Page
 {
     private string _storeUrl = "";
@@ -36,23 +36,23 @@ public sealed partial class DetailPage : Page
         InitializeComponent();
         Unloaded += (_, _) =>
         {
-            // 离开页面把「已复制」提示定时器停掉
+            
             _copyTimer?.Stop();
             DetachApp();
         };
     }
 
-    /// <summary>
-    /// 退订图标状态通知。
-    ///
-    /// ⚠️ 必须在**离开页面时**退订。`_app` 来自 App.Content.Apps —— 那是进程级静态单例，
-    /// 委托是"单例持有页面"，页面不持有单例；而 ContentFrame.CacheSize = 0、页面根本不缓存。
-    /// 所以只靠 OnNavigatedTo 里"退订上一个"救不了：**每进一次详情页就永久泄漏一个 Page**，
-    /// 翻得越多漏得越多（教学机内存小，必须堵）。
-    ///
-    /// OnNavigatedFrom 与 Unloaded 都挂一道：前者是导航时必定触发，后者兜住非导航的移除，
-    /// 重复调用无害（`_app` 已置空就直接返回）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void DetachApp()
     {
         if (_app is null) return;
@@ -70,7 +70,7 @@ public sealed partial class DetailPage : Page
     {
         base.OnNavigatedTo(e);
 
-        // 换软件时先把上一个的图标通知退订，避免占位字形被旧软件的状态带歪
+        
         if (_app is not null) _app.PropertyChanged -= App_PropertyChanged;
 
         var ui = App.Content.Ui;
@@ -82,10 +82,10 @@ public sealed partial class DetailPage : Page
         StoreButton.Content = ui.T("detail.store-button", "获取");
         StoreOnlyHint.Text = ui.T("detail.store-only", "该软件通过 Microsoft Store 分发，单击上方按钮打开商店页面即可获取");
 
-        // 商店图标（2026-10-19）：内嵌资源解到缓存再绑，避免 ms-appx 在 unpackaged 下取不到
+        
         if (StoreLogo.Source is null) StoreLogo.Source = LoadStoreLogo();
 
-        // 换软件时先把上一个的图标通知退订，避免占位字形被旧软件的状态带歪
+        
         var app = App.Content.FindById(e.Parameter as string ?? "");
         if (app is null)
         {
@@ -102,7 +102,7 @@ public sealed partial class DetailPage : Page
             return;
         }
 
-        // ── 头部 ──
+        
         AppName.Text = app.Name;
         AppTagline.Text = app.Tagline;
         AppTagline.Visibility = app.Tagline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -111,20 +111,20 @@ public sealed partial class DetailPage : Page
         CategoryText.Text = category;
         CategoryBadge.Visibility = category.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        // 占位字形先兜底（没图/加载中/失败都显示），图片加载成功后由 IconPlaceholder 通知收掉
+        
         _app = app;
         app.PropertyChanged += App_PropertyChanged;
         IconBox.Background = MakeIconBrush(app);
         IconFallback.Visibility = app.IconPlaceholder;
 
-        // ── 应用介绍 ──
+        
         AppDescription.Text = app.Description;
         AppDescription.Visibility = app.Description.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         IntroTitle.Visibility = AppDescription.Visibility;
 
-        // ── 来源说明（文件存在本站对象存储时）──
-        // 只有 `oss://` 那种「文件真的在咱们机器上」的才需要：其余都是官方直链或网盘跳转，
-        // 用户点下去看到的是官方域名，本来就清楚文件从哪来（2026-11-01）。
+        
+        
+        
         if (app.HasOssDownload)
         {
             OssBar.Title = ui.T("detail.oss-title", "来源说明");
@@ -139,7 +139,7 @@ public sealed partial class DetailPage : Page
             OssBar.Visibility = Visibility.Collapsed;
         }
 
-        // ── 小提示 ──
+        
         if (app.Notice.Length > 0)
         {
             NoticeBar.Title = ui.T("detail.notice-title", "小提示");
@@ -153,20 +153,20 @@ public sealed partial class DetailPage : Page
             NoticeBar.Visibility = Visibility.Collapsed;
         }
 
-        // ── 详细信息 ──
+        
         InfoList.Children.Clear();
         AddInfoRow(ui.T("detail.version", "软件版本"), app.Version);
         AddInfoRow(ui.T("detail.size", "软件体积"), app.Size);
         AddInfoRow(ui.T("detail.system", "系统限制"), app.System);
         AddLinkRow(ui.T("detail.website", "官方网站"), app.Website);
         AddLinkRow(ui.T("detail.github", "GitHub"), app.Github);
-        // 开发者 / 开源协议：选填字段，⛔ 不能用 AddInfoRow（它会给空值补一句「待补充」，
-        // 而这两个字段没有就是没有，补占位反而像漏填）。
+        
+        
         AddOptionalRow(ui.T("detail.author", "开发者"), app.Author);
         AddOptionalRow(ui.T("detail.license", "开源协议"), app.License);
 
-        // ── 下载 ──
-        // 商店项不进下载列表，交给上方那张商店卡（判据与站点一致：kindOf() === 'store'）
+        
+        
         _storeUrl = app.Store.Length > 0
             ? app.Store
             : app.Downloads.FirstOrDefault(d => d.Kind == DownloadKind.Store)?.Url ?? "";
@@ -176,7 +176,7 @@ public sealed partial class DetailPage : Page
         StoreOnlyHint.Visibility = _storeUrl.Length > 0 && others.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         DownloadList.ItemsSource = others;
 
-        // 微软商店本体是个特例：这台电脑要是没装商店，商店链接点开是没反应的 —— 提示一下怎么装回来
+        
         var isStoreItself = Services.StoreRepair.IsStoreItself(app.Id, _storeUrl);
         if (isStoreItself && _storeUrl.Length > 0)
         {
@@ -184,7 +184,7 @@ public sealed partial class DetailPage : Page
             StoreOnlyHint.Visibility = Visibility.Visible;
         }
 
-        // ── 数据问题 ──
+        
         var issues = App.Content.Issues
             .Where(i => i.File.Contains(app.Id, StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -195,7 +195,7 @@ public sealed partial class DetailPage : Page
             IssueBar.IsOpen = true;
         }
 
-        // ── 顶栏副标题、推荐应用、主题色 ──
+        
         var meta = string.Join("　·　", new[] { app.VersionText, app.Size, app.System }
             .Where(s => !string.IsNullOrWhiteSpace(s)));
         HeroMeta.Text = meta;
@@ -205,11 +205,11 @@ public sealed partial class DetailPage : Page
         _ = ApplyHeroColorAsync(app);
     }
 
-    /// <summary>
-    /// 右栏「推荐应用」：先取同分类的，不够就用其他软件补齐（Nick：搜不到就随便推荐）。
-    /// ⛔ 标题不能叫「相似应用」—— 补齐的那部分只是别的软件，叫相似名不副实。
-    /// ⛔ 用 Id 的稳定哈希排序而不是 Random —— 同一台机器每次进来顺序一致，不会看着"跳来跳去"。
-    /// </summary>
+    
+    
+    
+    
+    
     private void BuildRecommendations(SoftwareApp app)
     {
         var pool = App.Content.Apps
@@ -242,14 +242,14 @@ public sealed partial class DetailPage : Page
         Frame.Navigate(typeof(DetailPage), target.Id);
     }
 
-    /// <summary>
-    /// 顶部色带：一律等**图标主色**，颜色没就绪之前色带是透明的（等于页面底色）。
-    ///
-    /// ⛔⛔ 上一版先用主题强调色顶上、几百毫秒后再换成图标色，被 Nick 点名"非常割裂"。
-    /// 现在只有两种情况会立刻上色：① 列表页已经预热过（缓存命中，进页面就是最终色）；
-    /// ② 取不到色（黑白图标 / SVG / 网络失败）⇒ 才退回强调色，这是兜底、不是过渡。
-    /// 其余情况取到后再淡入，读起来像"色带浮现"，不像"颜色换了"。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private async Task ApplyHeroColorAsync(SoftwareApp app)
     {
         if (Services.IconPalette.TryGetCached(app.Icon, out var ready))
@@ -266,7 +266,7 @@ public sealed partial class DetailPage : Page
             return;
         }
 
-        // 兜底：没有主色可用，直接上强调色（不做淡入，免得看着像还在加载）
+        
         var fallback = (Services.ThemeBrush.Get(this, "AccentFillColorDefaultBrush") as SolidColorBrush)?.Color
                        ?? Color.FromArgb(255, 0, 95, 184);
         PaintHero(app, fallback, fade: false);
@@ -274,7 +274,7 @@ public sealed partial class DetailPage : Page
 
     private void PaintHero(SoftwareApp app, Color color, bool fade)
     {
-        // 期间可能已经导航到别的软件 —— 比 Id，别把 A 的颜色刷到 B 页面上
+        
         if (_app is null || !string.Equals(_app.Id, app.Id, StringComparison.OrdinalIgnoreCase)) return;
 
         Hero.Background = Services.IconPalette.Gradient(color);
@@ -300,7 +300,7 @@ public sealed partial class DetailPage : Page
         story.Begin();
     }
 
-    /// <summary>详细信息里的一行（左侧标签固定宽度，右侧值可选中复制）。</summary>
+    
     private void AddInfoRow(string label, string value)
     {
         var text = new TextBlock
@@ -314,12 +314,12 @@ public sealed partial class DetailPage : Page
         InfoList.Children.Add(InfoRow(label, text));
     }
 
-    /// <summary>
-    /// 选填的一行（开发者 / 开源协议）。没值就整行不出现。
-    ///
-    /// ⚠️ 跟 <see cref="AddInfoRow"/> 的唯一区别就在这里：版本 / 体积 / 系统是必有信息，
-    /// 空着要补一句「待补充」才不显得像坏了；而作者和协议本来就是选填，补占位反而像漏填。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private void AddOptionalRow(string label, string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
@@ -341,11 +341,11 @@ public sealed partial class DetailPage : Page
         InfoList.Children.Add(InfoRow(label, link));
     }
 
-    /// <summary>
-    /// 一行详细信息。
-    /// ⛔ 不再放进灰色卡片（Nick：灰底很丑）—— 现在靠**行间细分割线 + 上下留白**分组，
-    /// 和商店里详情区的做法一致。分割线只画在行与行之间，末行不拖一条尾巴。
-    /// </summary>
+    
+    
+    
+    
+    
     private Border InfoRow(string label, FrameworkElement value)
     {
         var grid = new Grid { ColumnSpacing = 16 };
@@ -373,11 +373,11 @@ public sealed partial class DetailPage : Page
         };
     }
 
-    /// <summary>
-    /// 微软商店图标（`Assets/StoreLogo.png`，内嵌资源 ⇒ 跟着 exe 走、离线可用）。
-    /// ⚠️ unpackaged 应用里 `ms-appx:///` 取不到 Assets，这里走 <see cref="Services.EmbeddedAssets"/> 解到缓存再用文件路径。
-    /// 取不到就返回 null，卡片照样能用（只是少一个图标），⛔ 别让整页崩掉。
-    /// </summary>
+    
+    
+    
+    
+    
     private static Microsoft.UI.Xaml.Media.ImageSource? LoadStoreLogo()
     {
         try
@@ -396,14 +396,14 @@ public sealed partial class DetailPage : Page
     {
         if (_storeUrl.Length == 0) return;
 
-        // 微软商店本体 → 特例（能顺带把商店装回来）
+        
         if (Services.StoreRepair.IsStoreItself(_app?.Id, _storeUrl))
         {
             await ShowStoreSelfDialogAsync();
             return;
         }
 
-        // 其余软件：转成商店协议 → 直接拉起「微软商店」应用（别再开浏览器了）
+        
         App.MainWindow?.OpenStore(_storeUrl);
     }
 
@@ -413,27 +413,27 @@ public sealed partial class DetailPage : Page
             OpenDownload(item, el);
     }
 
-    /// <summary>
-    /// 拆分按钮的**主键**（左半边「下载」）。
-    /// ⚠️ <see cref="SplitButton.Click"/> 的参数是 <c>TypedEventHandler&lt;SplitButton, SplitButtonClickEventArgs&gt;</c>，
-    ///    跟 <c>Button.Click</c> 的 <see cref="RoutedEventArgs"/> 不是一回事，别指望共用同一段处理器。
-    /// </summary>
+    
+    
+    
+    
+    
     private void DownloadSplit_Click(SplitButton sender, SplitButtonClickEventArgs args)
     {
         if (sender.DataContext is DownloadItem item)
             OpenDownload(item, sender);
     }
 
-    /// <summary>
-    /// 菜单刚被点开的那一行（<see cref="DownloadMenu_Opening"/> 记下来的），给不需要 URL 的情形兜底。
-    ///
-    /// <para>
-    /// ⚠️ 菜单项**不能只靠 <c>DataContext</c> 认行**：<c>MenuFlyout</c> 的内容住在独立的 popup 根里，
-    /// 模板的 DataContext 不一定传得进去，拿到 null 时表现就是"菜单点了没反应"。
-    /// 所以 URL 直接从菜单项自己的 <c>Tag</c> 取（XAML 里 <c>{x:Bind Url}</c> 编进模板），
-    /// 这里只是第二道保险。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private DownloadItem? _menuRow;
 
     private void DownloadMenu_Opening(object? sender, object e)
@@ -445,7 +445,7 @@ public sealed partial class DetailPage : Page
             _menuRow = first.DataContext as DownloadItem;
     }
 
-    /// <summary>「下载到其他文件夹…」：这一次换地方存，不改默认位置。</summary>
+    
     private async void DownloadTo_Click(object sender, RoutedEventArgs e)
     {
         var url = (sender as FrameworkElement)?.Tag as string;
@@ -461,7 +461,7 @@ public sealed partial class DetailPage : Page
     private void OpenDownloadFolder_Click(object sender, RoutedEventArgs e)
         => Services.DownloadService.OpenDownloadsFolder();
 
-    /// <summary>选一个文件夹；用户点取消或对话框打不开都返回 null（打不开只记日志，不打扰用户）。</summary>
+    
     private async Task<string?> PickFolderAsync()
     {
         try
@@ -472,7 +472,7 @@ public sealed partial class DetailPage : Page
             };
             picker.FileTypeFilter.Add("*");
 
-            // 用「元素所在窗口」的句柄：详情页以后若被装进浮窗/工具窗，对话框也跟着走
+            
             WindowHandle.BindPicker(picker, this);
 
             var folder = await picker.PickSingleFolderAsync();
@@ -485,13 +485,13 @@ public sealed partial class DetailPage : Page
         }
     }
 
-    /// <summary>
-    /// 下载按钮分流。类型判定见 <see cref="DownloadLinkKind"/>（与站点 src/gallery/downloadLink.ts 同源）：
-    ///   · 微软商店本体 → 特例（商店没装的话商店链接是死的，得能把商店装回来）
-    ///   · file     文件直链 → 原生下载
-    ///   · netdisk  网盘分享页 → 只能跳转（要密码 / 登录 / 客户端）
-    ///   · page     官网下载页 → 只能跳转（链接由 JS 生成或带签名，取不到）
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private async void OpenDownload(DownloadItem item, FrameworkElement? source = null)
     {
         var url = item.Url;
@@ -509,9 +509,9 @@ public sealed partial class DetailPage : Page
             App.MainWindow?.ShowWebSheet(url, item.Kind == DownloadKind.Netdisk ? "网盘分享" : "官网下载");
     }
 
-    /// <summary>
-    /// 微软商店本体专用：一是打开商店；二是「没装 / 被精简掉了」时用 wsreset -i 装回来。
-    /// </summary>
+    
+    
+    
     private async Task ShowStoreSelfDialogAsync()
     {
         var dialog = new ContentDialog
@@ -575,21 +575,21 @@ public sealed partial class DetailPage : Page
         }
     }
 
-    /// <summary>下载文件名：优先「软件名 + 版本」，实在没有就让 DownloadService 从 URL 猜。</summary>
+    
     private string? DownloadNameFor(DownloadItem? item)
     {
         if (_app is null) return null;
 
         var platform = item?.Platform ?? "";
 
-        // 用软件名当文件名，扩展名从 URL 里取 —— 这样下载下来是「微信 4.0.exe」而不是一串 hash
+        
         var name = _app.Name;
         if (!string.IsNullOrWhiteSpace(platform)) name += " " + platform;
         if (!string.IsNullOrWhiteSpace(_app.Version)) name += " " + _app.Version;
         return name.Trim();
     }
 
-    /// <summary>校验值：点一下把完整哈希复制走，2 秒后文案还原。</summary>
+    
     private void CopyHash_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button b || b.Tag is not string hash || hash.Length == 0) return;
@@ -602,7 +602,7 @@ public sealed partial class DetailPage : Page
         }
         catch
         {
-            return; // 剪贴板拿不到就什么都不做，完整值在 tooltip 里还能手选
+            return; 
         }
 
         b.Content = App.Content.Ui.T("detail.hash-copied", "已复制");
@@ -616,11 +616,11 @@ public sealed partial class DetailPage : Page
         _copyTimer.Start();
     }
 
-    /// <summary>
-    /// 「校验」：带着这个校验值跳到「编码 / 哈希工具」的**文件模式**，用户把刚下好的安装包
-    /// 拖进去就自动比对 —— 省掉"自己打开工具 → 找到哈希 → 复制 → 粘贴 → 再选文件"那一串。
-    /// 走 <c>viaList: false</c>：不铺工具列表，看完返回一次就回到这张详情页。
-    /// </summary>
+    
+    
+    
+    
+    
     private void HashCheck_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button b || b.Tag is not string hash || hash.Length == 0) return;
@@ -645,7 +645,7 @@ public sealed partial class DetailPage : Page
         _lastCopyButton = null;
     }
 
-    /// <summary>GitHub 直链才有的「加速下载」：列出所有镜像通道，点哪条走哪条。</summary>
+    
     private void Mirror_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button b || b.Tag is not string url || url.Length == 0) return;
@@ -673,9 +673,9 @@ public sealed partial class DetailPage : Page
             };
             button.Click += (s, _) =>
             {
-                // 加速下载就是把这条直链套上镜像前缀，入口本身只对文件直链出现
-                // ⇒ 显式声明 file：有些包的地址不带后缀（/package/win-autoupdate、
-                //   /api/v1/release/dl/1），光看 URL 会被判成「官网页面」而开成浮层。
+                
+                
+                
                 if (((Button)s).Tag is string u)
                     OpenDownload(new DownloadItem { Url = u, DeclaredKind = "file" }, b);
                 flyout.Hide();
@@ -686,8 +686,8 @@ public sealed partial class DetailPage : Page
         foreach (var channel in GithubMirror.Channels)
             AddChannelButton(channel.Name, GithubMirror.MirrorUrl(url, channel));
 
-        // IP 直连反代（2026-10-25）：拼法是「换掉 github.com 这个 host」而不是加前缀，
-        // 与上面几条不是一个套路，所以单独列一条。域名被按 SNI 拦掉的线路上，公益镜像全废，只剩它能用。
+        
+        
         if (Core.GithubIpRelay.CanRelay(url))
             AddChannelButton(Core.GithubIpRelay.Name, Core.GithubIpRelay.Relay(url));
 
@@ -702,10 +702,10 @@ public sealed partial class DetailPage : Page
         flyout.ShowAt(b);
     }
 
-    /// <summary>
-    /// 打开链接：http(s) 一律走应用内网页浮层（不再甩到浏览器），
-    /// 其它协议（ms-windows-store: 等）才交给系统。
-    /// </summary>
+    
+    
+    
+    
     private void Open(string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
@@ -716,17 +716,17 @@ public sealed partial class DetailPage : Page
             return;
         }
 
-        try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(url)); } catch { /* 打不开就算了 */ }
+        try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(url)); } catch {  }
     }
 
-    // 图标加载状态变了：成功 → 收掉占位字形；失败但本机有旧图 → 换成那张（IconImage 变了）
+    
     private void App_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (_app is null) return;
 
-        // ⛔ 只监听 IconPlaceholder 是不够的（2026-10-24 实测 ClassIsland）：
-        //    网络源失败后 SoftwareApp 会把 _icon 换成**本机那张旧图**再 Raise(IconImage)，
-        //    这里若不重建 ImageBrush，详情页就一直顶着购物袋占位 —— 盘上明明有图却显示不出来。
+        
+        
+        
         if (e.PropertyName == nameof(SoftwareApp.IconImage))
             IconBox.Background = MakeIconBrush(_app);
 
@@ -734,7 +734,7 @@ public sealed partial class DetailPage : Page
             IconFallback.Visibility = _app.IconPlaceholder;
     }
 
-    /// <summary>图标底：ImageBrush 从正中间裁、填满 72×72（`Border` 不裁剪子元素，所以用 Background 铺）。</summary>
+    
     private static Brush? MakeIconBrush(SoftwareApp app)
     {
         var source = app.IconImage;

@@ -6,12 +6,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:submit="using:ClassSoftwareHub.Desktop.Views.Submit">
 
-    <!--
-      第 3 步：安装包与系统。
+    
 
-      下载项一张卡默认只露「平台 + 直链 / 上传」，体积、备注、下载方式、校验值收进「更多选项」。
-      ⛔ 别再把六个框一次性铺开 —— 多数投稿人一条链接就完事，先看到六个框会直接劝退。
-    -->
+
+
+
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24,28,24,24">
             <StackPanel Width="600" HorizontalAlignment="Center" Spacing="14">

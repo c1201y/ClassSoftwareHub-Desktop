@@ -76,11 +76,11 @@ public sealed class GithubImportResult
     public GithubImportFacts Facts { get; set; } = new();
 }
 
-/// <summary>
-/// 「从 GitHub 一键读取」的服务端取数逻辑（移植自站点 src/gallery/githubImport.ts）。
-/// 接口入口按顺序回退：本站 Worker 代理 → api.github.com → gh-proxy → ghfast；成功的入口记在本地下次优先。
-/// ⚠️ 这里不带任何令牌 —— 站点那份源码里硬编码的 PAT 属于泄露，不要抄。
-/// </summary>
+
+
+
+
+
 public static class GithubImport
 {
     private static readonly (string Label, string Prefix)[] ApiBases =
@@ -104,9 +104,9 @@ public static class GithubImport
         return http;
     }
 
-    // ══════════ 地址解析 / 小工具 ══════════
+    
 
-    /// <summary>支持 https://github.com/o/r、github.com/o/r、o/r、git@github.com:o/r.git 等写法。</summary>
+    
     public static (string Owner, string Repo)? ParseRepoInput(string raw)
     {
         var text = Regex.Replace((raw ?? "").Trim(), @"\s+", "");
@@ -136,7 +136,7 @@ public static class GithubImport
         return id.Length > 48 ? id.Substring(0, 48) : id;
     }
 
-    /// <summary>简介压成一句话（首页卡片那行）。</summary>
+    
     public static string ToTagline(string description, int max = 60)
     {
         var text = Regex.Replace((description ?? "").Trim(), "\\s+", " ");
@@ -173,7 +173,7 @@ public static class GithubImport
         return "";
     }
 
-    /// <summary>从文件名猜「平台 / 架构」，例如 PowerToysSetup-0.101-x64.exe → Windows x64 安装版。</summary>
+    
     public static string GuessPlatform(string fileName)
     {
         var n = (fileName ?? "").ToLowerInvariant();
@@ -217,7 +217,7 @@ public static class GithubImport
         return head;
     }
 
-    /// <summary>从全部文件名里归纳「支持系统」。</summary>
+    
     public static string GuessSystem(IEnumerable<string> assetNames)
     {
         string[] order = { "Windows", "macOS", "Linux", "Android", "iOS" };
@@ -231,7 +231,7 @@ public static class GithubImport
         return string.Join(" / ", order.Where(found.Contains));
     }
 
-    // ══════════ 请求（带镜像回退） ══════════
+    
 
     private static List<(string Label, string Prefix)> OrderedBases()
     {
@@ -247,7 +247,7 @@ public static class GithubImport
                     return new List<(string, string)> { proxy, hit }.Concat(rest.Where(item => item.Label != hit.Label)).ToList();
             }
         }
-        catch { /* 读不到就用默认顺序 */ }
+        catch {  }
         return ApiBases.ToList();
     }
 
@@ -258,13 +258,13 @@ public static class GithubImport
             Directory.CreateDirectory(Core.AppPaths.DataDir);
             File.WriteAllText(BaseCacheFile, label);
         }
-        catch { /* 记不上不影响使用 */ }
+        catch {  }
     }
 
     private static void ForgetBase()
     {
         try { if (File.Exists(BaseCacheFile)) File.Delete(BaseCacheFile); }
-        catch { /* 忽略 */ }
+        catch {  }
     }
 
     private static async Task<(JsonElement Data, string Via)> FetchJsonAsync(string path, CancellationToken token)
@@ -330,7 +330,7 @@ public static class GithubImport
             ? value.GetInt64()
             : 0;
 
-    /// <summary>明显不是给人下载安装包的文件：调试符号、校验值、源码、策略模板……</summary>
+    
     private static readonly Regex[] JunkPatterns =
     {
         new(@"\.(blockmap|sha1|sha256|sha512|md5|sig|asc|pem|pdb|txt|json|yml|yaml|md)$", RegexOptions.IgnoreCase),
@@ -342,7 +342,7 @@ public static class GithubImport
 
     private static bool IsJunkAsset(string name) => JunkPatterns.Any(pattern => pattern.IsMatch(name));
 
-    // ══════════ 主流程 ══════════
+    
 
     public static async Task<GithubImportResult> FetchAsync(string rawInput, bool includePrerelease,
         int maxDownloads = 12, CancellationToken token = default)
@@ -375,13 +375,13 @@ public static class GithubImport
             var spdx = Str(licenseNode, "spdx_id");
             var licenseName = Str(licenseNode, "name");
 
-            // 仓库里放了 LICENSE 文件、但 GitHub 认不出是哪一种协议时会回 spdx_id = "NOASSERTION"。
-            // 那不是协议名，填进表单就会在详情页显示一行看不出意思的英文，
-            // 所以按「没有协议」处理（⛔ 也不退成「未标注」这类占位）。
+            
+            
+            
             info.License = spdx == "NOASSERTION" ? "" : (spdx.Length > 0 ? spdx : licenseName);
         }
 
-        // ── 版本信息（拿不到不算失败，退化成「只填仓库信息」）──
+        
         var releases = new List<JsonElement>();
         var releaseFailed = false;
         var via = repoResult.Via;
@@ -409,7 +409,7 @@ public static class GithubImport
         var noRelease = !hasChosen;
         var usedPrerelease = hasChosen && Bool(chosen, "prerelease");
 
-        // 没勾「包含预发布」时：如果最新那条其实是更新的预发布版，记下来给界面提示
+        
         var chosenTag = hasChosen ? Str(chosen, "tag_name").Trim() : "";
         var newerPrereleaseTag = !usedPrerelease && newest.ValueKind == JsonValueKind.Object && Bool(newest, "prerelease")
                                  && Str(newest, "tag_name").Trim() != chosenTag
@@ -427,7 +427,7 @@ public static class GithubImport
             }
             : null;
 
-        // ── 安装包列表 ──
+        
         var rawAssets = new List<(string Name, long Size, string Url)>();
         if (hasChosen && chosen.TryGetProperty("assets", out var assetsNode) && assetsNode.ValueKind == JsonValueKind.Array)
         {
@@ -441,7 +441,7 @@ public static class GithubImport
         }
 
         var kept = rawAssets.Where(asset => !IsJunkAsset(asset.Name)).ToList();
-        var finalAssets = kept.Count > 0 ? kept : rawAssets;   // 全被判成垃圾文件时宁可全留着
+        var finalAssets = kept.Count > 0 ? kept : rawAssets;   
         var limited = finalAssets.Take(maxDownloads).ToList();
 
         var downloads = limited.Select(asset => new GithubDownloadItem

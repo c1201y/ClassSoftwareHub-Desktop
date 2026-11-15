@@ -9,32 +9,32 @@ using Windows.UI;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// 从软件图标里取一个**能当主题色用**的颜色（详情页顶部渐变用，照 Microsoft Store 的做法）。
-///
-/// <para>
-/// ⛔ 不是简单求平均：图标常常是大面积白色背景 + 一块彩色 —— 直接平均会得到一片灰。
-/// 做法是逐像素转 HSV，**只统计有饱和度、亮度居中**的像素，按"饱和度 × 亮度居中程度"加权。
-/// </para>
-/// <para>
-/// ⛔ 拿不到就返回 null，调用方退回主题强调色 —— 详情页不能因为一个图标下载失败就白屏等待。
-/// 结果按 URL 缓存（同一次运行里反复进出同一个软件不重复下载）。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
 public static class IconPalette
 {
     private static readonly Dictionary<string, Color?> Cache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>正在取的地址。列表预热与详情页同时要同一个图标时，只发一次请求。</summary>
+    
     private static readonly Dictionary<string, Task<Color?>> Pending = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>取色的解码边长：48 已经足够统计主色，再大是浪费。</summary>
+    
     private const int SampleSize = 48;
 
-    /// <summary>⛔ 共用一个 HttpClient：每次 new 会积压 socket（列表页一次预热几十个）。</summary>
+    
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2.5) };
 
-    /// <summary>缓存里已有的颜色（**同步**给）。用来让详情页一进来就是最终色，别先刷强调色再跳。</summary>
+    
     public static bool TryGetCached(string? url, out Color color)
     {
         color = default;
@@ -52,10 +52,10 @@ public static class IconPalette
         return false;
     }
 
-    /// <summary>
-    /// 提前把颜色备好（列表页渲染完就调）。
-    /// 详情页的色带只有在**点进去之前**算好才不显延迟 —— 等页面画完再去取，一定会看见颜色换一下。
-    /// </summary>
+    
+    
+    
+    
     public static void Preload(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
@@ -65,7 +65,7 @@ public static class IconPalette
             if (Cache.ContainsKey(url)) return;
         }
 
-        _ = PickAsync(url);   // 内部全程有 catch，丢弃任务安全
+        _ = PickAsync(url);   
     }
 
     public static Task<Color?> PickAsync(string? url)
@@ -73,7 +73,7 @@ public static class IconPalette
         if (string.IsNullOrWhiteSpace(url)) return Task.FromResult<Color?>(null);
         if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return Task.FromResult<Color?>(null);
 
-        // SVG 解不了（BitmapDecoder 只吃位图），直接放弃，交给调用方兜底
+        
         if (url.EndsWith(".svg", StringComparison.OrdinalIgnoreCase)) return Task.FromResult<Color?>(null);
 
         lock (Cache)
@@ -96,13 +96,13 @@ public static class IconPalette
         Color? picked = null;
         try
         {
-            // ① 本机已经有这张图 → **直接拿它算色，不走网络**。
-            //    取色只要"大致对"，而这张就是同一个 URL 下下来的，没有先等 2.5 秒超时的理由
-            //    （2026-10-24：网络不通时详情页会先顶强调色、再跳成正确色，观感就是"颜色换了一下"）。
+            
+            
+            
             picked = await PickFromLocalAsync(url).ConfigureAwait(false);
 
-            // ② 本机没有才联网；联网失败再退回本机那张试一次
-            //    （覆盖"缓存是陈旧的、刚刚才被下载下来"这种本机有但时序靠后的情况）。
+            
+            
             if (picked is null)
             {
                 try
@@ -132,12 +132,12 @@ public static class IconPalette
         return picked;
     }
 
-    /// <summary>
-    /// 从本机缓存的那张图标算主色。没有文件、或文件解不出来（格式怪 / 内容是错误页）→ null。
-    ///
-    /// 为什么单独走原始字节而不用 <see cref="AppIconCache.TryGet"/>：后者给的是已经解码过、
-    /// 还限宽 128 的 <c>ImageSource</c>；主色统计要自己按 48×48 采样，必须拿到原始字节。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static async Task<Color?> PickFromLocalAsync(string url)
     {
         if (!AppIconCache.TryGetLocalPath(url, out var path)) return null;
@@ -196,10 +196,10 @@ public static class IconPalette
 
             ToHsv(r, g, b, out _, out var s, out var v);
 
-            if (s < 0.18) continue;          // 灰白/灰黑：不是"主题色"
+            if (s < 0.18) continue;          
             if (v < 0.12 || v > 0.96) continue;
 
-            // 亮度离 0.55 越远越不像配色，权重越低
+            
             var weight = s * (1 - Math.Abs(v - 0.55) * 1.4);
             if (weight <= 0) continue;
 
@@ -215,7 +215,7 @@ public static class IconPalette
         var cg = sumG / sumW;
         var cb = sumB / sumW;
 
-        // 统一拉到"能当主题色"的区间：够饱和、别太亮也别太暗，深浅主题上都压得住
+        
         ToHsv(cr, cg, cb, out var h, out var sat, out var val);
         sat = Math.Clamp(Math.Max(sat, 0.42), 0.42, 0.85);
         val = Math.Clamp(val, 0.46, 0.72);
@@ -223,11 +223,11 @@ public static class IconPalette
         return FromHsv(h, sat, val);
     }
 
-    /// <summary>
-    /// 把主色做成页头色带：**竖直**由上到下淡出（照 Microsoft Store 的做法）。
-    /// ⛔ 别做成斜向 —— 斜着渐变会在左上角堆出一块浓色，看着像贴了张图。
-    /// 最下一档 alpha 落到 0：色带下缘**没有可见的边**，直接化进页面底色。
-    /// </summary>
+    
+    
+    
+    
+    
     public static LinearGradientBrush Gradient(Color color)
     {
         var brush = new LinearGradientBrush

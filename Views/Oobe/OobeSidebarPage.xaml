@@ -6,11 +6,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls">
 
-    <!--
-      第 5 步：侧边工具栏（开关类）。
-      侧边栏和主界面是分开的两块，配置项也多（边、模式、模块、密度……），
-      这里只放"要不要显示 / 按钮怎么写"这几项；位置与尺寸各拆一页，细项仍在「侧边布局」页。
-    -->
+    
+
+
+
+
     <Grid>
         <StackPanel x:Name="ContentRoot" Width="600"
                     HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">

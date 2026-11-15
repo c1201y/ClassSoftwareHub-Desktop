@@ -7,9 +7,9 @@
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
     <Page.Resources>
-        <!-- 快捷入口模板：颜色全走 {ThemeResource}，浅色/深色自己会变。
-             ⚠️ 原来还有第二套「主题色底 + 反白字」专给「赞助作者」那颗用（Accent 模板 + QuickLinkSelector），
-                2026-10-12 Nick 嫌那底色越看越丑，整套去掉了 —— 五颗一视同仁，不再单独突出。 -->
+        
+
+
         <DataTemplate x:Key="QuickLinkNormal">
             <Border CornerRadius="8" Padding="12,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <StackPanel Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -26,15 +26,15 @@
             </Border>
         </DataTemplate>
 
-        <!-- 「硬件信息 / 系统信息」列表的行间分隔线（跟主题走） -->
+        
         <Style x:Key="InfoRowDivider" TargetType="Border">
             <Setter Property="Height" Value="1" />
             <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         </Style>
 
-        <!-- ===== 功能卡片（2026-10-06 起：裸图标 + 标题 + 副标题 + 右箭头）=====
-             图标**不再套方块底**（Nick 2026-10-06：不要"框套框"）—— 直接给裸 FontIcon，
-             字号放大到 20 顶住原来的视觉重量（FluentFlyout 首页同款做法）。 -->
+        
+
+
         <Style x:Key="CardIcon" TargetType="FontIcon">
             <Setter Property="FontSize" Value="20" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -43,8 +43,8 @@
 
         <Style x:Key="CardTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="14" />
-            <!-- ⚠️ 刻意**不设 FontWeight**：Nick 2026-10-06 要求卡片内文字不要粗体。
-                 层级靠字号（14/12）＋副标题降透明度拉开就够了；加粗反而显"重"，不是 WinUI 观感。 -->
+            
+
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
 
@@ -63,16 +63,16 @@
     </Page.Resources>
 
 
-    <!-- ⛔ 间距必须写在内部 Grid 的 Margin 上，不能写成 ScrollViewer 的 Padding：
-         WinUI 3 的 ScrollViewer.Padding 底部不参与滚动范围计算，滚到底最后一条内容仍被裁
-         （2026-10-01 实测：首页滚到 100% DirectX 行被底边切半）。Gallery 全部用内部 Margin。 -->
+    
+
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <!--
-          ⚠️ 别用 Stretch + MaxWidth：一旦触发上限 WinUI 会把整列**右甩**（左边空一大块）→ 看起来就是「变形」。
-          这里用「三列 Grid：* / 960 / *」把内容钉在中间 960 宽，导航展开或收起都不动。
-        -->
+        
+
+
+
         <Grid Margin="24,36,24,44">
-            <!-- 中间列 = 想要 960 宽：窗口够宽就正好 960 且居中（剩余给两侧星列），窗口太窄就自动缩、不裁切 -->
+            
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24" />
                 <ColumnDefinition Width="*" />
@@ -81,28 +81,28 @@
 
             <StackPanel Grid.Column="1" MaxWidth="960" Spacing="8">
 
-            <!-- 首页大标题。2026-10-07 Nick：字号从 40 收一点（40 → 36），副名从「桌面版」改回英文「- Desktop」
-                 （与站点/仓库的英文口径一致，也跟右边那张 banner 里的英文对得上）。
-                 随后他看了实机说"还是太大" ⇒ 再压到 **24**。 -->
+            
+
+
             <TextBlock Text="ClassSoftwareHub - Desktop" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" />
 
-            <!-- 「已收录 XX 款软件」原来就挂在大标题下面这一行。2026-10-07 Nick 说位置太隐蔽，
-                 已**整行挪进**「设置」卡片下面那条 InfoBar（见 CollectedBar），和「过去48小时收录」住一起。
-                 ⛔ 别再往大标题底下补回任何数字行。 -->
+            
 
-            <!-- ⚠️ 这里原来还有一行站点名副标题（HomeTitleText，内容＝"电教委员常用软件下载站"），
-                 已按 Nick 2026-10-06 要求整行删除 —— 大标题已经写明"桌面版"，下面再挂一行站点名纯属重复。
-                 它的 code-behind 赋值也一并清掉了，别再补回来。 -->
 
-            <!-- ===== 公告（2026-11-05）=====
-                 Nick：「之后的版本中如果有公告的话，应用软件首页顶部显示 infobar，每个版本可控，可以显示多条」。
-                 位置就在大标题正下方 —— 以前「已收录 XX 款软件」占的就是这一行，后来挪去设置卡片下面了，
-                 空出来的这段正好留给公告：进首页第一眼就能看到，又不至于抢大标题。
-                 ⚠️ 条目在 code-behind 的 RefreshNoticesAsync() 里生成（每条一个 InfoBar），这里只留容器。
-                    没有公告时容器高度为 0，不占任何间距，也不影响下面那块 banner 的位置。 -->
+
+            
+
+
+
+            
+
+
+
+
+
             <StackPanel x:Name="NoticeHost" Spacing="8" />
 
-            <!-- 图片（高 140，宽按比例，圆角 12）+ 版本号（图片右侧·左上）+ 代号（图片右侧·右上） -->
+            
             <Grid ColumnSpacing="20" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -115,14 +115,14 @@
                     <Image x:Name="Banner" Height="140" Stretch="Uniform" />
                 </Border>
 
-                <!-- 版本号 + 应用代号：**上下两行、都靠左**（Nick 2026-10-17）。
-                     ⛔ 原来是一个在左、一个贴右端，窗口一窄两者就在中间叠成一团（实测确实重合）。
-                     ⚠️ 别再往代号上面补「代号」两个字 —— 只要英文代号本身（2026-10-06 定的）。
-                     ⚠️ 别再把它挪回右端对齐。 -->
+                
+
+
+
                 <StackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="2" HorizontalAlignment="Left">
-                    <!-- 只显示**软件自己**的版本。以前这行下面还挂着"网站版本：xxx"小字，
-                         把软件版本陪衬成网站版本的附属品 —— 软件已经是独立发布的东西了，
-                         没必要再摆出依附的样子，那一行已删（2026-09-26）。 -->
+                    
+
+
                     <TextBlock x:Name="ShellVersionText" FontSize="28" FontWeight="Bold"
                                TextWrapping="Wrap" />
                     <TextBlock x:Name="CodeNameText" Text="Synesthesia" FontSize="28" FontWeight="Bold"
@@ -131,19 +131,19 @@
                 </StackPanel>
             </Grid>
 
-            <!-- 顶部那张独立的「更新状态卡片」已于 2026-10-06 **并入下方快速开始的主题色卡**
-                 （Nick：「图片卡已经有一个查看更新内容，你上面那个就删掉」）——
-                 版本状态文案改在「查看更新内容」那张卡上显示，卡片自带的 banner 缩略图一并取消。
-                 ⚠️ 状态逻辑没有删！还活在 code-behind 的 RefreshUpdateCard() 里，
-                    只是目标元素从 UpdateCard* 换成了 ChangelogCardTitle / ChangelogCardSubtitle。 -->
+            
 
-            <!-- ===== 推荐应用（2026-10-17 重做成 Store「精选实用软件」样式）=====
-                 一排整卡缓慢向左匀速滚动、无缝循环。每张卡是一整块圆角卡：
-                 上半 = 图标放大 + 亚克力模糊当底、中央叠圆角清晰图标；
-                 下半 = 加粗名称 + 一句短简介。鼠标悬停暂停，点卡片进详情页。
-                 ⚠️ 位置在「快速开始」标题正上方（Nick 2026-10-17 指定）。
-                 ⚠️ 卡片在 code-behind 的 BuildRecommendations() 里生成（要复制一份做无缝循环，
-                    用不到 DataTemplate）；视口裁剪靠 Clip，见 LayoutRecommend()。 -->
+
+
+
+
+            
+
+
+
+
+
+
             <Grid x:Name="RecommendSection" Visibility="Collapsed" Margin="0,22,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -176,10 +176,10 @@
 
             <TextBlock Text="快速开始" FontSize="20" FontWeight="Bold" Margin="0,20,0,4" />
 
-            <!-- 主题色一行两张：访问网页版 / 查看更新内容（Nick 2026-10-06：全宽卡对半切开，
-                 右半张换成更新日志入口）。两张都跟下面的普通卡片**同规格**：标题 + 副标题 + 右端指示符。
-                 ⚠️ 底色与文字色必须成对用 Accent / TextOnAccent 画刷，别写死色值（浅色主题会自动翻深字）。
-                 ⚠️ 高度**只靠 Padding 撑，不写 Height** —— 两列同处一个 Grid，天然自动等高。 -->
+            
+
+
+
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -210,9 +210,9 @@
                     </Grid>
                 </Border>
 
-                <!-- 「查看更新内容」：图标口径跟导航栏那条「更新日志」一致（E81C = 时钟/历史）。
-                     副标题＝版本状态，原本挂在顶部那张更新卡片上，2026-10-06 随卡片一起并到这里；
-                     文案由 code-behind 的 RefreshUpdateCard() 按「待装 / 已是最新」两态填。 -->
+                
+
+
                 <Border x:Name="ChangelogCard" Grid.Column="1" Tag="changelog" CornerRadius="8" Padding="16,18"
                         Background="{ThemeResource AccentFillColorDefaultBrush}"
                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
@@ -223,8 +223,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <!-- ⚠️ 2026-10-22：有更新时换成绿色横幅（InfoBar Success 那套配色），
-                             图标从时钟 E81C 换成对勾 E930。 -->
+                        
+
                         <FontIcon x:Name="ChangelogIcon" Glyph="&#xE81C;" FontSize="20" VerticalAlignment="Center"
                                   Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
@@ -237,20 +237,20 @@
                         <FontIcon x:Name="ChangelogChevron" Grid.Column="2" Glyph="&#xE8A7;" FontSize="12"
                                   VerticalAlignment="Center"
                                   Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                        <!-- 待装态：右端指示符让位给「立即安装」 -->
+                        
                         <Button x:Name="UpdateInstallButton" Grid.Column="2" VerticalAlignment="Center"
                                 Content="立即安装" Visibility="Collapsed" Click="InstallPending_Click" />
-                        <!-- 发现新版本（只是查到了、还没下载）：给一颗直接开干的「立即更新」。
-                             2026-10-16 加 —— 原先只有"包下完了"才有入口，用户选了「稍后」之后首页
-                             什么都不显示，很容易忘（Nick：「更新提示只会在开机弹一次，用户很容易忘记」）。
-                             ⛔ 它跟「立即安装」互斥显隐，两者同占第 2 列。 -->
+                        
+
+
+
                         <Button x:Name="QuickUpdateButton" Grid.Column="2" VerticalAlignment="Center"
                                 Content="立即更新" Visibility="Collapsed" Click="QuickUpdate_Click" />
                     </Grid>
                 </Border>
             </Grid>
 
-            <!-- 两张等大卡片 -->
+            
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -298,14 +298,14 @@
                 </Border>
             </Grid>
 
-            <!--
-              教室喊话 / 函数图像（2026-10-29 补）：
-              这两项在导航栏里是**一级功能项**（喊话是从工具里提出来的，函数图像是 Standalone），
-              首页一直没给卡片，用户从首页根本看不到它们。放在第二排 —— 只排在「下载首页」之后，
-              其余卡片依次下移。
-              ⚠️ 标签就是导航用的那个 tag（announce / function-plot），别另起名字：
-                 function-plot 交给 NavigateTagCore 按 Id 反查工具表，才能走载体选择（Web 优先、原生兜底）。
-            -->
+            
+
+
+
+
+
+
+
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -353,10 +353,10 @@
                 </Border>
             </Grid>
 
-            <!--
-              ⚠️ 2026-10-23：导航把「内置工具」拆成课堂 / 系统两组之后，首页还挂着一张「内置工具」指向总索引
-                  —— 点进去看到的是一个混在一起的列表，跟左侧导航对不上。这里跟着拆开，并补一张 Hub AI 卡。
-            -->
+            
+
+
+
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -383,7 +383,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Hub AI：只读的电脑顾问。副标固定写「电脑顾问」，⛔ 别写 Agent（Nick 定的口径）。 -->
+                
                 <Border Grid.Column="1" Tag="hubai" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
@@ -405,7 +405,7 @@
                 </Border>
             </Grid>
 
-            <!-- 第二行快速入口：侧边布局 / 实验性功能（跟上面一排同样的两张等大卡片、同样的图标口径） -->
+            
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -432,11 +432,11 @@
                     </Grid>
                 </Border>
 
-                <!--
-                  实验性功能：**故意不列它下面有什么**（Nick 2026-09-26）——
-                  首页卡片只说"这里有一组还没成熟的功能"，具体内容进去看。
-                  所以副标题也保持中性口径，不剧透任何条目名。
-                -->
+                
+
+
+
+
                 <Border Grid.Column="1" Tag="experimental" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
@@ -458,12 +458,12 @@
                 </Border>
             </Grid>
 
-            <!--
-              第三行：提交软件 / 反馈中心 —— 这两个是一对（都是"往维护者那边送东西"），所以并排。
-              ⚠️ **设置永远排在最后一张**（Nick 2026-09-26 定），加新卡片就往它前面插。
-              ⚠️ 约定：导航栏上半区有什么，首页就得有对应的卡片（除非特别说明）；
-                 所以挨着「侧边布局」后面补的「实验性功能」，以及下半区的「提交软件」「反馈中心」。
-            -->
+            
+
+
+
+
+
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -490,7 +490,7 @@
                     </Grid>
                 </Border>
 
-                <!-- 反馈中心：图标口径跟导航栏那条一致（E939 = 人 + 对话泡） -->
+                
                 <Border Grid.Column="1" Tag="feedback" CornerRadius="8" Padding="14,18"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
@@ -512,7 +512,7 @@
                 </Border>
             </Grid>
 
-            <!-- 设置：必须永远在最后一张，反馈中心进来后这一行放不下第三个，所以它单独占一行 -->
+            
             <Border Tag="settings" CornerRadius="8" Padding="14,18"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
@@ -533,21 +533,21 @@
                 </Grid>
             </Border>
 
-            <!-- ===== 收录情况（InfoBar，2026-10-07 第二版）=====
-                 Nick：「把已收录 87 款软件也移到 InfoBar」「使用内置提示的组件，加在首页的那个设置卡片的下面」。
-                 ⇒ 「已收录」和「过去48小时收录」现在**同住这一条**，贴在**设置卡片正下方**、快捷入口之上。
-                 标题 = 已收录 N 款软件（常驻：只要清单同步下来就显示）；
-                 正文(Message) = 过去48小时收录 N 款：具体是哪几款（只有算出 >0 时才有，平时是空串）。
-                 ⚠️ IsClosable=False —— 这是常驻信息，关掉就没地方看数字了。
-                 ⚠️ 默认 IsOpen=False，开不开由 code-behind 的 RefreshCollectedCount() 按"清单到没到"决定。
-                 ⛔ 不摆「过去48小时收录 0 款」这种占位。
-                 ✅ 长文本走 Message（原生即支持自动换行 + 卡片随内容撑高）；不要塞进 Content（会被裁切）。 -->
+            
+
+
+
+
+
+
+
+
             <InfoBar x:Name="CollectedBar" IsOpen="False" IsClosable="False"
                      Severity="Informational" Margin="0,4,0,0" />
 
-            <!-- ===== 一行快捷入口：图标在上、文字在下（不用卡片、不加标题） =====
-                 ⚠️ 五颗必须在**一行内**：窗口变窄时压缩格宽（code-behind 的 FitQuickRow 按可用宽度重算
-                    ItemWidth，上限 192、下限 104），而不是折成两行（Nick 2026-10-17）。 -->
+            
+
+
             <GridView x:Name="QuickGrid" Margin="0,14,0,0" Padding="0" SelectionMode="None"
                       IsItemClickEnabled="True" ItemClick="Quick_ItemClick"
                       ItemTemplate="{StaticResource QuickLinkNormal}"
@@ -560,7 +560,7 @@
                 </GridView.ItemsPanel>
             </GridView>
 
-            <!-- ===== 硬件信息 / 系统信息：列表形式（不用卡片），行在 code-behind 里填 ===== -->
+            
             <TextBlock Text="硬件信息" FontSize="20" FontWeight="Bold" Margin="0,20,0,2" />
             <StackPanel x:Name="HardwareList" Margin="2,0,0,0" />
 
