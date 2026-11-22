@@ -32,10 +32,7 @@
 | `tools-classroom` | 课堂工具 | 工具分组页 |
 | `tools-system` | 系统工具 | 工具分组页 |
 | `experimental` | 实验性功能 | 尚未确定上线的功能 |
-| `machinecheck` | 本机核实 | 硬件与系统信息 |
 | `procguard` | 程序专杀 | 指定进程的定时清理 |
-| `uninstaller` | 应用卸载 | 已安装程序的卸载入口 |
-| `startup` | 开机启动项 | 启动项的新增与禁用 |
 | `logs` | 运行日志 | 按会话查看日志 |
 | `feedback` | 反馈中心 | 问题与建议的提交入口（界面入口在「关于」页） |
 | `feedback-form` | 反馈表单 | 反馈中心内的填写页 |

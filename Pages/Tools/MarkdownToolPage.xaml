@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClassSoftwareHub.Desktop.Pages.Tools.MarkdownToolPage"
+    NavigationCacheMode="Disabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 2026-11-21 重做：保留标题、去掉标题下的说明；不限宽，左 1/3 编辑、右 2/3 呈现。
+         工具条只留两个常用图标 + 一个「格式」菜单，按钮统一 32 高、统一内边距。 -->
+    <Grid x:Name="PageRoot" Margin="24,28,24,16" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="PageTitle" Grid.Row="0" Text="Markdown 工具" FontSize="28" FontWeight="Bold" />
+
+        <Grid Grid.Row="1" ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" MinWidth="280" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="2" Margin="0,0,0,6">
+                    <Button Width="34" Height="30" Padding="0" Click="Bold_Click"
+                            ToolTipService.ToolTip="加粗">
+                        <FontIcon Glyph="&#xE8DD;" FontSize="14" />
+                    </Button>
+
+                    <Button Width="34" Height="30" Padding="0" Click="Italic_Click"
+                            ToolTipService.ToolTip="斜体">
+                        <FontIcon Glyph="&#xE8DB;" FontSize="14" />
+                    </Button>
+
+                    <Button Height="30" Padding="10,0" Margin="6,0,0,0"
+                            ToolTipService.ToolTip="更多格式">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="格式" FontSize="12.5" />
+                            <FontIcon Glyph="&#xE70D;" FontSize="9" Opacity="0.8" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                <MenuFlyoutItem Text="标题" Click="Heading_Click" />
+                                <MenuFlyoutItem Text="列表" Click="Bullet_Click" />
+                                <MenuFlyoutItem Text="引用" Click="Quote_Click" />
+                                <MenuFlyoutItem Text="行内代码" Click="Code_Click" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="链接" Click="Link_Click" />
+                                <MenuFlyoutItem Text="图片" Click="Image_Click" />
+                                <MenuFlyoutItem Text="表格" Click="Table_Click" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <Button Height="30" Padding="10,0" Margin="6,0,0,0"
+                            Click="Open_Click" ToolTipService.ToolTip="导入 Markdown 文件">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8E5;" FontSize="13" />
+                            <TextBlock Text="打开" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <TextBox x:Name="EditorBox" Grid.Row="1"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         FontFamily="Cascadia Mono, Consolas"
+                         FontSize="13.5"
+                         Padding="12,10,12,10"
+                         IsSpellCheckEnabled="False"
+                         PlaceholderText="在这里写作，右侧实时呈现。"
+                         TextChanged="EditorBox_TextChanged"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            </Grid>
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="2"
+                            HorizontalAlignment="Right" Margin="0,0,0,6">
+                    <Button Height="30" Padding="10,0" Click="Stage_Click"
+                            ToolTipService.ToolTip="全屏展示，适合投影与大屏">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE740;" FontSize="13" />
+                            <TextBlock Text="沉浸模式" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Height="30" Padding="10,0" Click="CopyPlain_Click"
+                            ToolTipService.ToolTip="复制去掉标记的纯文本">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8C8;" FontSize="13" />
+                            <TextBlock Text="复制纯文本" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Height="30" Padding="10,0" Click="ExportText_Click"
+                            ToolTipService.ToolTip="导出为 TXT">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8A5;" FontSize="13" />
+                            <TextBlock Text="导出文本" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Height="30" Padding="10,0" Click="ExportHtml_Click"
+                            ToolTipService.ToolTip="导出为 HTML 网页">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE7C3;" FontSize="13" />
+                            <TextBlock Text="导出 HTML" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Height="30" Padding="10,0" Click="ExportPdf_Click"
+                            ToolTipService.ToolTip="导出为 PDF 文档">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE749;" FontSize="13" />
+                            <TextBlock Text="导出 PDF" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0,2,0,0">
+                    <StackPanel x:Name="Preview" Spacing="0" Padding="0,0,16,24" />
+                </ScrollViewer>
+
+                <TextBlock x:Name="StatusText" Grid.Row="2"
+                           HorizontalAlignment="Right" Margin="0,4,0,0"
+                           FontSize="11.5" Opacity="0.5" />
+            </Grid>
+        </Grid>
+
+        <!-- PDF 导出用的一次性渲染宿主，平时不占位、不参与命中测试。 -->
+        <Grid x:Name="PdfHost" Grid.Row="1" Opacity="0" IsHitTestVisible="False"
+              Width="0" Height="0" HorizontalAlignment="Left" VerticalAlignment="Top" />
+    </Grid>
+</Page>

@@ -84,9 +84,20 @@ public static class BackdropHost
 
     /// <summary>纯色兜底：跟主窗口一个色（深浅色各一），别用死黑。</summary>
     private static Windows.UI.Color SolidColor(Panel root)
-        => root.ActualTheme == ElementTheme.Dark
+    {
+        // 2026-11-20：以「设置里的应用主题」为准，而不是 root.ActualTheme。
+        // 窗口在 ThemeHost.Apply 之前调本方法时，ActualTheme 还是系统主题；
+        // 应用主题与系统相反（浅色应用 + 深色系统）就会刷出相反的底色。
+        var theme = "";
+        try { theme = App.Settings.Current.Theme ?? ""; } catch { }
+        var dark = theme.Equals("dark", StringComparison.OrdinalIgnoreCase)
+            || (string.IsNullOrWhiteSpace(theme) || theme.Equals("system", StringComparison.OrdinalIgnoreCase))
+               && root.ActualTheme == ElementTheme.Dark;
+
+        return dark
             ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
             : Windows.UI.Color.FromArgb(255, 243, 243, 243);
+    }
 
     /// <summary>读设置里主窗口选的那个背景（读不到就按亚克力）。</summary>
     private static string SettingBackdrop()

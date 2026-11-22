@@ -25,7 +25,7 @@
 
 ; ⚠️ 唯一的版本号来源，必须和 Core/ShellConfig.cs 的 ShellVersion 一字不差（写在这里时**不带** dv 前缀）
 #ifndef DesktopVersion
-  #define DesktopVersion "1.2.2"
+   #define DesktopVersion "1.2.3-insider1.1"
 #endif
 
 #define AppName "ClassSoftwareHub"
@@ -38,9 +38,13 @@ AppId={{7A2C4D18-9F31-4C6B-8E5A-2D0B7F4A1C93}
 AppName={#AppName}
 AppVersion={#DesktopVersion}
 AppVerName={#AppName} dv{#DesktopVersion}
-AppPublisher={#AppName}
+AppPublisher=ClassSoftwareHub开发团队
 AppPublisherURL={#AppSite}
 AppSupportURL={#AppSite}
+VersionInfoVersion=1.2.3.0
+VersionInfoCompany=ClassSoftwareHub开发团队
+VersionInfoDescription=ClassSoftwareHub Setup
+VersionInfoCopyright=Copyright © 2026 ClassSoftwareHub开发团队
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -95,8 +99,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\dist\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"; IconIndex: 0; AppUserModelID: "TinyNick.ClassSoftwareHub.Desktop"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"; IconIndex: 0; AppUserModelID: "TinyNick.ClassSoftwareHub.Desktop"; Tasks: desktopicon
 
 [Run]
 ; 装完自动拉起应用（交互安装、以及应用内更新的静默安装都算）。

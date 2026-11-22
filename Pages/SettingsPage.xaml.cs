@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -10,29 +10,40 @@ using ClassSoftwareHub.Desktop.Data;
 using ClassSoftwareHub.Desktop.Services;
 using ClassSoftwareHub.Desktop.Services.License;
 using ClassSoftwareHub.Desktop.Services.Updating;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace ClassSoftwareHub.Desktop.Pages;
 
-/// <summary>原生设置页：关于（最上，突出版本号）/ 外观 / 窗口行为 / 内容。改动即时生效。</summary>
+
 public sealed partial class SettingsPage : Page
 {
+    
+    private HotkeyAction? _recordingHotkey;
+
+    
+    private Button? _recordingButton;
+
+    
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _recordTimer;
+
     private bool _loading = true;
     private bool _contentBusy;
-    /// <summary>
-    /// 打开设置页后把滚动位置拉回顶部的定时器。
-    /// ⚠️ 必须存字段 —— DispatcherQueueTimer 被 GC 收走就不会触发（本项目踩过）。
-    /// </summary>
+    
+    
+    
+    
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _settleTimer;
 
-    /// <summary>
-    /// 「本地缓存」「本地日志」两个列表的分页：每页最多这么多条。
-    /// 2026-10-11 Nick：展开后一屏拉不到头，改成翻页。数量不超一页时整条分页栏收起来。
-    /// </summary>
+    
+    
+    
+    
     private const int ListPageSize = 10;
 
     private int _cachePage = 1;
@@ -41,26 +52,26 @@ public sealed partial class SettingsPage : Page
     private int _localHistoryPage = 1;
     private int _historyPage = 1;
 
-    /// <summary>
-    /// 「从仓库装回旧版本」加载过的那一份（最多 20 条）。
-    /// ⚠️ 翻页**只翻这份缓存**，⛔不重新打网络 —— GitHub 那一步又慢又容易被限流，
-    ///    点一下「下一页」就重新拉一次，体验会很糟。要刷新得再点那颗「从仓库加载」按钮。
-    /// </summary>
+    
+    
+    
+    
+    
     private IReadOnlyList<UpdateRelease>? _historyReleases;
 
-    /// <summary>「从仓库装回旧版本」列表末尾那句说明（稳定通道只列正式版）；没有就不显示。</summary>
+    
     private string? _historyNote;
 
     public SettingsPage()
     {
         InitializeComponent();
 
-        // 主题一切（浅色 ⇄ 深色）就把 SVG 快捷图标重染成对应颜色
+        
         ActualThemeChanged += (_, _) => ApplyQuickLinkIcons();
 
     }
 
-    /// <summary>给带 SVG 的快捷入口按当前主题色染图标；主题一切就重染（浅色/深色自适应）。</summary>
+    
     private void ApplyQuickLinkIcons()
     {
         if (SettingsQuickGrid.ItemsSource is not List<Core.QuickLink> links) return;
@@ -70,28 +81,34 @@ public sealed partial class SettingsPage : Page
                 link.IconSource = QuickLinkIconLoader.GetIcon(link.IconSvg, color);
     }
 
-    /// <summary>
-    /// 滚到指定分组（需求 1:18：<c>csh://settings/&lt;section&gt;</c>）。
-    ///
-    /// <para>
-    /// 认得的 section：<c>appearance</c>（外观）/ <c>startup</c>（开机启动）/ <c>hubai</c> /
-    /// <c>cache</c>（本地缓存）/ <c>logs</c>（本地日志）/ <c>content</c>（软件内容）/
-    /// <c>update</c>（更新）/ <c>about</c>（关于，页面顶部）。
-    /// </para>
-    ///
-    /// <para>
-    /// ⚠️ 认不出就停回顶部且只留一条日志，**不弹提示**：文章里的链接可能比应用新
-    /// （用户装的是旧版），为这个打断阅读不值得。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public void ActivateSection(string? section)
     {
         var key = (section ?? "").Trim().ToLowerInvariant();
+
+        
+        
+        
+        _settleTimer?.Stop();
 
         FrameworkElement? target = key switch
         {
             "appearance" or "theme" => ThemeCard,
             "startup" => StartupCard,
+            "hotkeys" or "hotkey" or "keys" => HotkeyExpander,
             "hubai" or "ai" => HubAiCard,
             "cache" => CacheExpander,
             "logs" or "log" => LogExpander,
@@ -111,13 +128,13 @@ public sealed partial class SettingsPage : Page
         Bring(target);
     }
 
-    /// <summary>
-    /// 把某个控件滚进视野。
-    /// <para>
-    /// ⚠️ 刚 Navigate 过来时目标可能还没布局完，此时 <c>StartBringIntoView</c> 会**静默无效**
-    ///    （不抛异常，也没滚）。所以没加载就先等 <c>Loaded</c>。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private static void Bring(FrameworkElement target)
     {
         void ScrollNow()
@@ -152,8 +169,8 @@ public sealed partial class SettingsPage : Page
         base.OnNavigatedTo(e);
         _loading = true;
 
-        // 后台同步完成时这一屏要自己更新（安装包不自带清单，首次进来多半还空着）。
-        // ⚠️ 本页 NavigationCacheMode=Enabled（实例长驻），先 -= 再 += 保证只挂一次。
+        
+        
         App.Content.Changed -= OnContentChanged;
         App.Content.Changed += OnContentChanged;
 
@@ -164,10 +181,23 @@ public sealed partial class SettingsPage : Page
             "solid" => 2,
             _ => 0
         };
+        AiTemplateCombo.SelectedIndex = s.HubAiTemplate switch
+        {
+            "course" => 1,
+            "solver" => 2,
+            "coder" => 3,
+            _ => 0,
+        };
         TopMostSwitch.IsOn = s.AlwaysOnTop;
         AutoStartSwitch.IsOn = s.AutoStart;
         MinimizeSwitch.IsOn = s.MinimizeOnStart;
         TraySwitch.IsOn = s.CloseToTray;
+        ShellMenuSwitch.IsOn = s.ShellMenuEnabled;
+        HotkeysSwitch.IsOn = s.HotkeysEnabled;
+        UpdateHotkeyButtons();
+        UpdateHotkeyStatus();
+        RefreshDisplayInfo();
+
         ThemeCombo.SelectedIndex = s.Theme switch
         {
             "light" => 1,
@@ -175,7 +205,7 @@ public sealed partial class SettingsPage : Page
             _ => 0
         };
 
-        // GitHub 下载体验优化（下载路径）：认不出的值一律当「自动」
+        
         GithubRouteCombo.SelectedIndex = Services.GithubRoute.Current switch
         {
             Services.GithubRoutes.SelfHosted => 1,
@@ -185,7 +215,7 @@ public sealed partial class SettingsPage : Page
         UpdateGithubRouteHint();
         RefreshDownloadFolder();
 
-        // 查单词的词源优先级（需求第 17 条）：认不出的值一律当「离线优先」，与设置层的归一保持一致
+        
         DictSourceCombo.SelectedIndex = Core.Dictionary.DictSourceModes.Normalize(s.DictionarySource) switch
         {
             Core.Dictionary.DictSourceModes.OnlineFirst => 1,
@@ -194,7 +224,7 @@ public sealed partial class SettingsPage : Page
             _ => 0,
         };
 
-        // 外部组件（分体）外观
+        
         SplitThemeSwitch.IsOn = s.SplitTheme;
         ExtThemeCombo.SelectedIndex = s.ExternalTheme switch
         {
@@ -207,29 +237,27 @@ public sealed partial class SettingsPage : Page
 
         ChannelCombo.SelectedIndex = UpdateChannels.Parse(s.UpdateChannel) == UpdateChannel.Insider ? 1 : 0;
         AutoCheckSwitch.IsOn = s.AutoCheckUpdate;
-        // 安装包保留数量：下拉项 1~10 与索引一一对应；存档里的怪值夹回 1~10 再定位
+        
         KeepCombo.SelectedIndex = Math.Clamp(s.InstallerKeepCount, 1, 10) - 1;
-        // 缓存保留数量：同款下拉（1~10 与索引一一对应）
+        
         CacheKeepCombo.SelectedIndex = Math.Clamp(s.CacheKeepCount, 1, 10) - 1;
-        // 日志保留天数：3/7/15/30/永不（Tag 存天数，0 = 永不删除）；存档里出现别的值一律落回「7 天」
+        
         LogKeepCombo.SelectedIndex = LogKeepIndex(s.LogKeepDays);
         UpdateCurrent.Text = $"当前版本：{ShellConfig.VersionPrefix}{ShellConfig.DisplayVersion}· 更新源：{UpdateService.CreateDefault().Source.DisplayName}";
 
         RefreshContentInfo();
-            BuildAboutHeader();
-            SettingsQuickGrid.ItemsSource = Core.QuickLinks.Build(App.Content.Ui);
-            ApplyQuickLinkIcons();
-            _loading = false;
+        BuildAboutHeader();
+        SettingsQuickGrid.ItemsSource = Core.QuickLinks.Build(App.Content.Ui);
+        ApplyQuickLinkIcons();
+        _loading = false;
 
-        // 「版本记录」固定折叠：里面是十几条运行记录，摊开会把设置页拉得极长。
-        // ⚠️ 只在 XAML 里写 IsExpanded="False" 不够 —— 实测加载过程中仍会被撑开，这里再压一次。
+        
+        
         HistoryExpander.IsExpanded = false;
         InstallerExpander.IsExpanded = false;
         CacheExpander.IsExpanded = false;
 
-
-        // 打开设置页固定从顶部开始：卡片高度会被设置值二次刷新，ScrollViewer 的锚点跟着漂，
-        // 实测会直接停到「常用工具」那一段（2026-09-28）。
+        
         _settleTimer = DispatcherQueue.CreateTimer();
         _settleTimer.Interval = TimeSpan.FromMilliseconds(200);
         _settleTimer.IsRepeating = false;
@@ -238,7 +266,7 @@ public sealed partial class SettingsPage : Page
             _settleTimer.Stop();
             RootScroll.ChangeView(null, 0, null, true);
 
-            // 折叠区在导航后 200ms（早已过布局）再压一次，防"首帧摊开"。
+            
             HistoryExpander.IsExpanded = false;
             InstallerExpander.IsExpanded = false;
         };
@@ -251,7 +279,7 @@ public sealed partial class SettingsPage : Page
         base.OnNavigatedFrom(e);
     }
 
-    /// <summary>内容变了 → 刷新这一组摘要（手动同步进行中就别抢它刚写上的状态行）。</summary>
+    
     private void OnContentChanged()
     {
         if (!DispatcherQueue.HasThreadAccess)
@@ -281,9 +309,9 @@ public sealed partial class SettingsPage : Page
         AboutApp.Text = ShellConfig.AppName;
         AboutVersion.Text = ShellConfig.VersionPrefix + ShellConfig.DisplayVersion;
 
-        // 站点版本**以编译进程序的常量为准**，不读任何联网文本：
-        // 以前读内容包的 app.version，而那份 text/ 不联网更新、装机即冻结，一直显示装机那天那版（实测停在 v2.3.2）。
-        // 详见 ShellConfig.SiteVersionDisplay 的注释。
+        
+        
+        
         AboutSiteVersion.Text = $"站点版本：{ShellConfig.SiteVersionDisplay}";
 
     }
@@ -302,10 +330,10 @@ public sealed partial class SettingsPage : Page
     {
         if (_loading) return;
         if (ThemeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string theme) return;
-        App.MainWindow?.SetTheme(theme);       // 里面会 Save + 重算背景 + 通知外部组件
+        App.MainWindow?.SetTheme(theme);       
     }
 
-    // ── 外部组件（分体）外观 ─────────────────────────────────
+    
 
     private void SplitTheme_Toggled(object sender, RoutedEventArgs e)
     {
@@ -313,7 +341,7 @@ public sealed partial class SettingsPage : Page
         App.Settings.Current.SplitTheme = SplitThemeSwitch.IsOn;
         App.Settings.Save();
         UpdateExtThemeAvailability();
-        Services.ThemeHost.Notify();           // 外部组件（侧边栏/浮窗/截图窗）立刻换过来
+        Services.ThemeHost.Notify();           
     }
 
     private void ExtTheme_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -328,8 +356,8 @@ public sealed partial class SettingsPage : Page
     private void UpdateExtThemeAvailability()
     {
         ExtThemeCombo.IsEnabled = SplitThemeSwitch.IsOn;
-        // ⚠️ 文案要与 ThemeHost 里的分类一致（2026-10-29）：只有桌面浮动组件吃这一套，
-        //    文档窗口（条款与声明、日志详细视图、反馈引导窗）永远跟主界面的主题。
+        
+        
         ExtThemeHint.Text = SplitThemeSwitch.IsOn
             ? "只有侧边栏与「常用工具」浮窗跟着这个走；主界面与其它窗口仍跟「主题」"
             : "现在是关的：常用工具浮窗跟主界面的颜色模式保持一致";
@@ -343,6 +371,18 @@ public sealed partial class SettingsPage : Page
         App.Settings.Save();
         App.MainWindow?.SetBackdrop(kind);
     }
+
+
+    private void AiTemplate_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (AiTemplateCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string template) return;
+        App.Settings.Current.HubAiTemplate = template;
+        App.Settings.Save();
+    }
+
+    private void Migration_Click(object sender, RoutedEventArgs e)
+        => Views.Migration.MigrationWindow.Show();
 
     private void TopMostSwitch_Toggled(object sender, RoutedEventArgs e)
     {
@@ -375,13 +415,28 @@ public sealed partial class SettingsPage : Page
         App.MainWindow?.SetCloseToTray(TraySwitch.IsOn);
     }
 
+    private void ShellMenuSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+
+        var enabled = ShellMenuSwitch.IsOn;
+        var settings = App.Settings.Current;
+        if (settings.ShellMenuEnabled == enabled) return;
+
+        settings.ShellMenuEnabled = enabled;
+        App.Settings.Save();
+
+        if (!Services.ShellMenu.Apply(enabled))
+            Core.AppLog.Warn("shell", "右键菜单开关未生效");
+    }
+
     private void ReloadContent_Click(object sender, RoutedEventArgs e)
     {
         App.Content.Load();
         RefreshContentInfo();
     }
 
-    /// <summary>手动从网络同步内容（失败也不影响本机已有的那份）。</summary>
+    
     private async void SyncContent_Click(object sender, RoutedEventArgs e)
     {
         if (_contentBusy) return;
@@ -418,25 +473,25 @@ public sealed partial class SettingsPage : Page
             Directory.CreateDirectory(dir);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
         }
-        catch { /* 打不开就算了 */ }
+        catch {  }
     }
 
-    // ══════════════════════════ 诊断 ══════════════════════════
+    
 
-    /// <summary>设置 → 诊断 → 日志查看（Nick 2026-10-02：正式入口，不再放实验性分组）。
-    /// 走 ContentFrame 真导航 —— NavView 的后退键能回到设置页（设置页有缓存，回来状态还在）。</summary>
+    
+    
     private void OpenLogViewer_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(LogViewerPage));
     }
 
-    /// <summary>Hub AI 二级设置页（2026-10-18）。和日志查看同一套走法：Frame 直跳，返回靠导航栏。</summary>
+    
     private void OpenHubAiSettings_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(HubAiSettingsPage));
     }
 
-    // ══════════ GitHub 下载体验优化（下载路径的全局默认；设置 → 软件内容）══════════
+    
 
     private void GithubRoute_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -446,17 +501,17 @@ public sealed partial class SettingsPage : Page
         App.Settings.Current.GithubDownloadRoute = Services.GithubRoutes.Normalize(route);
         App.Settings.Save();
 
-        // 「自动」那次探测结果立刻作废 —— 否则刚换完设置还要等最多 10 分钟才认。
+        
         Services.GithubRoute.InvalidateCache();
         UpdateGithubRouteHint();
     }
 
-    // ══════════ 下载文件夹（2026-11-01，GitHub Issue #322）══════════
+    
 
-    /// <summary>
-    /// 把落点写清楚：改过的照实写路径；没改过的写明「系统下载文件夹」并给出实际路径 ——
-    /// 光写"默认"等于没说，用户看不出东西最后躺在哪儿。
-    /// </summary>
+    
+    
+    
+    
     private void RefreshDownloadFolder()
     {
         var custom = App.Settings.Current.DownloadFolder;
@@ -467,8 +522,8 @@ public sealed partial class SettingsPage : Page
         else if (string.Equals(custom, resolved, StringComparison.OrdinalIgnoreCase))
             DownloadDirText.Text = resolved;
         else
-            // 自定义目录读不到（U 盘拔了、网络盘掉线）时 DownloadService 已经退回系统下载，
-            // 这里必须跟着说，否则卡片上写着 D:\下载、东西其实在 C:\Users\…\Downloads。
+            
+            
             DownloadDirText.Text = "原设定的文件夹当前不可用，已改用：" + resolved;
 
         DownloadDirResetBtn.IsEnabled = !string.IsNullOrWhiteSpace(custom);
@@ -494,7 +549,7 @@ public sealed partial class SettingsPage : Page
         RefreshDownloadFolder();
     }
 
-    /// <summary>选文件夹；取消或对话框打不开都返回 null。</summary>
+    
     private static async Task<string?> PickFolderAsync(FrameworkElement owner)
     {
         try
@@ -516,7 +571,7 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    // ══════════ 查单词的词源优先级（需求第 17 条；设置 → 查单词）══════════
+    
 
     private void DictSource_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -527,9 +582,9 @@ public sealed partial class SettingsPage : Page
         App.Settings.Save();
     }
 
-    /// <summary>
-    /// 把当前这条路径具体怎么干说清楚（选项名太短，说不清「取不到签名会退镜像」这种差别）。
-    /// </summary>
+    
+    
+    
     private void UpdateGithubRouteHint()
     {
         var current = Services.GithubRoute.Current;
@@ -547,7 +602,7 @@ public sealed partial class SettingsPage : Page
         };
     }
 
-    // ══════════════════════════ 更新 ══════════════════════════
+    
 
     private readonly UpdateService _updater = UpdateService.CreateDefault();
     private bool _updateBusy;
@@ -572,7 +627,7 @@ public sealed partial class SettingsPage : Page
         App.Settings.Save();
     }
 
-    /// <summary>检查更新：查到新版先弹窗问用户要不要装（不强制）。</summary>
+    
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
     {
         if (_updateBusy) return;
@@ -592,12 +647,12 @@ public sealed partial class SettingsPage : Page
 
             if (result is { HasUpdate: true, Release: { } release })
             {
-                // ⛔ 这里原来会把发版正文渲染进设置卡（UpdateNotes）。2026-10-26 去掉：
-                //    一屏马克down 撑满整页、还把配图链接显示成源码，用户直接说"排版该改一改"。
-                //    正文改由下面的更新对话框展示（它只挑「前言」要点，已洗干净）。
+                
+                
+                
                 UpdateStatus.Text = $"发现新版本 {release.Tag}，可自行选择是否安装。";
 
-                // 先问；选「稍后」就什么都不做
+                
                 var choice = await UpdateFlow.AskAsync(XamlRoot, release);
                 if (choice == UpdateFlow.UpdateChoice.Later) return;
 
@@ -625,7 +680,7 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    /// <summary>关于区的软件图标（内嵌资源，单文件发布下也能取到）。</summary>
+    
     private void BuildAboutHeader()
     {
         try
@@ -634,14 +689,14 @@ public sealed partial class SettingsPage : Page
             if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
                 AboutIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
         }
-        catch { /* 图标取不到就不显示 */ }
+        catch {  }
     }
 
     private void Quick_ItemClick(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is not Core.QuickLink link) return;
 
-        // 跟首页那一行同一个口径：带 Tag 的走应用内导航（「更新日志」），其余才丢给系统浏览器
+        
         if (link.Tag.Length > 0)
         {
             App.MainWindow?.Shell.NavigateTo(link.Tag);
@@ -652,16 +707,16 @@ public sealed partial class SettingsPage : Page
             App.MainWindow?.OpenExternal(link.Url);
     }
 
-    // ── 版本记录（本机运行过的版本） ────────────────────────────
+    
 
-    /// <summary>
-    /// 版本记录展开时才去读本机记录（迁到 SettingsExpander 后事件名由 Expanding 变成 Expanded）。
-    /// ⚠️ 签名写成 (object, EventArgs) 而不是 (SettingsExpander, ...)：事件参数类型无论哪个派生类都能接，
-    /// 省得把 Toolkit 的内部事件参数类型引进来。
-    /// </summary>
+    
+    
+    
+    
+    
     private void History_Expanded(object sender, EventArgs args)
     {
-        _localHistoryPage = 1;          // 重新展开＝从第一页看起
+        _localHistoryPage = 1;          
         LoadLocalHistory();
     }
 
@@ -677,7 +732,7 @@ public sealed partial class SettingsPage : Page
         LoadLocalHistory();
     }
 
-    /// <summary>本机记录：这台电脑运行过哪些版本（启动时自动记的），不是仓库的 Release 列表。</summary>
+    
     private void LoadLocalHistory()
     {
         var records = Services.VersionHistory.Load();
@@ -700,7 +755,7 @@ public sealed partial class SettingsPage : Page
                                             LocalHistoryPrevButton, LocalHistoryNextButton);
     }
 
-    /// <summary>本机记录单行：版本号 + [通道] + 「当前版本」，下面一行首次／最近运行时间。</summary>
+    
     private static StackPanel LocalHistoryRow(Services.VersionRecord record)
     {
         var current = Core.ShellConfig.ShellVersion;
@@ -724,7 +779,7 @@ public sealed partial class SettingsPage : Page
         return row;
     }
 
-    // ── 历史版本（回滚） ──────────────────────────────────────
+    
 
     private void HistoryPrev_Click(object sender, RoutedEventArgs args)
     {
@@ -738,10 +793,10 @@ public sealed partial class SettingsPage : Page
         RenderHistoryPage();
     }
 
-    /// <summary>
-    /// 画「从仓库装回旧版本」的**当前页**。翻页也走这里，用的是 <see cref="_historyReleases"/> 那份缓存，
-    /// ⛔不会再打一次网络（GitHub 那步慢且易限流，点一下「下一页」就重拉一次体验很糟）。
-    /// </summary>
+    
+    
+    
+    
     private void RenderHistoryPage()
     {
         var releases = _historyReleases;
@@ -764,8 +819,8 @@ public sealed partial class SettingsPage : Page
         _historyPage = RenderPagedList(HistoryList, releases, _historyPage, HistoryRow,
                                        HistoryPager, HistoryPageText, HistoryPrevButton, HistoryNextButton);
 
-        // 尾注不属于数据行：正式版用户看不到预览版，说清楚免得以为列表缺斤少两。
-        // ⚠️ 必须排在 RenderPagedList 之后 —— 它开头会 Clear 一次。
+        
+        
         if (_historyNote is { Length: > 0 })
         {
             HistoryList.Children.Add(new TextBlock
@@ -798,7 +853,7 @@ public sealed partial class SettingsPage : Page
                 : null;
 
             _historyReleases = await _updater.GetHistoryAsync(rollbackChannel, 20);
-            _historyPage = 1;                     // 重新加载＝回第一页
+            _historyPage = 1;                     
             RenderHistoryPage();
         }
         catch (Exception ex)
@@ -876,9 +931,9 @@ public sealed partial class SettingsPage : Page
         await UpdateFlow.RunAsync(XamlRoot, _updater, release, "正在安装指定版本");
     }
 
-    // ── 安装包自动清理（updates 目录） ─────────────────────────
+    
 
-    /// <summary>保留数量改动：存档 + 后台立刻清一轮（不用等下次启动），列表若摊开着就跟着刷新。</summary>
+    
     private void KeepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
@@ -892,7 +947,7 @@ public sealed partial class SettingsPage : Page
         _ = Task.Run(() =>
         {
             try { InstallerCleanup.Clean(target); }
-            catch { /* 清理失败不打扰界面，下次启动会再试 */ }
+            catch {  }
         }).ContinueWith(_ =>
         {
             DispatcherQueue.TryEnqueue(() =>
@@ -904,7 +959,7 @@ public sealed partial class SettingsPage : Page
 
     private void Installer_Expanded(object sender, EventArgs args)
     {
-        _installerPage = 1;             // 重新展开＝从第一页看起
+        _installerPage = 1;             
         RefreshInstallerList();
     }
 
@@ -943,7 +998,7 @@ public sealed partial class SettingsPage : Page
                                          InstallerPager, InstallerPageText, InstallerPrevButton, InstallerNextButton);
     }
 
-    /// <summary>单行：左边名称 + 大小/时间，右边「覆盖安装」「删除」。实例方法 —— Click 里要用 this.XamlRoot。</summary>
+    
     private StackPanel BuildInstallerRow(InstallerFileInfo f)
     {
         var meta = $"{FormatSize(f.Length)}　·　{f.ModifiedUtc.LocalDateTime:yyyy-MM-dd HH:mm}"
@@ -963,8 +1018,8 @@ public sealed partial class SettingsPage : Page
             TextWrapping = TextWrapping.Wrap,
         };
 
-        // 「覆盖安装」：留着这个包的直接用途 —— 原地覆盖装一遍当前（或更旧）版本，不用重新下载。
-        // 走的是更新流程同一套「先退应用、安装程序后起」，见 UpdateFlow.InstallLocalAsync。
+        
+        
         var install = new Button { Content = "覆盖安装" };
         ToolTipService.SetToolTip(install, "用这个安装包原地覆盖安装，安装目录与各项设置保持不变。");
         install.Click += async (_, _) => await InstallFromLocalAsync(f);
@@ -998,11 +1053,11 @@ public sealed partial class SettingsPage : Page
         return new StackPanel { Spacing = 0, Children = { grid } };
     }
 
-    /// <summary>
-    /// 用本地已有的安装包覆盖安装（不必重新下载）。
-    /// ⚠️ 真正的"先退应用、安装程序后起"由 <see cref="UpdateFlow.InstallLocalAsync"/> 保证 ——
-    ///    顺序反了安装会被 Inno 静默取消（见 UpdateService.RunInstaller 的注释）。
-    /// </summary>
+    
+    
+    
+    
+    
     private async Task InstallFromLocalAsync(InstallerFileInfo f)
     {
         var body = new StackPanel { Spacing = 8 };
@@ -1054,9 +1109,9 @@ public sealed partial class SettingsPage : Page
         RefreshInstallerList();
     }
 
-    // ── 素材缓存（cache 目录，按版本分目录，见 CacheHome） ─────────────────────────
+    
 
-    /// <summary>保留数量改动：存档 + 后台立刻清一轮（不用等下次启动），列表摊开着就跟着刷新。</summary>
+    
     private void CacheKeepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
@@ -1070,7 +1125,7 @@ public sealed partial class SettingsPage : Page
         _ = Task.Run(() =>
         {
             try { Services.CacheHome.Clean(target); }
-            catch { /* 清理失败不打扰界面，下次启动会再试 */ }
+            catch {  }
         }).ContinueWith(_ =>
         {
             DispatcherQueue.TryEnqueue(() =>
@@ -1082,7 +1137,7 @@ public sealed partial class SettingsPage : Page
 
     private void Cache_Expanded(object sender, EventArgs args)
     {
-        _cachePage = 1;                 // 重新展开＝从第一页看起
+        _cachePage = 1;                 
         RefreshCacheList();
     }
 
@@ -1092,27 +1147,27 @@ public sealed partial class SettingsPage : Page
         RefreshCacheList();
     }
 
-    // ── 侧边栏导航自定义（2026-11-04）─────────────────────────────────────
+    
 
-    /// <summary>
-    /// 勾选哪些页面单独放在导航栏上。
-    ///
-    /// <para>
-    /// 勾/取消**立即生效**（不是点「完成」才生效）：对话框是模态的，导航栏就在它后面，
-    /// 改一项当场能看见结果，比"改完点完成再回头找变化"直观。
-    /// </para>
-    ///
-    /// <para>
-    /// ⛔ 这里是唯一的写入点 —— 状态与判定都在 <see cref="NavLayout"/>，别在这儿另算一套。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private async void CustomizeNav_Click(object sender, RoutedEventArgs e)
     {
         var switches = new List<(NavPlaceable Item, ToggleSwitch Switch)>();
 
-        // ⚠️ 右侧那 16 是留给滚动条的（2026-11-04 Nick 报「滚动条和内容重合了」）：
-        //    WinUI 的滚动条是**浮层**，不占布局宽度 —— 内容铺满时，
-        //    「开 / 关」那两个字会被那根细条直接压在下面。
+        
+        
+        
         var body = new StackPanel { Spacing = 12, Margin = new Thickness(0, 0, 16, 0) };
 
         body.Children.Add(new TextBlock
@@ -1124,11 +1179,21 @@ public sealed partial class SettingsPage : Page
             Opacity = 0.7,
         });
 
-        foreach (var group in new[] { ToolGroup.Classroom, ToolGroup.System })
+        // 2026-11-21：分组要与导航栏一一对应，实用工具此前漏了，用户看不到那一组。
+        foreach (var group in new[] { ToolGroup.Classroom, ToolGroup.Utility, ToolGroup.System })
         {
+            var entries = NavLayout.All.Where(x => x.Group == group).ToList();
+            if (entries.Count == 0) continue;
+
             body.Children.Add(new TextBlock
             {
-                Text = group == ToolGroup.System ? "系统工具" : "课堂工具",
+                Text = group switch
+                {
+                    ToolGroup.Classroom => "课堂工具",
+                    ToolGroup.Utility => "实用工具",
+                    ToolGroup.System => "系统工具",
+                    _ => "其他",
+                },
                 FontSize = 13,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Margin = new Thickness(0, 6, 0, 0),
@@ -1136,7 +1201,7 @@ public sealed partial class SettingsPage : Page
 
             var list = new StackPanel { Spacing = 2 };
 
-            foreach (var item in NavLayout.All.Where(x => x.Group == group))
+            foreach (var item in entries)
             {
                 var toggle = new ToggleSwitch
                 {
@@ -1145,7 +1210,7 @@ public sealed partial class SettingsPage : Page
                     MinWidth = 0,
                 };
 
-                // 先设好初值再挂事件 —— 否则构造期那一次赋值会当成用户操作写进设置
+                
                 toggle.Toggled += NavSwitch_Toggled;
 
                 var row = new Grid { ColumnSpacing = 12 };
@@ -1173,7 +1238,7 @@ public sealed partial class SettingsPage : Page
         var scroller = new ScrollViewer
         {
             Content = body,
-            // 436 = 原来的内容宽 420 + 右侧留给滚动条的 16，对话框宽度看起来跟以前一样
+            
             Width = 436,
             MaxHeight = 460,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1190,9 +1255,9 @@ public sealed partial class SettingsPage : Page
             DefaultButton = ContentDialogButton.Close,
         };
 
-        // 打开的一瞬间焦点落到第一个开关上，ScrollViewer 顺手把它滚进视野 ——
-        // 结果对话框一出现就停在中段，顶部的说明和「教室喊话」「查阅单词」全被滚上去了
-        // （2026-11-04 截图发现）。等这一轮布局跑完再滚回顶部。
+        
+        
+        
         dialog.Opened += (_, _) =>
         {
             DispatcherQueue.TryEnqueue(
@@ -1200,10 +1265,10 @@ public sealed partial class SettingsPage : Page
                 () => scroller.ChangeView(null, 0, null, disableAnimation: true));
         };
 
-        // 恢复默认：抹掉两份差异记录，再把开关拨回默认位置（拨动本身会走同一个 Toggled 处理）
+        
         dialog.SecondaryButtonClick += (_, args) =>
         {
-            args.Cancel = true;      // 不关窗 —— 让用户逐项看见都弹回去了
+            args.Cancel = true;      
 
             App.Settings.Current.NavTopLevel = Array.Empty<string>();
             App.Settings.Current.NavSecondLevel = Array.Empty<string>();
@@ -1218,7 +1283,7 @@ public sealed partial class SettingsPage : Page
 
         await dialog.ShowAsync();
 
-        // 关窗后对齐一次：个别项可能因为"拨回了原值"没触发 Toggled，导航与设置要保证一致
+        
         App.MainWindow?.Shell.ReloadNavLayout();
     }
 
@@ -1244,7 +1309,301 @@ public sealed partial class SettingsPage : Page
             System.IO.Directory.CreateDirectory(Services.CacheHome.Root);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Services.CacheHome.Root}\"") { UseShellExecute = true });
         }
-        catch { /* 打不开就算了，本来只是给个方便 */ }
+        catch {  }
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    private async void ClearCache_Click(object sender, RoutedEventArgs args)
+    {
+        var stale = Services.CacheHome.Scan().Where(x => !x.IsCurrent).ToList();
+
+        if (stale.Count == 0)
+        {
+            await ShowCacheMessageAsync("清除缓存",
+                "没有可以清除的旧版本缓存。\n\n当前正在使用的那个缓存目录会被保留。", "知道了");
+            return;
+        }
+
+        var bytes = stale.Sum(x => x.Bytes);
+        var confirm = new ContentDialog
+        {
+            RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme
+                             ?? Microsoft.UI.Xaml.ElementTheme.Default,
+            XamlRoot = this.XamlRoot,
+            Title = "清除缓存",
+            Content = $"将删除 {stale.Count} 个旧版本缓存目录，释放约 {FormatSize(bytes)}。\n\n"
+                    + "当前正在使用的缓存目录会保留（里面的素材正被界面读取）；"
+                    + "素材在下次用到时会自动重新解包，不影响设置与任何数据。",
+            PrimaryButtonText = "清除",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        var result = await Task.Run(() => Services.CacheHome.ClearAll());
+        RefreshCacheList();
+
+        var message = result.Removed == 0
+            ? $"没有删除任何目录：{result.Failed} 个缓存目录正被占用，下次启动时会自动清理。"
+            : $"已删除 {result.Removed} 个缓存目录，释放 {FormatSize(result.FreedBytes)}。";
+        if (result.Removed > 0 && result.Failed > 0)
+            message += $"\n另有 {result.Failed} 个目录正被占用，下次启动时会自动清理。";
+
+        await ShowCacheMessageAsync("清除缓存", message, "好");
+    }
+
+    
+    private async Task ShowCacheMessageAsync(string title, string message, string closeText)
+    {
+        var dialog = new ContentDialog
+        {
+            RequestedTheme = (App.MainWindow?.Content as Microsoft.UI.Xaml.FrameworkElement)?.ActualTheme
+                             ?? Microsoft.UI.Xaml.ElementTheme.Default,
+            XamlRoot = this.XamlRoot,
+            Title = title,
+            Content = message,
+            CloseButtonText = closeText,
+        };
+        await dialog.ShowAsync();
+    }
+
+    
+    private void RefreshDisplayInfo()
+    {
+        var window = App.MainWindow;
+        if (window is null)
+        {
+            DisplayInfoText.Text = "未获取到显示器信息";
+            return;
+        }
+
+        Services.DisplayCapabilities.Refresh(window);
+        DisplayInfoText.Text = Services.DisplayCapabilities.Current.Summary;
+    }
+
+    
+    
+    
+
+    private void HotkeysSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        App.Settings.Current.HotkeysEnabled = HotkeysSwitch.IsOn;
+        App.Settings.Save();
+        App.MainWindow?.RefreshHotkeys();
+        UpdateHotkeyButtons();
+        UpdateHotkeyStatus();
+    }
+
+    private void HotkeyShow_Click(object sender, RoutedEventArgs e) => BeginHotkeyRecord(HotkeyAction.ShowMain, HotkeyShowButton);
+
+    private void HotkeyAnnounce_Click(object sender, RoutedEventArgs e) => BeginHotkeyRecord(HotkeyAction.Announce, HotkeyAnnounceButton);
+
+    private void HotkeyTimer_Click(object sender, RoutedEventArgs e) => BeginHotkeyRecord(HotkeyAction.Timer, HotkeyTimerButton);
+
+    private void HotkeyPpt_Click(object sender, RoutedEventArgs e) => BeginHotkeyRecord(HotkeyAction.PptTouch, HotkeyPptButton);
+
+    private void HotkeyReset_Click(object sender, RoutedEventArgs e)
+    {
+        var s = App.Settings.Current;
+        s.HotkeyShow = AppSettings.DefaultHotkeyShow;
+        s.HotkeyAnnounce = AppSettings.DefaultHotkeyAnnounce;
+        s.HotkeyTimer = AppSettings.DefaultHotkeyTimer;
+        s.HotkeyPptTouch = AppSettings.DefaultHotkeyPptTouch;
+        App.Settings.Save();
+        App.MainWindow?.RefreshHotkeys();
+        UpdateHotkeyButtons();
+        UpdateHotkeyStatus();
+    }
+
+    
+    
+    
+    
+    private void BeginHotkeyRecord(HotkeyAction action, Button button)
+    {
+        CancelHotkeyRecord();
+
+        if (!App.Settings.Current.HotkeysEnabled)
+        {
+            App.Settings.Current.HotkeysEnabled = true;
+            App.Settings.Save();
+            HotkeysSwitch.IsOn = true;      
+        }
+
+        _recordingHotkey = action;
+        _recordingButton = button;
+        button.Content = "按下组合键…";
+        button.Focus(FocusState.Programmatic);
+
+        
+        App.MainWindow?.SuspendHotkeys();
+        HotkeyStatusText.Text = "正在录制：按下想用的组合键，Esc 取消。";
+
+        
+        _recordTimer ??= DispatcherQueue.CreateTimer();
+        _recordTimer.Interval = TimeSpan.FromSeconds(5);
+        _recordTimer.IsRepeating = false;
+        _recordTimer.Tick -= OnRecordTimeout;
+        _recordTimer.Tick += OnRecordTimeout;
+        _recordTimer.Start();
+
+        Core.AppLog.Info("hotkey", $"设置页开始录制：{HotkeyService.ActionName(action)}");
+    }
+
+    private void OnRecordTimeout(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        if (_recordingHotkey is null) return;
+
+        Core.AppLog.Info("hotkey", "录制超时，已自动取消");
+        CancelHotkeyRecord();
+        UpdateHotkeyStatus("录制超时，未设置新组合键。");
+    }
+
+    
+    private void HotkeyButton_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_recordingHotkey is null) return;
+        CancelHotkeyRecord();
+        UpdateHotkeyStatus();
+    }
+
+    private void CancelHotkeyRecord()
+    {
+        _recordTimer?.Stop();
+
+        var wasRecording = _recordingHotkey is not null;
+
+        if (_recordingButton is not null && _recordingHotkey is not null)
+            _recordingButton.Content = ComboOf(App.Settings.Current, _recordingHotkey.Value);
+
+        _recordingHotkey = null;
+        _recordingButton = null;
+
+        
+        if (wasRecording) App.MainWindow?.ResumeHotkeys();
+    }
+
+    
+    
+    
+    
+    private void HotkeyButton_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (_recordingHotkey is null) return;
+
+        e.Handled = true;
+
+        if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            CancelHotkeyRecord();
+            return;
+        }
+
+        var vk = (uint)e.Key;
+        if (HotkeyCombo.IsModifierKey(vk)) return;   
+
+        var modifiers = CurrentModifiers();
+        if (modifiers == 0) return;                   
+
+        var action = _recordingHotkey.Value;
+        if (!HotkeyCombo.TryBuild(modifiers, vk, out var text, out var error))
+        {
+            HotkeyStatusText.Text = error ?? "这个键不能用";
+            return;
+        }
+
+        SetCombo(App.Settings.Current, action, text);
+        App.Settings.Save();
+        Core.AppLog.Info("hotkey", $"设置页录到新组合键：{HotkeyService.ActionName(action)} → {text}");
+        CancelHotkeyRecord();      
+        UpdateHotkeyButtons();
+        UpdateHotkeyStatus();
+    }
+
+    
+    private static uint CurrentModifiers()
+    {
+        uint mods = 0;
+        try
+        {
+            if (IsKeyDown(Windows.System.VirtualKey.Control)) mods |= HotkeyCombo.ModControl;
+            if (IsKeyDown(Windows.System.VirtualKey.Menu)) mods |= HotkeyCombo.ModAlt;
+            if (IsKeyDown(Windows.System.VirtualKey.Shift)) mods |= HotkeyCombo.ModShift;
+            if (IsKeyDown(Windows.System.VirtualKey.LeftWindows) || IsKeyDown(Windows.System.VirtualKey.RightWindows))
+                mods |= HotkeyCombo.ModWin;
+        }
+        catch { }
+        return mods;
+    }
+
+    private static bool IsKeyDown(Windows.System.VirtualKey key)
+        => (InputKeyboardSource.GetKeyStateForCurrentThread(key) & Windows.UI.Core.CoreVirtualKeyStates.Down)
+           == Windows.UI.Core.CoreVirtualKeyStates.Down;
+
+    private void UpdateHotkeyButtons()
+    {
+        var s = App.Settings.Current;
+        HotkeyShowButton.Content = ComboOf(s, HotkeyAction.ShowMain);
+        HotkeyAnnounceButton.Content = ComboOf(s, HotkeyAction.Announce);
+        HotkeyTimerButton.Content = ComboOf(s, HotkeyAction.Timer);
+        HotkeyPptButton.Content = ComboOf(s, HotkeyAction.PptTouch);
+
+        
+        var enabled = s.HotkeysEnabled;
+        HotkeyShowButton.IsEnabled = enabled;
+        HotkeyAnnounceButton.IsEnabled = enabled;
+        HotkeyTimerButton.IsEnabled = enabled;
+        HotkeyPptButton.IsEnabled = enabled;
+    }
+
+    
+    private void UpdateHotkeyStatus(string? extra = null)
+    {
+        var s = App.Settings.Current;
+        if (!s.HotkeysEnabled)
+        {
+            HotkeyStatusText.Text = "已关闭。";
+            return;
+        }
+
+        var conflicts = App.MainWindow?.HotkeyConflicts;
+        var text = conflicts is { Count: > 0 }
+            ? "未生效：" + string.Join("；", conflicts)
+            : "组合键都已生效。";
+
+        if (extra is not null) text += "  " + extra;
+        HotkeyStatusText.Text = text;
+    }
+
+    private static string ComboOf(AppSettings s, HotkeyAction action) => action switch
+    {
+        HotkeyAction.ShowMain => s.HotkeyShow,
+        HotkeyAction.Announce => s.HotkeyAnnounce,
+        HotkeyAction.Timer => s.HotkeyTimer,
+        _ => s.HotkeyPptTouch,
+    };
+
+    private static void SetCombo(AppSettings s, HotkeyAction action, string text)
+    {
+        switch (action)
+        {
+            case HotkeyAction.ShowMain: s.HotkeyShow = text; break;
+            case HotkeyAction.Announce: s.HotkeyAnnounce = text; break;
+            case HotkeyAction.Timer: s.HotkeyTimer = text; break;
+            default: s.HotkeyPptTouch = text; break;
+        }
     }
 
     private void RefreshCacheList()
@@ -1261,7 +1620,7 @@ public sealed partial class SettingsPage : Page
                                      CachePager, CachePageText, CachePrevButton, CacheNextButton);
     }
 
-    /// <summary>单行：左边目录名 + 占用/时间，右边「打开」「删除」（当前正在用的那个不给删）。</summary>
+    
     private StackPanel BuildCacheRow(Services.CacheInstanceInfo inst)
     {
         var meta = $"{FormatSize(inst.Bytes)}　·　{inst.FileCount} 个文件　·　建立于 {inst.CreatedLocal:yyyy-MM-dd HH:mm}"
@@ -1286,7 +1645,7 @@ public sealed partial class SettingsPage : Page
         open.Click += (_, _) =>
         {
             try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{inst.FullPath}\"") { UseShellExecute = true }); }
-            catch { /* 打不开就算了 */ }
+            catch {  }
         };
 
         var del = new Button { Content = "删除" };
@@ -1345,14 +1704,14 @@ public sealed partial class SettingsPage : Page
         RefreshCacheList();
     }
 
-    /// <summary>
-    /// 把 <paramref name="items"/> 的第 <paramref name="page"/> 页填进 <paramref name="host"/>，并同步分页栏。
-    /// 「本地缓存」和「本地日志」结构一模一样，就这一份逻辑共用。
-    ///
-    /// ⚠️ 返回值是**夹紧后**的页码，调用方必须写回自己的字段：删掉最后一页最后一条时页码会超界，
-    ///    不写回的话下一轮刷新会从空页算起。
-    /// ⚠️ 条数不超一页时整条分页栏 Collapsed —— 只有两三条也顶一排翻页按钮太闹。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private static int RenderPagedList<T>(
         StackPanel host,
         IReadOnlyList<T> items,
@@ -1386,19 +1745,19 @@ public sealed partial class SettingsPage : Page
         return $"{bytes} B";
     }
 
-    // ── 会话日志（logs 目录，按启动时间分目录，见 LogHome） ─────────────────────────
+    
 
-    /// <summary>「日志保留天数」下拉的索引：3/7/15/30 天 + 永不删除（0）。</summary>
+    
     private static int LogKeepIndex(int days) => days switch
     {
         3 => 0,
         15 => 2,
         30 => 3,
-        0 => 4,     // 永不删除
-        _ => 1,     // 7 天（默认；存档里的怪值也落这里）
+        0 => 4,     
+        _ => 1,     
     };
 
-    /// <summary>保留天数改动：存档 + 后台立刻清一轮（不用等下次启动），列表摊开着就跟着刷新。</summary>
+    
     private void LogKeepCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
@@ -1412,7 +1771,7 @@ public sealed partial class SettingsPage : Page
         _ = Task.Run(() =>
         {
             try { Services.LogHome.Clean(target); }
-            catch { /* 清理失败不打扰界面，下次启动会再试 */ }
+            catch {  }
         }).ContinueWith(_ =>
         {
             DispatcherQueue.TryEnqueue(() =>
@@ -1424,7 +1783,7 @@ public sealed partial class SettingsPage : Page
 
     private void Log_Expanded(object sender, EventArgs args)
     {
-        _logPage = 1;                   // 重新展开＝从第一页看起
+        _logPage = 1;                   
         RefreshLogList();
     }
 
@@ -1447,7 +1806,7 @@ public sealed partial class SettingsPage : Page
             System.IO.Directory.CreateDirectory(Services.LogHome.Root);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Services.LogHome.Root}\"") { UseShellExecute = true });
         }
-        catch { /* 打不开就算了，本来只是给个方便 */ }
+        catch {  }
     }
 
     private void RefreshLogList()
@@ -1464,7 +1823,7 @@ public sealed partial class SettingsPage : Page
                                    LogPager, LogPageText, LogPrevButton, LogNextButton);
     }
 
-    /// <summary>单行：左边会话名 + 占用/时间，右边「打开」「删除」（当前正在运行的那次不给删）。</summary>
+    
     private StackPanel BuildLogRow(Services.LogSessionInfo s)
     {
         var title = s.IsLegacy
@@ -1494,7 +1853,7 @@ public sealed partial class SettingsPage : Page
         open.Click += (_, _) =>
         {
             try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{s.FullPath}\"") { UseShellExecute = true }); }
-            catch { /* 打不开就算了 */ }
+            catch {  }
         };
 
         var del = new Button { Content = "删除" };

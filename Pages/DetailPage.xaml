@@ -6,17 +6,17 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:data="using:ClassSoftwareHub.Desktop.Data">
 
-    <!--
-      ⛔⛔ 版式照 Microsoft Store（Nick 2026-10-17 二次定稿）：
-      · 顶部色带**满宽铺到内容区边缘**、竖直渐变、下缘化到透明（没有可见的边），内文锁 960 与正文对齐；
-      · 色带上只留 图标 / 名称 / 标语 / 分类与版本，⛔ 不放下载按钮（下方有完整的下载通道列表）；
-      · 正文与右栏各自成块，段落之间留足空白 —— 上一版所有间距都紧贴，被指"拥挤"。
-      色带颜色由 Services/IconPalette 取自图标，取不到退回主题强调色。
-    -->
+    
+
+
+
+
+
+
     <Grid Background="Transparent">
-        <!-- ⛔⛔ HorizontalContentAlignment 必须写 Stretch：
-             ScrollViewer 默认让内容按"自身想要的大小"摆放，于是整块被压窄、左右边距一大一小，
-             色带也铺不满（实测右侧凭空多出 130px 空白）。 -->
+        
+
+
         <ScrollViewer x:Name="RootScroll" VerticalScrollBarVisibility="Auto"
                       HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled">
             <Grid>
@@ -25,12 +25,12 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- ===== 色带底：满宽、贴顶、竖直渐变 ===== -->
+                
                 <Border x:Name="Hero" Grid.Row="0" Opacity="0" />
 
-                <!-- ===== 色带内文：与正文同宽（960）===== -->
-                <!-- ⛔ HorizontalAlignment 必须是 Stretch：写 Center 时 Grid 会缩到"内容宽度"再居中，
-                     结果是图标比正文明明偏右一大截（踩过）。Stretch + MaxWidth 才会满 960 居中。 -->
+                
+                
+
                 <Grid Grid.Row="0" MaxWidth="960" Margin="24,56,24,50"
                       HorizontalAlignment="Stretch" ColumnSpacing="24">
                     <Grid.ColumnDefinitions>
@@ -38,7 +38,7 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- 圆角 + 1:1 居中裁剪：图标用 ImageBrush 填满（Border 不裁剪子元素） -->
+                    
                     <Border x:Name="IconBox" Width="92" Height="92" CornerRadius="18"
                             VerticalAlignment="Top" HorizontalAlignment="Left">
                         <Grid>
@@ -53,7 +53,7 @@
                         <TextBlock x:Name="AppTagline" FontSize="14.5" Opacity="0.82"
                                    LineHeight="21" TextWrapping="Wrap" />
 
-                        <!-- 分类徽标 + 版本·体积·系统，压成一行，不再各占一行 -->
+                        
                         <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
                             <Border x:Name="CategoryBadge" CornerRadius="10" Padding="9,3"
                                     VerticalAlignment="Center"
@@ -66,7 +66,7 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- ===== 正文两栏 ===== -->
+                
                 <Grid x:Name="BodyGrid" Grid.Row="1" MaxWidth="960" Margin="24,44,24,68"
                       HorizontalAlignment="Stretch" ColumnSpacing="40">
                     <Grid.ColumnDefinitions>
@@ -75,39 +75,64 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel>
-                        <!-- 文件存在本站对象存储的软件：说明来源（2026-11-01 加）。
-                             这类软件的安装包由投稿者上传到本站 OSS，不是官方渠道 —— 出问题时
-                             用户得知道该找谁，而不是回头找下载站。
-                             ⛔ 同样默认 Collapsed：关着的 InfoBar 仍占一排高度（约 32px）。 -->
+                        
+
+
+
                         <InfoBar x:Name="OssBar" Severity="Warning" IsOpen="False"
                                  Visibility="Collapsed" IsClosable="False" Margin="0,0,0,14" />
 
-                        <!-- 小提示（数据里 notice 字段）。⛔ 默认 Collapsed：
-                             关着的 InfoBar 仍会占掉一排高度（约 32px），把「应用介绍」压低、
-                             跟右栏的「推荐应用」错开一大截。 -->
+                        
+
+
                         <InfoBar x:Name="NoticeBar" Severity="Informational" IsOpen="False"
                                  Visibility="Collapsed" IsClosable="False" Margin="0,0,0,26" />
 
-                        <!-- 应用介绍 -->
+                        
                         <TextBlock x:Name="IntroTitle" FontSize="17" FontWeight="SemiBold"
                                    Margin="0,0,0,14" />
                         <TextBlock x:Name="AppDescription" TextWrapping="Wrap" FontSize="14"
                                    LineHeight="27" Opacity="0.88" />
 
-                        <!-- 详细信息 -->
+                        <!-- 分享：一条网页链接 + 二维码，放在应用介绍与详细信息之间（2026-11-22 Nick 定） -->
+                        <Border x:Name="ShareCard" Style="{StaticResource CshCardStyle}" Margin="0,30,0,0">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ShareTitle" FontSize="14" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="ShareUrlText" FontSize="12" Opacity="0.6"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+
+                                <Button x:Name="ShareButton" Grid.Column="1"
+                                        Height="34" Padding="16,0" VerticalAlignment="Center"
+                                        Click="Share_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE72D;" FontSize="14" />
+                                        <TextBlock x:Name="ShareButtonText" FontSize="13" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        
                         <TextBlock x:Name="InfoTitle" FontSize="17" FontWeight="SemiBold"
                                    Margin="0,54,0,6" />
-                        <!-- ⛔ 不再套灰色卡片（Nick：灰底很丑）。改成细分割线的纯文字行，跟商店的详情区做法一致。 -->
+                        
                         <StackPanel x:Name="InfoList" Margin="0,6,0,0" />
 
-                        <!-- 下载通道 -->
+                        
                         <TextBlock x:Name="DownloadsTitle" FontSize="17" FontWeight="SemiBold"
                                    Margin="0,54,0,6" />
 
-                        <!--
-                          应用商店入口（2026-10-19 改版）：加微软商店图标 + 白底「获取」按钮。
-                          ⚠️ 原来只是一块纯色 + 两行字 + 透明按钮，没有任何商店标识，用户看不出这是商店通道。
-                        -->
+                        
+
+
+
                         <Border x:Name="StoreCard" Visibility="Collapsed" CornerRadius="8" Padding="18,16"
                                 Background="{ThemeResource AccentFillColorDefaultBrush}">
                             <Grid ColumnSpacing="14">
@@ -139,11 +164,11 @@
                         <TextBlock x:Name="StoreOnlyHint" Visibility="Collapsed" FontSize="12.5" Opacity="0.7"
                                    Margin="0,12,0,0" TextWrapping="Wrap" />
 
-                        <!-- 下载项：平台 / 备注 / 体积 / 类型说明（仅跳转类）+ 校验值 + 主按钮 + 加速下载 -->
+                        
                         <ItemsControl x:Name="DownloadList" Margin="0,14,0,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="data:DownloadItem">
-                                    <!-- ⛔ 不再用灰色卡片包一层：改成"行 + 底部细分割线"，靠留白分组。 -->
+                                    
                                     <Border Padding="0,22" Margin="0,0,0,2"
                                             BorderThickness="0,0,0,1"
                                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
@@ -153,7 +178,7 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Spacing="6">
-                                                <!-- 平台名与体积同一行（体积跟在名字后面），少一行就少一分松散 -->
+                                                
                                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                                     <TextBlock Text="{x:Bind Platform}" FontSize="14"
                                                                FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -162,7 +187,7 @@
                                                 </StackPanel>
                                                 <TextBlock Text="{x:Bind Note}" FontSize="12.5" Opacity="0.65"
                                                            TextWrapping="Wrap" />
-                                                <!-- 跳转类（网盘 / 官网下载页）才有的一行说明；文件直链整行收起。 -->
+                                                
                                                 <TextBlock Text="{x:Bind KindHint}"
                                                            Visibility="{x:Bind KindHintVisibility}"
                                                            FontSize="12" Opacity="0.7"
@@ -187,19 +212,19 @@
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                                                         VerticalAlignment="Center">
-                                                <!-- 文案随链接类型变：直链写「下载」，网盘写「前往网盘」、
-                                                     官网下载页写「前往官网」（Data/DownloadLinkKind.cs）。
+                                                
 
-                                                     直链用 SplitButton（2026-11-01，GitHub Issue #322）：主键还是「下载」，
-                                                     右边那半点开是「下载到其他文件夹…」与「打开下载文件夹」——
-                                                     存哪儿这个问题应该就在下载按钮上问，而不是逼人去设置页找。
-                                                     ⚠️ 跳转类（网盘 / 官网）不给拆分：没有文件要落盘，菜单是空的。 -->
+
+
+
+
+
                                                 <SplitButton Content="{x:Bind ActionText}" Tag="{x:Bind Url}"
                                                              Visibility="{x:Bind FileActionVisibility}"
                                                              Click="DownloadSplit_Click">
                                                     <SplitButton.Flyout>
-                                                        <!-- ⚠️ URL 直接绑到菜单项自己的 Tag 上：MenuFlyout 的内容住在独立的
-                                                             popup 根里，DataContext 未必传得进来，靠它认行会在点击时拿到 null。 -->
+                                                        
+
                                                         <MenuFlyout Opening="DownloadMenu_Opening">
                                                             <MenuFlyoutItem Text="下载到其他文件夹…" Tag="{x:Bind Url}"
                                                                             Click="DownloadTo_Click">
@@ -234,20 +259,20 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- 数据问题（该软件的 JSON 有问题时会提示） -->
+                        
                         <InfoBar x:Name="IssueBar" Severity="Warning" IsOpen="False" IsClosable="False"
                                  Margin="0,18,0,0" />
                     </StackPanel>
 
-                    <!-- ===== 右栏：推荐应用 ===== -->
+                    
                     <StackPanel x:Name="Rail" Grid.Column="1">
                         <TextBlock Text="推荐应用" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,16" />
 
                         <ItemsControl x:Name="RecommendList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="data:SoftwareApp">
-                                    <!-- 名称 + **短简介**（不再用分类：Nick 2026-10-17 指定）。
-                                         简介优先 Tagline、退 Description，最多两行。 -->
+                                    
+
                                     <Button Click="Recommend_Click" HorizontalAlignment="Stretch"
                                             HorizontalContentAlignment="Stretch"
                                             Background="Transparent" BorderThickness="0"
@@ -260,9 +285,9 @@
 
                                             <Border Width="44" Height="44" CornerRadius="10"
                                                     Background="{x:Bind IconBrush}">
-                                                <!-- ⛔ 购物袋只是「没有图标/还没加载完」的占位，
-                                                     图标一旦加载成功必须收起（绑 IconPlaceholder），
-                                                     否则会叠在真图标中间（GeoGebra 那个 bug）。 -->
+                                                
+
+
                                                 <FontIcon Glyph="&#xE7B8;" FontSize="17" Opacity="0.35"
                                                           Visibility="{x:Bind IconPlaceholder, Mode=OneWay}"
                                                           HorizontalAlignment="Center"

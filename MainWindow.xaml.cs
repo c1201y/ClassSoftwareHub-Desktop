@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using ClassSoftwareHub.Desktop.Core;
 using ClassSoftwareHub.Desktop.Services;
@@ -33,28 +33,35 @@ public sealed partial class MainWindow : Window
     private readonly bool _startMinimized;
     private readonly bool _startPalette;
 
-    /// <summary>
-    /// <c>--window=&lt;模块 id&gt;</c>：启动直接开一扇浮窗（<c>image-color</c> / <c>encoding</c> / <c>dictionary</c>…），
-    /// 主窗口照常露脸。空 = 什么都不做。
-    /// <para>
-    /// 为什么留它：验证浮窗以前得先把侧边栏叫出来、再点那颗按钮 —— 侧边栏还可能收在屏幕边上、被别的窗口压住，
-    /// 几轮截图都截不到目标。有了这个参数就能直达，也能给常用浮窗做桌面快捷方式。
-    /// ⚠️ id 直接用 <c>Data/SidebarModules</c> 那一份，⛔ 别在这里写 if/switch —— 加新窗口不用回来改。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private readonly string? _startWindow;
 
-    /// <summary>Shell 初始化被推迟到初次配置结束（见构造函数里的说明）。</summary>
+    
     private bool _shellPending;
 
     private TrayIcon? _tray;
-    private TrayIcon? _trayTools;      // 第二个托盘图标：常用工具（左键直接开工具窗口）
+    private TrayIcon? _trayTools;      
+
+    
+    
+    
+    
+    private HotkeyService? _hotkeys;
+
     private bool _exitRequested;
 
-    /// <summary>托盘气泡被点的时候要干什么（不同的通知点进去该去不同的地方）。</summary>
+    
     private Action? _balloonAction;
 
-    /// <summary>当前正开着的下载进度弹窗 + 它盯着的那条任务（同时只有一个弹窗）。</summary>
+    
     private ContentDialog? _downloadDialog;
     private string? _downloadDialogTaskId;
 
@@ -71,24 +78,24 @@ public sealed partial class MainWindow : Window
 
         Closed += OnWindowClosed;
 
-        // 托盘图标：关窗口收托盘、开机最小化收托盘、托盘菜单（工具浮窗 / 退出）都靠它
+        
         InitTray();
 
-        // 在线服务被授权闸门挡下来（403 csh_license_required）→ 引导用户激活。
-        // 事件可能在后台线程触发，进 UI 线程再弹。
+        
+        
         Services.License.ClientAuth.ActivationRequired += OnActivationRequired;
 
-        // 下载跑完（成功 / 失败）→ 弹系统通知。谁在盯着弹窗的那条不弹，交给弹窗自己收尾。
+        
         DownloadManager.Current.Finished += OnDownloadFinished;
 
-        // ===== 原生界面 =====
-        // ⚠️ 安装包**不自带**内容包，这里的 Load() 在新装的机器上必然读到空目录。
-        //    清单要等下面的 SyncContentAsync() 联网拉回来 —— 首启的"空 → 有"靠 ContentStore.Changed 通知界面。
+        
+        
+        
         App.Content.Load();
 
-        // ⛔ 初次配置期间不建 Shell 首页：主窗口这会儿是隐形的，首页那一帧照样要占掉
-        //    一整个渲染周期 —— 实测把刚弹出来的向导窗口压成 1 秒多的空白窗（2026-10-31）。
-        //    等向导收尾（App.EndOobeAndShowMainWindow）再补 <see cref="StartShell"/>。
+        
+        
+        
         if (App.ShellDeferredForOobe)
         {
             _shellPending = true;
@@ -101,17 +108,17 @@ public sealed partial class MainWindow : Window
         NativeShell.SetIcon(LoadAppIcon());
         SetTitleBar(NativeShell.TitleBarElement);
 
-        // 后台同步内容（从站点仓库读「软件数据/」；一次 ref 请求就知道有没有变）
+        
         _ = SyncContentAsync();
 
-        // 开机自启 + 「开机最小化」：注册表里会带 --minimized，启动时收进任务栏
+        
         _startMinimized = Environment.GetCommandLineArgs()
             .Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
-        // 直接开工具浮窗（可以拿它建个桌面快捷方式：ClassSoftwareHub.exe --palette）
+        
         _startPalette = Environment.GetCommandLineArgs()
             .Any(a => a.Equals("--palette", StringComparison.OrdinalIgnoreCase));
 
-        // 直接开某扇专用浮窗：--window=image-color / encoding / dictionary …
+        
         _startWindow = Environment.GetCommandLineArgs()
             .FirstOrDefault(a => a.StartsWith("--window=", StringComparison.OrdinalIgnoreCase))
             ?["--window=".Length..]
@@ -120,18 +127,18 @@ public sealed partial class MainWindow : Window
 
         _ = BootAsync();
 
-        // 构造走完留一笔，跟 App.xaml.cs 那侧的启动护栏对着看就能定位崩溃位置：
-        //   · 有这行           → 建窗完整成功
-        //   · 只有 [startup] 构造失败 → 崩在上面 InitTray() 之后
-        //     ⚠️ InitTray() 里已经把工具侧边栏显示出来了 —— 崩在它之后，正是
-        //        「侧边栏挂在屏幕上、主窗口却没有」那种形态（2026-10-02 用户反馈）。
+        
+        
+        
+        
+        
         Core.AppLog.Info("startup", "主窗口构造完成");
     }
 
-    /// <summary>
-    /// 补做构造时被推迟的那一步 Shell 初始化（只有初次配置那条路会推迟）。
-    /// 由 <see cref="App.EndOobeAndShowMainWindow"/> 在 <c>Activate()</c> 之前调 —— 窗口露脸时首页已经就位。
-    /// </summary>
+    
+    
+    
+    
     public void StartShell()
     {
         if (!_shellPending) return;
@@ -145,56 +152,56 @@ public sealed partial class MainWindow : Window
         _firstActivated = true;
         Activated -= OnFirstActivated;
 
-        // 窗口真正显示之后再兜一次圆角：框架在首帧还会碰一次标题栏，
-        // 早于显示设的值有可能被它按回去（图标那边也踩过同样的重置，见上面的 Activated 补刀）。
+        
+        
         ApplyWindowRounding();
 
-        // 「工具侧边栏」在这儿才挂出来 —— 主窗口已经在屏幕上了，它再抢前台也抢不走主角。
-        // ⚠️ 顺序就是 2026-10-02 那次修复的要点，别挪回 InitTray()（那边有详细说明）。
+        
+        
         StartToolSidebarAfterFirstFrame();
 
         if (_startPalette)
         {
-            // --palette：主窗口不露脸，托盘 + 工具浮窗直接摆出来
+            
             HideToTray();
             Views.ToolPaletteWindow.ShowTool();
         }
         else if (_startMinimized)
         {
-            // 「开机最小化启动」= 直接收进托盘（不占任务栏），想用的时候从托盘图标点出来
+            
             HideToTray();
         }
 
-        // --window=<id>：跟上面两条不冲突，主窗口该露脸还是露脸，浮窗叠在上面
+        
         if (_startWindow is { Length: > 0 } windowId) ShowSidebarWindowById(windowId);
 
-        // 启动时查一次更新：**不强制**，有新版就问用户（主窗口没露脸时发系统通知）
+        
         _ = CheckUpdateOnStartupAsync();
 
-        // 条款正文拉一次（2026-11-01）：站点改完条款提交即生效，不必等下一次发版。
-        // 后台跑、不挡任何界面；六条线路全失败就继续用内置那份，条款窗顶部会说明一句。
-        // ⚠️ 放在首帧之后：它自己的读写都是文件与网络，但拉完要换内存里那份，
-        //    在窗口还没成型时换，用户第一眼看到的是哪一版就说不清了。
+        
+        
+        
+        
         _ = Services.LegalTextSource.RefreshAsync();
 
-        // 本次启动带着链接（csh://…，需求 1:18）：等到这里才处理 —— 首帧之前 Shell 的 Frame
-        // 还没就绪，跳转会落到首页。放在更新检查之后：更新提示是"顺带问一句"，跳转是用户刚点的。
+        
+        
         var startupLink = App.TakeStartupLink();
         if (startupLink is { Length: > 0 }) _ = HandleAppUriAsync(startupLink);
 
-        // 初次配置（OOBE，需求 1:22）不在这里弹了 —— 新装首启时主窗口根本不出现，
-        // OOBE 由 App.OnLaunched 直接拉起来，走完才 Activate 本窗口（会再进一次这里）。
+        
+        
     }
 
-    /// <summary>
-    /// 按模块 id 打开一扇专用浮窗（<c>--window=&lt;id&gt;</c>）。
-    ///
-    /// <para>
-    /// 走 <see cref="Data.SidebarModules"/> 的 <c>WindowType</c> + 反射调 <c>Show()</c>，
-    /// 跟侧边栏点按钮是同一条路 —— ⛔ 不在这里写 if/switch，加新浮窗不用回来改。
-    /// 那扇窗没遵守"public static Show()"约定时静默跳过并留一笔日志。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static void ShowSidebarWindowById(string id)
     {
         try
@@ -226,17 +233,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 把「工具侧边栏」挂出来（按设置决定贴哪条边、几条边）。
-    ///
-    /// ⚠️⚠️ 调用时机不能提前到主窗口显示之前（2026-10-02 定，两次才挪到位）：
-    ///    侧边栏窗口第一次显示只能靠 <c>Activate()</c>（WinUI 没有 Show()），
-    ///    它一旦跑在主窗口**画出第一帧之前**，就会先出现在屏幕上并把自己设成置顶，
-    ///    主窗口被挤在后面 —— 实测到的最终形态是主窗口停在 <c>rect=0,0 0x0 / 不可见</c>：
-    ///    日志里「主窗口构造完成」「侧边栏已挂出」一条不少，代码路径全看着正常，
-    ///    但屏幕上就是没有主界面（用户反馈的"任务栏没图标、点桌面图标没反应"就是这个）。
-    ///    ⛔ 所以**别**直接调它，走 <see cref="StartToolSidebarAfterFirstFrame"/>。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void StartToolSidebar()
     {
         try
@@ -246,20 +253,20 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            // 侧边栏挂不出来不影响主界面，但必须留痕 —— 别让它静默消失
+            
             Core.AppLog.Info("startup", "工具侧边栏挂出失败: " + ex.Message);
         }
     }
 
-    /// <summary>
-    /// 预热 WebView2 环境（2026-10-23）。
-    ///
-    /// <para>
-    /// 只创建环境，**不建控件、不导航** —— 目的是把"用户目录创建 + 浏览器进程拉起"那 2~3 秒
-    /// 挪到启动阶段，这样点进 Web 工具页时不用等（切载体要"无感"，慢一步就白搭）。
-    /// </para>
-    /// <para>⚠️ 失败一律静默：没有运行时的机器本来就该走原生工具，这不叫错误。</para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static async System.Threading.Tasks.Task PrewarmWebRuntimeAsync()
     {
         try
@@ -275,18 +282,18 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 等主窗口**真的画出第一帧**之后再挂侧边栏。
-    ///
-    /// 为什么不能直接在 <see cref="OnFirstActivated"/> 里挂：那个回调在 <c>Activate()</c>
-    /// 时就会跑，此刻窗口内容还没呈现 —— 侧边栏这时抢前台，会把主窗口顶成"从未显示"。
-    /// 实测（`--page=logs` 这种要读文件的重页面更容易复现）：
-    /// 窗口停在 <c>rect=0,0 0x0</c>，而所有日志都写着成功。
-    ///
-    /// 用 <c>CompositionTarget.Rendering</c> 卡首帧，配 2 秒超时兜底 ——
-    /// 窗口被收进托盘 / 最小化时 Rendering 根本不触发，没有兜底就永远挂不出侧边栏了
-    /// （跟 Core/PerfLog.cs 里那套是同一个套路）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void StartToolSidebarAfterFirstFrame()
     {
         var done = false;
@@ -310,9 +317,9 @@ public sealed partial class MainWindow : Window
             Core.AppLog.Info("startup", $"主窗口首帧就绪（{how}）→ 挂工具侧边栏");
             StartToolSidebar();
 
-            // 预热 WebView2 环境（2026-10-23）：工具页走 Web 内核时，第一次进页面要
-            // 创建用户目录 + 拉起浏览器进程，冷启动 2~3 秒。在这里先用后台任务起一遍，
-            // 用户点进工具时就不用等 —— 这是"降级/切换无感"的前提。
+            
+            
+            
             _ = PrewarmWebRuntimeAsync();
         }
 
@@ -323,7 +330,7 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            Fire("帧回调挂不上");       // 挂不上就立刻挂侧边栏，别把功能丢了
+            Fire("帧回调挂不上");       
             return;
         }
 
@@ -342,28 +349,28 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    /// <summary>
-    /// 主窗口此刻真的在屏幕上吗？（<c>Activate()</c> 之后由 App 侧的兜底来核）
-    /// 「激活过了但没显示出来」这种状态在 Win32 层面是可能存在的，
-    /// 而用户看到的只是"点了图标什么也没有" —— 所以得有个地方问这一句。
-    /// </summary>
+    
+    
+    
+    
+    
     public bool IsVisibleNow()
     {
         try { return IsWindowVisible(WindowNative.GetWindowHandle(this)); }
         catch { return false; }
     }
 
-    /// <summary>
-    /// 启动兜底：隔一拍（800ms）核一次「主窗口真的在屏幕上吗」。
-    ///
-    /// 为什么需要：<c>Activate()</c> 返回并不等于窗口已经显示出来 —— 上面那条
-    /// 「有侧边栏、没主界面、任务栏也没图标」的反馈，在日志里表现为什么都正常。
-    /// 这里主动问一句：不可见就再亮一次，并且把结果写进日志。
-    /// 有了它，以后同样的反馈能一眼区分「根本没显示」和「显示了又被藏起来」。
-    ///
-    /// ⚠️ 只在"本来该露脸"的启动方式下武装（由 App 侧判断 --minimized / --palette，
-    ///    那两种是**故意**藏窗口的，装兜底会刚藏起来就被叫回来）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public void ArmStartupVisibleWatchdog()
     {
         try
@@ -413,19 +420,19 @@ public sealed partial class MainWindow : Window
             var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
 
-            // 查到「已是最新」⇒ 顺手把首页那颗「发现新版本」收起来（用户可能刚更新完）
+            
             if (result is not { HasUpdate: true, Release: { } release })
             {
                 Services.Updating.UpdateNotice.Clear();
                 return;
             }
 
-            // ⛔⛔ 先记下来、再弹窗：用户一选「稍后」，对话框关掉这条信息就没了 ——
-            //    首页要靠它显示「发现新版本」入口（Nick 2026-10-16 提的正是这一态）。
+            
+            
             Services.Updating.UpdateNotice.Set(release);
 
-            // 这种启动方式主窗口是藏着的（--minimized / --palette / 直接收进托盘）
-            // → 弹对话框没人看，改发一条系统通知，点通知再把界面叫出来
+            
+            
             if (!IsWindowVisible(WindowNative.GetWindowHandle(this)))
             {
                 NotifyUpdateAvailable(release);
@@ -435,7 +442,7 @@ public sealed partial class MainWindow : Window
             var root = (Content as FrameworkElement)?.XamlRoot;
             if (root is null) return;
 
-            // 让用户自己决定；选「稍后」就安静放过，下次启动还会再问一次
+            
             var choice = await Services.Updating.UpdateFlow.AskAsync(root, release);
             if (choice == Services.Updating.UpdateFlow.UpdateChoice.Now)
                 await Services.Updating.UpdateFlow.RunAsync(root, service, release);
@@ -444,31 +451,31 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            // 对用户安静放过（别影响正常使用），但对日志不能安静 —— 否则"启动时没弹更新"永远查不出原因。
+            
             Core.AppLog.Exception("update", ex, "启动时检查更新失败（已忽略，不影响正常使用）");
         }
     }
 
-    /// <summary>主窗口没露脸时，用系统通知提醒"有新版本"（点通知 = 打开主界面并重新走一次检查）。</summary>
+    
     private void NotifyUpdateAvailable(Services.Updating.UpdateRelease release)
     {
         ShowBalloon($"发现新版本 {release.Tag}", "当前版本不是最新版，单击查看更新详情。",
             () => { ShowFromTray(); _ = CheckUpdateManualAsync(); });
     }
 
-    /// <summary>下载跑完的提示：完成报一声「好了」，失败也报一声（别让人以为还在下）。</summary>
+    
     private void OnDownloadFinished(DownloadTask task)
     {
-        // 进度弹窗正开着它 → 弹窗自己会弹「下载完成 / 下载失败」，别再叠一条系统通知
+        
         if (task.Id == _downloadDialogTaskId) return;
 
-        // 更新包有自己那套收尾（带「现在安装」按钮的系统通知）——
-        // 再叠一条"下载完成，已保存到下载文件夹"只会把用户带偏（他要去的地方是任务页的「安装」）
+        
+        
         if (task.Kind == DownloadKind.Update) return;
 
-        // 清理任务根本没有落盘文件，走下面那条分支会报「已保存到 <某个目录>」——
-        // 那个目录还是上次下载的落点（2026-11-06 Nick 截图：AppData 清完了，
-        // 通知却写「下载完成 / 已保存到 D:\Microsoft Edge 下载」）。清理有自己的一套文案。
+        
+        
+        
         if (task.Kind == DownloadKind.Cleanup)
         {
             if (task.State == DownloadState.Completed)
@@ -486,8 +493,8 @@ public sealed partial class MainWindow : Window
 
         if (task.State == DownloadState.Completed)
         {
-            // 落点以**实际写入的路径**为准：用户可能这一条点了「下载到其他文件夹…」，
-            // 也可能默认目录换了地方，写成固定值会报错地方（2026-11-01）。
+            
+            
             var folder = Path.GetDirectoryName(task.Path ?? "");
             if (string.IsNullOrEmpty(folder)) folder = DownloadService.SaveDir;
             ShowBalloon("下载完成", $"{task.FileName}\n已保存到：{folder}",
@@ -500,11 +507,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 弹一条系统通知（托盘气泡），并记住"点它该干什么"。
-    /// 不用 Windows 的 AppNotification 是因为免安装（unpackaged）下它要额外注册一套 AUMID/COM
-    /// 激活器，而托盘气泡本来就在用（发现新版本那条），零依赖、装了就能用。
-    /// </summary>
+    
+    
+    
+    
+    
     private void ShowBalloon(string title, string text, Action? onClick)
     {
         _balloonAction = onClick;
@@ -512,16 +519,16 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    // ── 更新后台下载完成的通知 ──────────────────────────────────────
+    
 
     private bool _updateToastWired;
 
-    /// <summary>
-    /// 更新包下载完成：优先发系统 Toast（唯一能带「现在安装 / 稍后安装」按钮的通知形态），
-    /// 注册失败（免安装形态下的个别系统限制）自动退回托盘气泡。
-    /// 按钮语义：现在安装 = 马上进安装器并退出应用；稍后安装 = 什么都不做 —— 待装标记已在存档里，
-    /// 下次启动首页顶部横幅会接着提醒，直到装上为止。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     public void NotifyUpdateReady(string tag)
     {
         ShowUpdateReadyToast(tag);
@@ -552,7 +559,7 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            // Toast 起不来（注册被策略挡了之类）：托盘气泡兜底，点气泡打开应用看首页横幅
+            
         }
 
         ShowBalloon($"ClassSoftwareHub {tag} 下载完成", "安装包已通过校验，打开应用即可安装。",
@@ -563,27 +570,27 @@ public sealed partial class MainWindow : Window
         Microsoft.Windows.AppNotifications.AppNotificationActivatedEventArgs args)
     {
         args.Arguments.TryGetValue("updateAction", out var action);
-        if (action != "install") return;    // 稍后安装 / 点正文：待装标记已就位，不做动作
+        if (action != "install") return;    
 
-        // 事件回调不保证在 UI 线程上；安装要动 Application.Current，必须回去
+        
         DispatcherQueue?.TryEnqueue(() => _ = Services.Updating.UpdateFlow.InstallPendingNowAsync());
     }
 
-    /// <summary>后台更新下载失败：报一声，别让人干等（Toast 注册没成也一样，直接走气泡）。</summary>
+    
     public void NotifyBackgroundDownloadFailed(string tag, string reason)
     {
         ShowBalloon($"ClassSoftwareHub {tag} 下载失败", $"{reason}\n可稍后在应用内重试。", null);
     }
 
-    /// <summary>
-    /// 启动后台同步内容：从站点仓库把软件数据拖到本地缓存
-    /// （%LOCALAPPDATA%\ClassSoftwareHub\content）。
-    ///
-    /// ⚠️ 安装包不再自带内容包之后，这条路是**新装机器拿到清单的唯一途径**，所以：
-    ///   · 全程置 <see cref="Core.ContentStore.IsSyncing"/>，界面据此显示"正在获取软件清单…"，
-    ///     而不是让用户对着"清单为空"发懵；
-    ///   · 同步完 <c>Load()</c> 会触发 <c>Changed</c>，停在本页的用户也会立刻看到列表。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private async Task SyncContentAsync()
     {
         App.Content.SetSyncing(true);
@@ -594,7 +601,7 @@ public sealed partial class MainWindow : Window
 
             if (!result.Updated && before == "cache") return;
 
-            // 有更新（或本来还没拿到内容）→ 重新读一遍，内容源切到本地缓存
+            
             var oldSource = App.Content.Source;
             var oldCount = App.Content.Apps.Count;
             App.Content.Load();
@@ -605,7 +612,7 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            // 内容同步失败不打扰用户：界面上有"重新获取"入口
+            
         }
         finally
         {
@@ -617,13 +624,13 @@ public sealed partial class MainWindow : Window
 
     public SubmitWindow? SubmitWindowRef => _submitWindow;
 
-    /// <summary>原生外壳（首页卡片等要从这里跳导航）。</summary>
+    
     public Pages.ShellPage Shell => NativeShell;
 
-    /// <summary>
-    /// ⚠️ 遗留路径：「提交软件」的网页版小窗口（Views/SubmitWindow）。提交页早已原生化（Pages/SubmitPage），
-    /// 现在没有入口调用这里（OpenSubmitWindow 无人调用），留着当兜底；缺 WebView2 时给替代方案。
-    /// </summary>
+    
+    
+    
+    
     public async void OpenSubmitWindow()
     {
         if (_submitWindow is not null)
@@ -632,7 +639,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // 兜底：这是唯一需要 WebView2 的地方。系统里没有运行时 → 给两条退路，别让它白屏报错。
+        
         if (!_runtime.Probe())
         {
             await ShowRuntimeMissingDialogAsync(ShellConfig.SubmitPageUrl);
@@ -644,9 +651,9 @@ public sealed partial class MainWindow : Window
         _submitWindow.Activate();
     }
 
-    // ============================================================
-    // 窗口 & 标题栏
-    // ============================================================
+    
+    
+    
 
     [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
     private static extern int SetCurrentProcessExplicitAppUserModelID(string appUserModelId);
@@ -663,7 +670,7 @@ public sealed partial class MainWindow : Window
 
     private bool _iconApplied;
 
-    /// <summary>图标文件：优先用内嵌的 AppIcon.ico（多尺寸），取不到就退回 exe 自己。</summary>
+    
     private static string IconPath()
     {
         var ico = EmbeddedAssets.ExtractToCache("AppIcon.ico", "app-icon.ico");
@@ -671,7 +678,7 @@ public sealed partial class MainWindow : Window
         return Environment.ProcessPath ?? "";
     }
 
-    /// <summary>「常用工具」托盘图标用的图标：扳手那个（跟主界面图标区分开）。</summary>
+    
     private static string ToolIconPath()
     {
         var ico = EmbeddedAssets.ExtractToCache("ToolIcon.ico", "tool-icon.ico");
@@ -679,10 +686,10 @@ public sealed partial class MainWindow : Window
         return IconPath();
     }
 
-    /// <summary>
-    /// 打窗口图标。除了 AppWindow.SetIcon 之外再补一发老式的 WM_SETICON ——
-    /// 有的环境下 SetIcon 不生效，任务栏 / Alt-Tab / Win+Tab 就一直是系统默认图标。
-    /// </summary>
+    
+    
+    
+    
     private void ApplyWindowIcon(IntPtr hwnd)
     {
         var icon = IconPath();
@@ -702,10 +709,10 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureWindow()
     {
-        // 给进程一个显式的任务栏身份：任务栏按这个 id 取图标，
-        // 避免 Windows 拿旧缓存（上次那个"只有 256 一张图、缩不来"的 ico）继续显示通用图标。
+        
+        
         try { SetCurrentProcessExplicitAppUserModelID("TinyNick.ClassSoftwareHub.Desktop"); }
-        catch { /* 设不上不影响使用 */ }
+        catch {  }
         try
         {
             var hwnd = WindowNative.GetWindowHandle(this);
@@ -716,9 +723,13 @@ public sealed partial class MainWindow : Window
             Core.AppLog.Warn("shell", "AppWindow 获取失败（窗口管理功能全部降级）：" + ex.Message);
         }
 
+        
+        InitHotkeys();
+
         if (_appWindow is null) return;
 
         _appWindow.Title = ShellConfig.WindowTitle;
+        Services.DisplayCapabilities.Refresh(this);
 
         try
         {
@@ -726,7 +737,7 @@ public sealed partial class MainWindow : Window
         }
         catch { }
 
-        // 窗口显示之后再补一次：有的环境下窗口一显示图标会被系统重置回默认
+        
         try
         {
             var hwndForIcon = WindowNative.GetWindowHandle(this);
@@ -759,10 +770,10 @@ public sealed partial class MainWindow : Window
         }
         catch { }
 
-        // 自启项自愈：Run 值不会自己跟着 exe 走。换安装位置、升级、跑过构建产物之后，
-        // 它就指向一条已经不存在的路径 —— 开机时"什么都没启动"，但界面上开关还是开着的。
-        // （2026-10-27 实测：值指向已被删除的 bin\Debug\...\win-x64\，安装版却在 LOCALAPPDATA\Programs\）
-        // ⚠️ 只在开着自启时校正；关着就一个字都别动。
+        
+        
+        
+        
         if (_settings.Current.AutoStart) ApplyAutoStart();
 
         _appWindow.Closing += (_, _) =>
@@ -771,17 +782,17 @@ public sealed partial class MainWindow : Window
             SaveWindowState(flush: true);
         };
 
-        // 点右上角 × 默认收进托盘（可在设置 / 内置工具页关掉）；托盘挂不上就直接退，别把用户困在后台
+        
         _appWindow.Closing += (_, args) =>
         {
             Core.AppLog.Info("exit", $"主窗 Closing: exitRequested={_exitRequested} "
                 + $"closeToTray={_settings.Current.CloseToTray} trayReady={_tray?.IsReady}");
             if (_exitRequested || !_settings.Current.CloseToTray || _tray?.IsReady != true)
             {
-                // 这一支是"真的要走"（托盘退出 / 用户关掉了「收进托盘」/ 托盘没挂上）。
-                // ⚠️ 必须打上全局退出标记：工具浮窗与 Q 群反馈窗的 Closing 会把关闭拦成"收起来"，
-                //    而 WinUI 的 Application.Exit() 撞上被取消的关闭就会中止整条退出流程 ——
-                //    结果就是"窗口都关了、托盘也摘了、进程却一直不走"（2026-10-04 实测）。
+                
+                
+                
+                
                 App.IsExiting = true;
                 Core.AppLog.Info("exit", "主窗 Closing -> 放行（真的要走）");
                 return;
@@ -793,36 +804,37 @@ public sealed partial class MainWindow : Window
         };
         _appWindow.Changed += (_, args) =>
         {
+            if (args.DidPositionChange) Services.DisplayCapabilities.Refresh(this);
             if (args.DidSizeChange || args.DidPositionChange || args.DidPresenterChange)
             {
-                ApplyWindowRounding();   // 最大化 / 还原 → 圆角跟着切换（最大化必须直角）
+                ApplyWindowRounding();   
 
-                // 大小 / 位置 / 最大化状态随时记一笔（内部有节流）——
-                // 光靠关闭时存是不行的：托盘退出根本不走 Closing（见 SaveWindowState 注释）
+                
+                
                 SaveWindowState();
             }
 
-            // 最小化 = 用户看不见窗口了 → 把内存还给系统（教学机 8G）。
-            // ⚠️ 不要挪到切页时做 —— 那条路会把 GC 卡在用户正要滚动的瞬间（见 Services/MemoryTrimmer.cs）。
-            //    可见时的回收由 MemoryTrimmer 自己的巡检线程负责（水位 + 停手）。
+            
+            
+            
             if (args.DidPresenterChange && IsMinimized()) Services.MemoryTrimmer.TrimLater(2500);
         };
 
-        // 让内存回收知道"用户此刻看不看得见窗口"：
-        //   藏进托盘 / 最小化 → 立刻收（不等水位、不等停手，这是最该收的时候）；
-        //   看得见            → 走"水位 + 停手"那条路（见 Services/MemoryTrimmer.cs）。
+        
+        
+        
         Services.MemoryTrimmer.IsIdle = () => !IsWindowVisible(WindowNative.GetWindowHandle(this)) || IsMinimized();
 
-        // 可见时也得能收 —— 后台巡检线程就是那条路唯一的触发点（2026-10-02，
-        // 起因：用户一直可见地乱点也能把占用顶到半个 G，而原来只在最小化时收）。
-        // ⚠️ 必须**注完 IsIdle 再起**，否则头几轮巡检会按"看得见"判、空转。
+        
+        
+        
         Services.MemoryTrimmer.StartWatch();
     }
 
-    /// <summary>
-    /// 混合标题栏：网页自带 win-titlebar 就是标题栏；这里保留系统按钮（右上角）。
-    /// 不调用 SetTitleBar —— 拖动由「网页判断 + 桥接消息」实现（规格书要求的路径）。
-    /// </summary>
+    
+    
+    
+    
     private void ConfigureTitleBar()
     {
         ExtendsContentIntoTitleBar = true;
@@ -832,7 +844,7 @@ public sealed partial class MainWindow : Window
         {
             var bar = _appWindow.TitleBar;
             bar.ExtendsContentIntoTitleBar = true;
-            bar.PreferredHeightOption = TitleBarHeightOption.Tall;   // 48px
+            bar.PreferredHeightOption = TitleBarHeightOption.Tall;   
             bar.ButtonBackgroundColor = Colors.Transparent;
             bar.ButtonInactiveBackgroundColor = Colors.Transparent;
         }
@@ -842,19 +854,19 @@ public sealed partial class MainWindow : Window
         }
 
         UpdateCaptionButtonColors();
-        ApplyWindowRounding();   // ⚠️ 必须在 ExtendsContentIntoTitleBar 之后 —— 那一步会把圆角偏好按回 Default(直角)
+        ApplyWindowRounding();   
     }
 
-    /// <summary>
-    /// 主窗口四角圆角（Win 11 原生观感）。
-    ///
-    /// 为什么得手动兜：WinUI 3 的 <see cref="ConfigureTitleBar"/> 一旦伸进标题栏，
-    /// 窗口圆角偏好就留在 Default —— 实测在这台 Win 11 上就是**直角**，和系统别处的窗口并排看很出戏。
-    /// 显式写 ROUND 即可复原（见 WindowChrome.SetRounded 的实测记录）。
-    ///
-    /// ⚠️ 最大化时反而要写 DONOTROUND：贴边的窗口不该削角，万一某个版本认了 ROUND，
-    ///    屏幕四角就会露出底下的桌面 —— 全屏时钟当初踩的就是这个坑（见 ClockFullscreenWindow）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void ApplyWindowRounding()
     {
         if (_appWindow is null) return;
@@ -884,15 +896,15 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    /// <summary>上一次 saveBounds 的时刻：窗口**随时在写**，别每拖一帧都落一次盘。</summary>
+    
     private DateTime _lastBoundsSave = DateTime.MinValue;
 
-    /// <summary>恢复记忆布局的那一刻起才允许写回（避免把默认值覆盖掉用户的记忆）。</summary>
+    
     private bool _windowBoundsLoaded;
 
-    /// <summary>
-    /// 启动恢复：大小 + 位置 + 是否最大化，全部来自上一次退出时的样子。
-    /// </summary>
+    
+    
+    
     private void LoadWindowBounds()
     {
         if (_appWindow is null) return;
@@ -901,12 +913,12 @@ public sealed partial class MainWindow : Window
         var w = Math.Max(900, s.WindowWidth);
         var h = Math.Max(600, s.WindowHeight);
 
-        // ⛔ 别无脑照抄：上次是在别的显示器（或外接投影）上拉的尺寸，
-        //    换回一台更小的机器会超出屏幕 —— 按当前屏幕夹一趟。
-        //    ⚠️ 用 Win32 而不是 DisplayArea：本机实测 DisplayArea.FindAll() 拿不到有效结果，
-        //       拿它判"位置在不在屏上"会永远判否 ⇒ 记忆下来的位置从不生效。
-        // ⚠️ 夹的是**工作区**而不是整屏：整屏高度把任务栏也算进去，
-        //    于是「复原成上次大小」的窗口会压住任务栏（2026-10-26 用户截图里的现象之一）。
+        
+        
+        
+        
+        
+        
         var maxW = GetSystemMetrics(SmCxScreen);
         var maxH = GetSystemMetrics(SmCyScreen);
         if (GetWorkArea(out var work))
@@ -919,9 +931,9 @@ public sealed partial class MainWindow : Window
 
         _pendingMaximize = s.WindowMaximized;
 
-        // ⛔ 要最大化时**不要在启动期 Resize**：对随即要最大化的窗口先 Resize 一次，
-        //    会和系统异步套回来的最大化状态打架，落成"最大化标志 + 普通矩形"的坏状态
-        //    （详见 ApplyPlacementCore 的注释）。
+        
+        
+        
         if (!_pendingMaximize) _appWindow.Resize(new SizeInt32(w, h));
 
         if (s.WindowLeft != int.MinValue && s.WindowTop != int.MinValue
@@ -930,8 +942,8 @@ public sealed partial class MainWindow : Window
             _pendingPosition = new PointInt32(s.WindowLeft, s.WindowTop);
         }
 
-        // ⚠️ Move() 不能在构造期就喊：窗口那时还没真正落位，系统随后会把它摆回默认位置，
-        //    我们摆的坐标被吃掉（实测只认大小、位置回到左上角）。挪到激活之后再摆。
+        
+        
         Activated += (_, _) => ApplyPendingPlacement();
 
         StartBoundsWatch();
@@ -941,21 +953,21 @@ public sealed partial class MainWindow : Window
 
     private PointInt32? _pendingPosition;
 
-    /// <summary>开机最小化 / 浮窗启动时跳过了窗口摆放，等用户第一次从托盘叫出来再补。</summary>
+    
     private bool _placementDeferred;
     private bool _pendingMaximize;
     private bool _placementApplied;
 
-    /// <summary>
-    /// 兜底巡检（每 1.2 秒）：AppWindow.Changed **并不可靠** —— 某些改动窗口尺寸/位置的路径
-    /// （外部还原、系统贴靠）它压根不报，光靠它会出现"用户明明拖过了，值却没写进去"。
-    /// SaveWindowState 内部有节流且只在真的变了才落盘，所以这里空转几乎不花钱。
-    /// </summary>
+    
+    
+    
+    
+    
     private void StartBoundsWatch()
     {
         try
         {
-            // ⚠️ 引用必须挂在字段上：只写在局部变量里会被 GC 回收，timer 从此再也不 tick
+            
             _boundsTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
             _boundsTimer.Interval = TimeSpan.FromSeconds(1.2);
             _boundsTimer.Tick += (_, _) => { try { SaveWindowState(); } catch { } };
@@ -966,7 +978,7 @@ public sealed partial class MainWindow : Window
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _boundsTimer;
 
-    /// <summary>窗口首次激活后补上一次「摆位置 / 最大化」——见 <see cref="LoadWindowBounds"/>。</summary>
+    
     private void ApplyPendingPlacement()
     {
         if (_placementApplied || _appWindow is null) return;
@@ -975,9 +987,9 @@ public sealed partial class MainWindow : Window
         {
             ApplyPlacementCore();
 
-            // ⚠️ 二次校正：Windows 会替窗口记住「上次是不是最大化」，并在窗口创建后
-            //    **异步**把它套回来 —— 那一下落在我们第一次摆放之后，会把坐标顶掉。
-            //    隔一小会儿再看一眼，被顶回最大化就再按回来。
+            
+            
+            
             var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             _ = Task.Run(async () =>
             {
@@ -988,34 +1000,34 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { Core.AppLog.Warn("shell", "恢复窗口位置失败：" + ex.Message); }
     }
 
-    /// <summary>把记忆里的大小 / 位置 / 最大化状态真正落到窗口上。</summary>
+    
     private void ApplyPlacementCore()
     {
         try
         {
             if (_appWindow is null) return;
 
-            // ⛔⛔ 「开机最小化」/「--palette」启动时，主窗口本来就不该露脸 —— 这里**一条都不能动**。
-            //   原因：HideToTray() 只是 SW_HIDE，而 Maximize() / Move() 都会把隐藏的窗口**重新显示**出来。
-            //   2026-10-27 实测（--minimized 启动，每 30ms 采样）：
-            //       503ms 可见=False → 1191ms 可见=True → 1223ms 被最大化 → 1256ms 才又隐藏
-            //   用户看到的就是「开机自启时窗口闪一下、而且闪出来时是最大化的」。
-            //   ⇒ 先记账，等用户真从托盘叫出来时再摆（见 ShowFromTray）。
+            
+            
+            
+            
+            
+            
             if (_startMinimized || _startPalette)
             {
                 _placementDeferred = true;
                 return;
             }
 
-            // ⛔⛔ 最大化时**只调 Maximize** —— Move 和 Resize 一条都不能碰。
-            //   对已经最大化的窗口 Move 一次，WinUI 会把"最大化尺寸"当成普通尺寸落下来，
-            //   同时保留最大化标志，得到一个「状态是最大化、矩形却跑到工作区外面」的怪窗口：
-            //     · 直边框  —— 最大化状态下 DWM 不给圆角
-            //     · 半透明  —— 多出来的那块没有内容，透的是 Mica 底
-            //     · 压住任务栏、右边超出屏幕
-            //   2026-10-26 实测：屏幕工作区 0,0 1920x1020，窗口却是 564,50 1938x1038 状态=最大化。
-            //   这个坏状态是**每次启动都会重新造出来**的 —— 因为下面 600ms 的二次校正
-            //   又对最大化窗口 Move 了一遍。
+            
+            
+            
+            
+            
+            
+            
+            
+            
             if (_pendingMaximize)
             {
                 if (_appWindow.Presenter is OverlappedPresenter op
@@ -1028,7 +1040,7 @@ public sealed partial class MainWindow : Window
 
             if (_pendingPosition is { } p) _appWindow.Move(p);
 
-            // 记忆里是「没最大化」⇒ 现在若被系统顶成最大化，就还原回来再摆一次
+            
             if (_appWindow.Presenter is OverlappedPresenter p2
                 && p2.State != OverlappedPresenterState.Restored)
             {
@@ -1041,16 +1053,16 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    /// <summary>
-    /// 存的位置是不是真的看得见。显示器拔了 / 换了投影 / 分辨率变小都会让它落到屏幕外，
-    /// 那种情况下别硬搬 —— 交给系统自己摆，总好过窗口出现在看不见的地方。
-    /// </summary>
+    
+    
+    
+    
     private static bool IsVisibleOnAnyScreen(int left, int top, int width, int height)
     {
         try
         {
-            // 取窗口标题栏附近那个点：拔了显示器 / 换了投影之后，这个点多半还在屏上才算数。
-            // ⚠️ 用 MonitorFromPoint（Win32）判，别用 DisplayArea —— 见 LoadWindowBounds 里的说明。
+            
+            
             var pt = new NativePoint
             {
                 X = left + Math.Min(200, width / 2),
@@ -1060,7 +1072,7 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            // 判不了就照摆 —— 宁可摆错，也不要这个功能彻底不生效
+            
             return true;
         }
     }
@@ -1095,7 +1107,7 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
 
-    /// <summary>取主屏工作区（不含任务栏）。取不到返回 false，调用方退回用整屏尺寸。</summary>
+    
     private static bool GetWorkArea(out NativeRect rect)
     {
         rect = default;
@@ -1109,28 +1121,28 @@ public sealed partial class MainWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SystemParametersInfo(uint action, uint param, ref NativeRect data, uint winIni);
 
-    /// <summary>
-    /// 窗口大小 / 位置一变就记一笔（节流 700ms）。
-    ///
-    /// ⚠️ 为什么不能只在关闭时保存：程序化的 <c>Window.Close()</c> 与
-    /// <c>Application.Exit()</c> **都不触发** AppWindow.Closing（见 FinishExit 注释），
-    /// 而托盘「退出」、更新安装器接管、进程被杀全走这条路 ——
-    /// 结果就是"用户拖了半天，下次开还是老样子"。随时写才丢不了。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private void SaveWindowState(bool flush = false)
     {
         try
         {
             if (_appWindow is null || !_windowBoundsLoaded) return;
 
-            // ⚠️ 尺寸与坐标一律用 Win32 GetWindowRect 读真实窗口矩形，**不用 AppWindow.Size/Position**：
-            //    后者在某些路径（外部还原、EarlierWinUI 状态没同步）会给旧值，
-            //    于是"明明已经还原了"却仍被判成最大化、一条都不写。
+            
+            
+            
             var hwnd = WindowNative.GetWindowHandle(this);
             if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rc)) return;
 
-            // ⛔ 收进托盘 / 开机最小化期间窗口是隐藏的，此时读到的是「隐藏前或系统默认」的矩形
-            //    （开机自启时就是那个 1440×740），存下去会把用户记住的尺寸覆盖掉。
+            
+            
             if (!IsWindowVisible(hwnd)) return;
 
             var sizeW = rc.Right - rc.Left;
@@ -1138,12 +1150,12 @@ public sealed partial class MainWindow : Window
             var screenW = GetSystemMetrics(SmCxScreen);
             var screenH = GetSystemMetrics(SmCyScreen);
 
-            // 最大化 / 最小化时不存：此时 Size 是铺满后的尺寸、Position 是屏幕角落，
-            // 存了会让「还原」按钮再也回不到原来那个大小。
-            //
-            // ⛔ 这里**只认 Presenter.State**，绝不许再加"尺寸约等于屏幕就算最大化"这类补判：
-            //    本应用窗口无边框，用户手动把窗口拉到几乎铺满是**完全正常的用法**，
-            //    加补判会把他的尺寸当成最大化吃掉 ⇒ 表现为"我拉的尺寸下次没记住"。
+            
+            
+            
+            
+            
+            
             if (_appWindow.Presenter is OverlappedPresenter p
                 && (p.State == OverlappedPresenterState.Maximized
                     || p.State == OverlappedPresenterState.Minimized))
@@ -1156,7 +1168,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            // 拖动过程中别每次都落盘（每帧一次 IO）；真要退出了强制写一次
+            
             var now = DateTime.UtcNow;
             if (!flush && (now - _lastBoundsSave) < TimeSpan.FromMilliseconds(700)) return;
             _lastBoundsSave = now;
@@ -1164,9 +1176,9 @@ public sealed partial class MainWindow : Window
             var s = _settings.Current;
             s.WindowMaximized = false;
 
-            // ⛔⛔ 2026-10-22：这里原来是 `if (sizeChanged) {...} else if (posChanged) {...}` ——
-            //    只要**大小**变了就再也不存位置。窗口拖动时尺寸往往同时微变（贴边、吸附），
-            //    于是位置永远写不进去，重启后回到旧坐标。改成两件独立的事，各存各的。
+            
+            
+            
             var dirty = false;
 
             if (sizeW > 0 && sizeH > 0 && (sizeW != s.WindowWidth || sizeH != s.WindowHeight))
@@ -1192,20 +1204,20 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    // ── 授权 ─────────────────────────────────────────────────────────────
+    
 
-    /// <summary>激活对话框是否已经弹着（同一次未激活会连着撞好几次 403，不能弹一串）。</summary>
+    
     private bool _activationPromptShowing;
 
-    /// <summary>
-    /// 某个在线请求被闸门挡下来了 → 引导激活。
-    ///
-    /// <para>
-    /// ⚠️ 可能在后台线程触发（HttpClient 的响应回调），必须切回 UI 线程再弹窗。
-    /// ⚠️ 不做"激活成功后自动重放原请求"：那次请求已经失败了，用户手上还停在一个
-    ///    报了错的界面上，让他再点一次比替他重放更清楚。文档允许重放，但不是必须。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void OnActivationRequired()
     {
         if (_activationPromptShowing) return;
@@ -1214,7 +1226,7 @@ public sealed partial class MainWindow : Window
         {
             if (_activationPromptShowing) return;
 
-            // 窗口最小化到托盘时 XamlRoot 还在，但弹出来用户看不见 —— 先等它露头
+            
             if (Content?.XamlRoot is null) return;
 
             _activationPromptShowing = true;
@@ -1243,12 +1255,12 @@ public sealed partial class MainWindow : Window
         try { _trayTools?.Dispose(); } catch { }
         _trayTools = null;
 
-        // 走到这儿说明主窗口是**真的关掉了**（"收进托盘"那条路在 Closing 里被 cancel，压根到不了 Closed）
-        // → 应用就该退出了。
-        // ⛔ 必须自己把剩下的窗口收掉并请 Application 退出：WinUI 3 **不会**因为"主窗关了"就自动退出，
-        //    而侧边栏 / 工具浮窗还活着 → 进程一直挂在任务管理器里。
-        //    2026-10-04 实测：把「关闭时收进托盘」关掉后点 ×（= 任务栏右键「关闭窗口」）必现残留。
-        //    已经由 ExitApp 发起时（_exitRequested 已是 true）不重复走 —— 那条路自己会收尾。
+        
+        
+        
+        
+        
+        
         if (!_exitRequested)
         {
             _exitRequested = true;
@@ -1257,8 +1269,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>AppIcon → 原生外壳标题栏的图标。</summary>
-    /// <remarks>原先挂在网页加载层的 Image 控件上，那个控件已随网页承载一并删除，改为直接返回图像。</remarks>
+    
+    
     private static Microsoft.UI.Xaml.Media.ImageSource? LoadAppIcon()
     {
         try
@@ -1270,9 +1282,9 @@ public sealed partial class MainWindow : Window
         catch { return null; }
     }
 
-    // ============================================================
-    // 外观：背景（亚克力 / Mica / 纯色）与主题
-    // ============================================================
+    
+    
+    
 
     public void SetBackdrop(string kind)
     {
@@ -1369,12 +1381,12 @@ public sealed partial class MainWindow : Window
             _ => ElementTheme.Default
         };
         _settings.Current.Theme = theme;
-        Services.ThemeHost.Notify();                     // 侧边栏 / 浮窗 / 截图窗也跟着换（它们各自登记过）
+        Services.ThemeHost.Notify();                     
 
         if (_settings.Current.Backdrop == "solid")
             RootGrid.Background = new SolidColorBrush(FallbackSolidColor());
         else
-            ApplyBackdrop(_settings.Current.Backdrop);   // 主题变了 → tint 颜色跟着重算
+            ApplyBackdrop(_settings.Current.Backdrop);                             
 
         UpdateCaptionButtonColors();
         Services.ThemeBrush.Probe(RootGrid, "MainWindow.ApplyTheme(" + theme + ")");
@@ -1383,19 +1395,19 @@ public sealed partial class MainWindow : Window
 
     private Task BootAsync()
     {
-        // 启动不做任何网页初始化：原生界面完全不依赖 WebView2，唯一用到它的是应用内网页浮层
-        // （WebSheet），由那边按需创建；缺运行时时它自己给「去安装 / 用浏览器打开」的兜底。
+        
+        
         _runtime.Probe();
         RuntimePanel.Visibility = Visibility.Collapsed;
 
-        // 记一笔"这台电脑运行过的版本"（更新页的「历史版本」读的就是这份记录）
+        
         Services.VersionHistory.Record();
         return Task.CompletedTask;
     }
 
-    // ============================================================
-    // WebView2 缺失：弹窗三选项
-    // ============================================================
+    
+    
+    
 
     private void HandleMissingRuntime()
     {
@@ -1432,9 +1444,9 @@ public sealed partial class MainWindow : Window
 
     private void ExitApp_Click(object sender, RoutedEventArgs e) => ExitApp();
 
-    // ============================================================
-    // 桥接动作
-    // ============================================================
+    
+    
+    
 
     public void SetAlwaysOnTop(bool value)
     {
@@ -1457,7 +1469,7 @@ public sealed partial class MainWindow : Window
         _settings.Save();
     }
 
-    /// <summary>开机最小化启动（依赖开机自启：不打开自启时不会被用到）。</summary>
+    
     public void SetMinimizeOnStart(bool value)
     {
         _settings.Current.MinimizeOnStart = value;
@@ -1465,14 +1477,14 @@ public sealed partial class MainWindow : Window
         _settings.Save();
     }
 
-    /// <summary>点关闭时收进托盘（true）/ 直接退出（false）。</summary>
+    
     public void SetCloseToTray(bool value)
     {
         _settings.Current.CloseToTray = value;
         _settings.Save();
     }
 
-    /// <summary>工具浮窗是否始终置顶。</summary>
+    
     public void SetPaletteOnTop(bool value)
     {
         _settings.Current.PaletteOnTop = value;
@@ -1480,21 +1492,21 @@ public sealed partial class MainWindow : Window
         Views.ToolPaletteWindow.ApplyOnTopSetting();
     }
 
-    // ============================================================
-    // 托盘图标：主窗口藏起来、工具浮窗、退出都从这儿走
-    // ============================================================
+    
+    
+    
 
     private void InitTray()
     {
         try
         {
-            // 托盘图标一：主界面（左键 = 主窗口显示/收起）
+            
             _tray = new TrayIcon(IconPath());
             _tray.LeftClick += ToggleMainWindow;
             _tray.CommandInvoked += OnTrayCommand;
             _tray.BalloonClicked += OnBalloonClicked;
 
-            // 右键菜单用 WinUI 画（路线图第 25 项）；起不来时 TrayIcon 自己退回原生菜单
+            
             _tray.MenuRequested = (items, invoke) => Views.TrayMenuWindow.Show(items, invoke);
 
             _tray.MenuItems.Add(new TrayMenuItem { Text = "打开主界面", Command = "show", IsDefault = true });
@@ -1509,7 +1521,7 @@ public sealed partial class MainWindow : Window
             if (!_tray.Setup(ShellConfig.WindowTitle))
                 Core.AppLog.Warn("tray", "托盘图标没挂上（挂不上时关闭窗口仍然直接退出）");
 
-            // 托盘图标二：常用工具（左键 = 直接开工具窗口，不用先进主界面）—— 学校电脑是触屏，少点几下
+            
             _trayTools = new TrayIcon(ToolIconPath());
             _trayTools.LeftClick += () => Views.ToolPaletteWindow.TogglePalette();
             _trayTools.CommandInvoked += OnTrayCommand;
@@ -1522,14 +1534,14 @@ public sealed partial class MainWindow : Window
             if (!_trayTools.Setup("常用工具"))
                 Core.AppLog.Warn("tray", "「常用工具」托盘图标没挂上");
 
-            // ⚠️⚠️「工具侧边栏」不在这里挂 —— 挪到主窗口首帧显示之后了（见 StartToolSidebar）。
-            //    原来那句 ApplySetting() 摆在 InitTray() 里，也就是主窗口**构造函数中途**；
-            //    而侧边栏窗口第一次显示必须走 Activate()（WinUI 没有 Show()），
-            //    结果它抢在主窗口之前出现在屏幕上、还把自己设成置顶 ——
-            //    主窗口那声 Activate() 反倒成了配角。用户看到的正是
-            //    「侧边栏挂在屏幕上、任务栏里却没有本应用、点桌面图标没反应」。
+            
+            
+            
+            
+            
+            
 
-            // 记着"上一次在用的窗口"（点了侧边栏之后前台就变成我们自己了，"关前台应用"得知道原本是谁）
+            
             Services.TeachingActions.StartFocusWatcher();
         }
         catch (Exception ex)
@@ -1538,7 +1550,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>通知被点开：按"这条通知是关于什么的"分流（更新 / 下载完成 / 下载失败）。</summary>
+    
     private void OnBalloonClicked()
     {
         var action = _balloonAction;
@@ -1550,7 +1562,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // 没登记动作的（老路子）：把界面叫出来 + 顺手查一次更新
+        
         ShowFromTray();
         _ = CheckUpdateManualAsync();
     }
@@ -1581,7 +1593,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>左键点托盘图标：主窗口显示/收起来回切。</summary>
+    
     public void ToggleMainWindow()
     {
         try
@@ -1595,25 +1607,25 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>窗口此刻是不是最小化状态（托盘隐藏走的另一条路，见 <see cref="HideToTray"/>）。</summary>
+    
     private bool IsMinimized()
         => _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Minimized;
 
-    /// <summary>主窗口藏进托盘（任务栏上不留最小化按钮）。</summary>
+    
     public void HideToTray()
     {
         try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); } catch { }
-        // 藏起来没人看的时候把内存还给系统（教学机 8G，不能白白占着）
+        
         Services.MemoryTrimmer.TrimLater(1200);
     }
 
-    /// <summary>
-    /// 第一次「点 × 收进托盘」时提示一次（只提示一次，之后不再打扰）。
-    ///
-    /// 用户反馈（2026-09-30）：关掉窗口后以为程序退了，去点桌面图标毫无反应，
-    /// 托盘图标又不一定在看得见的地方 —— 只能去任务管理器。这条提示把"程序还在后台"
-    /// 与"两条回来的路"一次讲清，点气泡本身也直接叫回窗口。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private void ShowTrayHideHintOnce()
     {
         if (_settings.Current.TrayHideHintShown) return;
@@ -1626,12 +1638,12 @@ public sealed partial class MainWindow : Window
             () => ShowFromTray());
     }
 
-    /// <summary>从托盘把主窗口叫回来。</summary>
+    
     public void ShowFromTray()
     {
         try
         {
-            // 开机最小化启动时这里没摆过位置/最大化：先摆再显示，别让它先以默认尺寸露一帧
+            
             if (_placementDeferred)
             {
                 _placementDeferred = false;
@@ -1651,10 +1663,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 工具浮窗里的「详细设置」：把主界面叫出来，并直接跳到对应的工具页
-    /// （浮窗太小，放不下那些自定义项 —— 但用户想细调时得有条路进去）。
-    /// </summary>
+    
+    
+    
+    
     public void OpenToolSettings(Type pageType)
     {
         try
@@ -1665,6 +1677,103 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Core.AppLog.Exception("palette", ex, "打开工具设置页");
+        }
+    }
+
+    /// <summary>右键菜单与第二实例唤醒统一由 Services.ShellLauncher 处理，主窗口不再参与。</summary>
+    private void InitHotkeys()
+    {
+        try
+        {
+            PinnedAppLauncher.EnsureIds();
+            _hotkeys = new HotkeyService(this, OnGlobalHotkey, OnSidebarAppHotkey);
+            _hotkeys.Apply(_settings.Current);
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("hotkey", ex, "初始化全局快捷键");
+        }
+    }
+
+    
+    public void RefreshHotkeys()
+    {
+        try { _hotkeys?.Apply(_settings.Current); }
+        catch (Exception ex) { Core.AppLog.Exception("hotkey", ex, "重新注册全局快捷键"); }
+    }
+
+    
+    public void SuspendHotkeys()
+    {
+        try { _hotkeys?.Suspend(); }
+        catch (Exception ex) { Core.AppLog.Exception("hotkey", ex, "挂起全局快捷键"); }
+    }
+
+    
+    public void ResumeHotkeys() => RefreshHotkeys();
+
+    
+    public IReadOnlyList<string> HotkeyConflicts => _hotkeys?.Conflicts ?? Array.Empty<string>();
+
+    public string? HotkeyTargetError(string appId) => _hotkeys?.TargetError(appId);
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    private void OnGlobalHotkey(HotkeyAction action)
+    {
+        try
+        {
+            Core.AppLog.Info("hotkey", $"触发：{HotkeyService.ActionName(action)}");
+
+            switch (action)
+            {
+                case HotkeyAction.ShowMain:
+                    ShowFromTray();
+                    break;
+
+                case HotkeyAction.Announce:
+                    ShowFromTray();
+                    Shell?.NavigateTo("announce");
+                    break;
+
+                case HotkeyAction.PptTouch:
+                    ShowFromTray();
+                    Shell?.NavigateTo("ppttouch");
+                    break;
+
+                case HotkeyAction.Timer:
+                    Views.ToolPaletteWindow.ShowTool("timer");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("hotkey", ex, $"处理快捷键 {action}");
+        }
+    }
+
+    private void OnSidebarAppHotkey(string appId)
+    {
+        try
+        {
+            var app = PinnedAppLauncher.FindById(appId);
+            if (app is null) return;
+            Core.AppLog.Info("hotkey", $"触发快捷应用：{PinnedAppLauncher.DisplayName(app)}");
+            if (PinnedAppLauncher.Launch(app) is { } error)
+                Core.AppLog.Warn("hotkey", error);
+        }
+        catch (Exception ex)
+        {
+            Core.AppLog.Exception("hotkey", ex, "处理快捷应用组合键");
         }
     }
 
@@ -1680,7 +1789,7 @@ public sealed partial class MainWindow : Window
     private const int SW_HIDE = 0;
     private const int SW_SHOW = 5;
 
-    /// <summary>托盘菜单「检查更新」：查到新版就走更新流程，没有就明确说一声。</summary>
+    
     private async Task CheckUpdateManualAsync()
     {
         try
@@ -1695,7 +1804,7 @@ public sealed partial class MainWindow : Window
             var channel = Services.Updating.UpdateChannels.Parse(_settings.Current.UpdateChannel);
             var result = await service.CheckAsync(channel, ShellConfig.ShellVersion);
 
-            // 首页那颗「发现新版本」与这里共用同一份检查结果 —— ⛔ 首页自己绝不联网，见 UpdateNotice 的类注释。
+            
             if (result is { HasUpdate: true, Release: { } found }) Services.Updating.UpdateNotice.Set(found);
             else Services.Updating.UpdateNotice.Clear();
 
@@ -1704,7 +1813,7 @@ public sealed partial class MainWindow : Window
 
             if (result is { HasUpdate: true, Release: { } release })
             {
-                // 一样先问，绝不替用户做主
+                
                 var choice = await Services.Updating.UpdateFlow.AskAsync(root, release);
                 if (choice == Services.Updating.UpdateFlow.UpdateChoice.Now)
                     await Services.Updating.UpdateFlow.RunAsync(root, service, release);
@@ -1725,12 +1834,12 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            // ⚠️ 原来是 Debug.WriteLine —— 那东西在发布版里没人监听，等于什么都没记（2026-10-12 改）
+            
             Core.AppLog.Fail("update", ex, "手动「检查更新」失败");
         }
     }
 
-    /// <summary>把自启项写进注册表 Run；开着「开机最小化」时附带 --minimized 参数。</summary>
+    
     private void ApplyAutoStart()
     {
         try
@@ -1745,9 +1854,9 @@ public sealed partial class MainWindow : Window
                 var exe = Environment.ProcessPath;
                 if (string.IsNullOrEmpty(exe)) return;
 
-                // ⛔ 跑的是构建产物（路径含 \bin\）时，别把自启指到 bin 下 ——
-                //   那个目录随时会被清理/重建（OneDrive 配额、重新编译），指过去就是
-                //   "开机时什么都没启动"。装了正式版就让自启走正式版。
+                
+                
+                
                 if (exe.Contains(@"\bin\", StringComparison.OrdinalIgnoreCase))
                 {
                     var installed = Path.Combine(
@@ -1776,14 +1885,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 把链接交给系统浏览器处理（只有「必须用外部程序」的场景才该走这里）。
-    ///
-    /// ⚠️ 必须限协议。这里最终是 `Process.Start(UseShellExecute = true)`，等于把 URL 直接交给
-    /// shell 解析 —— 放行任意协议的话，一个 `file:///C:/Windows/...` 或者攻击者自定义注册的协议
-    /// 就能拉起本机程序。而 URL 的来源（软件条目的 website、网页浮层里的链接）并不都是我们自己写的，
-    /// 所以这里只留真正需要的三个，其余一律拒绝并记日志。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     public void OpenExternal(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
@@ -1805,7 +1914,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>允许交给系统的协议：网页、微软商店。其余（file / 自定义协议等）不放行。</summary>
+    
     private static readonly HashSet<string> AllowedExternalSchemes = new(StringComparer.OrdinalIgnoreCase)
     {
         "http",
@@ -1813,10 +1922,10 @@ public sealed partial class MainWindow : Window
         "ms-windows-store",
     };
 
-    /// <summary>
-    /// 打开 Microsoft Store 链接：先转成商店协议拉起身上的「微软商店」应用；
-    /// 转不出来（不是商店链接）就当普通网页开在浮层里；商店应用不在再退回浏览器。
-    /// </summary>
+    
+    
+    
+    
     public void OpenStore(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -1843,10 +1952,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 用系统的默认关联打开一个本地文件（刚下载完的安装包之类）。
-    /// ⚠️ 故意不加 shell 参数：安装包会按自己的清单弹 UAC，我们不该替它提权。
-    /// </summary>
+    
+    
+    
+    
     public void OpenFile(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
@@ -1860,10 +1969,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 在资源管理器里定位到某个文件；传目录就直接把它打开。
-    /// （解压完之后「打开文件夹」指的是产物目录，不是那个压缩包 —— 见 DownloadTask.PreferredRevealPath）
-    /// </summary>
+    
+    
+    
+    
     public void RevealFile(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
@@ -1884,24 +1993,24 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // ============================================================
-    // 应用内网页浮层（官网 / 网页版）：由下往上淡入的「窗中窗」
-    // （「提交软件」是原生页 Pages/SubmitPage；遗留的网页版小窗口 Views/SubmitWindow 没人调用）
-    // ============================================================
+    
+    
+    
+    
 
     private bool _sheetReady;
     private string _sheetUrl = "";
 
-    /// <summary>
-    /// 浮层收起时把 WebView2 挂起（2026-11-13）。
-    /// 这个控件是常驻的：关掉的 WebView2 不能复用，所以这里只挂起不关闭 ——
-    /// 挂起后 Chromium 会把渲染进程的堆与缓存压到最低，下次打开 <see cref="WebViewMemory.Resume"/> 原样恢复。
-    /// </summary>
+    
+    
+    
+    
+    
     private bool _sheetSuspended;
 
-    /// <summary>
-    /// 在应用内浮层里打开一个网页（http/https）。缺 WebView2 时退化成「去安装 / 用浏览器打开」。
-    /// </summary>
+    
+    
+    
     public async void ShowWebSheet(string? url, string? title = null)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
@@ -1909,7 +2018,7 @@ public sealed partial class MainWindow : Window
 
         if (!href.StartsWith("http", StringComparison.OrdinalIgnoreCase))
         {
-            OpenExternal(href);   // ms-windows-store: 这类协议只能交给系统
+            OpenExternal(href);   
             return;
         }
 
@@ -1931,7 +2040,7 @@ public sealed partial class MainWindow : Window
 
         WebSheetRing.IsActive = true;
 
-        // 上次收起时挂起过 → 先解冻再显示，否则打开的是一个冻住的页面
+        
         if (_sheetSuspended)
         {
             WebViewMemory.Resume(SheetWeb, "网页浮层");
@@ -1971,7 +2080,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>浮层里点了需要新窗口的链接 → 能 http 就原地跳，其它协议交给系统。</summary>
+    
     private void SheetNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         e.Handled = true;
@@ -1985,7 +2094,7 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    /// <summary>显示/收起浮层：位移 + 透明度一起动（由下往上淡入）。</summary>
+    
     private void PlaySheetAnimation(bool show)
     {
         var ease = new CubicEase { EasingMode = show ? EasingMode.EaseOut : EasingMode.EaseIn };
@@ -2000,7 +2109,7 @@ public sealed partial class MainWindow : Window
         Storyboard.SetTarget(fade, WebSheetCard);
         Storyboard.SetTargetProperty(fade, "Opacity");
 
-        // ⚠️ TranslateTransform.Y 属于「依赖动画」→ 必须 EnableDependentAnimation
+        
         var slide = new DoubleAnimation
         {
             From = show ? 150 : 0,
@@ -2019,7 +2128,7 @@ public sealed partial class MainWindow : Window
         {
             story.Completed += (_, _) =>
             {
-                // 先彻底藏起来，再挂起 —— TrySuspend 要求控件此刻不可见（顺序反了会抛）
+                
                 WebSheet.Visibility = Visibility.Collapsed;
                 SuspendWebSheet();
             };
@@ -2028,7 +2137,7 @@ public sealed partial class MainWindow : Window
         story.Begin();
     }
 
-    /// <summary>收起之后挂起网页内核，把它的内存还给系统（见 <see cref="WebViewMemory"/>）。</summary>
+    
     private async void SuspendWebSheet()
     {
         if (_sheetSuspended || !_sheetReady || SheetWeb?.CoreWebView2 is null) return;
@@ -2050,37 +2159,37 @@ public sealed partial class MainWindow : Window
         OpenExternal(url);
     }
 
-    // ============================================================
-    // 原生下载（不跳浏览器）
-    // ============================================================
+    
+    
+    
 
-    /// <summary>
-    /// 原生下载一个文件。
-    ///
-    /// ⚠️ 下载本身跑在 <see cref="DownloadManager"/> 里，**跟这个弹窗解绑**：
-    ///   · 点「看看别的」把弹窗收掉，下载在后台接着跑（以前收掉就等于取消，半个 G 的包只能干等）；
-    ///   · 想反悔就按「取消下载」，或者去左侧「任务进行」页取消；
-    ///   · 下完/失败会弹系统通知，通知点开直接跳到「任务进行」。
-    /// 弹窗还开着的时候跑完了，更省事：直接在这儿弹「下载完成」。
-    ///
-    /// <paramref name="directory"/> 只在「这一次换个地方存」时给（详情页的「下载到其他文件夹…」）；
-    /// 不给就按用户设的默认下载文件夹走（见 <see cref="DownloadService.SaveDir"/>）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public async void DownloadFile(string? url, string? suggestedName = null, string? directory = null)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
 
         var task = DownloadManager.Current.Start(url, suggestedName, suggestedName, directory);
-        _downloadDialogTaskId = task.Id;   // 这条由本方法负责收尾，别让系统通知重复报一次
+        _downloadDialogTaskId = task.Id;   
 
         var root = (Content as FrameworkElement)?.XamlRoot;
         if (root is null)
         {
-            _downloadDialogTaskId = null;   // 弹不了框：任务照跑，收尾交给系统通知
+            _downloadDialogTaskId = null;   
             return;
         }
 
-        // 同一时刻只允许一个 ContentDialog：上一条下载的弹窗先收掉（它自己的下载转后台继续）
+        
         if (_downloadDialog is { } previous)
         {
             try { previous.Hide(); } catch { }
@@ -2104,13 +2213,13 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = root,
-            // ⚠️ ContentDialog 走的是独立的 popup 根，**不会自动继承窗口的 RequestedTheme** ——
-            //    不显式给就会跟系统主题走，于是浅色界面里弹出一个黑框（2026-10-19 用户截图）。
-            //    同类的坑：动态生成的 AI 气泡、首页推荐卡片（见 ThemeBrush 的注释）。
+            
+            
+            
             RequestedTheme = RootGrid.ActualTheme,
             Title = "下载 " + task.Title,
             Content = panel,
-            PrimaryButtonText = "后台继续",     // 只是把弹窗收掉，下载继续
+            PrimaryButtonText = "后台继续",     
             CloseButtonText = "取消下载",
             DefaultButton = ContentDialogButton.Primary,
         };
@@ -2126,7 +2235,7 @@ public sealed partial class MainWindow : Window
         void OnTaskChanged(object? _, PropertyChangedEventArgs __)
         {
             Sync();
-            // 跑完了（成功/失败/取消）→ 把进度框收掉，下面接着弹结果
+            
             if (task.IsFinished)
             {
                 try { dialog.Hide(); } catch { }
@@ -2149,16 +2258,16 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            // 极端情况：还没来得及弹就被下完了（只在"上一张弹窗还停着"那种空档里可能发生）
+            
             task.PropertyChanged -= OnTaskChanged;
         }
 
-        // 从这儿往后是**收尾**：完成 / 失败由下面自己弹，不再叠一条系统通知
+        
         _downloadDialogTaskId = null;
 
-        // 「看看别的」→ 任务还在跑：放手让它下，收尾交给系统通知
+        
         if (task.IsRunning) return;
-        if (task.State == DownloadState.Canceled) return;    // 自己取消的，不用报错
+        if (task.State == DownloadState.Canceled) return;    
 
         if (task.State == DownloadState.Failed)
         {
@@ -2177,8 +2286,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // 下到的是安装包还是压缩包，决定主按钮写什么 —— 见 PackageKind。
-        // 「打开」对这两类都不是用户想干的事：安装包该说「安装」，压缩包该说「解压」。
+        
+        
         var action = task.Action;
 
         var body = new StackPanel { Spacing = 10 };
@@ -2212,8 +2321,8 @@ public sealed partial class MainWindow : Window
                 TextWrapping = TextWrapping.Wrap,
             });
 
-        // 和「任务进行」页底部那两颗开关是同一组设置项，两边改哪边都算数。
-        // 勾上就立刻生效，不用等下一次下载。
+        
+        
         var autoDeleteBox = new CheckBox
         {
             Content = "安装或解压完成后自动删除该文件",
@@ -2221,7 +2330,7 @@ public sealed partial class MainWindow : Window
         };
         body.Children.Add(autoDeleteBox);
 
-        // 「自动打开产物目录」只有压缩包才有意义 —— 安装包没有"产物目录"这回事
+        
         CheckBox? autoOpenBox = null;
         if (action == PackageAction.Extract)
         {
@@ -2252,7 +2361,7 @@ public sealed partial class MainWindow : Window
 
         var choice = await done.ShowAsync();
 
-        // 用户可能在弹窗里刚改过开关 —— 不管他接着点的是哪个按钮，都按他改的存下来
+        
         var autoDelete = autoDeleteBox.IsChecked == true;
         var autoOpen = autoOpenBox?.IsChecked == true;
         var settingsChanged = false;
@@ -2276,10 +2385,10 @@ public sealed partial class MainWindow : Window
                 break;
 
             case ContentDialogResult.Primary:
-                // 有类型的（安装包 / 压缩包）交回给任务页那条同款流程，免得这套动作有两个版本
+                
                 _ = PackageRunner.RunAsync(task);
-                // 解压有过程（可能好几秒到大半分钟），把人领到任务页看进度，
-                // 否则"点了解压之后什么都没发生"又成了新一个"点后台下载没反应"
+                
+                
                 if (action == PackageAction.Extract) Services.Updating.UpdateFlow.GoToDownloads();
                 break;
 
@@ -2289,7 +2398,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>缺 WebView2 时的统一提示（官网浮层、提交软件都用它）。</summary>
+    
     private async Task ShowRuntimeMissingDialogAsync(string? fallbackUrl = null)
     {
         var root = (Content as FrameworkElement)?.XamlRoot;
@@ -2329,29 +2438,29 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// 真正退出应用（托盘菜单「退出」/ 其它需要走人的地方）。
-    /// ⚠️⚠️ 这里的 <c>_exitRequested = true</c> 是**必需**的，不是可选优化：
-    ///    见 <c>ConfigureWindow</c> 里挂的 AppWindow.Closing —— 它按 <see cref="_exitRequested"/> 判断
-    ///    这次关闭是"用户点了 ×"（收进托盘）还是"真的要走"。少了这一行，退出请求会被当成点 × 处理，
-    ///    变成 <c>SW_HIDE</c> 躲进托盘、**进程不退**。
-    ///    2026-10-01 的「1.2 升不到 1.3」就是更新流程绕过了本方法、直接调
-    ///    <c>Application.Current.Exit()</c> 造成的：应用没退 → 安装程序查到 AppMutex 占用 →
-    ///    静默模式自动取消 → 安装悄悄失败。
-    /// </summary>
-    /// <summary>
-    /// 重启应用（2026-10-28 加，托盘菜单与 Hub AI 的「立即重启」都走这里）。
-    /// <para>
-    /// ⚠️ **不能**先 <c>Process.Start</c> 再退出：本进程持有单实例互斥体，新进程一起来就发现
-    /// 「已经有一个实例在跑」，按 <c>App</c> 的启动逻辑去"敲门"叫醒旧实例、然后自己 <c>Exit(0)</c> ——
-    /// 结果就是旧的一退、新的也没了，用户看到的是"点了重启软件直接消失"。
-    /// 所以先安排一个**延迟 2 秒**的启动命令，让旧进程有时间退干净、把互斥体放开，再走正常退出流程。
-    /// </para>
-    /// <para>
-    /// 用 <c>ping -n 3</c> 而不是 <c>timeout</c> 做延时：timeout.exe 在没有交互式控制台时会直接报错
-    /// 「输入重定向不支持」，等于没延时。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public void RestartApp()
     {
         var exe = Environment.ProcessPath;
@@ -2363,7 +2472,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            // -n 4 = 约 3 秒。给足时间：ExitApp 里有 1.5 秒硬退兜底，余下 1.5 秒留给互斥体释放。
+            
             var psi = new ProcessStartInfo("cmd.exe", $"/c ping 127.0.0.1 -n 4 >nul & start \"\" \"{exe}\"")
             {
                 CreateNoWindow = true,
@@ -2376,7 +2485,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            // 安排不成就别退出 —— 否则用户既没重启成，手上的窗口也没了
+            
             Core.AppLog.Fail("exit", ex, "安排重启失败，本次不退出");
             return;
         }
@@ -2384,19 +2493,19 @@ public sealed partial class MainWindow : Window
         ExitApp();
     }
 
-    /// <summary>
-    /// 处理一条应用链接（<c>csh://…</c> 或 <c>ms-settings:…</c>），需求 1:18。
-    ///
-    /// <para>
-    /// 来源有三处：① 命令行（Windows 唤起协议时把链接当参数传进来）；② 第二个实例通过
-    /// <c>AppLinks</c> 的信箱递过来再敲叫醒事件；③ 将来文档库文章里的超链接。
-    /// 三处都汇到这里，避免"点文章里的链接"和"点浏览器里的链接"走两套逻辑。
-    /// </para>
-    ///
-    /// <para>
-    /// ⚠️ 先 <see cref="ShowFromTray"/>：链接要跳到某个页面，窗口隐在托盘里就等于"点了没反应"。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public async System.Threading.Tasks.Task HandleAppUriAsync(string uri)
     {
         try
@@ -2404,8 +2513,8 @@ public sealed partial class MainWindow : Window
             var target = Core.AppUri.Parse(uri);
             if (target is null)
             {
-                // 本应用不认识的链接：交给系统（ms-settings: 这类），其余只留痕不弹窗 ——
-                // 一条坏链接不该打断用户手上的事。
+                
+                
                 if (uri.StartsWith(Core.AppUri.SystemSchemePrefix, StringComparison.OrdinalIgnoreCase)
                     && Uri.TryCreate(uri, UriKind.Absolute, out var systemUri))
                 {
@@ -2429,13 +2538,13 @@ public sealed partial class MainWindow : Window
 
                 case Core.AppUriKind.Page:
                 case Core.AppUriKind.Tool:
-                    // 两者走同一条路：工具子项的 tag 就是 ToolCatalog 的 Id，NavigateTagCore
-                    // 会先按 Id 反查工具表（连带载体选择），认不出才当普通页面 tag 处理。
+                    
+                    
                     Shell?.NavigateTo(target.Target);
                     break;
 
                 case Core.AppUriKind.Article:
-                    // 文档库正文页（需求 1:15）。找不到这篇文章时由页面自己给出人话提示。
+                    
                     Shell?.NavigateToDocArticle(target.Target);
                     break;
 
@@ -2455,14 +2564,14 @@ public sealed partial class MainWindow : Window
     {
         Core.AppLog.Info("exit", "ExitApp() 被调用");
         _exitRequested = true;
-        // 让工具浮窗 / Q 群反馈窗的 Closing 放行（它们默认是"关掉 = 收起来"）。
-        // ⚠️ 实测（2026-10-04）：程序化的 Window.Close() 和 Application.Exit() **都不触发**
-        //    AppWindow.Closing（只有用户级的 × / Alt+F4 / 任务栏「关闭窗口」才触发），
-        //    所以真正保证退干净的是 FinishExit() 里的显式关窗；这个标记是防御性的 ——
-        //    万一某个版本让程序化关闭也走 Closing，它保证那两个窗不会被自己的 args.Cancel 拦下。
+        
+        
+        
+        
+        
         App.IsExiting = true;
-        // 托盘「退出」/ 更新接管都不走 Closing（AppWindow.Closing 只认用户级关闭），
-        // 所以这里必须自己收一次——布局已经随时在写了，这只是补最后一把。
+        
+        
         SaveWindowState(flush: true);
         try { _settings.Save(); } catch { }
         try { _tray?.Dispose(); } catch { }
@@ -2472,24 +2581,25 @@ public sealed partial class MainWindow : Window
         FinishExit();
     }
 
-    /// <summary>
-    /// 退出流程的后半段：摘钩子 → 关掉所有自家窗口 → <c>Application.Exit()</c> → 1.5 秒硬退兜底。
-    /// 两个入口共用：<see cref="ExitApp"/>（托盘「退出」/ 更新安装器要接管），
-    /// 以及 <see cref="OnWindowClosed"/>（用户点了 × 且没开「关闭时收进托盘」）。
-    /// </summary>
+    
+    
+    
+    
+    
     private void FinishExit()
     {
-        // ⚠️ 2026-10-09：虚拟键盘整体下线，这里原本的
-        //    Services.VirtualKeyboard.VirtualKeyboardService.Stop()（摘全局触摸钩子 /
-        //    还原注册表）已随功能删除。注册表现在由 App 启动时的
-        //    Services.VirtualKeyboardRetire.Run() 做一次性还原，不再有"退出时要清"的东西。
+        
+        
+        
+        
 
-        // ① 显式关掉我们自己建的每一个窗口，再请 Application 退出。
-        //    ⛔ 不能只依赖 Application.Exit()，2026-10-04 实测（logs\exit.log）它：
-        //       · **不走 AppWindow.Closing** —— 所以"关掉=收起来"那套既拦不住它、也感知不到它在关窗；
-        //       · 且**只关掉一部分窗口**，剩下没关掉的窗口把消息循环撑住，
-        //         结果就是「主界面没了、托盘图标也没了，进程却一直挂在任务管理器里」。
-        //         这正是用户反馈的"点了退出，任务管理器里还有残留"。
+        
+        
+        
+        
+        
+        
+        try { _hotkeys?.Dispose(); } catch { }   
         Core.AppLog.Info("exit", "开始显式关闭所有窗口");
         try { Views.ToolPaletteWindow.CloseForExit(); } catch { }
         try { Views.QqFeedbackGuideWindow.CloseForExit(); } catch { }
@@ -2507,8 +2617,8 @@ public sealed partial class MainWindow : Window
         catch { Environment.Exit(0); }
         Core.AppLog.Info("exit", "Application.Exit() 已返回（若进程仍在 = 消息循环没退）");
 
-        // ③ 最后一道保险：Application.Exit() 偶尔仍会让消息循环卡住不退。
-        //    1.5 秒还没走就硬退 —— 走到这里该做的清理都已做完（设置已存、托盘已摘），硬退是安全的。
+        
+        
         new System.Threading.Thread(() =>
         {
             System.Threading.Thread.Sleep(1500);

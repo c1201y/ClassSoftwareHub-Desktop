@@ -3,44 +3,44 @@ using System.Runtime.InteropServices;
 
 namespace ClassSoftwareHub.Desktop.Services;
 
-/// <summary>
-/// 讲台动作：侧边栏里那几个"按一下就干活"的模块都调这里。
-///
-/// 原则（老师上课的命脉）：
-///   · **能调系统 API 就调 API，模拟按键只当兜底**（模拟按键拿不到结果、可能被安全策略拦、会抢焦点）
-///   · **关窗口一律优雅关闭**（等于点 ×），绝不硬杀 —— 老师没保存的 PPT 不能没
-///   · 动作做完**把焦点还回去**，别把全屏 PPT 的焦点抢走
-/// </summary>
+
+
+
+
+
+
+
+
 public static class TeachingActions
 {
-    /// <summary>按住型动作（现在只有放大镜）：按下开始、松手结束。</summary>
-    /// <summary>有没有"按住型"动作（按下开始、松手结束）。当前没有 —— 放大镜已改成点一下开、再点一下关。</summary>
+    
+    
     public static bool IsHold(string id) => false;
 
-    /// <summary>记着"上一次不在我们自己家里"的前台窗口（见 StartFocusWatcher）。</summary>
+    
     private static IntPtr _lastForeign = IntPtr.Zero;
 
-    /// <summary>「关全部」的待确认清单：点一下先攒好，用户在确认面板上按了红键才真关。</summary>
+    
     private static readonly List<IntPtr> _pendingCloseAll = new();
 
     private static Microsoft.UI.Dispatching.DispatcherQueueTimer? _focusWatcher;
 
-    /// <summary>按下/单击：开始干活。返回"要不要顺便给界面上留一句话"（比如两下确认的提示）。</summary>
+    
     public static string? Begin(string id)
     {
         try
         {
             switch (id)
             {
-                // 常用系统入口四件套（2026-11-08）：文件资源管理器 / 运行 / 屏幕键盘 / 锁定电脑。
-                // 前三件要做的事都很轻，唯独「运行」是模拟按键（系统没给 API），见各自注释。
+                
+                
                 case "explorer": return OpenExplorer();
                 case "run": RunDialog(); break;
                 case "osk": return OpenOnScreenKeyboard();
-                // 锁定电脑（Win+L）：与「安全选项」弹出菜单里那一项是同一个实现
+                
                 case "lock": LockScreen(); break;
 
-                // 系统快捷三件套（2026-10-11）：任务管理器 / 剪贴板历史 / 安全选项里的那几项
+                
                 case "taskmgr": OpenTaskManager(); break;
                 case "clipboard": ClipboardHistory(); break;
                 case "switchuser": SwitchUser(); break;
@@ -52,11 +52,11 @@ public static class TeachingActions
                 case "closefg": CloseForegroundApp(); break;
                 case "closeall": return PrepareCloseAll();
                 case "screenshot": return StartScreenshot();
-                // 取消关机：返回值就是给用户看的一句话（「已取消」或「当前没有待执行的关机」），
-                // 侧边栏会拿它弹一个原生提示浮层（见 ToolSidebarWindow.Tool_Click 里 hint 那一段）。
+                
+                
                 case "cancelshutdown": return Data.AutoShutdown.CancelPending();
-                // 杀希沃（2026-10-12 Nick 要）：立刻清一次白板5 的残留进程，不带时间点。
-                // ⚠️ 安全闸在 EasiNoteGuard.RunOnce 里 —— **有可见窗口的一律放过**（老师正开着白板讲课）。
+                
+                
                 case "killseewo": return KillEasiNote();
                 case "shutdown": return PrepareShutdown();
                 default: Log($"不认识的动作: {id}"); break;
@@ -71,21 +71,21 @@ public static class TeachingActions
         return null;
     }
 
-    /// <summary>松手：结束按住型动作。</summary>
+    
     public static void End(string id)
     {
         if (!IsHold(id)) return;
-        // 现阶段没有"按住型"动作（放大镜改成调系统那个了），留着这个入口给以后的动作。
+        
     }
 
-    /// <summary>
-    /// 一次性动作：先把"用户正在用的那个窗口"记下来，做完再把焦点还回去（别打断讲课）。
-    ///
-    /// ⚠️ 例外：「要先问一句」的动作（见 `AsksFirst`）**先不还焦点** —— 侧边栏一旦失活，
-    /// 刚弹出来的确认面板会被系统按"点了别处"关掉。用户看到的就是
-    /// "前台有窗口时这按钮点了没反应，得先把窗口全最小化才能用"（2026-09-26 修）。
-    /// 这类动作由调用方在面板关掉后自己还焦点，见 `ToolSidebarWindow.Tool_Click`。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     public static string? Run(string id)
     {
         var previous = TargetForeground();
@@ -96,20 +96,20 @@ public static class TeachingActions
         return hint;
     }
 
-    /// <summary>
-    /// 哪些动作"按下去要先问用户一句"（`Begin` 会返回非空提示，由调用方弹确认面板）。
-    ///
-    /// ⚠️ 判据不能写成"Begin 返回了非空提示"：出错时也会返回提示
-    /// （比如截屏启动失败 `return "截屏启动失败，看日志"`），那种没什么可确认的。
-    /// 以后再加"要先问一句"的动作，记得往这里补 id。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static bool AsksFirst(string id) => id is "closeall" or "logout" or "shutdown";
 
-    /// <summary>
-    /// 焦点观察器（保留）：只在"确实是个能用的应用窗口"时才记一下。
-    /// ⚠️ 现在**不再用它来决定"关前台关谁"**（它会把顺手抢焦点的悬浮助手也算进来，2026-09-25 踩过），
-    /// 只作为 ReturnFocus 的兜底。
-    /// </summary>
+    
+    
+    
+    
+    
     public static void StartFocusWatcher()
     {
         if (_focusWatcher is not null) return;
@@ -132,7 +132,7 @@ public static class TeachingActions
         _focusWatcher = timer;
     }
 
-    /// <summary>该把焦点还给谁：前台要是干净的应用窗口就用它，否则按 z 序找。</summary>
+    
     private static IntPtr TargetForeground()
     {
         var fg = GetForegroundWindow();
@@ -141,9 +141,9 @@ public static class TeachingActions
         return IntPtr.Zero;
     }
 
-    // ── 具体动作 ─────────────────────────────────────────────
+    
 
-    /// <summary>回桌面：调系统的"显示桌面"（切换式，再按一次还原）。调不到就退回模拟 Win+D。</summary>
+    
     private static void ShowDesktop()
     {
         try
@@ -164,12 +164,12 @@ public static class TeachingActions
         SendWinChord(VkD);
     }
 
-    // ── 系统快捷三件套（2026-10-11）────────────────────────────
+    
 
-    /// <summary>
-    /// 任务管理器：直接调起 Windows 自带的 <c>taskmgr.exe</c>（等同 Ctrl+Shift+Esc）。
-    /// 已经在跑的话系统会把它那个窗口带到前台（它自己就是单实例）。
-    /// </summary>
+    
+    
+    
+    
     private static void OpenTaskManager()
     {
         try
@@ -191,17 +191,17 @@ public static class TeachingActions
         }
     }
 
-    // ── 常用系统入口四件套（2026-11-08）────────────────────────────
+    
 
-    /// <summary>
-    /// 文件资源管理器（等同 Win+E）。
-    ///
-    /// <para>
-    /// 直接起 <c>explorer.exe</c>，**不**模拟 Win+E：模拟键会被学校机器上的安全策略拦，
-    /// 而且不少一体机把 Win+E 劫持成厂商自己的文件管家，直接起进程打开的一定是系统的那个。
-    /// shell 已经跑着的时候，explorer.exe 会把请求转给它，不会再起一个壳。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static string? OpenExplorer()
     {
         try
@@ -214,7 +214,14 @@ public static class TeachingActions
                 return "找不到文件资源管理器，详见日志";
             }
 
-            _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+            
+            
+            
+            _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "shell:MyComputerFolder")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
             Log("资源管理器：已调起");
             return null;
         }
@@ -225,14 +232,14 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>
-    /// 「运行」对话框（等同 Win+R）—— 系统没给 API，只能模拟按键。
-    ///
-    /// <para>
-    /// 与剪贴板历史同一条路子：先把焦点还回用户刚才那个窗口，隔一拍再发键。
-    /// 运行框本身会拿到焦点；它关掉之后焦点自然落回原窗口，侧边栏不会留着抢焦点。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private static void RunDialog()
     {
         RefocusPrevious();
@@ -260,18 +267,18 @@ public static class TeachingActions
         timer.Start();
     }
 
-    /// <summary>
-    /// 屏幕键盘，调系统自带的 <c>osk.exe</c>。
-    ///
-    /// <para>
-    /// ⚠️ 路径取 <c>SpecialFolder.System</c>（64 位下就是 System32）。⛔ 别按位数自己拼
-    /// SysWOW64 —— 那里没有 osk.exe，32 位宿主上会直接找不到文件。
-    /// </para>
-    /// <para>
-    /// 已经在跑就把它带到前台，而不是再起一个：触摸设备上多点两下会堆出好几个键盘窗口，
-    /// 盖住半个屏幕还关不干净。
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static string? OpenOnScreenKeyboard()
     {
         try
@@ -300,19 +307,19 @@ public static class TeachingActions
         }
         catch (Exception ex)
         {
-            // 常见原因：系统策略禁止启动 osk，或触摸键盘服务被裁剪过的精简版系统
+            
             Log("屏幕键盘失败: " + ex.Message);
             return "屏幕键盘启动失败，详见日志";
         }
     }
 
-    /// <summary>
-    /// 剪贴板历史（等同 Win+V）—— 只能模拟按键，系统没给对应的 API。
-    ///
-    /// ⚠️ 发键**之前**必须先把焦点还回"用户刚才在用的那个窗口"：剪贴板面板挑中一条之后，
-    ///    内容是往**打开面板时的活动窗口**里粘的；焦点要是还杵在侧边栏上，粘过去就掉进侧边栏了。
-    ///    还焦点是异步排队的（见 <see cref="ReturnFocus"/>），所以这里再隔一拍才发键。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private static void ClipboardHistory()
     {
         RefocusPrevious();
@@ -340,18 +347,18 @@ public static class TeachingActions
         timer.Start();
     }
 
-    /// <summary>
-    /// 立刻结束希沃白板5 后台滞留的残留进程（侧边栏「杀希沃」，2026-10-12 Nick 要）。
-    ///
-    /// 复用 <see cref="Data.EasiNoteGuard.RunOnce"/> —— 它自带那道**唯一的安全闸**：
-    /// 有可见顶层窗口的一律放过（老师正开着白板讲课就不动它），只清"没有任何窗口"的残留进程。
-    /// 返回的那句话由侧边栏弹一个原生提示浮层显示（跟「取消关机」一个路子）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private static string KillEasiNote()
     {
         var r = Data.EasiNoteGuard.RunOnce(dryRun: false);
 
-        // 手动点也留一条日志 —— 翻 easiguard.log 时分得清"是到点自己杀的"还是"我手点的"
+        
         Log($"杀希沃（侧边栏手点）：{r.Summary}"
             + (r.KilledNames.Count > 0 ? " 清掉=" + string.Join("、", r.KilledNames) : "")
             + (r.SkippedNames.Count > 0 ? " 放过=" + string.Join("、", r.SkippedNames) : "")
@@ -360,10 +367,10 @@ public static class TeachingActions
         return r.Summary;
     }
 
-    /// <summary>
-    /// 「关机」第一步：**只准备要问用户的那句话**（按当前关机方式给不同说明），真关机在 <see cref="ConfirmPending"/>("shutdown") 里。
-    /// 这么拆是因为关机是破坏性操作，必须先问一句（走 <see cref="AsksFirst"/> + 侧边栏的确认浮层）。
-    /// </summary>
+    
+    
+    
+    
     private static string? PrepareShutdown()
     {
         var mode = App.Settings.Current.ShutdownMode;
@@ -372,7 +379,7 @@ public static class TeachingActions
             : "确认关机？\n将立即关闭计算机，未保存的工作内容会丢失";
     }
 
-    /// <summary>执行关机（确认浮层里按了红键之后）：读设置里的关机方式，交给 <see cref="Data.AutoShutdown.ShutdownNow"/>。</summary>
+    
     private static string? ExecuteShutdown()
     {
         try
@@ -387,13 +394,13 @@ public static class TeachingActions
         return null;
     }
 
-    /// <summary>把存档里可能写歪的关机方式归一到合法值（认不出的一律当「滑动关机」）。</summary>
+    
     private static string NormalizeShutdownMode(string? mode) =>
         string.Equals(mode, Data.ShutdownMethods.Shutdown, StringComparison.OrdinalIgnoreCase)
             ? Data.ShutdownMethods.Shutdown
             : Data.ShutdownMethods.Slide;
 
-    /// <summary>锁定电脑：Win+L 用的就是这个 API，它也是 Ctrl+Alt+Del 界面上的第一项。</summary>
+    
     private static void LockScreen()
     {
         try
@@ -407,10 +414,10 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>
-    /// 切换用户：用系统自带的 <c>tsdiscon.exe</c>（它做的就是"断开当前会话"= 回到登录界面选别的账户）。
-    /// ⚠️ 这一步系统可能要求提权，失败就照实写日志 —— 别自己去提 UAC（讲台上弹权限框最烦人）。
-    /// </summary>
+    
+    
+    
+    
     private static void SwitchUser()
     {
         try
@@ -432,16 +439,16 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>「注销」第一步：**只点数**，把要问用户的那句话返回去（真注销在 ConfirmPending("logout") 里）。</summary>
+    
     private static string? PrepareLogout() =>
         "注销当前用户\n所有程序都会被关掉，没有保存的内容会丢失";
 
-    /// <summary>真注销：<c>ExitWindowsEx(EWX_LOGOFF)</c>。⚠️ 调它得先拿到 SeShutdownPrivilege 特权。</summary>
+    
     private static string? ExecuteLogout()
     {
         try
         {
-            _ = EnableShutdownPrivilege();       // 拿不到也照样试一下（有些账户本来就有）
+            _ = EnableShutdownPrivilege();       
             var ok = ExitWindowsEx(EWX_LOGOFF, 0);
             Log("注销：" + (ok ? "已下发" : $"失败 err={Marshal.GetLastWin32Error()}"));
         }
@@ -453,7 +460,7 @@ public static class TeachingActions
         return null;
     }
 
-    /// <summary>注销 / 关机前要拿的系统特权（SeShutdownPrivilege）。</summary>
+    
     private static bool EnableShutdownPrivilege()
     {
         const uint TokenAdjustPrivileges = 0x0020;
@@ -480,17 +487,17 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>任务视图：等于 Win+Tab。</summary>
+    
     private static void TaskView()
     {
         var sent = SendWinChord(VkTab);
         Log($"任务视图：SendInput 插入 {sent} 个事件" + (sent == 0 ? $"（被拦了？err={Marshal.GetLastWin32Error()}）" : ""));
     }
 
-    /// <summary>
-    /// 截屏贴图：先把边条收起来（别照进图里），稍等一下弹出框选层。
-    /// 真正干活在 `Views.SnipOverlayWindow`：框完一块 → 进剪贴板（课件 Ctrl+V 直接贴）+ 屏幕上留一张贴图。
-    /// </summary>
+    
+    
+    
+    
     private static string? StartScreenshot()
     {
         try
@@ -508,18 +515,18 @@ public static class TeachingActions
         return null;
     }
 
-    /// <summary>把焦点还回"用户刚才在用的那个窗口"（面板之类的显示后调用，别打断讲课）。</summary>
+    
     public static void RefocusPrevious()
     {
         var back = TargetForeground();
         if (back != IntPtr.Zero) ReturnFocus(back);
     }
 
-    /// <summary>
-    /// 系统放大镜（Windows 自带那个 `Magnify.exe`）：
-    /// 没开就调起来（起来后自动切到"镜头"模式 = 跟着鼠标跑的那块），开着就**优雅关掉**（发关闭消息，不硬杀）。
-    /// （自研那版「自抓屏 + 自绘控制条」因显示效果与跟随手感不满意已放弃，2026-10-24 连同封存档一并清除，不再保留。）
-    /// </summary>
+    
+    
+    
+    
+    
     private static void ToggleSystemMagnifier()
     {
         try
@@ -552,7 +559,7 @@ public static class TeachingActions
             _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
             Log("系统放大镜：已调起（稍后切镜头模式）");
 
-            // 它起来默认可能是"全屏"模式，压屏幕就太野了 → 等它出来按 Ctrl+Alt+L 切"镜头"（跟着鼠标）
+            
             var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             if (queue is null) return;
 
@@ -577,11 +584,11 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>
-    /// 「关全部」第一步：**只点数**，把清单攒起来，返回要问用户的那句话（两行：标题 + 说明）。
-    /// 真正的关闭在 `ConfirmPending("closeall")` 里做（= 用户在浮出面板上按了红按钮）。
-    /// ⚠️ 和「关前台」的区别：这里**连最小化的窗口也算**（最小化 = 还在任务栏里开着）。
-    /// </summary>
+    
+    
+    
+    
+    
     private static string? PrepareCloseAll()
     {
         var found = new List<IntPtr>();
@@ -610,7 +617,7 @@ public static class TeachingActions
         return $"将关闭 {found.Count} 个窗口\n含最小化的窗口：{sample}";
     }
 
-    /// <summary>执行关闭（面板上按了红按钮之后）。</summary>
+    
     private static string? ExecuteCloseAll()
     {
         var list = _pendingCloseAll.ToList();
@@ -632,7 +639,7 @@ public static class TeachingActions
         return null;
     }
 
-    /// <summary>用户在确认面板上按了「确定」——执行这个动作攒着的那件事。</summary>
+    
     public static string? ConfirmPending(string id)
     {
         try
@@ -652,7 +659,7 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>批量关窗口时的"合格"判定：比「关前台」宽松（允许最小化），但排除系统壳、工具窗、我们自家那些。</summary>
+    
     private static bool EligibleForBulkClose(IntPtr hwnd)
     {
         try
@@ -679,12 +686,12 @@ public static class TeachingActions
         "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd",
         "Windows.UI.Core.CoreWindow", "XamlExplorerHostIslandWindow_WASDK",
         "ShellHandwritingCanvas", "DuiHostWnd", "ThumbnailDeviceHelperWnd",
-        // 输入法/系统小窗：有标题、不一定带 TOOLWINDOW，光靠"标题非空"挡不住
+        
         "IME", "MSCTFIME UI", "Default IME", "CicMarshalWnd",
         "EdgeUiInputTopWndClass", "Shell_InputSwitchTopLevelWindow", "ApplicationFrameInputSinkWindow",
     };
 
-    /// <summary>「关前台应用」：正常关（发 WM_CLOSE，等于点 ×），绝不硬杀。</summary>
+    
     private static void CloseForegroundApp()
     {
         var hwnd = ResolveTargetWindow();
@@ -707,14 +714,14 @@ public static class TeachingActions
         Log($"关前台：{ttl} [{cls}] pid={pid}");
     }
 
-    /// <summary>
-    /// 找"用户正在看的那个应用窗口"。
-    /// ⚠️ 2026-09-25 教训：原来用"上一次不在我们家的前台窗口"这个记法，**会记错人**
-    /// （别的程序（如悬浮助手）顺手抢一下焦点就被记下来了），结果按下去关的是别的应用，
-    /// 用户看到的就是"关前台关不掉前台，只关掉一部分应用"。
-    /// 现在改成：① 当前前台要是"干净的应用窗口"就用它；② 否则按 **z 序**从上往下找第一个合格的
-    /// （我们自己的窗口是置顶的，所以"我们下面那个"正是用户刚才在用的窗口）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private static IntPtr ResolveTargetWindow()
     {
         var fg = GetForegroundWindow();
@@ -725,28 +732,28 @@ public static class TeachingActions
         {
             if (!EligibleAppWindow(hwnd)) return true;
             found = hwnd;
-            return false;                       // EnumWindows 是按 z 序来的，第一个就是最上面的
+            return false;                       
         }, IntPtr.Zero);
 
         return found == IntPtr.Zero ? IntPtr.Zero : RootWindowOf(found);
     }
 
-    /// <summary>是不是"一个可以让人关掉的应用窗口"。</summary>
+    
     private static bool EligibleAppWindow(IntPtr hwnd)
     {
         try
         {
             if (hwnd == IntPtr.Zero) return false;
             if (!IsWindowVisible(hwnd)) return false;
-            if (IsIconic(hwnd)) return false;                        // 最小化的不算"正在看"
-            if (IsOurApp(hwnd)) return false;                        // 别关自己（含我们的其它实例）
-            if (GetWindow(hwnd, GwOwner) != IntPtr.Zero) return false;   // 有主的（弹窗之类）跟着主人走
+            if (IsIconic(hwnd)) return false;                        
+            if (IsOurApp(hwnd)) return false;                        
+            if (GetWindow(hwnd, GwOwner) != IntPtr.Zero) return false;   
             if ((GetWindowLongPtr(hwnd, GwlExStyle).ToInt64() & WsExToolWindow) != 0) return false;
 
             var cls = ClassNameOf(hwnd);
             if (ShellClassNames.Contains(cls)) return false;
 
-            return TitleOf(hwnd).Length > 0;                          // 没标题的十有八九是杂窗
+            return TitleOf(hwnd).Length > 0;                          
         }
         catch
         {
@@ -754,7 +761,7 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>往上找到整窗（比如点在某控件/弹窗上时，关掉的是整个应用窗口）。</summary>
+    
     private static IntPtr RootWindowOf(IntPtr hwnd)
     {
         try
@@ -768,7 +775,7 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>最小化全部：所有"普通顶层窗口"收进任务栏（跳过工具窗、有主的窗口、系统窗和我们自己）。</summary>
+    
     private static void MinimizeAll()
     {
         var count = 0;
@@ -781,7 +788,7 @@ public static class TeachingActions
                 if (IsIconic(hwnd)) return true;
                 if (IsOurApp(hwnd)) return true;
                 if ((GetWindowLongPtr(hwnd, GwlExStyle).ToInt64() & WsExToolWindow) != 0) return true;
-                if (GetWindow(hwnd, GwOwner) != IntPtr.Zero) return true;       // 有主的窗口跟着主人一起收
+                if (GetWindow(hwnd, GwOwner) != IntPtr.Zero) return true;       
                 var cls = ClassNameOf(hwnd);
                 if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return true;
 
@@ -796,7 +803,7 @@ public static class TeachingActions
         Log($"最小化全部：{count} 个窗口 {detail}");
     }
 
-    /// <summary>点完把焦点还给原来那个窗口（否则老师全屏的 PPT 会"失焦"）。</summary>
+    
     private static void ReturnFocus(IntPtr previous)
     {
         if (previous == IntPtr.Zero) return;
@@ -809,7 +816,7 @@ public static class TeachingActions
                 {
                     var now = GetForegroundWindow();
                     if (now == IntPtr.Zero || now == previous) return;
-                    if (!IsOwnWindow(now)) return;              // 焦点已经不在我们身上了，别乱抢
+                    if (!IsOwnWindow(now)) return;              
                     SetForegroundWindow(previous);
                 }
                 catch { }
@@ -818,7 +825,7 @@ public static class TeachingActions
         catch { }
     }
 
-    // ── Win32 ────────────────────────────────────────────────
+    
 
     private const int GwlExStyle = -20;
     private const long WsExToolWindow = 0x00000080;
@@ -830,10 +837,10 @@ public static class TeachingActions
     private const ushort VkTab = 0x09;
     private const ushort VkD = 0x44;
     private const ushort VkControl = 0x11;
-    private const ushort VkMenu = 0x12;      // Alt
+    private const ushort VkMenu = 0x12;      
     private const ushort VkL = 0x4C;
-    private const ushort VkV = 0x56;         // V（Win+V = 剪贴板历史）
-    private const ushort VkR = 0x52;         // R（Win+R = 运行对话框）
+    private const ushort VkV = 0x56;         
+    private const ushort VkR = 0x52;         
     private const uint EWX_LOGOFF = 0x00000000;
     private const uint InputKeyboard = 1;
     private const uint KeyEventKeyUp = 0x0002;
@@ -857,11 +864,11 @@ public static class TeachingActions
     {
         public uint type;
 
-        // 联合体起点在偏移 8（type 4 字节 + 4 字节对齐）；KEYBDINPUT 占 24 字节 → 到 32
+        
         public KEYBDINPUT ki;
 
-        // ⚠️ 关键：x64 上 Win32 的 INPUT 是 **40** 字节（联合体那一块按最长的 MOUSEINPUT 算 32 字节）。
-        // 少了这 8 字节，SendInput 会整批拒收：返回 0 且 err=87（参数错误）——2026-09-25 实测踩过。
+        
+        
         public ulong pad;
     }
 
@@ -898,7 +905,7 @@ public static class TeachingActions
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    // ── 锁定 / 注销（系统快捷三件套）──
+    
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool LockWorkStation();
@@ -963,10 +970,10 @@ public static class TeachingActions
 
     private static readonly System.Collections.Generic.Dictionary<uint, bool> _ourPidCache = new();
 
-    /// <summary>
-    /// 是不是"我们家的"窗口 —— **用进程名判断，包含我们的其它实例**。
-    /// ⚠️ 2026-09-25：只比自己的 pid 不够（另一个实例的窗口会被当成"别人"，被"关前台"关掉）。
-    /// </summary>
+    
+    
+    
+    
     private static bool IsOurApp(IntPtr hwnd)
     {
         try
@@ -1006,7 +1013,7 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>模拟 Win+某键（Win 键必须按下再松开成对，不然会"卡住"）。返回实际插入的事件数（0 = 被系统拦了）。</summary>
+    
     private static uint SendWinChord(ushort vk)
     {
         try
@@ -1034,7 +1041,7 @@ public static class TeachingActions
         }
     }
 
-    /// <summary>模拟组合键（如 Ctrl+Alt+L）：按下按给的顺序，松开按倒序。</summary>
+    
     private static uint SendChord(params ushort[] keys)
     {
         try

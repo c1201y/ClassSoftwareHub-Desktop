@@ -6,40 +6,42 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace ClassSoftwareHub.Desktop.Core;
 
-/// <summary>
-/// 极简 Markdown → 原生控件（2026-10-18，2026-10-23 补表格）。
-///
-/// <para>
-/// 为什么自己写而不是引库：WinUI 3 没有内置 Markdown 控件，而模型输出永远是 Markdown
-/// （`**加粗**`、`- 列表`、`### 标题`、`| 表格 |`）。引一个第三方渲染器会带进一堆用不上的东西。
-/// </para>
-/// <para>
-/// ⛔ 仍然**不支持**代码块、图片、链接：这三样在 AI 回答里出现频率低，
-/// 按纯文本显示信息也不会丢。
-/// </para>
-/// <para>
-/// ⚠️ 表格必须用 <see cref="Apply(StackPanel, string, ...)"/> —— <see cref="RichTextBlock"/>
-/// 里塞不进 Grid，所以在那里表格仍会退化成一行竖线。（2026-10-23：Nick 截图里那张表
-/// 就挤成了一段 `|软件|补的缺|说明||---|---|---|`，因为气泡正文当时用的就是 RichTextBlock。）
-/// </para>
-/// <para>
-/// ⚠️ 流式渲染时这个方法会被反复调用（约每 80ms 一次），所以实现要够轻：
-/// 只做一次字符串切分，不建语法树、不回溯。
-/// </para>
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public static class MarkdownText
 {
-    /// <summary>把 <paramref name="markdown"/> 渲染进 <paramref name="target"/>，会清空原有内容。</summary>
+    
     public static void Apply(RichTextBlock target, string markdown)
     {
         target.Blocks.Clear();
 
         if (string.IsNullOrEmpty(markdown)) return;
 
-        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        // WinUI 的 TextBox 交出的是纯 \r 换行，只换 \r\n 会把整篇当成一行（2026-11-21 的导出事故）。
+        var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         var paragraph = new List<string>();
 
         void FlushParagraph()
@@ -62,7 +64,7 @@ public static class MarkdownText
                 continue;
             }
 
-            // 标题：# / ## / ### —— **字号必须分级**，否则标题和正文一样大，层级完全看不出来
+            
             if (trimmed[0] == '#')
             {
                 FlushParagraph();
@@ -70,7 +72,7 @@ public static class MarkdownText
                 continue;
             }
 
-            // 有序列表：1. / 2. / 12. （保留原编号，不重新数）
+            
             if (TryOrderedItem(trimmed, out var marker, out var rest))
             {
                 FlushParagraph();
@@ -78,7 +80,7 @@ public static class MarkdownText
                 continue;
             }
 
-            // 无序列表：- / * / •
+            
             if (TryBulletItem(trimmed, out var bulletRest))
             {
                 FlushParagraph();
@@ -86,18 +88,18 @@ public static class MarkdownText
                 continue;
             }
 
-            // 其余按段落累积（相邻行合并成一段，单换行不硬断 —— 中文排版里那多半是软换行）
+            
             paragraph.Add(trimmed);
         }
 
         FlushParagraph();
     }
 
-    /// <summary>
-    /// 把 Markdown 渲染进一个 <see cref="StackPanel"/>：文本块（段落 / 标题 / 列表）走
-    /// <see cref="RichTextBlock"/>，表格走真正的 <see cref="Grid"/>（2026-10-23）。
-    /// </summary>
-    /// <param name="foreground">正文颜色。⚠️ StackPanel 没有 Foreground 可继承，必须显式往下传。</param>
+    
+    
+    
+    
+    
     public static void Apply(
         StackPanel host, string markdown,
         Brush? foreground = null, double fontSize = 15, double lineHeight = 25)
@@ -106,7 +108,8 @@ public static class MarkdownText
 
         if (string.IsNullOrEmpty(markdown)) return;
 
-        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        // WinUI 的 TextBox 交出的是纯 \r 换行，只换 \r\n 会把整篇当成一行（2026-11-21 的导出事故）。
+        var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
         RichTextBlock? text = null;
         var paragraph = new List<string>();
@@ -148,13 +151,69 @@ public static class MarkdownText
                 continue;
             }
 
-            // 表格：本行以 | 开头，且下一行是 |---|---| 这种分隔行
-            if (trimmed[0] == '|' && i + 1 < lines.Length && IsTableDivider(lines[i + 1]))
+            
+            if (trimmed.StartsWith("```", StringComparison.Ordinal))
+            {
+                FlushParagraph();
+                var code = new List<string>();
+                i++;
+                while (i < lines.Length && !lines[i].TrimStart().StartsWith("```", StringComparison.Ordinal))
+                {
+                    code.Add(lines[i]);
+                    i++;
+                }
+
+                host.Children.Add(BuildCodeBlock(string.Join("\n", code)));
+                text = null;
+                continue;
+            }
+
+            if (trimmed.StartsWith(">", StringComparison.Ordinal))
+            {
+                FlushParagraph();
+                var quote = new List<string>();
+                while (i < lines.Length && lines[i].TrimStart().StartsWith(">", StringComparison.Ordinal))
+                {
+                    quote.Add(lines[i].TrimStart()[1..].Trim());
+                    i++;
+                }
+
+                i--;
+                host.Children.Add(BuildQuote(string.Join(" ", quote), foreground, fontSize, lineHeight));
+                text = null;
+                continue;
+            }
+
+            if (trimmed is "---" or "***" or "___")
+            {
+                FlushParagraph();
+                host.Children.Add(new Border
+                {
+                    Height = 1,
+                    Background = Res("DividerStrokeColorDefaultBrush"),
+                    Margin = new Thickness(0, 10, 0, 10),
+                });
+                text = null;
+                continue;
+            }
+
+            if (IsTableLine(trimmed) && i + 1 < lines.Length && IsTableLine(lines[i + 1].Trim()))
             {
                 FlushParagraph();
                 host.Children.Add(BuildTable(lines, i, foreground, out var consumed));
                 i = consumed;
-                text = null;      // 表格之后的文本另起一个 RichTextBlock
+                text = null;      
+                continue;
+            }
+
+            // 独占一行的图片：Markdown 写法 ![说明](地址)，或从 Word/网页粘贴的 <img src="…">。
+            if ((trimmed.StartsWith("![", StringComparison.Ordinal)
+                 || trimmed.StartsWith("<img", StringComparison.OrdinalIgnoreCase))
+                && TryImage(trimmed, out var alt, out var source))
+            {
+                FlushParagraph();
+                host.Children.Add(BuildImage(alt, source, foreground, fontSize));
+                text = null;
                 continue;
             }
 
@@ -168,14 +227,17 @@ public static class MarkdownText
             if (TryOrderedItem(trimmed, out var marker, out var rest))
             {
                 FlushParagraph();
-                EnsureText().Blocks.Add(MakeListItem(marker + "  ", rest));
+                EnsureText().Blocks.Add(MakeListItem(marker + "  ", rest, IndentOf(lines[i]) * 14));
                 continue;
             }
 
             if (TryBulletItem(trimmed, out var bulletRest))
             {
                 FlushParagraph();
-                EnsureText().Blocks.Add(MakeListItem("•  ", bulletRest));
+                var bullet = bulletRest.StartsWith("[ ]", StringComparison.Ordinal) ? "☐  "
+                    : bulletRest.StartsWith("[x]", StringComparison.OrdinalIgnoreCase) ? "☑  "
+                    : "•  ";
+                EnsureText().Blocks.Add(MakeListItem(bullet, TrimTaskBox(bulletRest), IndentOf(lines[i]) * 14));
                 continue;
             }
 
@@ -185,7 +247,63 @@ public static class MarkdownText
         FlushParagraph();
     }
 
-    /// <summary><c>#</c> / <c>##</c> / <c>###</c> 标题。</summary>
+    
+    /// <summary>代码块：等宽字体 + 卡片底 + 横向滚动，长行不折行。</summary>
+    private static Border BuildCodeBlock(string code)
+    {
+        var body = new TextBlock
+        {
+            Text = code,
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 13,
+            LineHeight = 20,
+            TextWrapping = TextWrapping.NoWrap,
+            IsTextSelectionEnabled = true,
+        };
+
+        return new Border
+        {
+            Background = Res("CardBackgroundFillColorDefaultBrush"),
+            BorderBrush = Res("CardStrokeColorDefaultBrush"),
+            BorderThickness = new Thickness(0.5),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 6, 0, 10),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Child = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = body,
+            },
+        };
+    }
+
+    /// <summary>引用块：左侧强调色竖线 + 次要色文字。</summary>
+    private static Border BuildQuote(string quote, Brush? foreground, double fontSize, double lineHeight)
+    {
+        var text = new RichTextBlock
+        {
+            FontSize = fontSize,
+            LineHeight = lineHeight,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextFillColorSecondaryBrush") ?? foreground,
+        };
+        var p = new Paragraph();
+        AppendInline(p, quote);
+        text.Blocks.Add(p);
+
+        return new Border
+        {
+            BorderBrush = Res("AccentFillColorDefaultBrush"),
+            BorderThickness = new Thickness(3, 0, 0, 0),
+            Padding = new Thickness(12, 2, 0, 2),
+            Margin = new Thickness(0, 4, 0, 10),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Child = text,
+        };
+    }
+
     private static Paragraph MakeHeading(string trimmed)
     {
         var level = 0;
@@ -202,13 +320,109 @@ public static class MarkdownText
         return p;
     }
 
-    /// <summary>列表项：标记（原样保留）+ 内容。</summary>
-    private static Paragraph MakeListItem(string marker, string rest)
+    
+    private static Paragraph MakeListItem(string marker, string rest, double indent = 0)
     {
-        var p = new Paragraph { Margin = new Thickness(0, 0, 0, 3) };
+        var p = new Paragraph
+        {
+            Margin = new Thickness(indent, 0, 0, 3),
+        };
         p.Inlines.Add(new Run { Text = marker });
         AppendInline(p, rest);
         return p;
+    }
+
+    /// <summary>独占一行的图片：![说明](地址) 或 &lt;img src="地址"&gt;。导出那边共用同一套判定。</summary>
+    internal static bool TryImage(string line, out string alt, out string source)
+    {
+        alt = "";
+        source = "";
+
+        var markdown = System.Text.RegularExpressions.Regex.Match(
+            line, @"^!\[([^\]]*)\]\(([^)\s]+)\)$");
+
+        if (markdown.Success)
+        {
+            alt = markdown.Groups[1].Value;
+            source = markdown.Groups[2].Value;
+            return source.Length > 0;
+        }
+
+        var tag = System.Text.RegularExpressions.Regex.Match(
+            line, @"<img\b[^>]*?\bsrc\s*=\s*[""'](?<src>[^""']+)[""'][^>]*>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (!tag.Success) return false;
+
+        source = System.Net.WebUtility.HtmlDecode(tag.Groups["src"].Value).Trim();
+        if (source.Length == 0) return false;
+
+        // 能取到 alt 或 title 就当说明文字。
+        var altMatch = System.Text.RegularExpressions.Regex.Match(
+            line, @"\balt\s*=\s*[""'](?<alt>[^""']*)[""']",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        alt = altMatch.Success ? System.Net.WebUtility.HtmlDecode(altMatch.Groups["alt"].Value) : "";
+        return true;
+    }
+
+    private static FrameworkElement BuildImage(string alt, string source, Brush? foreground, double fontSize)
+    {
+        try
+        {
+            var uri = source.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                || source.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+                ? new Uri(source)
+                : new Uri(System.IO.Path.GetFullPath(source));
+
+            var image = new Image
+            {
+                Source = new BitmapImage(uri) { DecodePixelWidth = 900 },
+                Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                MaxWidth = 680,
+            };
+
+            return new Border
+            {
+                Child = image,
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 8, 0, 12),
+            };
+        }
+        catch
+        {
+            // 地址解析不了就退回说明文字，不让整页渲染失败。
+            return new TextBlock
+            {
+                Text = alt.Length > 0 ? alt : source,
+                FontSize = fontSize,
+                Foreground = foreground,
+                Opacity = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 4, 0, 8),
+            };
+        }
+    }
+
+    private static string TrimTaskBox(string text)
+    {
+        if (text.StartsWith("[ ]", StringComparison.Ordinal)) return text[3..].TrimStart();
+        if (text.StartsWith("[x]", StringComparison.OrdinalIgnoreCase)) return text[3..].TrimStart();
+        return text;
+    }
+
+    private static int IndentOf(string raw)
+    {
+        var count = 0;
+        foreach (var ch in raw)
+        {
+            if (ch == ' ') count++;
+            else if (ch == '\t') count += 4;
+            else break;
+        }
+
+        return count;
     }
 
     private static bool TryBulletItem(string trimmed, out string rest)
@@ -224,14 +438,14 @@ public static class MarkdownText
         return true;
     }
 
-    // ══════════════════════════════════════════════════════
-    //  表格
-    // ══════════════════════════════════════════════════════
+    
+    
+    
 
-    /// <summary>是不是 <c>|---|:--:|---|</c> 这种分隔行（去掉竖线、冒号、横线和空白后什么都不剩）。</summary>
+    
     private static bool IsTableDivider(string line)
     {
-        var trimmed = line.Trim();
+        var trimmed = line.Trim().Replace('｜', '|');
         if (trimmed.Length == 0 || trimmed[0] != '|') return false;
 
         foreach (var ch in trimmed)
@@ -243,10 +457,14 @@ public static class MarkdownText
         return trimmed.Count(ch => ch == '-') >= 3;
     }
 
-    /// <summary>切一行表格：去掉首尾竖线再按竖线分区。</summary>
+    /// <summary>表格行：以半角或全角竖线开头。中文输入法下常打出全角 ｜。</summary>
+    private static bool IsTableLine(string trimmed)
+        => trimmed.Length > 0 && (trimmed[0] == '|' || trimmed[0] == '｜');
+
+    
     private static List<string> SplitRow(string line)
     {
-        var trimmed = line.Trim();
+        var trimmed = line.Trim().Replace('｜', '|');
         if (trimmed.StartsWith('|')) trimmed = trimmed[1..];
         if (trimmed.EndsWith('|')) trimmed = trimmed[..^1];
 
@@ -255,19 +473,25 @@ public static class MarkdownText
         return cells;
     }
 
-    /// <summary>
-    /// 从 <paramref name="start"/> 起把一整张表建成圆角边框包着的 <see cref="Grid"/>。
-    /// </summary>
-    /// <param name="consumed">最后一行表格的下标（调用方据此跳过）。</param>
+    
+    
+    
+    
     private static Border BuildTable(string[] lines, int start, Brush? foreground, out int consumed)
     {
         var rows = new List<List<string>> { SplitRow(lines[start]) };
 
-        var i = start + 2;      // 跳过表头与分隔行
+        var i = start + 1;
+
+        // 对齐行（| --- | :--: |）不是数据行，有就跳过。
+        if (i < lines.Length && IsTableDivider(lines[i].Trim())) i++;
+
+        // 只要后面还是竖线行就继续收，不再强制要求有对齐行 ——
+        // 从 Word、网页粘贴过来的表经常没有对齐行（2026-11-21）。
         while (i < lines.Length)
         {
             var trimmed = lines[i].Trim();
-            if (trimmed.Length == 0 || trimmed[0] != '|') break;
+            if (!IsTableLine(trimmed)) break;
 
             rows.Add(SplitRow(trimmed));
             i++;
@@ -278,7 +502,7 @@ public static class MarkdownText
         var columns = 1;
         foreach (var row in rows) columns = Math.Max(columns, row.Count);
 
-        // 列宽按内容长度分配：给每列一个下限，免得「软件」这种两字列被挤成一条缝
+        
         var weights = new double[columns];
         foreach (var row in rows)
             for (var c = 0; c < columns; c++)
@@ -349,12 +573,12 @@ public static class MarkdownText
         };
     }
 
-    /// <summary>去掉行内标记，表格单元格只显示纯文本（`**` / 反引号 / 链接语法）。</summary>
+    
     private static string PlainText(string text)
     {
         var s = text.Replace("**", "", StringComparison.Ordinal).Replace("`", "", StringComparison.Ordinal);
 
-        // [文字](url) → 文字（表格里放不下链接，留文字就够）
+        
         var open = s.IndexOf('[');
         while (open >= 0)
         {
@@ -371,11 +595,11 @@ public static class MarkdownText
         return s.Trim();
     }
 
-    /// <summary>取主题资源里的画刷（取不到就返回 null，UI 仍然可用）。</summary>
+    
     private static Brush? Res(string key) =>
         Application.Current.Resources.TryGetValue(key, out var value) ? value as Brush : null;
 
-    /// <summary>识别「1. 」开头的有序列表项，marker 原样保留（不重新编号）。</summary>
+    
     private static bool TryOrderedItem(string line, out string marker, out string rest)
     {
         marker = "";
@@ -393,25 +617,65 @@ public static class MarkdownText
         return true;
     }
 
-    /// <summary>
-    /// 行内解析：只认 <c>**粗体**</c> 和 <c>`代码`</c>。
-    /// 用最简单的分隔符切分 —— 成对的星号交替出现即为粗体区间。
-    /// </summary>
-    private static void AppendInline(Paragraph paragraph, string text)
+    
+    
+    
+    
+    /// <summary>行内标记渲染：粗体、斜体、删除线、行内代码、链接。<see cref="MarkdownView"/> 复用同一套。</summary>
+    internal static void AppendInline(Paragraph paragraph, string text)
     {
         if (text.Length == 0) return;
 
-        var bold = text.Split("**");
-        for (var i = 0; i < bold.Length; i++)
-        {
-            if (bold[i].Length == 0) continue;
+        var pattern = new System.Text.RegularExpressions.Regex(
+            @"\*\*(?<bold>[^*]+)\*\*|\*(?<italic>[^*]+)\*|`(?<code>[^`]+)`|\[(?<lt>[^\]]+)\]\((?<lu>[^)]+)\)");
 
-            var isBold = i % 2 == 1;
-            AppendCode(paragraph, bold[i], isBold);
+        var last = 0;
+        foreach (System.Text.RegularExpressions.Match m in pattern.Matches(text))
+        {
+            if (m.Index > last) paragraph.Inlines.Add(new Run { Text = text[last..m.Index] });
+
+            if (m.Groups["bold"].Success)
+            {
+                paragraph.Inlines.Add(new Run
+                {
+                    Text = m.Groups["bold"].Value,
+                    FontWeight = FontWeights.SemiBold,
+                });
+            }
+            else if (m.Groups["italic"].Success)
+            {
+                paragraph.Inlines.Add(new Run
+                {
+                    Text = m.Groups["italic"].Value,
+                    FontStyle = Windows.UI.Text.FontStyle.Italic,
+                });
+            }
+            else if (m.Groups["code"].Success)
+            {
+                paragraph.Inlines.Add(new Run
+                {
+                    Text = m.Groups["code"].Value,
+                    FontFamily = new FontFamily("Consolas"),
+                });
+            }
+            else if (m.Groups["lt"].Success)
+            {
+                var link = new Hyperlink
+                {
+                    NavigateUri = Uri.TryCreate(m.Groups["lu"].Value.Trim(), UriKind.Absolute, out var uri) ? uri : null,
+                    Foreground = Res("AccentTextFillColorPrimaryBrush"),
+                };
+                link.Inlines.Add(new Run { Text = m.Groups["lt"].Value });
+                paragraph.Inlines.Add(link);
+            }
+
+            last = m.Index + m.Length;
         }
+
+        if (last < text.Length) paragraph.Inlines.Add(new Run { Text = text[last..] });
     }
 
-    /// <summary>段内再切一层反引号，代码片段用等宽字体。</summary>
+    
     private static void AppendCode(Paragraph paragraph, string text, bool bold)
     {
         var parts = text.Split('`');

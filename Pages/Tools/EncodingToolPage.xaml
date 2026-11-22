@@ -6,19 +6,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:tools="using:ClassSoftwareHub.Desktop.Pages.Tools">
 
-    <!-- ═══ 2026-10-02 四次重排（Nick：「所有块都是方块包方块，像一张填满格子的 Excel」）═══
-         前三版一直在解决"拖拽区占篇幅""哈希值被挤到下面"这类比例问题，
-         但外壳一直没动过 —— 每个功能块都套一张手写 Border，四层叠下来又厚又平，没有层级。
+    
 
-         这一版按"能少一层就少一层"重排：
-           ① 「用途」从两张并排大卡降级为**一行原生 RadioButton**（两个选项照样都看得见）；
-           ② 拖拽区从"描边卡片"改成**淡色底、不描边**的扁平块，只保留一条提示语；
-           ③ 核对行去掉卡片外壳，标签交给 TextBox 自带的 Header；
-           ④ 四条哈希值改用 **ListView 承载**（CshResultRowStyle）：每行自带系统悬停底色，
-              最外面那张大卡片整个删掉 —— 只读结果不该长得像能编辑的表格。
-         仅"输入文本 / 输出结果"两块仍保留卡片：它们确实是两个互不相干的模块。 -->
+
+
+
+
+
+
+
+
+
     <Page.Resources>
-        <!-- 一条哈希值：算法名（定宽）· 值（占满、长了折行、可拖选）· 复制 -->
+        
         <DataTemplate x:Key="HashRowTemplate" x:DataType="tools:HashRow">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -37,9 +37,9 @@
         </DataTemplate>
     </Page.Resources>
 
-    <!-- ⚠️ Background="Transparent" 是给滚轮接力用的（见 Core/WheelRelay.cs）：不画任何像素，
-         但要让两侧留白参与命中测试 —— 否则鼠标停在留白上滚，内容区纹丝不动（与首页手感不一致）。
-         本页真正的滚动区是中间那行（Grid.Row=2 里互斥的 FileView / TextView），标题行/两侧留白靠接力兜。 -->
+    
+
+
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="1*" />
@@ -60,29 +60,26 @@
                            Text="校验文件哈希，也可对文本做 Base64 / URL 编解码。" />
             </StackPanel>
 
-            <!-- 用途：一行原生单选，不再占掉两张卡片的高度。
-                 ⚠️ MinWidth 必须清零（RadioButton 默认 120）；IsChecked 一律在代码里赋初值。 -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="用途" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,2,0" />
-                <RadioButton x:Name="FileTab" GroupName="EncMode" Content="校验文件" MinWidth="0"
-                             AutomationProperties.Name="校验文件" Checked="Mode_Changed" />
-                <RadioButton x:Name="TextTab" GroupName="EncMode" Content="文本编解码" MinWidth="0"
-                             AutomationProperties.Name="文本编解码" Checked="Mode_Changed" />
-            </StackPanel>
+            
+
+            <SelectorBar x:Name="ModeBar" Grid.Row="1" SelectionChanged="ModeBar_SelectionChanged">
+                <SelectorBarItem Text="校验文件" Tag="file" IsSelected="True" />
+                <SelectorBarItem Text="文本编解码" Tag="text" />
+            </SelectorBar>
 
             <Grid Grid.Row="2">
-                <!-- ══════════ 文件校验 ══════════ -->
+                
                 <ScrollViewer x:Name="FileView" VerticalScrollBarVisibility="Auto">
-                    <!-- ⛔ 底部 Margin 是保险栓：外层 Grid 的 Padding 底部在滚动区**之外**，
-                         实测滚到底仍会贴住窗口底边 —— 留白必须写在滚动区**里**。 -->
+                    
+
                     <StackPanel Spacing="10" Margin="0,0,0,20">
 
-                        <!-- 从软件详情页的「校验」键跳进来时才有：说明校验值是从哪来的 -->
+                        
                         <TextBlock x:Name="FromAppHint" Visibility="Collapsed" FontSize="12"
                                    TextWrapping="Wrap" Opacity="0.85" />
 
-                        <!-- ① 选文件：一条扁平横条，整条都能拖、能点 ——
-                             只铺一层淡底、不描边，不再是"又一张卡片"。 -->
+                        
+
                         <Border x:Name="DropZone" Padding="14,12,14,12" CornerRadius="4" BorderThickness="0"
                                 Background="{ThemeResource ControlFillColorDefaultBrush}"
                                 AllowDrop="True" Tapped="DropZone_Tapped"
@@ -116,7 +113,7 @@
 
                         <ProgressBar x:Name="HashProgress" IsIndeterminate="True" Visibility="Collapsed" />
 
-                        <!-- ② 核对：标签用 TextBox 自带的 Header，不再额外套一层卡片 -->
+                        
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -125,13 +122,13 @@
                             <TextBox x:Name="ExpectedBox" Header="核对官方哈希值"
                                      PlaceholderText="粘贴 MD5 / SHA-1 / SHA-256 / SHA-512 值，忽略空格与大小写"
                                      FontFamily="Consolas" FontSize="12" TextChanged="Expected_TextChanged" />
-                            <!-- 结论跟输入框**本体**对齐（不是跟它的标题对齐），粘完一眼就看到 -->
+                            
                             <TextBlock x:Name="MatchText" Grid.Column="1" FontSize="14" FontWeight="Bold"
                                        VerticalAlignment="Bottom" Margin="0,0,0,8"
                                        MaxWidth="300" TextWrapping="Wrap" />
                         </Grid>
 
-                        <!-- ③ 结果：四条只读哈希值，交给 ListView 承载（每行自带悬停底色） -->
+                        
                         <TextBlock Text="文件哈希值" FontSize="14" FontWeight="Bold" Margin="0,4,0,2" />
                         <ListView x:Name="HashPanel"
                                   SelectionMode="None" IsItemClickEnabled="False"
@@ -141,10 +138,10 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 文本编解码 ══════════ -->
+                
                 <ScrollViewer x:Name="TextView" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
-                    <!-- ⛔ 底部 Margin 是保险栓：外层 Grid 的 Padding 底部在滚动区**之外**，
-                         实测滚到底仍会贴住窗口底边 —— 留白必须写在滚动区**里**。 -->
+                    
+
                     <StackPanel Spacing="10" Margin="0,0,0,20">
                         <Grid ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
@@ -163,7 +160,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="输入文本" FontSize="14" FontWeight="Bold"
                                                    VerticalAlignment="Center" />
-                                        <!-- 清空：原来只能全选删掉，贴一大段文本后想重来很别扭 -->
+                                        
                                         <Button Grid.Column="1" Content="清空" Click="ClearInput_Click"
                                                 Padding="10,2,10,2" FontSize="12" />
                                     </Grid>
@@ -171,8 +168,8 @@
                                              PlaceholderText="输入文本（支持中文）" FontFamily="Consolas" FontSize="12"
                                              TextChanged="Input_TextChanged" />
 
-                                    <!-- 四个按钮平铺分不清哪个是哪种编码 → 改成"左边给算法、右边给方向"的表格型排布，
-                                         同一列永远是同一个动作（右=解码），肌肉记忆直接建立。 -->
+                                    
+
                                     <Grid ColumnSpacing="8" RowSpacing="8">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
@@ -219,7 +216,7 @@
                             </Border>
                         </Grid>
 
-                        <!-- 文本的哈希：跟输入框实时联动，所以单独成一块，不与"文件哈希"共用显示区 -->
+                        
                         <TextBlock Text="这段文本的哈希值" FontSize="14" FontWeight="Bold" Margin="0,4,0,0" />
                         <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap"
                                    Text="随上方输入框的内容实时计算，无需单击任何按钮。" />

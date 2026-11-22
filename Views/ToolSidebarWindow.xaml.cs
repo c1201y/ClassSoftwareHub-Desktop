@@ -15,73 +15,75 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Text;
 using Windows.Graphics;
+using Windows.Storage;
 using WinRT.Interop;
 
 namespace ClassSoftwareHub.Desktop.Views;
 
-/// <summary>
-/// 屏幕边缘侧边栏：贴在屏幕的某一条边上（上下左右都能放）。
-/// 全屏放 PPT / 视频时够不到任务栏，从边上点一下就能用工具。
-///   · 收起 = 一小截圆角抓手（亚克力底）：点一下展开；**按住可以拖**着挪位置、或拖到别的边
-///   · 展开 = 工具 + 「收起 / 常驻 / 位置复原 / 隐藏 / 打开应用」（展开状态下不能拖，免得跟点按钮打架）
-/// 位置（贴哪条边 + 沿边位置）会记在设置里；「位置复原」= 回到右边的居中位置。
-/// 置顶、不进任务栏、无标题栏、不能缩放/最大化/最小化。
-///
-/// ⚠️ 2026-09-27（Nick）：**左右两边可以同时显示**（设置里选「左右两边」= <c>SidebarEdge</c> 为 "both"）。
-/// 所以它不再是个单例 —— 见 <see cref="_pool"/>：一条边一个实例，设置里的 "both" 会被拆成 left + right 两条。
-/// 两条共享 <c>SidebarPosRatio</c>，上下位置天然一致；拖任意一条时对面实时跟随（<see cref="FollowPartner"/>）。
-/// 上边 / 下边**只有单条**（Nick：横着放一条就够了）。
-///
-/// ⚠️ 2026-09-28（Nick）：再加**两种模式**（<c>SidebarMode</c>）——
-///   · <c>dock</c> 贴靠模式：**只贴左右两条边**（可选「左右两边」同时显示两条），沿边位置共用
-///     <c>SidebarPosRatio</c>；上/下边**不归它管**。
-///   · <c>free</c> 自由模式：**四条边都能吸**（左/右/上/下），贴哪条边存 <c>SidebarFreeEdge</c>，
-///     贴上/下边时是横条。它**不是**"浮在屏幕中间不吸边"—— 侧边栏永远吸在某条边上。
-/// 两种模式走的是**同一套**实例池与吸附逻辑（<see cref="_pool"/> / <see cref="SyncInstances"/>），
-/// 差别只在"允许哪几条边"（见 <see cref="DesiredEdges"/>）与"松手时把边存进哪个设置"（<see cref="DockToNearestEdge"/>）。
-///
-/// 用法：<c>ToolSidebarWindow.ShowSidebar()</c> / <c>HideSidebar()</c> / <c>ApplySetting()</c>。
-/// </summary>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public sealed partial class ToolSidebarWindow : Window
 {
-    // ── 收起态那颗「悬浮按钮」的尺寸（2026-10-11 二次定稿）──
-    //
-    // 来龙去脉（⛔ 别再往回走）：
-    //   · 13:xx Nick 要"再细一些、再小一些，判定区域可以扩大点，方便触屏点" ⇒ 于是把窗口做成
-    //     比看得见的小条**大一圈**，那圈当触摸判定区，靠"透明窗口"藏起来
-    //     （TransparentBackdrop + 分层窗口 + DwmExtendFrameIntoClientArea）。
-    //   · 15:4x Nick 反馈：**那圈一直带着一道阴影**，宁可不要 ——
-    //     「算了，判定区去掉吧，只要点的时候方便能点到就行」。
-    //     那道阴影就是 DwmExtendFrameIntoClientArea(-1×4) 让 DWM 把整窗当 frame 画出来的边。
-    //   ⇒ 回归「**窗口 = 看得见的小条**」，两者一个尺寸，没有那圈，也就没有阴影；
-    //     窗口背景不用再玩透明的花样（整条亚克力即可）—— 那一整套已随本轮一并删掉。
-    //
-    // 取值（dip）：标准档＝原样 20×110；紧凑档比原来的 16×88 再细一点（12×72）。
-    private const int CollapsedThicknessDip = 20;        // 标准档：厚度（竖条=宽，横条=高）
-    private const int CollapsedLengthDip = 110;          // 标准档：长度（竖条=高）
-    private const int CollapsedCompactThicknessDip = 12; // 紧凑档：厚度（"一条小竖线"的味儿）
-    private const int CollapsedCompactLengthDip = 72;    // 紧凑档：长度
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    private const int CollapsedThicknessDip = 20;        
+    private const int CollapsedLengthDip = 110;          
+    private const int CollapsedCompactThicknessDip = 12; 
+    private const int CollapsedCompactLengthDip = 72;    
 
-    /// <summary>
-    /// 收起态那条离屏幕边缘留多少 dip —— **用户可改**（「侧边布局」页的「收起时离屏幕边缘」，
-    /// 见 <c>AppSettings.SidebarCollapsedGap</c>；2026-10-11：有用户不喜欢那道缝，做成可选）。
-    /// 原先是写死的 6，现在 <see cref="CollapsedGapDip"/> 读设置、这里只当**默认值**兜底。
-    ///
-    /// ⚠️ 只作用于**收起态**：展开态照旧紧贴（面板悬空一条缝会很难看）。
-    /// ⚠️ 连带 <see cref="ConfirmPlacement"/> 里"这条边"的判定阈值必须跟着放宽 ——
-    ///    它原来拿 `work.X + 8` 当"贴左"的判据，空隙一大就认不出来了。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private const int CollapsedEdgeGapDip = 6;
 
-    /// <summary>离屏幕边缘最多能留多少（dip）—— 再大就不是"贴边"了。</summary>
+    
     private const int MaxCollapsedGapDip = 24;
 
-    /// <summary>
-    /// 当前该留的空隙（dip）：读设置并夹到 <c>0 ~ MaxCollapsedGapDip</c>。
-    /// ⚠️ 夹取不能省：存档里躺着一个离谱的值时，边条会被推到屏幕中间去。
-    /// </summary>
+    
+    
+    
+    
     private static int CollapsedGapDip
     {
         get
@@ -98,37 +100,37 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    private const int PanelThicknessDip = 92;       // 展开后的厚度（竖着放时=宽）
-    /// <summary>
-    /// ⛔ <b>已不参与高度计算</b>（2026-10-11 起改成按内容实测，见 <c>ExpandedHeight</c>）。
-    /// 留着只是因为下面那段说明还在解释老算法为什么"模块少还空一大块"。
-    /// </summary>
-    private const int PanelLengthDip = 450;         // 展开后的长度（竖着放时=高）—— 旧算法的下限
-    private const int PanelThicknessFlatDip = 112;  // 上/下边时：两行（工具一行、按钮一行）的高度
-    private const int PanelLengthFlatDip = 470;     // 上/下边时：展开面板长度的**下限**（真实宽度按内容算，见 PlannedSize）
+    private const int PanelThicknessDip = 92;       
+    
+    
+    
+    
+    private const int PanelLengthDip = 450;         
+    private const int PanelThicknessFlatDip = 112;  
+    private const int PanelLengthFlatDip = 470;     
 
-    /// <summary>展开面板高度占比的允许区间（「侧边布局」页那根滑块的上下限）。</summary>
+    
     public const double MinHeightRatio = 0.45;
     public const double MaxHeightRatio = 0.95;
-    /// <summary>没调过时的默认占比（2026-10-12 从 0.65 抬到 0.75 的那一档）。</summary>
+    
     public const double DefaultHeightRatio = 0.75;
 
-    /// <summary>
-    /// 单列（竖着一条）时，展开面板最多能占工作区高度的几成。
-    ///
-    /// 来历：Nick 2026-10-11「一列下来的时候还是长长的一长条，太长了，要加个限高」→ 先写死 0.65，
-    /// 10-12 又说「有点太少，稍微再扩大一点」→ 0.75。**2026-10-18 Nick 定：别再替他调了，
-    /// 把这个通道开放给用户自己拖**（0.45～0.95，默认 0.75，见「侧边布局 → 展开面板高度」）。
-    /// 存档字段 <c>AppSettings.SidebarHeightRatio</c>；⛔ 别再把这里改回 const。
-    ///
-    /// 为什么只管单列：每行三个时行数天然少（14 个模块也才 5 行），用不着限；横条是固定厚度，也不走这里。
-    /// 单列才是一路往下排、模块一多就顶到工作区下沿的那一种。
-    ///
-    /// ⚠️ 它**只是封顶，不是"给个固定高度"**：面板高度仍然由 <c>ExpandedHeight</c> 按内容 Measure 实测，
-    ///    模块少的时候该多矮就多矮（2026-10-11 才从"按个数算高度"改成实测 —— 那正是
-    ///    「模块少还空一大块」的根因，⛔ 别改回去）。超出的部分交给工具区滚动：
-    ///    <c>ApplyScrollLimit</c> 里的 <c>ToolsScroll.MaxHeight</c> 就是拿这个上限算出来的。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static double SingleColumnMaxHeightRatio
     {
         get
@@ -136,7 +138,7 @@ public sealed partial class ToolSidebarWindow : Window
             try
             {
                 var v = App.Settings.Current.SidebarHeightRatio;
-                // 存档里可能是 0（老档没这个键）、NaN、或者被人手改成离谱值 —— 一律夹回来
+                
                 if (double.IsNaN(v) || v <= 0) return DefaultHeightRatio;
                 return Math.Clamp(v, MinHeightRatio, MaxHeightRatio);
             }
@@ -147,12 +149,12 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 展开面板高度是否**跟随内容**（2026-10-18 Nick：要一个能自己缩的开关）。
-    /// · true = 自适应：高度按里面模块实测，<see cref="SingleColumnMaxHeightRatio"/> 只当上限；
-    /// · false = 锁定：高度就是「占比 × 工作区高度」，模块少时下面留白。
-    /// 存档字段 <c>AppSettings.SidebarHeightAuto</c>，默认 true（= 保持原来那套"按内容实测"的行为）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static bool HeightAuto
     {
         get
@@ -162,113 +164,113 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 收起动画的第二段：面板滑出屏幕之后，**抓手从屏幕外滑回贴边位**要花的毫秒（2026-10-01）。
-    /// 第一段是 <see cref="SlideOutToEdge"/> 的 240ms（整个面板推出屏幕）。两段加起来 ≈ 430ms。
-    /// 抓手的行程很短（只有自身厚度 20dip + 2px ≈ 27px），所以这段比第一段快一些才跟得上。
-    /// </summary>
+    
+    
+    
+    
+    
     private const double CollapseSlideMs = 190;
 
-    /// <summary>
-    /// 底部按钮那一排在竖条里的高度增量 —— <b>五颗全显</b>时的经验值（2026-09-27 定的）。
-    /// 注意它**不是**五颗的真实高度（那是 5×44 + 4×2 = 228）：面板高度基数
-    /// <see cref="PanelLengthDip"/>（450）里本来就已经含了标题和一段留白，这 94 只是把五颗"补齐"。
-    /// ⚠️ 2026-09-29 底排改成**逐颗开关**后，这里必须按**可见颗数**摊算（见 <see cref="FooterDipFor"/>），
-    ///    别改写成 <c>n × 44</c> 这种"真实高度" —— 会跟 450 的基数重复计算，面板凭空长一截。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private const int FooterBaseDip = 94;
 
-    /// <summary>底排可见 <paramref name="visible"/> 颗时，竖条高度里的增量（0 颗 = 完全不留）。</summary>
+    
     private static int FooterDipFor(int visible) =>
         visible <= 0 ? 0 : (int)Math.Round(FooterBaseDip * visible / 5.0);
 
-    /// <summary>
-    /// 上/下边（横条）下**只有工具那一行**时的高度（= 底排一颗都不显示）。
-    /// 两行版是 <see cref="PanelThicknessFlatDip"/>（112）；底排一颗都没有时只剩一行，
-    /// 面板上下的 padding（5+6）+ 外框（2）+ 工具按钮的行高（图标 20 + 间距 3 + 文字 11 ≈ 54）
-    /// ≈ 67，给几像素余量取 72。不跟着缩的话底下会空出一大块；反过来给小了会把按钮裁掉。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private const int PanelThicknessFlatBareDip = 72;
 
-    // 上/下边（横条）时底排按钮的排版参数。
-    // ⚠️ 横条宽度必须容得下**底排这一整排**（见 PlannedSize），不然最后一颗会被面板裁掉 ——
-    //    2026-09-27 用户截图就是这个：「打开应用」只露出半个「打」字。
-    private const int FooterFlatButtonWidthDip = 104;   // 底排每个按钮的最小宽度
-    private const int FooterFlatSpacingDip = 8;         // 底排按钮之间的间距
-    private const int FlatRowPadDip = 24;               // 横条里每一行的左右内边距 + 余量
+    
+    
+    
+    private const int FooterFlatButtonWidthDip = 104;   
+    private const int FooterFlatSpacingDip = 8;         
+    private const int FlatRowPadDip = 24;               
 
-    /// <summary>
-    /// 按边缓存的窗口实例（键 = left | right | top | bottom）。
-    ///
-    /// ⚠️ 2026-09-27（Nick 需求）：竖直状态要能**左右同时**有侧边栏，所以从"单例"改成了"一条边一个实例"。
-    /// 建过的实例留着复用 —— 切边只是显隐，不反复建窗。当前该显示哪几条见 <see cref="SyncInstances"/>。
-    /// 设置里的 "both" 在这儿会被拆成 left + right 两个实例，每个实例的边存在 <see cref="_edge"/>（不读设置）。
-    /// 换边 / 换模式都只是改这个字典里"该显示哪几条" —— 同一条路（<see cref="SyncInstances"/>）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private static readonly Dictionary<string, ToolSidebarWindow> _pool = new();
 
-    /// <summary>这条实例贴的边：left | right | top | bottom。**实例级** —— 设置里那个 "both" 是拆出来的两条，不是它的值。</summary>
+    
     private readonly string _edge;
 
     private AppWindow? _appWindow;
     private bool _expanded;
 
-    /// <summary>
-    /// 沿边位置比例（0~1，-1 = 居中）。
-    ///
-    /// 内存里的实时值，拖动期间必须无条件更新（原先只有双边模式更新，单边永远居中）。
-    /// 存档那份在 <see cref="SettingsStore.SidebarPosRatio"/>：**松手时写**（<see cref="DockToNearestEdge"/>）、
-    /// **启动/重建时读**（<see cref="SyncInstances"/>）。2026-10-24 按 Nick 要求恢复了这条路。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private double _liveRatio = -1;
 
-    private int _collapseEpoch;                            // 收起滑出/抓手淡入的批次号：展开、再次收起都能把它作废
+    private int _collapseEpoch;                            
     private bool _shownOnce;
     private bool _visible;
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _idle;
 
-    /// <summary>展开滑动用的渲染循环帧回调（滑完置空）。⚠️ 见 <see cref="TweenWindow"/>。</summary>
+    
     private EventHandler<object>? _slideFrame;
 
-    /// <summary>渲染循环万一停摆（窗口被藏、渲染暂停）时的收尾兜底定时器。</summary>
+    
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _slideWatchdog;
 
-    /// <summary>滑动的**落点存档**（目标位置）。滑动进行中 <see cref="CurrentRect"/> 返回它，
-    /// 别让锚定方（音量浮窗）读到半路上的实时位置 —— 锚到半路的位置，等边条滑到位两个就叠上了（2026-10-01 修）。</summary>
+    
+    
     private Windows.Graphics.RectInt32? _restRect;
 
-    /// <summary>
-    /// 滑动动画的"代次"。每次状态变化（收起/展开/拖动/隐藏）都 +1，让**还在跑的那一波动画立刻作废**。
-    /// 没有它就会出现"展开到一半快速点收起 → 动画的后续帧又把窗口挪回去"的竞态（按钮跑到左上角就是这么来的）。
-    /// </summary>
+    
+    
+    
+    
     private int _slideEpoch;
 
-    /// <summary>展开面板里的工具按钮（按「侧边布局」的模块清单动态生成，见 BuildToolButtons）。</summary>
+    
     private readonly List<Button> _toolButtons = new();
 
-    /// <summary>当前那个"要先问一句"的原生 Flyout（一次只有一个）。</summary>
+    
     private Flyout? _confirmFlyout;
 
-    /// <summary>「安全选项」那颗键弹出来的菜单浮层（锁定 / 切换用户 / 注销）。</summary>
+    
     private Flyout? _securityFlyout;
 
-    /// <summary>「PPT 触控」那颗键弹出来的菜单浮层（触控手势 / 长按菜单 两个开关）。</summary>
+    
     private Flyout? _pptFlyout;
 
-    /// <summary>「收起」键的那个图标（内容会按贴边重建，所以要留住当前这个实例才好换箭头方向）。</summary>
+    
     private FontIcon? _foldIcon;
 
-    /// <summary>「常驻」键的图标（同上，钉住/松开要换样子）。</summary>
+    
     private FontIcon? _pinIcon;
 
-    /// <summary>
-    /// 暂时压住"自动收起"（按住型动作、以及"还有话要问用户"的确认面板期间）。
-    ///
-    /// ⚠️ 这必须在**自己会过期**：早先写成普通 bool，一旦设了 true 而对面又没回来清（比如面板没弹出来、
-    /// 用户压根没理），侧边栏就**永远不再自动收起**了 —— 真出过这个 bug。
-    /// 现在本质是"压到某个时间点为止"，最长 `SuppressMaxSeconds`，到点自己恢复。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     public static bool SuppressAutoCollapse
     {
         get => DateTime.Now < _suppressUntil;
@@ -277,30 +279,30 @@ public sealed partial class ToolSidebarWindow : Window
 
     private static DateTime _suppressUntil = DateTime.MinValue;
 
-    /// <summary>压住自动收起的最长时间（秒）。确认面板活 10 秒，这里给够余量。</summary>
+    
     private const int SuppressMaxSeconds = 15;
 
-    /// <summary>
-    /// 侧边栏当前在屏幕上的矩形（给"挨着它弹提示"用）；还没建/拿不到就返回 null。
-    ///
-    /// ⚠️ 左右两条同时显示时这里**优先右边那条**（历史默认，见 <see cref="AnchorInstance"/>）。
-    ///    所以但凡"必须锚到某一条指定的边"的调用方（音量浮窗），请改用 <see cref="RectOf"/> 指名道姓，
-    ///    ⛔ 别再用这个"猜一条"的入口 —— 2026-10-11 Nick 报的
-    ///    「贴靠模式 + 左右都开，点左边边条的音量，浮窗却从右边弹出来」就是栽在这个"优先右"上。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     public static Windows.Graphics.RectInt32? CurrentRect => RectOfInstance(AnchorInstance());
 
-    /// <summary>
-    /// **指定那条边**上的边条矩形 —— 谁开的浮窗就锚谁（2026-10-11 修「浮窗从右边冒出来」）。
-    /// 那条边没有可见实例时（自由模式换过边、边条被重建）退回 <see cref="CurrentRect"/>。
-    /// </summary>
+    
+    
+    
+    
     public static Windows.Graphics.RectInt32? RectOf(string edge)
     {
         if (_pool.TryGetValue(edge, out var w) && w._visible) return RectOfInstance(w);
         return CurrentRect;
     }
 
-    /// <summary>那条边上现在有没有可见的实例（判断"这个 edge 还算不算数"用）。</summary>
+    
     public static bool IsEdgePresent(string edge) => _pool.TryGetValue(edge, out var w) && w._visible;
 
     private static Windows.Graphics.RectInt32? RectOfInstance(ToolSidebarWindow? w)
@@ -308,8 +310,8 @@ public sealed partial class ToolSidebarWindow : Window
         if (w?._appWindow is null) return null;
         try
         {
-            // 滑动进行中：返回落点存档（动画的目标位置）。实时位置还在半路上，
-            // 锚定方拿到它会把自己的落座点算歪，等边条滑到位就叠上了。
+            
+            
             if (w._slideFrame is not null && w._restRect is { } rest) return rest;
 
             var pos = w._appWindow.Position;
@@ -322,7 +324,7 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>挑一条"可见的"实例当锚点：优先右边 → 再任意一条可见的 → 都没有就 null。</summary>
+    
     private static ToolSidebarWindow? AnchorInstance()
     {
         if (_pool.TryGetValue("right", out var r) && r._visible) return r;
@@ -330,18 +332,18 @@ public sealed partial class ToolSidebarWindow : Window
         return null;
     }
 
-    /// <summary>
-    /// 侧边栏**当前实际**贴的那条边（音量浮窗按它决定往哪边排）。
-    ///
-    /// ⚠️ 绝不能用 <c>App.Settings.Current.SidebarEdge</c> 代替：那条是**停靠模式**的设置，
-    ///    **自由模式**下它可能还是老值（`SidebarFreeEdge` 才是真身），用户还能把边条拖到任意一边。
-    ///    读错方向的后果（2026-10-01 踩到）：浮窗被摆到边条的**另一侧**（等于屏幕外）→
-    ///    又被 ClampToWork 夹回屏幕边缘 → 正好压在边条（乃至合成器）身上，看着就是"三个窗叠一起"。
-    ///
-    /// ⚠️⚠️ 这里同样是"**猜**一条边"：左右两条同时显示时优先右边（<see cref="AnchorInstance"/>）。
-    ///    所以音量浮窗**不该**再拿它当依据 —— 它现在记着"是谁开的"，只是在那条边没了的时候
-    ///    才退回到这里兜底（见 <c>VolumeWindow.Edge</c>）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public static string CurrentEdge
     {
         get
@@ -351,7 +353,7 @@ public sealed partial class ToolSidebarWindow : Window
                 var inst = AnchorInstance();
                 if (inst is not null) return inst._edge;
 
-                // 没有可见实例：按设置推一个（音量浮窗一直挂右边，双双模式也取右）
+                
                 var want = DesiredEdges();
                 return want.Contains("right") ? "right" : want[0];
             }
@@ -362,27 +364,27 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    // 收起状态下的拖拽（屏幕坐标算，别用窗口内坐标，会自己滚起来）
+    
     private bool _pressed;
     private bool _dragging;
     private POINT _dragStart;
     private PointInt32 _dragOrigin;
-    private double _pressInWindowDipX;        // 触摸/笔：按下时手指在窗口里的位置（DIP）
+    private double _pressInWindowDipX;        
     private double _pressInWindowDipY;
-    private bool _useSnapToFinger;            // true = 触摸/笔，走"窗口跟着手指走"算法
-    private int _pressOffsetPx;               // 按下时手指在窗口里的物理偏移（绝对坐标拖动用）
+    private bool _useSnapToFinger;            
+    private int _pressOffsetPx;               
     private int _pressOffsetPy;
-    private bool _loggedSource;               // 这次拖动记过"坐标源"了吗（每拖只记一次）
-    private int _lastTargetX;                 // 上一次真正发出去的目标位置（相同就别重复 Move）
+    private bool _loggedSource;               
+    private int _lastTargetX;                 
     private int _lastTargetY;
-    private int _dragSamples;                 // 诊断用：这次拖动记了几条样本
+    private int _dragSamples;                 
 
     private ToolSidebarWindow(string edge)
     {
         _edge = edge;
         InitializeComponent();
 
-        // 展开后没人动 → 自己收回去（触屏没地方"点空白处收起"）
+        
         _idle = DispatcherQueue.CreateTimer();
         _idle.Interval = TimeSpan.FromSeconds(10);
         _idle.IsRepeating = false;
@@ -394,9 +396,9 @@ public sealed partial class ToolSidebarWindow : Window
         Closed += (_, _) => Core.AppLog.Info("exit", $"侧边栏 Closed edge={_edge}");
     }
 
-    // ── 对外入口 ─────────────────────────────────────────────
+    
 
-    /// <summary>显示侧边栏（托盘菜单等入口调它；顺手把设置里的开关打开）。</summary>
+    
     public static void ShowSidebar()
     {
         if (!App.Settings.Current.SidebarEnabled)
@@ -412,11 +414,11 @@ public sealed partial class ToolSidebarWindow : Window
         foreach (var w in _pool.Values) w.HideSelf();
     }
 
-    /// <summary>
-    /// 退出应用时把实例池里的窗口**真正关掉**（平时只是显隐，从不销毁）。
-    /// ⛔ 为什么必须有：Application.Exit() 在 WinUI 3 里会漏窗口 —— 2026-10-04 实测，
-    ///    托盘「退出」后侧边栏常常是唯一活下来的那个窗口，把消息循环撑住、进程退不掉。
-    /// </summary>
+    
+    
+    
+    
+    
     public static void CloseForExit()
     {
         foreach (var w in _pool.Values.ToList())
@@ -427,16 +429,16 @@ public sealed partial class ToolSidebarWindow : Window
         Core.AppLog.Info("exit", "侧边栏实例已请求 Close");
     }
 
-    /// <summary>
-    /// 按设置把实例集合对齐到"该有哪几条边"：该显示的建出来/显示，不该显示的藏起来。
-    /// 返回**本次该显示的那些实例**（顺序：左 → 右；单条就是一个）。
-    /// </summary>
-    /// <param name="ratioEdge">
-    /// 需要**在显示之前**就把沿边比例准备好的那条边（换边时用）。
-    /// ⛔⛔ 2026-10-23 Nick：「拖到左边再拖到右边上部，会先在右边下部出现再突变上去」。
-    ///    原因就是先 ApplySetting() 让它按**旧比例** Present 出来，再 SnapToSetting() 挪走 —— 中间态被看见了。
-    ///    这里在实例"建出来 / 从池里取出来"的那一瞬间就写好吃到的比例，后面 Present 一次到位。
-    /// </param>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static List<ToolSidebarWindow> SyncInstances(string? ratioEdge = null, double ratio = -1)
     {
         var want = DesiredEdges();
@@ -453,16 +455,16 @@ public sealed partial class ToolSidebarWindow : Window
                 _pool[e] = w;
             }
 
-            // 新建的和复用的都要覆盖 —— 复用那条带着它上次的比例，正是"跳一下"的另一个来源
+            
             if (ratioEdge == e && ratio >= 0)
                 w._liveRatio = ratio;
 
             list.Add(w);
         }
 
-        // 调用方没给比例（启动 / 重建 / 从侧边布局页回来）→ 用存档里那份。
-        // 2026-10-24 Nick 要求恢复位置记忆：他拖到的位置重启后就该还在。
-        // 双边模式下两边共用同一个比例（存档里只有一份，拖动时本来就靠 _liveRatio 互相同步）。
+        
+        
+        
         if (ratioEdge is null && App.Settings.Current.SidebarPosRatio >= 0)
         {
             foreach (var w in list) w._liveRatio = App.Settings.Current.SidebarPosRatio;
@@ -471,12 +473,12 @@ public sealed partial class ToolSidebarWindow : Window
         return list;
     }
 
-    /// <summary>
-    /// 设置说该有哪几条边。
-    ///   · 贴靠模式（<c>dock</c>）：**只有左右两条边** —— <c>both</c> 拆成 left + right。
-    ///   · 自由模式（<c>free</c>）：用户选的那**一条边**，左/右/上/下都行（<see cref="FreeEdgeSetting"/>），
-    ///     贴上/下边时是横条（<see cref="IsFlat"/>）。自由模式**不提供「左右两边」**。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static List<string> DesiredEdges()
     {
         if (IsFreeMode) return new List<string> { FreeEdgeSetting };
@@ -485,36 +487,36 @@ public sealed partial class ToolSidebarWindow : Window
         {
             "left" => new List<string> { "left" },
             "both" => new List<string> { "left", "right" },
-            // ⚠️ 贴靠模式只认左右。老设置里如果留着 top/bottom（那时贴靠也能贴上下边），这里一律归到右边 ——
-            //    想贴上下边得切到自由模式（Nick 2026-09-28 定：贴靠 = 左右模式）。
+            
+            
             _ => new List<string> { "right" },
         };
     }
 
-    /// <summary>自由模式贴的那条边（设置值认不出就退回 right）。</summary>
+    
     private static string FreeEdgeSetting => App.Settings.Current.SidebarFreeEdge switch
     {
         "left" or "top" or "bottom" => App.Settings.Current.SidebarFreeEdge,
         _ => "right",
     };
 
-    /// <summary>
-    /// 边条旁边那些**临时浮层**（音量 / 亮度面板、确认面板、安全选项菜单）全收干净了叫一声：
-    /// 边条这时候也该跟着收回去。
-    ///
-    /// 为什么必须有它：这些浮层弹出来的时候我们压住了自动收起（不然浮层一抢焦点边条就缩），
-    /// 而**那份压制一旦放开，边条自己那次"失焦收起"早就在被压制期间错过了** ——
-    /// <c>Activated</c> 只报**状态变化**，边条那时候就已经是 deactivated，不会再来第二次通知。
-    /// 光把压制解除是不够的，结果就是"浮层关掉了、边条却赖着不收"
-    /// （Nick 2026-10-12 报的「点『关全部』弹的确认框 / 「安全选项」菜单，点空白关掉之后
-    ///   再点别处边条再也不缩回去」就是这个）。所以凡是在"压制中弹过浮层"的地方，
-    /// 收尾都必须显式调一次它。
-    ///
-    /// ⚠️ 自己会判"还有没有别的浮层挂着"（<c>_confirmFlyout</c> / <c>_securityFlyout</c> / <c>_pptFlyout</c>）——
-    ///    点「注销」会先关安全菜单、紧接着弹确认面板，那种时候不能把边条收走
-    ///    （一收，确认面板的锚点按钮就跟着没了）。
-    /// 钉了常驻（SidebarPinned）的不收 —— 用户明确要它留着。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     public static void CollapseAfterPopupsClosed()
     {
         foreach (var w in _pool.Values)
@@ -522,7 +524,7 @@ public sealed partial class ToolSidebarWindow : Window
             try
             {
                 if (!w._visible || !w._expanded) continue;
-                if (w._confirmFlyout is not null || w._securityFlyout is not null || w._pptFlyout is not null) continue;  // 还有浮层挂着，别收
+                if (w._confirmFlyout is not null || w._securityFlyout is not null || w._pptFlyout is not null) continue;  
                 if (App.Settings.Current.SidebarPinned) continue;
                 w.Collapse();
             }
@@ -530,10 +532,10 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 「截屏」专用的收起：把边条收成那条细把手（**不是隐藏**），免得它被照进截图里。
-    /// 边条展开着的时候才需要收；已经收着就啥也不做。
-    /// </summary>
+    
+    
+    
+    
     public static void CollapseForCapture()
     {
         foreach (var w in _pool.Values)
@@ -541,7 +543,7 @@ public sealed partial class ToolSidebarWindow : Window
             try
             {
                 if (!w._expanded) continue;
-                w.Collapse(animate: false);               // 截图前必须当帧收干净，不然把淡出中的边条也照进去
+                w.Collapse(animate: false);               
             }
             catch { }
         }
@@ -556,25 +558,25 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>设置里的开关/边选项变了：开就显示、关就藏起来；边变了重新贴过去。</summary>
+    
     public static void ApplySetting(string? ratioEdge = null, double ratio = -1)
     {
         if (!App.Settings.Current.SidebarEnabled) { HideSidebar(); return; }
         foreach (var w in SyncInstances(ratioEdge, ratio))
         {
             w.Present();
-            // ⚠️ 这里必须**整个重建**（不是只 SnapToSetting）：大小样式 / 每行几个都会换掉
-            //    工具区的行列结构与按钮尺寸，光重新排布是改不出来的。
+            
+            
             w.RebuildModules();
         }
     }
 
-    /// <summary>
-    /// 「收起时离屏幕边缘」改了：只要**重新落位**，不用重建按钮 ——
-    /// 按钮的行列结构一点没变，走 <see cref="ApplySetting"/> 那条重建的路反而会把边条当前状态打断。
-    ///
-    /// ⚠️ 展开态不吃这个值（面板始终紧贴边缘），所以展开着的边条调完看不出变化，收起后才看得出来。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     public static void ApplyCollapsedGap()
     {
         foreach (var w in _pool.Values)
@@ -584,14 +586,14 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 「展开面板高度」占比改了（2026-10-18）：重新量一遍尺寸再贴边，**不重建按钮**。
-    ///
-    /// ⚠️ 走 <c>SnapToSetting</c> 那条轻路（= 算布局 + 改尺寸 + 重新贴边），⛔ 别用
-    ///    <c>ApplySetting</c> —— 那是整条重建（拆按钮、重排、重新显示），只为改个高度不值当，
-    ///    而且滑块是**拖动时连续触发**的，重建会一路闪。
-    /// ⚠️ 只有展开着的实例才看得出变化；收起态的抓手尺寸与这个值无关。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     public static void ApplyHeightRatio()
     {
         foreach (var w in _pool.Values)
@@ -612,39 +614,39 @@ public sealed partial class ToolSidebarWindow : Window
         MoveToEdge();
     }
 
-    // ── 窗口本身 ─────────────────────────────────────────────
+    
 
-    /// <summary>这条实例贴的边：left | right | top | bottom。⚠️ 实例级 —— 别改回"读设置"，那样两条实例会贴到同一条边上去。</summary>
+    
     private string Edge => _edge;
 
-    /// <summary>横条（贴上/下边）还是竖条（贴左/右边）。</summary>
+    
     private bool IsFlat => _edge is "top" or "bottom";
 
-    // ── 大小样式（标准 / 紧凑）与列数（2026-10-11 Nick 要）──────────────
-    //
-    // ⚠️「紧凑」不是把整条等比缩小到底：条宽、图标、字号都缩，但**按钮的点击区域不缩到底**
-    //    —— Nick 特意提的「判定区域可以大一点，不然容易点不到」，所以紧凑档按钮高仍留 40。
-    //    ⛔ 别把这些值写回上面的 const（那是旧的一档样式），也别在别处另抄一份数字。
-    //
-    // ⚠️ 2026-10-12 起两个态**各有各的样式来源**：
-    //    · 收起条 → CompactCollapsed（设置项「侧边栏大小样式」）
-    //    · 展开面板 → CompactBody（设置项「展开后的大小样式」，默认跟随上面那个）
-    //    ⇒ 下面所有"面板上看得见的东西"（条宽/按钮/图标/字号/横条厚度/标题行）一律用 CompactBody；
-    //      只有收起态的抓手尺寸用 CompactCollapsed。⛔ 别再写回单个 Compact —— 那会让两态又绑死。
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
-    /// <summary>
-    /// **收起条**（贴边那条小抓手）用紧凑样式。见 <c>AppSettings.SidebarDensity</c>，认不出的值当标准。
-    /// ⚠️ 2026-10-12 起「侧边栏大小样式」这一项**只管收起态**，展开面板走 <see cref="CompactBody"/>。
-    /// </summary>
+    
+    
+    
+    
     private static bool CompactCollapsed =>
         string.Equals(App.Settings.Current.SidebarDensity, "compact", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// **展开面板**用紧凑样式。
-    /// 默认（<c>same</c>）跟随 <see cref="CompactCollapsed"/>，也就是上下两态一致 —— 这是 2026-10-12 之前的唯一行为；
-    /// 也可以在「侧边布局 → 展开后的大小样式」里单独指定（Nick 2026-10-12：有用户要"收起时紧凑、展开后仍用标准"）。
-    /// ⚠️ 只认 <c>compact</c> / <c>standard</c>，别的值（含 <c>same</c>）一律回落到跟随收起态。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static bool CompactBody
     {
         get
@@ -656,16 +658,51 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 工具区**每行摆几个**：竖条认设置（1 或 3，别的值当 1），横条永远是一排到底
-    /// （贴上/下边时本来就是横向排一排，再折行没有意义）。
-    /// </summary>
+    
+    
+    
+    
     private int Columns => IsFlat ? 1 : (App.Settings.Current.SidebarColumns == 3 ? 3 : 1);
 
-    /// <summary>竖条展开后的厚度（= 单列的宽度）。</summary>
+    
     private static int BarWidth => CompactBody ? 58 : PanelThicknessDip;
 
-    /// <summary>单个工具按钮的宽度（去掉面板左右内边距与外框）—— 多列时按它算总宽。</summary>
+    /// <summary>
+    /// 快捷应用栏摆在工具上方（贴左右边时才有效）。对应「侧边布局」里的
+    /// 「快捷应用位置：工具左侧 / 工具上方」。
+    /// </summary>
+    private bool PinnedAbove =>
+        !IsFlat && string.Equals(App.Settings.Current.SidebarPinnedPosition, "top", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>是否真的有一栏快捷应用要显示（模块还在列表里、且至少有一个应用）。</summary>
+    private static bool HasPinnedApps
+    {
+        get
+        {
+            var settings = App.Settings.Current;
+            if ((settings.PinnedApps?.Count ?? 0) == 0) return false;
+
+            return (settings.SidebarModuleIds ?? Array.Empty<string>())
+                .Any(id => SidebarModules.Find(id)?.Kind == SidebarModuleKinds.Pinned);
+        }
+    }
+
+    /// <summary>
+    /// 软件栏额外占的宽度：只有「贴左右边 + 软件栏在左」时才另起一列。
+    /// 摆在上方或横条时都跟工具同宽，不再加宽面板。
+    /// </summary>
+    private int SoftwareBarWidth
+    {
+        get
+        {
+            if (!HasPinnedApps) return 0;
+            if (IsFlat || PinnedAbove) return 0;
+
+            return CellWidth + 1;   // +1 是右侧分隔线
+        }
+    }
+
+    
     private static int CellWidth => BarWidth - 12;
 
     private static int ToolButtonH => CompactBody ? 40 : 52;
@@ -674,17 +711,18 @@ public sealed partial class ToolSidebarWindow : Window
     private static int ToolGap => CompactBody ? 2 : 3;
 
     private static int FooterButtonH => CompactBody ? 36 : 44;
-    private static int FlatThickness => CompactBody ? 96 : PanelThicknessFlatDip;
-    private static int FlatBareThickness => CompactBody ? 64 : PanelThicknessFlatBareDip;
     private static int FlatMinLength => CompactBody ? 380 : PanelLengthFlatDip;
 
-    /// <summary>设置里选的是自由模式（能吸四条边）。⚠️ 认不出的值一律当贴靠模式。</summary>
+    /// <summary>横条模式的高度上限。实际高度由内容量出来，这个只是封顶。</summary>
+    private const int FlatMaxThicknessDip = 240;
+
+    
     private static bool IsFreeMode => App.Settings.Current.SidebarMode == "free";
 
-    /// <summary>左右两条同时显示（贴靠模式里选的 "both"）。拖动时靠它决定"锁竖直、不换边"以及要不要带对面一起动。</summary>
+    
     private static bool IsDual => !IsFreeMode && App.Settings.Current.SidebarEdge == "both";
 
-    /// <summary>对面那条实例（双边模式下用来做位置联动）；自由模式、单边模式都是 null。</summary>
+    
     private ToolSidebarWindow? Partner()
     {
         if (!IsDual) return null;
@@ -701,35 +739,33 @@ public sealed partial class ToolSidebarWindow : Window
             _appWindow.Title = "工具侧边栏";
             _appWindow.Closing += (_, _) => Core.AppLog.Info("exit", $"侧边栏 Closing edge={_edge}");
 
-            _appWindow.IsShownInSwitchers = false;          // 不进任务栏、不进 Alt+Tab
+            _appWindow.IsShownInSwitchers = false;          
 
             if (_appWindow.Presenter is OverlappedPresenter p)
             {
-                p.SetBorderAndTitleBar(false, false);       // 就一条贴着边的条，不要标题栏/边框
+                p.SetBorderAndTitleBar(false, false);       
                 p.IsResizable = false;
                 p.IsMaximizable = false;
                 p.IsMinimizable = false;
-                p.IsAlwaysOnTop = true;                    // 全屏播放时也要显示在上面
+                p.IsAlwaysOnTop = true;                    
             }
 
             var ex = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
             SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(ex | WsExToolWindow));
 
-            // 窗口背景：整条亚克力（收起态那颗悬浮按钮靠的就是它，展开态照旧）。
-            // ⛔ 别再往"透明窗口 + 局部材质"上走 —— 那条路要靠 DwmExtendFrameIntoClientArea 撑，
-            //    而它会让 DWM 把整窗当 frame 画出一道边，正是 Nick 2026-10-11 报的"判定区阴影"。
-            try { SystemBackdrop = new DesktopAcrylicBackdrop(); }
-            catch (Exception ex2) { Log("亚克力不可用: " + ex2.Message); }
-
+            
+            
+            
+            SystemBackdrop = new DesktopAcrylicBackdrop();
             ApplyPanelBrush();
-            ThemeHost.Apply(Root, external: true);         // 侧边栏跟「桌面悬浮窗单独设置外观」（2026-10-29 定）
-            BuildToolButtons();                            // 按「侧边布局」的模块清单生成工具按钮
+            ThemeHost.Apply(Root, external: true);         
+            BuildToolButtons();                            
             Root.PointerMoved += (_, _) => Touch();
             Root.PointerPressed += (_, _) => Touch();
 
             Activated += (_, args) =>
             {
-                // 常驻时：失焦也不收（鼠标点去别处、切到别的窗口都保持展开）
+                
                 if (args.WindowActivationState == WindowActivationState.Deactivated
                     && _expanded && !_pressed && !App.Settings.Current.SidebarPinned && !SuppressAutoCollapse)
                     Collapse();
@@ -737,13 +773,13 @@ public sealed partial class ToolSidebarWindow : Window
             Root.ActualThemeChanged += (_, _) =>
             {
                 ApplyPanelBrush();
-                UpdatePinVisual();                         // 常驻块的图标颜色也跟主题（钉住=主题色，松开=默认前景）
-                // 窗口那圈边的颜色也是跟着深浅色走的，换主题得重画一次
+                UpdatePinVisual();                         
+                
                 try
                 {
                     WindowChrome.RemoveBorder(WindowNative.GetWindowHandle(this), rounded: _expanded,
                                               dark: Root.ActualTheme == ElementTheme.Dark);
-                    RefreshWindowShape();                  // RemoveBorder 会把圆角偏好改回 ROUND，按状态纠回来
+                    RefreshWindowShape();                  
                 }
                 catch { }
             };
@@ -765,7 +801,7 @@ public sealed partial class ToolSidebarWindow : Window
 
             var hwnd = WindowNative.GetWindowHandle(this);
 
-            // 首显那几帧亚克力底还没跟上 —— 面板先用不透明主题底色顶住，别让"没底的黑"露出来。
+            
             HoldOpaqueForTransition();
 
             if (!_shownOnce)
@@ -775,22 +811,22 @@ public sealed partial class ToolSidebarWindow : Window
             }
             else
             {
-                // 之前被「隐藏」或收起过 → 得显式再显示出来，否则窗口一直藏着
+                
                 ShowWindow(hwnd, SW_SHOW);
                 SetForegroundWindow(hwnd);
             }
 
             _visible = true;
-            Collapse(animate: false);                      // 每次出现都从收起状态开始（不挡画面）
+            Collapse(animate: false);                      
 
             if (_appWindow?.Presenter is OverlappedPresenter p) p.IsAlwaysOnTop = true;
 
             MoveToEdge();
-            // ⚠️ 外观要等窗口真显示出来之后再收尾（构造期改窗口样式会让窗口显示不出来）
-            // ⚠️ rounded 得跟着当前状态走：启动是"收起"，要的是"直角窗口 + 自己裁圆角"
-            //    （见 ApplyRoundRegion 那段注释 —— Win11 的圆角窗口投影在这条窄条上会右偏成一圈假边框）
+            
+            
+            
             WindowChrome.RemoveBorder(hwnd, rounded: _expanded, dark: Root.ActualTheme == ElementTheme.Dark);
-            RefreshWindowShape();                          // RemoveBorder 会把圆角偏好改回 ROUND，这里按状态纠回来
+            RefreshWindowShape();                          
         }
         catch (Exception ex)
         {
@@ -804,37 +840,38 @@ public sealed partial class ToolSidebarWindow : Window
         StopSlide();
         _visible = false;
 
-        // 音量浮窗（主音量 + 合成器）跟着一起收
+        
         VolumeFlyoutGroup.CloseAll();
 
         try { ShowWindow(WindowNative.GetWindowHandle(this), SW_HIDE); } catch { }
     }
 
-    /// <summary>
-    /// 面板底色：亚克力上面再压一层很淡的色（深色压深、浅色压白），字才看得清。
-    ///
-    /// <paramref name="opaque"/>=true 时**不压薄纱，直接用不透明的主题底色** ——
-    /// 专门给"窗口刚放大 / 刚显形"的那几帧用：那会儿亚克力底还没跟上，
-    /// 半透明薄纱压上去等于压在黑上，一整条纯黑就是这么来的（2026-10-04 Nick 截图那个黑框）。
-    /// 色值跟 <see cref="Core.WindowChrome.SetBackgroundFallback"/> 的兜底底色同族，别各挑各的。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private void ApplyPanelBrush(bool opaque = false)
     {
+        var solid = opaque;
         var dark = Root.ActualTheme == ElementTheme.Dark;
-        Panel.Background = new SolidColorBrush(opaque
+        Panel.Background = new SolidColorBrush(solid
             ? (dark ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
                     : Windows.UI.Color.FromArgb(255, 243, 243, 243))
             : (dark ? Windows.UI.Color.FromArgb(95, 20, 20, 20)
                     : Windows.UI.Color.FromArgb(110, 255, 255, 255)));
     }
 
-    /// <summary>
-    /// 过渡期保护：先把面板压成**不透明**，过 <paramref name="frames"/> 帧再放回"亚克力 + 薄纱"。
-    ///
-    /// 为什么只保前几帧：亚克力底跟上就不需要它了。给多了整段动画都是纯色面板，
-    /// 材质会"啪"一下冒出来 —— 反而更显眼。
-    /// ⚠️ 帧数别低于 4：慢机器（本次反馈就是教学机）亚克力底要好几帧才跟上。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private void HoldOpaqueForTransition(int frames = 8)
     {
         ApplyPanelBrush(opaque: true);
@@ -852,88 +889,88 @@ public sealed partial class ToolSidebarWindow : Window
         }
         catch
         {
-            ApplyPanelBrush();       // 挂不上帧回调就直接恢复，别留个纯色面板
+            ApplyPanelBrush();       
         }
     }
 
-    // ── 展开 / 收起 / 隐藏 ───────────────────────────────────
+    
 
     private void Expand()
     {
-        StopSlide();                                      // 掐掉上一次没跑完的（防连点/竞态）
-        _collapseEpoch++;                                 // 取消可能还在跑的"收起滑出/抓手淡入"
+        StopSlide();                                      
+        _collapseEpoch++;                                 
         _expanded = true;
         ResetPanelOpacity();
 
-        // 这一下会把窗口放大到展开尺寸（见 SlideInFromEdge），新露出来的那几帧
-        // "内容还没铺出来 / 亚克力底还没跟上"就是那块黑框的来源 —— 先用不透明主题底色顶住。
+        
+        
         HoldOpaqueForTransition();
 
         CollapsedView.Visibility = Visibility.Collapsed;
         ExpandedView.Visibility = Visibility.Visible;
-        // 展开态是"卡片"：恢复 1px 描边（与全站卡片同源的浅灰线）
+        
         Panel.BorderThickness = new Thickness(1);
-        ApplyScrollLimit();                               // 先把滚动范围算好；尺寸交给滑入动画一帧设到位
+        ApplyScrollLimit();                               
 
-        // ⚠️ 这里**不要**再单独 ApplySize() + MoveToEdge()：
-        //    那会让窗口先出现在"终点位置"并画出一帧展开态，紧接着又被滑入动画挪到起点 ——
-        //    肉眼就是"闪一下，然后再滑"。滑入动画自己会用**一次** MoveAndResize
-        //    把"起点位置 + 展开尺寸"同时设下去（2026-09-26 优化）。
+        
+        
+        
+        
         SlideInFromEdge();
         Touch();
     }
 
     private void Collapse(bool animate = true)
     {
-        StopSlide();                                      // ⚠️ 必须停：不然展开动画的后续帧还会把窗口挪回去
+        StopSlide();                                      
         _idle.Stop();
 
-        // 展开 → 收起给个过渡：整个窗口往贴的那条边**滑出去**（跟滑进来同一条路子，方向相反），滑完再真收。
-        // animate=false 用在"要立刻消失"的场合（截图前、刚出现时），那种必须当帧就收干净。
+        
+        
         if (!_expanded || ExpandedView.Visibility != Visibility.Visible || !animate)
         {
             FinishCollapse();
             return;
         }
 
-        _expanded = false;                                // 先立旗：滑出期间自动收起那条路别再来一遍
+        _expanded = false;                                
         var epoch = ++_collapseEpoch;
-        // 滑完才真收，而且要让抓手**淡入**：滑出终点在屏幕外，小条直接"啪"一下冒出来太生硬
+        
         if (SlideOutToEdge(() => { if (epoch == _collapseEpoch) FinishCollapse(fadeIn: true); })) return;
-        FinishCollapse();                                 // 没有窗口可滑（极少数）：当帧收干净，不做动画
+        FinishCollapse();                                 
     }
 
 
-    /// <summary>
-    /// 真收：换回抓手 + 落位。中途用户又展开了就别收（_expanded 已被置回 true）。
-    /// </summary>
-    /// <param name="fadeIn">
-    /// true = 抓手淡入（**走滑动动画那条路用它**：面板刚滑出屏幕，小条淡入比"啪一下出现"自然）。
-    /// false = 当帧就位（截图前、窗口刚出现时那种要立刻收干净的场合，不能有任何可见动画）。
-    /// </param>
+    
+    
+    
+    
+    
+    
+    
     private void FinishCollapse(bool fadeIn = false)
     {
         if (_expanded) return;
 
-        // 先按住透明度，等落位之后再放出来 —— 顺序反了会先闪一帧不透明的小条
+        
         if (fadeIn) SetPanelOpacity(0f);
 
-        // 收起态只是个抓手，不是卡片：去掉 Panel 的 1px 描边。
-        // 紧凑档条只有 12dip 宽，这圈浅灰描边沿圆角几乎绕满左右两侧，看着就像"右边还有一圈边框"
-        // （Nick 2026-10-12 报的）。标准档同样有，只是条宽不显眼 —— 两档一起去掉，收起/展开一个口径。
+        
+        
+        
         Panel.BorderThickness = new Thickness(0);
 
         ExpandedView.Visibility = Visibility.Collapsed;
         CollapsedView.Visibility = Visibility.Visible;
 
-        // 一次到位：收起尺寸 + 位置。
-        // 滑出动画已经把**整个窗口**推出屏幕外了，所以这一步的"变身"（尺寸 92×450 → 20×110、
-        // 内容换视图）用户在屏幕上看不到 —— 不会再出现"没滑出去就突然缩一下"（2026-09-26 修）。
-        //
-        // ⚠️ fadeIn 的落点是**屏幕外的抓手起点**，不是贴边位（2026-10-01 改）：
-        //    面板滑出去之后，抓手再从屏幕外滑回贴边（见下面的 TweenWindow）——
-        //    "大块滑走 + 小条滑回"一口气看完，比"大块滑走 + 小条原地淡入"连贯。
-        //    起点在屏幕外，所以尺寸变身依旧藏得住。
+        
+        
+        
+        
+        
+        
+        
+        
         PointInt32? slideFrom = null, slideTo = null;
         try
         {
@@ -942,17 +979,17 @@ public sealed partial class ToolSidebarWindow : Window
                 var size = CollapsedSize();
                 var pos = EdgePosition(size.Width, size.Height);
                 var startPos = fadeIn
-                    ? OutwardOffset(pos, (IsFlat ? size.Height : size.Width) + 2)   // 整个抓手推到屏幕外 + 2px 余量
+                    ? OutwardOffset(pos, (IsFlat ? size.Height : size.Width) + 2)   
                     : pos;
 
                 _appWindow.MoveAndResize(new RectInt32(startPos.X, startPos.Y, size.Width, size.Height));
-                ApplyRoundRegion(size);                    // 展开→收起尺寸变了，圆角区域跟着重裁
+                ApplyRoundRegion(size);                    
 
                 if (fadeIn)
                 {
                     slideFrom = startPos;
                     slideTo = pos;
-                    _restRect = new Windows.Graphics.RectInt32(pos.X, pos.Y, size.Width, size.Height);  // 滑动期间 CurrentRect 返回它
+                    _restRect = new Windows.Graphics.RectInt32(pos.X, pos.Y, size.Width, size.Height);  
                 }
             }
         }
@@ -973,7 +1010,7 @@ public sealed partial class ToolSidebarWindow : Window
 
     private void ResetPanelOpacity() => SetPanelOpacity(1f);
 
-    /// <summary>把整块面板的透明度按住（不走动画）。收起后要给抓手"淡入"，就先用它把面板压到 0。</summary>
+    
     private void SetPanelOpacity(float value)
     {
         try
@@ -985,7 +1022,7 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
-    /// <summary>面板从当前透明度淡到不透明（收起后让小条"浮现"而不是"闪现"）。</summary>
+    
     private void FadePanelToOpaque(double ms)
     {
         try
@@ -996,22 +1033,22 @@ public sealed partial class ToolSidebarWindow : Window
 
             var fade = compositor.CreateScalarKeyFrameAnimation();
             fade.InsertKeyFrame(1f, 1f, compositor.CreateCubicBezierEasingFunction(
-                new Vector2(0.2f, 0f), new Vector2(0f, 1f)));      // 缓出：一开始就明显起来，尾巴柔和
+                new Vector2(0.2f, 0f), new Vector2(0f, 1f)));      
             fade.Duration = TimeSpan.FromMilliseconds(ms);
             visual.StartAnimation("Opacity", fade);
         }
         catch (Exception ex)
         {
             Log("抓手淡入失败: " + ex.Message);
-            ResetPanelOpacity();                            // 出问题就退回"直接可见"，别留个透明的边条
+            ResetPanelOpacity();                            
         }
     }
 
-    /// <summary>
-    /// 下一帧再确认一次"收起态"的尺寸和位置。
-    /// 有些时候尺寸/位置要等系统下一帧才对得上（尤其是刚快速开关过），再兜一次就不会跑偏。
-    /// 只在"仍然是收起态"时才兜 —— 用户这会儿要展开的话，不能跟展开打架。
-    /// </summary>
+    
+    
+    
+    
+    
     private void ReassertCollapsed()
     {
         DispatcherQueue.TryEnqueue(() =>
@@ -1020,13 +1057,13 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 if (_expanded || _appWindow is null) return;
 
-                // ⚠️ 抓手正在从屏幕外滑入时**别纠位**：这一帧它本来就还在路上，
-                //    抢先挪到贴边位会把滑入动画打断成"闪一下就到了"（2026-10-01）。
-                //    落位交给动画自己的最后一帧（TweenWindow 里那次 SetWindowPos）。
+                
+                
+                
                 if (_slideFrame is not null) return;
 
-                // ⚠️ 已经落对了就**什么都别做**。多挪一次窗口就多一帧重绘 ——
-                //    动画刚结束那一下最容易看出抖，这里不能无脑再摆一次（2026-09-26 优化）。
+                
+                
                 var size = CollapsedSize();
                 var pos = EdgePosition(size.Width, size.Height);
                 var now = _appWindow.Size;
@@ -1048,27 +1085,27 @@ public sealed partial class ToolSidebarWindow : Window
     private void Touch()
     {
         if (!_expanded || _pressed) return;
-        if (App.Settings.Current.SidebarPinned) return;    // 常驻：不启动自动收起计时
+        if (App.Settings.Current.SidebarPinned) return;    
         _idle.Stop();
         _idle.Start();
     }
 
     private void Collapse_Click(object sender, RoutedEventArgs e) => Collapse();
 
-    /// <summary>常驻开关：钉住 = 展开后不自动收起（手动「收起」还是能收）。</summary>
+    
     private void Pin_Click(object sender, RoutedEventArgs e)
     {
         var pinned = !App.Settings.Current.SidebarPinned;
         App.Settings.Current.SidebarPinned = pinned;
         App.Settings.Save();
 
-        _idle.Stop();                       // 先把已经排队的自动收起取消掉
+        _idle.Stop();                       
         UpdatePinVisual();
-        Touch();                            // 松开时重新起计时；钉住时 Touch 自己会跳过
+        Touch();                            
         Log(pinned ? "常驻：开" : "常驻：关");
     }
 
-    /// <summary>「常驻」键的样子：钉住 = 实心钉 + 主题色；松开 = 空心钉。</summary>
+    
     private void UpdatePinVisual()
     {
         try
@@ -1076,7 +1113,7 @@ public sealed partial class ToolSidebarWindow : Window
             var pinned = App.Settings.Current.SidebarPinned;
             if (_pinIcon is not null)
             {
-                _pinIcon.Glyph = pinned ? "\uE840" : "\uE718";      // Pinned / Pin
+                _pinIcon.Glyph = pinned ? "\uE840" : "\uE718";      
 
                 if (pinned)
                 {
@@ -1084,11 +1121,11 @@ public sealed partial class ToolSidebarWindow : Window
                 }
                 else
                 {
-                    // ⚠️ 松开状态**清掉本地值、跟着主题走**（2026-10-01 修「亮色模式下钉子白得看不见」）：
-                    //    以前这里写死成 SolidColorBrush（暗色给白、亮色给黑）—— 可换主题时只有面板底色会重刷
-                    //    （ActualThemeChanged 里只调了 ApplyPanelBrush），这个写死的颜色不会跟着变：
-                    //    暗色下启动过再切亮色，就成了「白钉子压白底」，整颗图标消失。
-                    //    清掉本地值后它回到 IconElement 默认前景（主题画刷），深浅色都自动对。
+                    
+                    
+                    
+                    
+                    
                     _pinIcon.ClearValue(FontIcon.ForegroundProperty);
                 }
             }
@@ -1107,10 +1144,10 @@ public sealed partial class ToolSidebarWindow : Window
     private static Windows.UI.Color AccentColor() =>
         new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
 
-    /// <summary>
-    /// 位置复原：沿边居中；两种模式都顺便把边退回默认的那条。
-    /// ⚠️ 双边模式（both）下**不改边** —— 它没有"哪一条边"的概念，保持两条并一起摆正。
-    /// </summary>
+    
+    
+    
+    
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
         if (!IsDual)
@@ -1122,24 +1159,24 @@ public sealed partial class ToolSidebarWindow : Window
         App.Settings.Current.SidebarPosRatio = -1;
         App.Settings.Save();
 
-        // 边可能变了 → 得走 ApplySetting()（按新设置重建实例集合），不能只 SnapToSetting()
+        
         ApplySetting();
         Partner()?.SnapToSetting();
         Touch();
     }
 
-    /// <summary>隐藏：直接关掉（设置里也不显示了），想找回来去「内置工具」页或托盘图标菜单。</summary>
+    
     private void Hide_Click(object sender, RoutedEventArgs e)
     {
         App.Settings.Current.SidebarEnabled = false;
         App.Settings.Save();
-        HideSidebar();                                    // 双边时两条一起藏
+        HideSidebar();                                    
     }
 
-    /// <summary>
-    /// 打开应用：把**主窗口**叫出来（可能收在托盘里、也可能只是最小化了）。
-    /// 侧边栏是独立小窗，经常是屏幕上唯一露着的东西 —— 给老师留一条回主界面的近路。
-    /// </summary>
+    
+    
+    
+    
     private void OpenApp_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -1152,18 +1189,18 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>设置里的模块清单变了（侧边布局页改完调它）：重建按钮 + 重新量尺寸贴边（左右两条都要）。</summary>
+    
     public static void ApplyModules()
     {
         if (!App.Settings.Current.SidebarEnabled) return;
         foreach (var w in _pool.Values) w.RebuildModules();
     }
 
-    /// <summary>
-    /// 底排那几颗按钮（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用）的显示开关变了
-    /// （「侧边布局」页底部那五个开关，逐颗）。
-    /// 跟换模块清单走同一条路：重排 + 重新量尺寸 —— 面板高矮、横条宽窄都跟着**可见颗数**变。
-    /// </summary>
+    
+    
+    
+    
+    
     public static void ApplyFooterSetting() => ApplyModules();
 
     private void RebuildModules()
@@ -1181,10 +1218,10 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 按 AppSettings.SidebarModuleIds（= 「侧边布局」页里勾选+排序的结果）生成工具按钮。
-    /// 清单里认不出来的 id（老设置里存了后来删掉的模块）直接跳过，不会崩。
-    /// </summary>
+    
+    
+    
+    
     private void BuildToolButtons()
     {
         ToolStack.Children.Clear();
@@ -1192,23 +1229,34 @@ public sealed partial class ToolSidebarWindow : Window
         ToolStack.ColumnDefinitions.Clear();
         _toolButtons.Clear();
 
+        var settings = App.Settings.Current;
         var modules = new List<SidebarModule>();
-        foreach (var id in App.Settings.Current.SidebarModuleIds ?? Array.Empty<string>())
+        foreach (var id in settings.SidebarModuleIds ?? Array.Empty<string>())
         {
             if (SidebarModules.Find(id) is { } found) modules.Add(found);
         }
 
-        // 行列：竖条 = 每行 Columns 个、满了自动折行；横条 = 横向一排到底（见 Columns）。
+        var pinnedModule = modules.FirstOrDefault(m => m.Kind == SidebarModuleKinds.Pinned);
+        var pinnedApps = new List<PinnedApp>();
+        if (pinnedModule is not null)
+        {
+            PinnedAppLauncher.EnsureIds();
+            pinnedApps = settings.PinnedApps ?? new List<PinnedApp>();
+        }
+
+        // 快捷应用一律独立成栏：竖排是左边一列，横条是左边一段（2026-11-22）。
+        if (pinnedModule is not null) modules.Remove(pinnedModule);
+
+        var cells = modules.Count;
         var cols = IsFlat
-            ? Math.Max(1, modules.Count)
-            : Math.Max(1, Math.Min(Columns, Math.Max(1, modules.Count)));
-        var rows = IsFlat ? 1 : Math.Max(1, (int)Math.Ceiling(modules.Count / (double)cols));
+            ? Math.Max(1, cells)
+            : Math.Max(1, Math.Min(Columns, Math.Max(1, cells)));
+        var rows = Math.Max(1, (int)Math.Ceiling(cells / (double)cols));
 
         for (var c = 0; c < cols; c++)
         {
             ToolStack.ColumnDefinitions.Add(new ColumnDefinition
             {
-                // 竖条：各列等分（宽度跟着面板走）；横条：按内容宽度，别把按钮拉扁
                 Width = IsFlat ? GridLength.Auto : new GridLength(1, GridUnitType.Star),
             });
         }
@@ -1218,64 +1266,11 @@ public sealed partial class ToolSidebarWindow : Window
         var i = 0;
         foreach (var m in modules)
         {
-            var content = new StackPanel { Spacing = 3 };
-            content.Children.Add(new FontIcon
-            {
-                Glyph = m.Glyph,
-                FontSize = ToolIcon,
-                HorizontalAlignment = HorizontalAlignment.Center
-            });
-            content.Children.Add(new TextBlock
-            {
-                Text = LabelOf(m),
-                FontSize = ToolLabel,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                // 长名最多 4 个字，理论上放得下（面板厚 92、11 号字）；真超了宁可截断也别撑出按钮
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxWidth = 84
-            });
-
-            var btn = new Button
-            {
-                Tag = m.Id,
-                MinWidth = 0,
-                MinHeight = ToolButtonH,
-                Padding = new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8),
-                Background = new SolidColorBrush(Colors.Transparent),
-                BorderThickness = new Thickness(0),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                Content = content
-            };
-            ToolTipService.SetToolTip(btn, m.Note ?? m.Name);
-
-            if (m.Kind == SidebarModuleKinds.Action && TeachingActions.IsHold(m.Id))
-            {
-                // 按住型（放大镜）：按下开始 → 松手结束。按住期间别让侧边栏自动收起，
-                // 否则按钮被一起收走、指针捕获也会断，放大镜就"按两下才亮"了。
-                var holdId = m.Id;
-                btn.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) =>
-                {
-                    SuppressAutoCollapse = true;
-                    TeachingActions.Begin(holdId);
-                }), true);
-                btn.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, _) => EndHold(holdId)), true);
-                btn.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler((_, _) => EndHold(holdId)), true);
-            }
-            else
-            {
-                btn.Click += Tool_Click;
-            }
-
-            Grid.SetRow(btn, IsFlat ? 0 : i / cols);
-            Grid.SetColumn(btn, i % cols);
-            ToolStack.Children.Add(btn);
-            _toolButtons.Add(btn);
+            AddModuleButton(m, i, cols, 0);
             i++;
         }
 
-        // 一个模块都没选：面板里给一句说明，别让用户以为坏了
-        if (_toolButtons.Count == 0)
+        if (cells == 0)
         {
             var tip = new TextBlock
             {
@@ -1291,15 +1286,466 @@ public sealed partial class ToolSidebarWindow : Window
             Grid.SetColumn(tip, 0);
             ToolStack.Children.Add(tip);
         }
+
+        BuildSoftwareButtons(pinnedModule, pinnedApps);
     }
 
     /// <summary>
-    /// 按钮上显示哪个名字（2026-10-30）：开了「用长名显示」且这个模块有长名，就用长名。
-    /// <para>
-    /// 来由（Nick）：两三个字常常说不清这个按钮干什么。长名统一 4 个字以内
-    /// （见 <see cref="SidebarModule.LongName"/>），面板厚度只有 92，再多就挤了。
-    /// </para>
+    /// 软件栏三种排法：贴左右边·左侧是一整列，贴左右边·上方是一整行，
+    /// 贴上下边是夹在工具与操作按钮之间的一整行（2026-11-22 Nick 定）。
     /// </summary>
+    private void BuildSoftwareButtons(SidebarModule? pinnedModule, List<PinnedApp> pinnedApps)
+    {
+        SoftwareStack.Children.Clear();
+        SoftwareStack.RowDefinitions.Clear();
+        SoftwareStack.ColumnDefinitions.Clear();
+
+        if (pinnedModule is null || pinnedApps.Count == 0)
+        {
+            SoftwarePane.Visibility = Visibility.Collapsed;
+            SoftwarePane.Width = double.NaN;
+            SoftwarePane.HorizontalAlignment = HorizontalAlignment.Stretch;
+            return;
+        }
+
+        SoftwarePane.Visibility = Visibility.Visible;
+
+        if (IsFlat)
+        {
+            BuildFlatSoftwareBar(pinnedApps);
+            return;
+        }
+
+        if (PinnedAbove)
+        {
+            BuildTopSoftwareBar(pinnedApps);
+            return;
+        }
+
+        BuildSideSoftwareBar(pinnedApps);
+    }
+
+    /// <summary>贴左右边·软件栏在左：一列，与工具列同宽，高度跟着工具列走。</summary>
+    private void BuildSideSoftwareBar(List<PinnedApp> apps)
+    {
+        SoftwarePane.Width = CellWidth + 1;
+        SoftwarePane.HorizontalAlignment = HorizontalAlignment.Stretch;
+        SoftwareScroll.HorizontalScrollMode = ScrollMode.Disabled;
+        SoftwareScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        SoftwareScroll.VerticalScrollMode = ScrollMode.Auto;
+        SoftwareScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        SoftwareScroll.MaxWidth = double.PositiveInfinity;
+        SoftwareScroll.MaxHeight = MeasureToolColumnHeight();
+        SoftwareStack.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+        SoftwareStack.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = new GridLength(1, GridUnitType.Star),
+        });
+
+        for (var i = 0; i < apps.Count; i++)
+        {
+            SoftwareStack.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var button = BuildSoftwareTile(apps[i]);
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            Grid.SetRow(button, i);
+            Grid.SetColumn(button, 0);
+            SoftwareStack.Children.Add(button);
+        }
+    }
+
+    /// <summary>
+    /// 贴左右边·软件栏在上：按面板列数横排，最多两行，再多在栏内纵向滚动。
+    /// </summary>
+    private void BuildTopSoftwareBar(List<PinnedApp> apps)
+    {
+        var cols = Math.Max(1, Columns);
+
+        SoftwarePane.Width = double.NaN;
+        SoftwarePane.HorizontalAlignment = HorizontalAlignment.Stretch;
+        SoftwareScroll.HorizontalScrollMode = ScrollMode.Disabled;
+        SoftwareScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        SoftwareScroll.VerticalScrollMode = ScrollMode.Auto;
+        SoftwareScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        SoftwareScroll.MaxWidth = double.PositiveInfinity;
+        SoftwareScroll.MaxHeight = 2 * (ToolButtonH + ToolGap);
+        SoftwareStack.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+        for (var c = 0; c < cols; c++)
+            SoftwareStack.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var rows = Math.Max(1, (int)Math.Ceiling(apps.Count / (double)cols));
+        for (var r = 0; r < rows; r++)
+            SoftwareStack.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        for (var i = 0; i < apps.Count; i++)
+        {
+            var button = BuildSoftwareTile(apps[i]);
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            Grid.SetRow(button, i / cols);
+            Grid.SetColumn(button, i % cols);
+            SoftwareStack.Children.Add(button);
+        }
+    }
+
+    /// <summary>
+    /// 量一下工具列当前有多高。软件栏拿它当最大高度 ——
+    /// 面板高度只由工具决定，软件再多也只是栏内滚动，不会在右侧留出空白（2026-11-22）。
+    /// </summary>
+    private double MeasureToolColumnHeight()
+    {
+        try
+        {
+            var cols = Math.Max(1, Columns);
+            var width = Math.Max(CellWidth, cols * CellWidth + (cols - 1) * ToolGap);
+
+            ToolStack.Measure(new Windows.Foundation.Size(width, double.PositiveInfinity));
+
+            var height = ToolStack.DesiredSize.Height;
+            if (height > 20) return height;
+        }
+        catch (Exception ex)
+        {
+            Log("量工具列高度失败: " + ex.Message);
+        }
+
+        var fallbackCols = Math.Max(1, Columns);
+        var rows = Math.Max(1, (int)Math.Ceiling(Math.Max(1, _toolButtons.Count) / (double)fallbackCols));
+        return rows * (ToolButtonH + ToolGap);
+    }
+
+    /// <summary>横条模式：软件栏独占一行，夹在工具与操作按钮之间，横向铺满。</summary>
+    private void BuildFlatSoftwareBar(List<PinnedApp> apps)
+    {
+        SoftwarePane.Width = double.NaN;
+        SoftwarePane.HorizontalAlignment = HorizontalAlignment.Stretch;
+        SoftwareScroll.MaxHeight = double.PositiveInfinity;
+        SoftwareScroll.MinHeight = 0;
+        SoftwareScroll.MaxWidth = double.PositiveInfinity;
+        SoftwareScroll.HorizontalScrollMode = ScrollMode.Auto;
+        SoftwareScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+        SoftwareScroll.VerticalScrollMode = ScrollMode.Disabled;
+        SoftwareScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+
+        // 整条横条里工具是居中的，快捷应用也一样居中，不留左边一坨右边空着。
+        SoftwareStack.HorizontalAlignment = HorizontalAlignment.Center;
+
+        SoftwareStack.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        for (var i = 0; i < apps.Count; i++)
+        {
+            SoftwareStack.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var button = BuildSoftwareTile(apps[i], compact: true);
+            Grid.SetRow(button, 0);
+            Grid.SetColumn(button, i);
+            SoftwareStack.Children.Add(button);
+        }
+    }
+
+    /// <summary>软件栏里的一格：竖排时带名称（与模块按钮同款），横条时只留图标。</summary>
+    private Button BuildSoftwareTile(PinnedApp app, bool compact = false)
+    {
+        var iconHost = new Grid
+        {
+            Width = ToolIcon + 6,
+            Height = ToolIcon + 6,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+
+        var glyph = new FontIcon
+        {
+            Glyph = "\uE731",
+            FontSize = ToolIcon,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var image = new Image
+        {
+            Width = ToolIcon,
+            Height = ToolIcon,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+
+        iconHost.Children.Add(glyph);
+        iconHost.Children.Add(image);
+        LoadPinnedIcon(image, glyph, app.Path);
+
+        var content = new StackPanel { Spacing = compact ? 0 : 3 };
+        content.Children.Add(iconHost);
+
+        if (!compact)
+        {
+            content.Children.Add(new TextBlock
+            {
+                Text = PinnedAppLauncher.DisplayName(app),
+                FontSize = ToolLabel,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = Math.Max(40, CellWidth - 10),
+            });
+        }
+
+        var button = new Button
+        {
+            Tag = $"pinapp:{app.Id}",
+            Width = compact ? 44 : double.NaN,
+            Height = compact ? 40 : double.NaN,
+            MinWidth = 0,
+            MinHeight = compact ? 0 : ToolButtonH,
+            Padding = compact ? new Thickness(0) : new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8),
+            Margin = compact ? new Thickness(2, 0, 2, 0) : new Thickness(0),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Content = content,
+        };
+
+        ToolTipService.SetToolTip(button, PinnedAppLauncher.DisplayName(app) + "\n" + app.Path);
+        button.Click += PinnedApp_Click;
+
+        var flyout = new MenuFlyout();
+        var open = new MenuFlyoutItem { Text = "打开", Tag = $"pinapp:{app.Id}" };
+        open.Click += PinnedApp_Click;
+        var remove = new MenuFlyoutItem { Text = "从侧边栏移除", Tag = $"pinapp:{app.Id}" };
+        remove.Click += PinnedApp_Remove_Click;
+        flyout.Items.Add(open);
+        flyout.Items.Add(remove);
+        button.ContextFlyout = flyout;
+
+        return button;
+    }
+
+    private void AddModuleButton(SidebarModule m, int index, int cols, int rowOffset)
+    {
+        var content = new StackPanel { Spacing = 3 };
+        content.Children.Add(new FontIcon
+        {
+            Glyph = m.Glyph,
+            FontSize = ToolIcon,
+            HorizontalAlignment = HorizontalAlignment.Center
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = LabelOf(m),
+            FontSize = ToolLabel,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 84
+        });
+
+        var btn = new Button
+        {
+            Tag = m.Id,
+            MinWidth = 0,
+            MinHeight = ToolButtonH,
+            Padding = new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Content = content
+        };
+        ToolTipService.SetToolTip(btn, m.Note ?? m.Name);
+
+        if (m.Kind == SidebarModuleKinds.Action && TeachingActions.IsHold(m.Id))
+        {
+            var holdId = m.Id;
+            btn.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) =>
+            {
+                SuppressAutoCollapse = true;
+                TeachingActions.Begin(holdId);
+            }), true);
+            btn.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, _) => EndHold(holdId)), true);
+            btn.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler((_, _) => EndHold(holdId)), true);
+        }
+        else
+        {
+            btn.Click += Tool_Click;
+        }
+
+        Grid.SetRow(btn, rowOffset + index / cols);
+        Grid.SetColumn(btn, index % cols);
+        ToolStack.Children.Add(btn);
+        _toolButtons.Add(btn);
+    }
+
+    private void AddPinnedButton(PinnedApp app, int index, int cols, int rowOffset)
+    {
+        var content = new StackPanel { Spacing = 3 };
+        var iconHost = new Grid
+        {
+            Width = ToolIcon + 4,
+            Height = ToolIcon + 4,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        var glyph = new FontIcon
+        {
+            Glyph = "\uE731",
+            FontSize = ToolIcon,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var image = new Image
+        {
+            Width = ToolIcon,
+            Height = ToolIcon,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+        iconHost.Children.Add(glyph);
+        iconHost.Children.Add(image);
+        content.Children.Add(iconHost);
+        LoadPinnedIcon(image, glyph, app.Path);
+        content.Children.Add(new TextBlock
+        {
+            Text = PinnedAppLauncher.DisplayName(app),
+            FontSize = ToolLabel,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 84,
+        });
+
+        var button = new Button
+        {
+            Tag = $"pinapp:{app.Id}",
+            MinWidth = 0,
+            MinHeight = ToolButtonH,
+            Padding = new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Content = content,
+        };
+        ToolTipService.SetToolTip(button, "快捷应用：" + app.Path);
+        button.Click += PinnedApp_Click;
+
+        var flyout = new MenuFlyout();
+        var open = new MenuFlyoutItem { Text = "打开", Tag = $"pinapp:{app.Id}" };
+        open.Click += PinnedApp_Click;
+        var remove = new MenuFlyoutItem { Text = "从侧边栏移除", Tag = $"pinapp:{app.Id}" };
+        remove.Click += PinnedApp_Remove_Click;
+        flyout.Items.Add(open);
+        flyout.Items.Add(remove);
+        button.ContextFlyout = flyout;
+
+        Grid.SetRow(button, rowOffset + index / cols);
+        Grid.SetColumn(button, index % cols);
+        ToolStack.Children.Add(button);
+        _toolButtons.Add(button);
+    }
+
+    /// <summary>
+    /// 快捷应用的图标。走 shell 取图标而不是文件缩略图 ——
+    /// 开始菜单里的 .lnk 用缩略图接口多半取不到，只剩一个通用字形（2026-11-22）。
+    /// </summary>
+    private void LoadPinnedIcon(Image image, FontIcon fallback, string path)
+    {
+        try
+        {
+            var source = Services.AppIconService.Get(path);
+            if (source is null) return;
+
+            image.Source = source;
+            image.Visibility = Visibility.Visible;
+            fallback.Visibility = Visibility.Collapsed;
+        }
+        catch
+        {
+        }
+    }
+
+    private void AddPinnedPlaceholder(int index, int cols, int rowOffset)
+    {
+        var content = new StackPanel { Spacing = 3 };
+        content.Children.Add(new FontIcon
+        {
+            Glyph = "\uE710",
+            FontSize = ToolIcon,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = "添加应用",
+            FontSize = ToolLabel,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
+
+        var button = new Button
+        {
+            MinWidth = 0,
+            MinHeight = ToolButtonH,
+            Padding = new Thickness(0, CompactBody ? 4 : 8, 0, CompactBody ? 4 : 8),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Content = content,
+        };
+        ToolTipService.SetToolTip(button, "去「侧边布局」添加快捷应用");
+        button.Click += (_, _) =>
+        {
+            App.MainWindow?.ShowFromTray();
+            App.MainWindow?.Shell.NavigateTo("sidebar");
+        };
+
+        Grid.SetRow(button, rowOffset + index / cols);
+        Grid.SetColumn(button, index % cols);
+        ToolStack.Children.Add(button);
+        _toolButtons.Add(button);
+    }
+
+    private void PinnedApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.Tag is not string tag) return;
+        if (!tag.StartsWith("pinapp:", StringComparison.Ordinal)) return;
+
+        var app = PinnedAppLauncher.FindById(tag[7..]);
+        if (app is null) return;
+
+        if (PinnedAppLauncher.Launch(app) is { } error)
+        {
+            ShowPinnedError(element as Button, error);
+            return;
+        }
+
+        Collapse();
+    }
+
+    private void PinnedApp_Remove_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.Tag is not string tag) return;
+        if (!tag.StartsWith("pinapp:", StringComparison.Ordinal)) return;
+        if (!PinnedAppLauncher.RemoveById(tag[7..])) return;
+
+        ApplyModules();
+        App.MainWindow?.RefreshHotkeys();
+    }
+
+    private void ShowPinnedError(Button? anchor, string message)
+    {
+        SuppressAutoCollapse = true;
+        ShowConfirmFlyout(anchor, "快捷应用", message, "知道了", () => { },
+            onClosed: () => { SuppressAutoCollapse = false; }, dangerStyle: false);
+    }
+
+    
+    
+    
+    
+    
+    
+    
     private static string LabelOf(SidebarModule m)
     {
         if (!App.Settings.Current.SidebarLongLabels) return m.ShortName;
@@ -1314,15 +1760,15 @@ public sealed partial class ToolSidebarWindow : Window
             var m = SidebarModules.Find(id);
             if (m is null) return;
 
-            // 讲台动作：按一下就干活（放大镜是"按住"型，走的是按下/松手那条路，不走这里）
+            
             if (m.Kind == SidebarModuleKinds.Action)
             {
-                // 有两项不是"按一下就干完"，而是先弹个二级菜单让用户挑：
-                //   · 「安全选项」—— 锁定 / 切换用户 / 注销（Ctrl+Alt+Del 界面上那几项）；
-                //   · 「PPT 触控」—— 触控手势 / 长按菜单 两个开关（一个按钮表达不了两个状态，
-                //     而且这两个都是"出问题才去拨"的，收进菜单里看得见当前状态）。
-                // ⚠️ 它们跟普通动作在清单、排序、侧边布局页里完全一样，只有这一瞬间区别对待，
-                //    所以不为它们另立一个 Kind（见 SidebarModuleKinds.Action 上的注释）。
+                
+                
+                
+                
+                
+                
                 if (m.Id == "security")
                 {
                     ShowSecurityFlyout(b);
@@ -1335,16 +1781,16 @@ public sealed partial class ToolSidebarWindow : Window
                     return;
                 }
 
-                // ⚠️ 「要先问一句」的动作（关全部）不能按老办法在 Run 之后就还焦点：
-                //    侧边栏一失活，刚弹出来的确认面板就会被系统按"点了别处"关掉。
-                //    Run 里已经按 AsksFirst 区分过了，这里只管把面板弹出来。
+                
+                
+                
                 var asks = TeachingActions.AsksFirst(m.Id);
                 var hint = TeachingActions.Run(m.Id);
 
                 if (hint is { Length: > 0 })
                 {
-                    // ① 边条**不许收**（失焦/空闲两条自动收起路都要压住，否则他还得重新点开）；
-                    // ② 用**原生 Flyout** 弹确认（框架自带的描边/圆角/投影 + 点别处自动收）。
+                    
+                    
                     SuppressAutoCollapse = true;
                     var lines = hint.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                     var title = lines.Length > 0 ? lines[0].Trim() : hint;
@@ -1352,11 +1798,11 @@ public sealed partial class ToolSidebarWindow : Window
 
                     var confirmed = false;
 
-                    // ⚠️ 不只是"待确认"能走到这儿：出错时也会有提示（例如"截屏启动失败，看日志"）。
-                    //    那种没什么可确认的，给个「知道了」就行 —— 别摆红色危险键、也别去执行什么。
+                    
+                    
                     ShowConfirmFlyout(b, title, body, asks ? "确定关闭" : "知道了", () =>
                     {
-                        if (!asks) return;                 // 纯提示：按掉就完事
+                        if (!asks) return;                 
                         confirmed = true;
                         SuppressAutoCollapse = false;
                         TeachingActions.ConfirmPending(m.Id);
@@ -1364,14 +1810,14 @@ public sealed partial class ToolSidebarWindow : Window
                     },
                     onClosed: () =>
                     {
-                        // 面板没了：只有"没真执行"（取消 / 超时 / 点别处）才把焦点还给用户原来的窗口，
-                        // 别打断讲课。真执行了就不还 —— 那些窗口刚被关掉，还给谁都不对。
+                        
+                        
                         if (!confirmed) TeachingActions.RefocusPrevious();
                     },
                     dangerStyle: asks);
 
-                    // ⚠️ 这里**绝不能**再调 RefocusPrevious()：那会立刻把侧边栏踢下台，
-                    //    刚弹出的面板当场被关掉 —— 这正是"前台有窗口时按了没反应"的直接原因。
+                    
+                    
                 }
                 else
                 {
@@ -1381,7 +1827,7 @@ public sealed partial class ToolSidebarWindow : Window
                 return;
             }
 
-            // 贴边展开的常驻面板（音量 / 屏幕亮度）：挨着边条长一栏，不跳窗口、不开新窗
+            
             if (m.Kind == SidebarModuleKinds.Panel)
             {
                 if (m.Id == "brightness") ToggleBrightness();
@@ -1389,13 +1835,13 @@ public sealed partial class ToolSidebarWindow : Window
                 return;
             }
 
-            Collapse();                                        // 先把边条收起来，别挡着工具窗口
+            Collapse();                                        
             if (m.Kind == SidebarModuleKinds.Page && m.Page is not null)
-                App.MainWindow?.OpenToolSettings(m.Page);      // 拉出主窗口并跳到那一页
+                App.MainWindow?.OpenToolSettings(m.Page);      
             else if (m.Kind == SidebarModuleKinds.Window)
-                OpenModuleWindow(m);                           // 单开一扇轻量窗，不碰主界面
+                OpenModuleWindow(m);                           
             else
-                ToolPaletteWindow.ShowTool(m.Id);              // 小浮窗
+                ToolPaletteWindow.ShowTool(m.Id);              
         }
         catch (Exception ex)
         {
@@ -1404,20 +1850,20 @@ public sealed partial class ToolSidebarWindow : Window
     }
 
 
-    /// <summary>
-    /// 打开「独立窗口」类模块（kind = window）。
-    /// <para>
-    /// 两种：
-    /// <list type="number">
-    ///   <item>模块自带一扇专用窗口（<see cref="SidebarModule.WindowType"/>，目前是「哈希校验」）——
-    ///         那扇窗口按约定提供 <c>public static void Show()</c>，这里按名字反射调用。
-    ///         ⚠️ 用反射而不是 if/switch 判断类型：加一扇新窗口只改 <c>SidebarModule</c> 一行，
-    ///            不用回来改这里（正是代码审计里"别写 case"那条）。</item>
-    ///   <item>其余走学科工具窗（<see cref="SubjectToolsWindow"/>），工具 id 由
-    ///         <see cref="SidebarModule.WindowTool"/> 指定。</item>
-    /// </list>
-    /// </para>
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private static void OpenModuleWindow(SidebarModule m)
     {
         if (m.WindowType is { } type)
@@ -1435,7 +1881,7 @@ public sealed partial class ToolSidebarWindow : Window
                     return;
                 }
 
-                // 约定没遵守：说明代码改坏了，但别让用户点了没反应 —— 退回学科工具窗并留痕
+                
                 Log($"模块 {m.Id} 的窗口没有 public static Show()，已退回学科工具窗");
             }
             catch (Exception ex)
@@ -1448,27 +1894,27 @@ public sealed partial class ToolSidebarWindow : Window
         SubjectToolsWindow.ShowTool(m.WindowTool);
     }
 
-    // ── 贴边面板（音量 / 屏幕亮度）──────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 「音量」模块的入口：**边条不收**（浮窗是挨着边条长出来的一栏，边条留着才像一个整体），
-    /// 直接把主音量浮窗开在边条内侧；浮窗里再点「展开」看合成器。
-    /// ⚠️ 必须先把自动收起压住：浮窗一显形就抢焦点，边条会以为自己"失焦"当场缩回去。
-    ///
-    /// ⚠️⚠️ 必须把**自己这条边**（<c>_edge</c>）交给浮窗（2026-10-11 修 Nick 报的
-    ///    「贴靠 + 左右都开，点左边的音量、浮窗从右边弹出来」）：浮窗自己猜边会优先猜右边，
-    ///    哪条边上的键被按，浮窗就得长在哪条边。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void ToggleVolume()
     {
         SuppressAutoCollapse = true;
         VolumeWindow.Toggle(VolumeWindow.Target.Volume, _edge);
     }
 
-    /// <summary>
-    /// 「屏幕亮度」模块：跟音量**同一个浮窗**（换成亮度那一栏：下面那颗键是自动亮度，没有二级浮窗）。
-    /// 其余（挨着边条、边条不收、把自己这条边交出去）完全一样。
-    /// </summary>
+    
+    
+    
+    
     private void ToggleBrightness()
     {
         SuppressAutoCollapse = true;
@@ -1481,20 +1927,20 @@ public sealed partial class ToolSidebarWindow : Window
         finally { SuppressAutoCollapse = false; }
     }
 
-    // ── "要先问一句"的原生 Flyout ────────────────────────────
-    //
-    // 为什么是原生 Flyout（而不是自己开个小窗口）：自己开窗要自己管窗口边框/背景/置顶/圆角，
-    // 结果被 Nick 一眼看穿"很丑、有奇妙的白色边框、还不置顶"。用框架的 Flyout：
-    // 描边/圆角/投影/主题全归系统，点别处自动收（light dismiss），也不用管 z 序。
-    //
-    // ⚠️ 唯一关键点：`ShouldConstrainToRootBounds = false`。
-    //    默认是 true → Flyout 会被限制在**自己窗口**的边界内，而边条只有 92dip 宽，
-    //    弹出来会被剪成一条没法用。框架自己在 ComboBox/Flyout 里也是设 false 的。
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
-    /// <summary>
-    /// 在边条旁边弹一个原生确认 Flyout（红底确定键）。
-    /// `onClosed`：面板消失后调（不管用户是按了红键、按取消、点别处还是超时自动收）。
-    /// </summary>
+    
+    
+    
+    
     private void ShowConfirmFlyout(Button? anchor, string title, string? body, string okText, Action onConfirm,
                                    Action? onClosed = null, bool dangerStyle = true)
     {
@@ -1534,7 +1980,7 @@ public sealed partial class ToolSidebarWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Right,
             };
 
-            // 纯提示（非危险动作）不给「取消」——那会和「知道了」语义重复
+            
             if (dangerStyle)
             {
                 var cancel = new Button { Content = "取消", FontSize = 13, MinWidth = 76, Padding = new Thickness(0, 6, 0, 6) };
@@ -1545,7 +1991,7 @@ public sealed partial class ToolSidebarWindow : Window
             var danger = new Button { Content = okText, FontSize = 13, MinWidth = 88, Padding = new Thickness(0, 6, 0, 6) };
             if (dangerStyle)
             {
-                // 红底危险键：这条资源链上按钮的刷子全改红，否则一 hover/按下就变回主题灰
+                
                 var red = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xC4, 0x2B, 0x1C));
                 var redHover = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xD1, 0x43, 0x35));
                 var redPressed = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xA8, 0x22, 0x16));
@@ -1569,24 +2015,24 @@ public sealed partial class ToolSidebarWindow : Window
 
             var flyout = new Flyout
             {
-                ShouldConstrainToRootBounds = false,     // ⚠️ 必须 false，否则被剪在边条窗口里
+                ShouldConstrainToRootBounds = false,     
                 Placement = ConfirmPlacement(),
                 Content = panel,
             };
             flyout.Closed += (_, _) =>
             {
                 if (ReferenceEquals(_confirmFlyout, flyout)) _confirmFlyout = null;
-                SuppressAutoCollapse = false;            // 面板没了 → 恢复自动收起
+                SuppressAutoCollapse = false;            
                 try { onClosed?.Invoke(); } catch (Exception ex) { Log("确认面板收尾失败: " + ex.Message); }
 
-                // ⚠️ 光解除压制不够：被压住的那段时间里，边条自己那次"失焦收起"已经被错过了
-                //    （原因见 CollapseAfterPopupsClosed 的注释）。不补这一下，面板一关边条就赖着不收。
+                
+                
                 CollapseAfterPopupsClosed();
             };
             danger.Click += (_, _) =>
             {
-                // ⚠️ 顺序要紧：先把"确认"做完（onConfirm 会把 confirmed 立起来），再收面板。
-                //    反过来的话，Closed 里的收尾会误当成"用户取消了"而去抢焦点。
+                
+                
                 try { onConfirm(); } catch (Exception ex) { Log("确认动作失败: " + ex.Message); }
                 flyout.Hide();
             };
@@ -1597,7 +2043,7 @@ public sealed partial class ToolSidebarWindow : Window
             flyout.ShowAt(target, new FlyoutShowOptions { Placement = flyout.Placement });
             Log($"确认面板：原生 Flyout 已弹出（标题={title} 锚点={(target as FrameworkElement)?.Name} 方位={flyout.Placement}）");
 
-            // 兜底：20 秒还没人理就自己收（原生 Flyout 不退的话会一直挂着挡点击）
+            
             var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             _ = System.Threading.Tasks.Task.Delay(20000).ContinueWith(_ =>
             {
@@ -1614,7 +2060,7 @@ public sealed partial class ToolSidebarWindow : Window
         catch (Exception ex)
         {
             Log("确认面板弹出失败: " + ex.Message);
-            SuppressAutoCollapse = false;            // 面板没弹出来 → 别把"禁止收起"这个旗一直立着
+            SuppressAutoCollapse = false;            
         }
     }
 
@@ -1629,15 +2075,15 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
-    // ── 「PPT 触控」菜单（两个开关：触控手势 / 长按菜单）──────────
-    //
-    // 形态与「安全选项」一致：原生 Flyout + 原生 ToggleSwitch，一个字都不自己画。
-    //
-    // ⚠️ 为什么不用 MenuFlyout：这里要放两个 ToggleSwitch（各带一行说明），
-    //    而 MenuFlyoutItem 只能装单行文字 + 图标 —— 要塞开关就得整个换掉它的模板，那就成自己画控件了。
-    //
-    // ⚠️ 两个开关的状态**一律现读**（见 PptTouchSwitch），与「PPT 触控优化」页共用同一份配置：
-    //    在页面上改过再回来点这颗键，菜单里显示的就是改过之后的状态。
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     private void ShowPptTouchFlyout(Button anchor)
     {
@@ -1657,8 +2103,8 @@ public sealed partial class ToolSidebarWindow : Window
                 Margin = new Thickness(12, 8, 12, 6),
             });
 
-            // 一行开关：左边两行字（名称 + 说明），右边原生 ToggleSwitch。
-            // ⚠️ ToggleSwitch 默认 MinWidth 154，放进 248 宽的菜单里会把文字挤没 —— 必须压成 0。
+            
+            
             void SwitchRow(string title, string note, bool initial, Func<bool, bool> apply)
             {
                 var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
@@ -1680,8 +2126,8 @@ public sealed partial class ToolSidebarWindow : Window
                     VerticalAlignment = VerticalAlignment.Center,
                 };
 
-                // 铺初值会触发一次 Toggled（回声），铺完再放行；
-                // 拨动后按**实际结果**回写 —— 失败时 PptTouchSwitch 会把真状态还回来。
+                
+                
                 var ready = false;
                 toggle.Toggled += (_, _) =>
                 {
@@ -1712,7 +2158,7 @@ public sealed partial class ToolSidebarWindow : Window
 
             var flyout = new Flyout
             {
-                ShouldConstrainToRootBounds = false,     // ⚠️ 必须 false，否则被剪在边条窗口里
+                ShouldConstrainToRootBounds = false,     
                 Placement = ConfirmPlacement(),
                 Content = panel,
             };
@@ -1720,17 +2166,17 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 if (ReferenceEquals(_pptFlyout, flyout)) _pptFlyout = null;
 
-                // 菜单收掉 = 用户不再操作了 → 恢复自动收起，并补收一次边条
-                // （被压住的这段时间它自己那次"失焦收起"已经错过了；原因见 CollapseAfterPopupsClosed）。
+                
+                
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (_confirmFlyout is not null) return;     // 后面还跟着确认面板 → 由它收尾
+                    if (_confirmFlyout is not null) return;     
                     SuppressAutoCollapse = false;
                     CollapseAfterPopupsClosed();
                 });
             };
 
-            SuppressAutoCollapse = true;                // 菜单挂着的时候边条不许自己收
+            SuppressAutoCollapse = true;                
             _pptFlyout = flyout;
             flyout.ShowAt(anchor, new FlyoutShowOptions { Placement = flyout.Placement });
             Log("PPT 触控：菜单已弹出");
@@ -1753,12 +2199,12 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
-    // ── 「安全选项」菜单（锁定 / 切换用户 / 注销）──────────────
-    //
-    // ⚠️ Ctrl+Alt+Del 那个蓝色界面是系统的**安全桌面**，Windows 从设计上就禁止普通程序调起它
-    //    （否则钓鱼程序可以伪造一个一模一样的界面骗密码）。所以这里给的是它上面那几个**操作本身**。
-    //
-    // 用框架原生 Flyout + 原生 Button（不自己画）：描边 / 圆角 / 投影 / 亮暗主题 / 点别处自动收，全归系统。
+    
+    
+    
+    
+    
+    
 
     private void ShowSecurityFlyout(Button anchor)
     {
@@ -1793,7 +2239,7 @@ public sealed partial class ToolSidebarWindow : Window
                     VerticalAlignment = VerticalAlignment.Center,
                 });
 
-                // 看着像系统菜单项：透明底、无边框、内容靠左
+                
                 var item = new Button
                 {
                     Content = row,
@@ -1813,15 +2259,15 @@ public sealed partial class ToolSidebarWindow : Window
                 panel.Children.Add(item);
             }
 
-            // 锁定 / 切换用户：按下去就干，没什么可问的
+            
             Item("\uE72E", "锁定电脑", () => TeachingActions.Begin("lock"));
             Item("\uE748", "切换用户", () => TeachingActions.Begin("switchuser"));
-            // 注销：会把所有程序关掉、没保存的内容会丢 → 跟「关全部」一样先问一句
+            
             Item("\uE7E8", "注销…", () => BeginLogout(anchor));
 
             var flyout = new Flyout
             {
-                ShouldConstrainToRootBounds = false,     // ⚠️ 必须 false，否则被剪在边条窗口里
+                ShouldConstrainToRootBounds = false,     
                 Placement = ConfirmPlacement(),
                 Content = panel,
             };
@@ -1829,22 +2275,22 @@ public sealed partial class ToolSidebarWindow : Window
             {
                 if (ReferenceEquals(_securityFlyout, flyout)) _securityFlyout = null;
 
-                // 菜单收掉 = 用户没在继续操作 → 恢复自动收起，并**补收一次**边条
-                //（被压住的这段时间它自己那次"失焦收起"已经错过了，见 CollapseAfterPopupsClosed）。
-                //
-                // ⚠️⚠️ 必须排到下一轮消息再判：点「注销」时是**先** HideSecurityFlyout、**紧接着**
-                //     才在 act() 里弹确认面板 —— 这一刻 _confirmFlyout 还是 null，
-                //     当场判会把边条误收、把确认面板的锚点按钮一起收走。
-                //     排到队尾之后 act() 已经跑完、面板挂上了，才能正确地把收尾交给它。
+                
+                
+                
+                
+                
+                
+                
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (_confirmFlyout is not null) return;     // 后面还跟着确认面板 → 由它收尾
+                    if (_confirmFlyout is not null) return;     
                     SuppressAutoCollapse = false;
                     CollapseAfterPopupsClosed();
                 });
             };
 
-            SuppressAutoCollapse = true;                // 菜单挂着的时候边条不许自己收
+            SuppressAutoCollapse = true;                
             _securityFlyout = flyout;
             flyout.ShowAt(anchor, new FlyoutShowOptions { Placement = flyout.Placement });
             Log("安全选项：菜单已弹出");
@@ -1867,10 +2313,10 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
-    /// <summary>
-    /// 菜单里点「注销」：先让 <see cref="TeachingActions.Begin"/> 攒好"待确认"（它返回要问用户的那句话），
-    /// 再弹原生确认面板 —— 用户在面板上按了红键才真注销。
-    /// </summary>
+    
+    
+    
+    
     private void BeginLogout(Button anchor)
     {
         var hint = TeachingActions.Begin("logout");
@@ -1885,12 +2331,12 @@ public sealed partial class ToolSidebarWindow : Window
             () => TeachingActions.ConfirmPending("logout"), dangerStyle: true);
     }
 
-    /// <summary>
-    /// 边条贴哪条边 → Flyout 往哪边弹（贴左往右弹，依此类推）。
-    ///
-    /// ⚠️ 收起态那条离屏幕边缘留了 <see cref="CollapsedEdgeGapDip"/> 的空隙，所以"贴边"的
-    ///    判据不能再用写死的 8px —— 得把空隙（按当前缩放换算）加进去，否则认不出这条边。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private static FlyoutPlacementMode ConfirmPlacement()
     {
         try
@@ -1911,20 +2357,20 @@ public sealed partial class ToolSidebarWindow : Window
         return FlyoutPlacementMode.Right;
     }
 
-    // ── 收起状态：点一下展开 / 按住拖动 ──────────────────────
+    
 
     private void Strip_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (_appWindow is null) return;
-        StopSlide();                                     // 滑到一半被按住拖？先停下，别跟拖动抢窗口
+        StopSlide();                                     
         _dragOrigin = _appWindow.Position;
         _dragging = false;
 
-        // ⚠️ 触摸/笔**不能**问系统要"屏幕坐标"：
-        //    · GetPointerInfo 常常根本不是这个指针（拿鼠标的 info 回来的），
-        //    · GetCursorPos 给的必然是鼠标位置（手指拖动时鼠标压根不动）。
-        //    于是"按下点"会被记成鼠标待的地方（离边条两百多像素）→ 一拖就跳、看着像"拖不动"。
-        //    触摸只能用**手指在窗口里的相对位置**，拖动时让窗口"跟着手指走"（算法见 Moved）。
+        
+        
+        
+        
+        
         _useSnapToFinger = !IsMousePointer(e);
         if (_useSnapToFinger)
         {
@@ -1932,14 +2378,14 @@ public sealed partial class ToolSidebarWindow : Window
             _pressInWindowDipX = press.X;
             _pressInWindowDipY = press.Y;
 
-            // 手指在窗口里的**物理像素**偏移（整数，后面按绝对坐标拖动要用）
+            
             var pressScale = DpiScaleOf();
             _pressOffsetPx = (int)Math.Round(press.X * pressScale);
             _pressOffsetPy = (int)Math.Round(press.Y * pressScale);
         }
         else
         {
-            PointerScreenPoint(e, out _dragStart);       // 鼠标：光标位置就是屏幕坐标，最准
+            PointerScreenPoint(e, out _dragStart);       
         }
 
         _pressed = true;
@@ -1962,8 +2408,8 @@ public sealed partial class ToolSidebarWindow : Window
 
         if (_useSnapToFinger)
         {
-            // 触摸/笔：**优先**问系统要"这个指针自己的屏幕坐标"——
-            // 那是绝对坐标，跟窗口现在在哪儿无关，所以窗口追得准、也不会自己跟自己震荡。
+            
+            
             if (TryGetPointerScreenPoint(e, out var abs))
             {
                 LogSource("系统指针坐标(绝对)");
@@ -1972,14 +2418,14 @@ public sealed partial class ToolSidebarWindow : Window
             }
             else
             {
-                // 拿不到绝对坐标（这台机器上 GetPointerInfo 不认 WinUI 的 PointerId）→
-                // 用「**真实窗口位置 + 手指相对读数**」做绝对推算：
-                //     目标 = 当前窗口真实位置(GetWindowRect) + (当前读数 − 按下读数)
-                // 手指按在原位 → 窗口不动；手指挪 N px → 窗口挪 N px。读数里混着的"窗口自己挪的那部分"
-                // 正好被"当前真实位置"加回来，两项都是**当下**的绝对量。
-                // ⚠️ 别再用"增量累加 + 上次移动量补偿"：AppWindow.Move 是异步落地的，读数滞后一帧时
-                //    补偿会被重复计入（一次挪算两次），下一帧又往回找 —— 来回过冲，就是"拖起来癫痫"的根源。
-                //    绝对推算不进累加器，一帧滞后只造成一次性的小偏差、下一帧自愈，不会震荡。
+                
+                
+                
+                
+                
+                
+                
+                
                 LogSource("窗口相对·绝对推算");
                 var scale = DpiScaleOf();
                 var cur = e.GetCurrentPoint(Root).Position;
@@ -1999,13 +2445,13 @@ public sealed partial class ToolSidebarWindow : Window
 
         if (!_dragging && Math.Abs(targetX - _dragOrigin.X) + Math.Abs(targetY - _dragOrigin.Y) < 8)
         {
-            return;                                      // 手还没动够，先当点击
+            return;                                      
         }
 
         _dragging = true;
 
-        // ⚠️ 双边模式：拖动**只沿竖直走** —— 横向锁在自己那条边，免得一拖就把"两边都有"拖成单边。
-        //    上下方向由下面每帧 Move 之后的 FollowPartner 带给对面那条。
+        
+        
         if (IsDual) targetX = _dragOrigin.X;
 
         if (targetX == _lastTargetX && targetY == _lastTargetY) { e.Handled = true; return; }
@@ -2014,11 +2460,11 @@ public sealed partial class ToolSidebarWindow : Window
 
         _appWindow.Move(new PointInt32(targetX, targetY));
 
-        // ⛔⛔ 2026-10-22：**单边也得记位置**。
-        //    原先只有 IsDual 才调 FollowPartner，而 _liveRatio 只在它里面赋值
-        //    ⇒ 单边模式下 _liveRatio 永远是 -1，EdgePosition 一律按 free/2 算
-        //    ⇒ 拖完松手永远回到这条边的**正中间**（Nick 报的「锁在中心」）。
-        //    这里按当前边是否为横条选长度参考，与 EdgePosition 保持一致。
+        
+        
+        
+        
+        
         {
             var wa = DisplayArea.Primary.WorkArea;
             var flatEdge = _edge is "top" or "bottom";
@@ -2029,20 +2475,20 @@ public sealed partial class ToolSidebarWindow : Window
 
             _liveRatio = span <= 0 ? 0.5 : Math.Clamp(alongPos / (double)span, 0, 1);
 
-            // 诊断日志（2026-10-23 临时）：拖动时记下算出来的比例与目标点，用来定位「自由模式位置不对」。
-            // ⚠️ 定位完可以删，只在高频拖动里每帧一条，量不大。
+            
+            
             Core.AppLog.Info("sidebar",
                 $"拖动 edge={_edge} flat={flatEdge} along={alongPos} span={span} ratio={_liveRatio:F3} " +
                 $"target=({targetX},{targetY})");
         }
 
-        // 双边：对面那条实时跟到同一高度（拖动中不落盘，松手才存）
+        
         if (IsDual) FollowPartner(targetY, _appWindow.Size.Height);
 
         e.Handled = true;
     }
 
-    /// <summary>鼠标光标 → 屏幕像素坐标。拿不到就 false（触摸/笔不走这条路）。</summary>
+    
     private static bool PointerScreenPoint(PointerRoutedEventArgs e, out POINT pt)
     {
         pt = default;
@@ -2059,11 +2505,11 @@ public sealed partial class ToolSidebarWindow : Window
         return false;
     }
 
-    /// <summary>
-    /// 触摸/笔：要"这个指针自己的屏幕像素坐标"（绝对坐标）。
-    /// 光看 pointerId 不够——这台机器上曾经拿鼠标的 info 回来过，所以**再核一次 pointerType**
-    /// （1=PT_POINTER 2=PT_TOUCH 3=PT_PEN 4=PT_MOUSE），只认触摸/笔。
-    /// </summary>
+    
+    
+    
+    
+    
     private static bool TryGetPointerScreenPoint(PointerRoutedEventArgs e, out POINT pt)
     {
         pt = default;
@@ -2072,8 +2518,8 @@ public sealed partial class ToolSidebarWindow : Window
             var id = e.Pointer.PointerId;
             if (id == 0) return false;
             if (!GetPointerInfo(id, out var info)) return false;
-            if (info.pointerId != id) return false;                     // 不是同一个指针，宁可用别的路
-            if (info.pointerType != 2 && info.pointerType != 3) return false;   // 只要触摸(2)/笔(3)
+            if (info.pointerId != id) return false;                     
+            if (info.pointerType != 2 && info.pointerType != 3) return false;   
             if (info.ptPixelLocation.X == 0 && info.ptPixelLocation.Y == 0) return false;
 
             pt = new POINT(info.ptPixelLocation.X, info.ptPixelLocation.Y);
@@ -2082,7 +2528,7 @@ public sealed partial class ToolSidebarWindow : Window
         catch { return false; }
     }
 
-    /// <summary>这次拖动用的哪条取点路子（每拖只记一次，排查"抖/不跟手"时看它）。</summary>
+    
     private void LogSource(string src)
     {
         if (_loggedSource) return;
@@ -2090,10 +2536,10 @@ public sealed partial class ToolSidebarWindow : Window
         Log($"拖动坐标源: {src}");
     }
 
-    /// <summary>
-    /// 诊断用：把这次拖动的每一条采样记下来（最多 40 条）。
-    /// 重点是「目标」「Win32 实读」「AppWindow 自称」三个位置——用来确认"读回来的位置是不是真的"。
-    /// </summary>
+    
+    
+    
+    
     private void LogDrag(double curDipX, double curDipY, double dxF, double dyF, int tx, int ty)
     {
         if (++_dragSamples > 40) return;
@@ -2106,7 +2552,7 @@ public sealed partial class ToolSidebarWindow : Window
         catch { }
     }
 
-    /// <summary>现读窗口位置（直接问 Win32，不走缓存/不带 DPI 换算）。</summary>
+    
     private PointInt32 WindowRectNow()
     {
         try
@@ -2120,7 +2566,7 @@ public sealed partial class ToolSidebarWindow : Window
         return _appWindow?.Position ?? new PointInt32(0, 0);
     }
 
-    /// <summary>窗口当前的 DPI 缩放（DIP → 物理像素）。</summary>
+    
     private double DpiScaleOf()
     {
         try
@@ -2137,10 +2583,10 @@ public sealed partial class ToolSidebarWindow : Window
         return 1.0;
     }
 
-    /// <summary>
-    /// 是不是鼠标指针。用 ToString 比对，绕开 PointerDeviceType 枚举命名空间的版本差异
-    /// （WinUI 3 里在 Microsoft.UI.Input，UWP 那套在 Windows.Devices.Input，两个都见过）。
-    /// </summary>
+    
+    
+    
+    
     private static bool IsMousePointer(PointerRoutedEventArgs e)
     {
         try
@@ -2163,18 +2609,18 @@ public sealed partial class ToolSidebarWindow : Window
         }
         else
         {
-            Expand();                                      // 没动 → 当成点了一下
+            Expand();                                      
         }
 
         e.Handled = true;
     }
 
-    /// <summary>
-    /// 松手时定位置：看窗口中心离哪条边最近就吸过去，沿边的位置按松手处记下来。
-    ///   · 自由模式：左/右/上/下**四条边**都参与吸附，吸到哪条边存进 <c>SidebarFreeEdge</c>。
-    ///   · 贴靠模式：**只吸左右两条** —— 松手时中心若更靠上下，也按左右就近归位（贴靠 = 左右模式）。
-    ///     ⚠️ 双边模式（设置 = both）下**不许换边** —— 换边就等于把"两边都有"拆成单边了。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private void DockToNearestEdge()
     {
         if (_appWindow is null) return;
@@ -2193,7 +2639,7 @@ public sealed partial class ToolSidebarWindow : Window
             string edge;
             if (IsDual)
             {
-                edge = _edge;                            // 留在自己这条边，只挪上下
+                edge = _edge;                            
             }
             else
             {
@@ -2204,51 +2650,51 @@ public sealed partial class ToolSidebarWindow : Window
 
                 if (IsFreeMode)
                 {
-                    App.Settings.Current.SidebarFreeEdge = edge;    // 四条边都收
+                    App.Settings.Current.SidebarFreeEdge = edge;    
                 }
                 else
                 {
-                    // 贴靠模式没有上下边：更靠上/下时按左右就近归位
+                    
                     if (edge is "top" or "bottom") edge = dl <= dr ? "left" : "right";
                     App.Settings.Current.SidebarEdge = edge;
                 }
             }
 
-            // 2026-10-24 Nick 要求恢复位置记忆（他反馈「每次重启都跑回右边居中，明明调过位置」）。
-            // 松手这一刻把沿边比例落盘。
-            // ⚠️ 只在**松手**写，拖动过程中绝不写 —— 10-22 那次出问题正是拖动时反复 Save：
-            //    既卡，又会把「开机最小化」启动早期"窗口尺寸还没定"的中间态当成最终位置存下来。
+            
+            
+            
+            
             App.Settings.Current.SidebarPosRatio = _liveRatio;
             App.Settings.Save();
 
-            // ⚠️⚠️ 2026-09-28 修：单边模式换不了边（Nick 报的"拖了但固定不到上/下/左边"）。
-            //   上次把单例改成"一条边一个实例"之后，_edge 变成**实例级只读**字段，
-            //   这里只改设置再 SnapToSetting() 是没用的 —— 这条实例还按自己那条老边走，松手一贴就弹回原边。
-            //   换边必须走 ApplySetting()：它按新设置重建实例集合（新的那条建出来、这条藏起来）再贴过去。
+            
+            
+            
+            
             if (edge != _edge)
             {
                 Log("换边: " + _edge + " → " + edge);
 
-                // ⛔⛔ 2026-10-23：换边后必须**按鼠标在新边上的真实位置**重算比例。
-                //    原因：_pool 是按边名存的实例池，换到右边时 _pool["right"] 多半早就建过了，
-                //    SyncInstances() 会**直接复用它**，连带它上一次的 _liveRatio 一起复活 ——
-                //    于是「左边靠下 → 拖到右边上部」会吸附到右下（Nick 报的那个）。
-                //    这里先把鼠标点投影到**新边**上算成比例，重建后再扣到新实例上。
+                
+                
+                
+                
+                
                 var flatNew = edge is "top" or "bottom";
                 var alongNow = flatNew ? cx - work.X : cy - work.Y;
                 var mineNow = flatNew ? Math.Max(1, _appWindow?.Size.Width ?? 1) : Math.Max(1, _appWindow?.Size.Height ?? 1);
                 var spanNow = Math.Max(0, (flatNew ? work.Width : work.Height) - mineNow);
                 var newRatio = spanNow <= 0 ? 0.5 : Math.Clamp(alongNow / (double)spanNow, 0, 1);
 
-                // ⛔ 比例**交给 ApplySetting 在建/取实例时就写好**，⛔ 别在它之后再 SnapToSetting ——
-                //    那样会先按旧位置显示一次、再跳到新位置（Nick 说的「先在下面出现，然后突变到上面」）。
+                
+                
                 ApplySetting(edge, newRatio);
                 return;
             }
 
             SnapToSetting();
 
-            // 双边：比例共享，让对面那条也落回同一高度收尾
+            
             Partner()?.SnapToSetting();
         }
         catch (Exception ex)
@@ -2257,13 +2703,13 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 双边模式的位置联动：把自己当前的沿边位置算成 0~1 比例甩给对面那条，让它立刻贴到同一高度。
-    ///
-    /// 拖动中每帧都会调，所以**故意不落盘** —— 每帧写一次 settings.json 会顿。
-    /// 落盘交给松手时的 <see cref="DockToNearestEdge"/> 统一做。
-    /// 用 <c>verify: false</c> 挪对面：跟着走的东西要跟手，别一帧里读回位置纠偏好几次。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private void FollowPartner(int myY, int myHeight)
     {
         var other = Partner();
@@ -2274,10 +2720,10 @@ public sealed partial class ToolSidebarWindow : Window
             var free = Math.Max(0, work.Height - myHeight);
             _liveRatio = free <= 0 ? 0.5 : Math.Clamp((myY - work.Y) / (double)free, 0, 1);
 
-            // ⛔⛔ 2026-10-22：**必须把比例同步给对面**。
-            //    原先只改了 self 的 _liveRatio 就调 other.MoveToEdge()，而 MoveToEdge 读的是
-            //    **对面自己的** _liveRatio（还是它上次的旧值）⇒ 对面根本不跟，两条越拖越分家
-            //    （Nick 报的「左右两边高度不一致、左边能拖走右边不动」就是这个）。
+            
+            
+            
+            
             other._liveRatio = _liveRatio;
             other.MoveToEdge(verify: false);
         }
@@ -2287,45 +2733,45 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    // ── 动画 ─────────────────────────────────────────────────
+    
 
-    /// <summary>
-    /// 展开：**整个窗口**（连亚克力底、圆角、描边一起）从贴的那条边滑进去。
-    /// 以前是"窗口先瞬间铺开成一大块 → 里面的内容才自己滑"，所以先闪一个灰框，很出戏。
-    /// 窗口位置交给不了合成器，只能按帧 Move（16ms 一帧 ≈ 60fps）；
-    /// 而且从"露出半块"起步，不从屏幕外起步 —— 完全挪到屏幕外的窗口 DWM 往往不给它刷帧，
-    /// 滑进来的第一帧会发虚。半块起步肉眼就是"从边上滑进来"。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     private void SlideInFromEdge()
     {
         if (_appWindow is null) return;
-        StopSlide();                                     // 上一次没滑完就再展开：作废重来
+        StopSlide();                                     
 
-        var size = PlannedSize();                        // 展开尺寸（此处 _expanded 已经置为 true）
+        var size = PlannedSize();                        
         var finalPos = EdgePosition(size.Width, size.Height);
-        _restRect = new Windows.Graphics.RectInt32(finalPos.X, finalPos.Y, size.Width, size.Height);   // 滑动期间 CurrentRect 返回它
+        _restRect = new Windows.Graphics.RectInt32(finalPos.X, finalPos.Y, size.Width, size.Height);   
 
-        // 起步只推"半块"：保证窗口还有一半留在屏幕里。整块挪到屏幕外的窗口
-        // DWM 常常不给它刷帧，那滑进来的第一帧会发虚（见方法注释）。
+        
+        
         var start = OutwardOffset(finalPos, (int)((IsFlat ? size.Height : size.Width) / 2.0));
 
-        // 一次把"起点位置 + 展开尺寸"设下去。分成 Resize + Move 两次的话，
-        // 中间那一帧会被系统画出来 —— 那就是"闪一下再滑"的来源（2026-09-26 优化）。
+        
+        
         try { _appWindow.MoveAndResize(new RectInt32(start.X, start.Y, size.Width, size.Height)); }
         catch (Exception ex) { Log("滑入落位失败: " + ex.Message); }
-        ApplyRoundRegion(size);                           // 收起→展开：这里一次把"起点 + 展开尺寸"设下去，区域同步
+        ApplyRoundRegion(size);                           
 
         TweenWindow(start, finalPos, 220);
     }
 
-    /// <summary>
-    /// 按帧把窗口从 from 挪到 to（缓出）。⚠️ 状态一变（收起/拖动/再展开）这一波就作废，绝不许它回头改窗口。
-    ///
-    /// ⚠️ 驱动方式（2026-10-01 修"展开/收起卡顿掉帧"）：**渲染循环（CompositionTarget.Rendering）**
-    ///    而不是 16ms 的 DispatcherQueueTimer —— 那个计时器精度低、忙时会合并 tick，实测一合并就是
-    ///    30fps 甚至更低，肉眼全是掉帧感。渲染回调每个 vsync 准时一帧，和 DWM 上屏节奏对齐。
-    ///    挪窗口也换成直接 SetWindowPos（NOACTIVATE|NOZORDER|NOSIZE），比 AppWindow.Move 轻得多。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private void TweenWindow(PointInt32 from, PointInt32 to, double ms, Action? done = null)
     {
         if (_appWindow is null) return;
@@ -2337,10 +2783,10 @@ public sealed partial class ToolSidebarWindow : Window
 
         EventHandler<object> onFrame = (_, _) =>
         {
-            if (epoch != _slideEpoch) return;                // 状态已经变了：这一波到此为止
+            if (epoch != _slideEpoch) return;                
 
             var t = Math.Clamp(sw.Elapsed.TotalMilliseconds / ms, 0, 1);
-            var e = 1 - Math.Pow(1 - t, 3);              // ease-out cubic
+            var e = 1 - Math.Pow(1 - t, 3);              
             var x = (int)Math.Round(from.X + (to.X - from.X) * e);
             var y = (int)Math.Round(from.Y + (to.Y - from.Y) * e);
             _ = SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0, SwpNoSizeFlag | SwpNoZOrderFlag | SwpNoActivateFlag);
@@ -2349,12 +2795,12 @@ public sealed partial class ToolSidebarWindow : Window
             StopSlide();
             _ = SetWindowPos(hwnd, IntPtr.Zero, to.X, to.Y, 0, 0, SwpNoSizeFlag | SwpNoZOrderFlag | SwpNoActivateFlag);
             try { _restRect = new Windows.Graphics.RectInt32(to.X, to.Y, _appWindow.Size.Width, _appWindow.Size.Height); } catch { }
-            done?.Invoke();                                  // 滑完了再收尾（收起就是靠它）
+            done?.Invoke();                                  
         };
         _slideFrame = onFrame;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += onFrame;
 
-        // 兜底：万一渲染回调停摆（窗口被藏、island 暂停渲染），动画不能卡死不收尾
+        
         var watchdog = DispatcherQueue.CreateTimer();
         watchdog.Interval = TimeSpan.FromMilliseconds(ms + 400);
         watchdog.IsRepeating = false;
@@ -2370,7 +2816,7 @@ public sealed partial class ToolSidebarWindow : Window
         watchdog.Start();
     }
 
-    /// <summary>收起：整个窗口往贴着的那条边**滑出去**（跟展开滑进来同一条路子，方向相反），滑完再真收。</summary>
+    
     private bool SlideOutToEdge(Action done)
     {
         if (_appWindow is null) return false;
@@ -2379,11 +2825,11 @@ public sealed partial class ToolSidebarWindow : Window
         var from = _appWindow.Position;
         var size = _appWindow.Size;
 
-        // ⚠️ 必须滑到**整个窗口都在屏幕外**（推的距离 = 当前厚度 + 2px 余量）。
-        //    以前只推"展开尺寸 − 收起尺寸"（92−20=72），滑完还剩 20dip 的展开态残片贴在屏幕边上，
-        //    紧接着又被 Resize 成抓手 —— 肉眼看就是"没滑出去就突然变身"，很出戏（2026-09-26 修）。
-        //    现在滑到底时屏幕边缘是干净的，"变身"那一下（92×450 → 20×110）用户在屏幕外看不到，
-        //    抓手再淡入接上，就顺了。
+        
+        
+        
+        
+        
         var thickness = IsFlat ? size.Height : size.Width;
         var to = OutwardOffset(from, thickness + 2);
         TweenWindow(from, to, 240, done);
@@ -2392,7 +2838,7 @@ public sealed partial class ToolSidebarWindow : Window
 
     private void StopSlide()
     {
-        _slideEpoch++;                                    // 让在跑的那一波作废（关键：竞态的根治）
+        _slideEpoch++;                                    
         if (_slideFrame is not null)
         {
             try { Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= _slideFrame; } catch { }
@@ -2402,7 +2848,7 @@ public sealed partial class ToolSidebarWindow : Window
         _slideWatchdog = null;
     }
 
-    /// <summary>旧的内容滑入（只动 Panel 里的东西，窗口先铺开）——现在不用了，留着备用。</summary>
+    
     private void PlaySlideIn()
     {
         try
@@ -2434,9 +2880,61 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    // ── 排版 / 位置 / 尺寸 ───────────────────────────────────
+    
 
-    /// <summary>按贴的边决定排版：贴左右 = 一列；贴上/下 = 两行（工具一行、按钮一行）。</summary>
+    
+    /// <summary>
+    /// 切换 BodyArea 的行列归属。四种形态共用一块 Grid，只改坐标与行列数，
+    /// 不搬运控件，避免滚动位置和焦点丢失（2026-11-22）。
+    /// </summary>
+    private void ApplyBodyLayout()
+    {
+        var flat = IsFlat;
+        var above = !flat && PinnedAbove && HasPinnedApps;
+
+        // 竖排时工具那行吃掉剩余高度；横条时整条高度由内容决定。
+        ToolsRow.Height = flat ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        BodyArea.RowSpacing = flat || above ? 3 : 0;
+        BodyArea.ColumnSpacing = 0;
+
+        if (flat)
+        {
+            Place(ToolsScroll, row: 0, col: 0, rowSpan: 1, colSpan: 2);
+            Place(SoftwarePane, row: 1, col: 0, rowSpan: 1, colSpan: 2);
+            Place(Sep, row: 2, col: 0, rowSpan: 1, colSpan: 2);
+            Place(FooterStack, row: 3, col: 0, rowSpan: 1, colSpan: 2);
+            SetPaneDivider(new Thickness(0));   // 下面紧跟分隔线，不再多画一条
+            return;
+        }
+
+        if (above)
+        {
+            Place(SoftwarePane, row: 0, col: 0, rowSpan: 1, colSpan: 2);
+            Place(ToolsScroll, row: 1, col: 0, rowSpan: 1, colSpan: 2);
+            Place(Sep, row: 2, col: 0, rowSpan: 1, colSpan: 2);
+            Place(FooterStack, row: 3, col: 0, rowSpan: 1, colSpan: 2);
+            SetPaneDivider(new Thickness(0, 0, 0, 1));
+            return;
+        }
+
+        // 竖排·软件栏在左：左列从工具上方一直贯穿到操作按钮下方。
+        Place(SoftwarePane, row: 1, col: 0, rowSpan: 3, colSpan: 1);
+        Place(ToolsScroll, row: 1, col: 1, rowSpan: 1, colSpan: 1);
+        Place(Sep, row: 2, col: 1, rowSpan: 1, colSpan: 1);
+        Place(FooterStack, row: 3, col: 1, rowSpan: 1, colSpan: 1);
+        SetPaneDivider(new Thickness(0, 0, 1, 0));
+
+        static void Place(FrameworkElement el, int row, int col, int rowSpan, int colSpan)
+        {
+            Grid.SetRow(el, row);
+            Grid.SetColumn(el, col);
+            Grid.SetRowSpan(el, rowSpan);
+            Grid.SetColumnSpan(el, colSpan);
+        }
+    }
+
+    private void SetPaneDivider(Thickness thickness) => SoftwarePane.BorderThickness = thickness;
+
     private void ApplyEdgeLayout()
     {
         try
@@ -2444,39 +2942,42 @@ public sealed partial class ToolSidebarWindow : Window
             var edge = Edge;
             var flat = edge is "top" or "bottom";
 
-            // 收起状态的抓手：竖条时竖着、横条时横着。
-            // ⚠️ 紧凑档也要跟着缩 —— 条本身细了，抓手还是原来那根长条会显得只剩它一根杵着。
-            // ⚠️ 这里跟着**收起态**那套样式（CompactCollapsed），不是展开面板那套。
+            
+            
+            
             GripStack.Orientation = flat ? Orientation.Horizontal : Orientation.Vertical;
             var gripLong = CompactCollapsed ? 34 : 48;
             var gripStub = CompactCollapsed ? 4 : 5;
             Grip.Width = flat ? gripLong : gripStub;
             Grip.Height = flat ? gripStub : gripLong;
 
-            // 展开面板：永远竖着排（贴上下边时就是两行）
-            ExpandedStack.Orientation = Orientation.Vertical;
-            // ⚠️ 紧凑档也把标题收掉：条才 58 宽，「常用工具」四个字加图标根本放不下（会被裁掉）
+            
             TitleRow.Visibility = flat || CompactBody ? Visibility.Collapsed : Visibility.Visible;
 
-            // 工具区是个 Grid（行列由 BuildToolButtons 按「每行几个」摆好），这里只管间距与对齐
+            // 横条时整条高度是固定的，让内容自然排开；竖排时留出可滚动的剩余空间。
+            BodyRow.Height = flat ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+
+            ApplyBodyLayout();
+
+            
             ToolStack.ColumnSpacing = flat ? 8 : ToolGap;
             ToolStack.RowSpacing = flat ? 8 : ToolGap;
             ToolStack.HorizontalAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
 
             Sep.Margin = flat ? new Thickness(10, 4, 10, 4) : new Thickness(2, 3, 2, 3);
 
-            // 底排现在是 **Grid**（能折行）：间距走 Column/RowSpacing。
-            // 行列由 LayFooter 摆（等 Visibility 定下来之后 —— 它要跳过收起来的那几颗）。
+            
+            
             var footerGap = flat ? FooterFlatSpacingDip : 2;
             FooterStack.ColumnSpacing = footerGap;
             FooterStack.RowSpacing = footerGap;
             FooterStack.HorizontalAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
 
-            // 底部那排按钮是**逐颗**开关（「侧边布局」页底部那五个开关，key 见 SidebarFooterKeys）。
-            // 关掉的那颗用 Collapsed —— StackPanel 不吃折叠子项，整排自己跟着收；一颗都不剩时连分隔线一起收。
-            // ⚠️ 但**别靠 Visibility 反推高度**：尺寸那几处都有独立的"可见颗数"分支
-            //    （<see cref="PlannedSize"/> / <see cref="ExpandedLimits"/> / <see cref="ApplyScrollLimit"/>），
-            //    靠 Visibility 算会在"重排前先量尺寸"的顺序上算错。
+            
+            
+            
+            
+            
             var hiddenFooter = App.Settings.Current.SidebarFooterHidden ?? Array.Empty<string>();
             foreach (var (key, btn) in FooterItems())
                 btn.Visibility = hiddenFooter.Contains(key) ? Visibility.Collapsed : Visibility.Visible;
@@ -2485,10 +2986,10 @@ public sealed partial class ToolSidebarWindow : Window
             FooterStack.Visibility = footerCount > 0 ? Visibility.Visible : Visibility.Collapsed;
             Sep.Visibility = footerCount > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-            // 可见颗数定下来才能摆 —— LayFooter 要跳过收起来的那几颗（按可见序号分配格子）
+            
             LayFooter(flat);
 
-            // 贴上下边时给按钮留出宽度，别挤成一坨；竖条时按钮高度/内边距按大小样式走
+            
             foreach (var b in _toolButtons)
             {
                 b.MinWidth = flat ? (CompactBody ? 56 : 64) : 0;
@@ -2500,7 +3001,7 @@ public sealed partial class ToolSidebarWindow : Window
             foreach (var (_, b) in FooterItems())
             {
                 b.MinWidth = flat ? (CompactBody ? 88 : FooterFlatButtonWidthDip) : 0;
-                // 横条时矮一点，不然两行加起来超出面板高度，下面一排会被裁掉
+                
                 b.MinHeight = flat ? (CompactBody ? 28 : 32) : FooterButtonH;
                 b.Padding = flat ? new Thickness(6, 2, 6, 2) : new Thickness(8, 4, 8, 4);
                 b.HorizontalContentAlignment = flat ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
@@ -2508,7 +3009,7 @@ public sealed partial class ToolSidebarWindow : Window
 
             ApplyFooterContent(flat);
 
-            // 模块多了就让工具区自己滚动（贴上下边时改成左右滚）
+            
             ToolsScroll.VerticalScrollMode = flat ? ScrollMode.Disabled : ScrollMode.Auto;
             ToolsScroll.VerticalScrollBarVisibility = flat ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
             ToolsScroll.HorizontalScrollMode = flat ? ScrollMode.Auto : ScrollMode.Disabled;
@@ -2516,14 +3017,14 @@ public sealed partial class ToolSidebarWindow : Window
             ApplyScrollLimit();
             if (_foldIcon is not null)
             {
-                // 箭头 = "点了会往哪边收"：贴着哪条边就朝哪边收
+                
                 var dir = edge;
                 _foldIcon.Glyph = dir switch
                 {
-                    "left" => "\uE76C",      // 往左收
-                    "top" => "\uE70D",       // 往下收
-                    "bottom" => "\uE70E",    // 往上收
-                    _ => "\uE76B",           // 往右收
+                    "left" => "\uE76C",      
+                    "top" => "\uE70D",       
+                    "bottom" => "\uE70E",    
+                    _ => "\uE76B",           
                 };
             }
         }
@@ -2533,15 +3034,15 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 底排「五大金刚」摆格子：**竖条**跟着工具区一起折行（单列 = 竖着一列；三列 = 5 颗摆成 3+2 两行），
-    /// **横条**永远一排到底（面板本来就矮，折行会顶穿）。
-    ///
-    /// ⚠️ 按**可见**颗数分配格子 —— 中间某颗被用户关掉时不能留个空洞
-    ///（收起来的按钮设 (0,0) 且 Collapsed，Auto 行列吃不掉尺寸，不会占位）。
-    /// ⛔ 别去 <c>Clear()</c> Children：这五颗是 XAML 里声明的（x:Name 字段持有），摘掉再塞回去纯属多此一举，
-    ///     Grid 的定位只看 <c>Grid.SetRow/SetColumn</c>，跟 Children 顺序无关。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void LayFooter(bool flat)
     {
         FooterStack.RowDefinitions.Clear();
@@ -2552,14 +3053,14 @@ public sealed partial class ToolSidebarWindow : Window
         var n = visible.Length;
         if (n == 0) return;
 
-        // 横条 = 有几颗开几列（一排到底）；竖条 = 跟着工具区的 Columns 走
+        
         var cols = flat ? n : Math.Max(1, Math.Min(Columns, n));
         var rows = (int)Math.Ceiling(n / (double)cols);
 
         for (var c = 0; c < cols; c++)
             FooterStack.ColumnDefinitions.Add(new ColumnDefinition
             {
-                // 竖条：各列等分（宽度跟工具区一列对齐）；横条：按内容宽度，别把按钮拉扁
+                
                 Width = flat ? GridLength.Auto : new GridLength(1, GridUnitType.Star),
             });
         for (var r = 0; r < rows; r++)
@@ -2568,7 +3069,7 @@ public sealed partial class ToolSidebarWindow : Window
         var i = 0;
         foreach (var (_, btn) in FooterItems())
         {
-            if (btn.Visibility != Visibility.Visible) continue;      // 关掉的那几颗不进 Grid
+            if (btn.Visibility != Visibility.Visible) continue;      
             Grid.SetRow(btn, i / cols);
             Grid.SetColumn(btn, i % cols);
             FooterStack.Children.Add(btn);
@@ -2576,30 +3077,30 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 底下**五个**按钮（收起 / 常驻 / 位置复原 / 隐藏 / 打开应用）的内容：
-    /// 贴左右边是**竖条** → 图标在上、文字在下（跟工具块一个样式）；
-    /// 贴上/下边是**横条**（面板只有 112 高）→ 左图标、右文字，竖排会被裁掉。
-    /// ⚠️ 「打开应用」那颗是**图片图标**（软件自己的图标），走 SetFooterImageButton，别跟字形混。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private void ApplyFooterContent(bool flat)
     {
         SetFooterButton(FoldButton, "\uE76C", "收起", flat, out _foldIcon);
         SetFooterButton(PinButton, "\uE718", "常驻", flat, out _pinIcon);
         SetFooterButton(ResetButton, "\uE777", "位置复原", flat, out _);
-        // ⚠️「隐藏」原来是 \uED1A —— 在 **Win10 上是个空框**（Nick 2026-10-12 报）。
-        //    那不是码位不存在，而是 ED 那一段属于"新版图标字体"才有的字形，Win10 自带的那版没有。
-        //    ⇒ 一律挑 E7/E8/E9 这一带的老码位（本机 Win10 上已经在正常显示的都在这一带）。
-        //    现在用的 \uE89F 是「ClosePane」（一块面板被收进去），语义对得上"把这条边条收掉不再显示"。
+        
+        
+        
+        
         SetFooterButton(HideButton, "\uE89F", "隐藏", flat, out _);
         SetFooterImageButton(OpenAppButton, "打开应用", flat);
         UpdatePinVisual();
     }
 
-    /// <summary>
-    /// 底排那颗「打开应用」：版式跟 SetFooterButton 一模一样，只是把字形换成**软件自己的图标**
-    /// （Assets\AppIcon-512.png，内嵌资源；Nick 2026-09-26 要求：这颗不要用别的图标）。
-    /// </summary>
+    
+    
+    
+    
     private void SetFooterImageButton(Button b, string label, bool flat)
     {
         var text = new TextBlock
@@ -2637,7 +3138,7 @@ public sealed partial class ToolSidebarWindow : Window
 
     private static ImageSource? _appIconImage;
 
-    /// <summary>软件自己的图标（内嵌 AppIcon-512.png，只解一次、缓存住）。解不开就返回 null（那颗按钮只剩文字，不会崩）。</summary>
+    
     private static ImageSource? AppIconImage()
     {
         if (_appIconImage is not null) return _appIconImage;
@@ -2646,7 +3147,7 @@ public sealed partial class ToolSidebarWindow : Window
             var path = EmbeddedAssets.ExtractToCache("AppIcon-512.png", "app-icon.png");
             if (string.IsNullOrEmpty(path)) return null;
             var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
-            bmp.DecodePixelWidth = 64;          // 底排就 17px 大，解 64 足够，省内存
+            bmp.DecodePixelWidth = 64;          
             bmp.UriSource = new Uri(path);
             _appIconImage = bmp;
         }
@@ -2690,10 +3191,10 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 底排五颗按钮 + 各自的设置 key（顺序 = 在侧边栏上的先后）。
-    /// ⚠️ key 是**存档格式**的一部分（<see cref="SidebarFooterKeys"/>），别随手改字面量。
-    /// </summary>
+    
+    
+    
+    
     private (string Key, Button Btn)[] FooterItems() => new (string, Button)[]
     {
         (SidebarFooterKeys.Fold, FoldButton),
@@ -2703,10 +3204,10 @@ public sealed partial class ToolSidebarWindow : Window
         (SidebarFooterKeys.OpenApp, OpenAppButton),
     };
 
-    /// <summary>
-    /// 底排当前**可见**几颗（0~5）—— 按设置里"关掉了哪几颗"过滤。
-    /// 尺寸处处用它，⛔ 别写死 5：逐颗开关之后，少一颗面板就得少一截。
-    /// </summary>
+    
+    
+    
+    
     private static int VisibleFooterCount()
     {
         var hidden = App.Settings.Current.SidebarFooterHidden ?? Array.Empty<string>();
@@ -2722,7 +3223,7 @@ public sealed partial class ToolSidebarWindow : Window
         catch { return 1.0; }
     }
 
-    /// <summary>当前状态下窗口该多大（dip → 物理像素）。尺寸跟着模块数量、大小样式、每行几个走。</summary>
+    
     private SizeInt32 PlannedSize()
     {
         var scale = Scale();
@@ -2734,9 +3235,9 @@ public sealed partial class ToolSidebarWindow : Window
 
         if (IsFlat)
         {
-            // 上/下边：竖着两行 —— 第一行工具、第二行底排按钮（一颗不剩就只剩第一行）。
-            // 宽度取**两行里更宽的那行**：底排是固定几颗（不被裁的硬要求），
-            // 工具行多到放不下时由 ToolsScroll 横向滚动兜底。
+            
+            
+            
             var count = Math.Max(1, _toolButtons.Count);
             var cell = CompactBody ? 56 : 64;
             var toolsRow = count * cell + (count - 1) * 8 + FlatRowPadDip;
@@ -2746,82 +3247,108 @@ public sealed partial class ToolSidebarWindow : Window
                 : 0;
 
             dipW = (int)Math.Min(Math.Max(Math.Max(FlatMinLength, toolsRow), footerRow), lim.W);
-            dipH = footerCount > 0 ? FlatThickness : FlatBareThickness;
+            dipH = (int)Math.Round(FlatPlannedHeight(dipW, lim.H));
         }
         else
         {
-            // 竖条：宽度按「每行几个」摊 —— 单列就是原来的厚度，三列就三倍宽（各列等分）。
+            
             var cols = Columns;
-            dipW = cols > 1 ? cols * CellWidth + (cols - 1) * ToolGap + 12 : BarWidth;
+            dipW = (cols > 1 ? cols * CellWidth + (cols - 1) * ToolGap + 12 : BarWidth) + SoftwareBarWidth;
             dipH = ExpandedHeight(dipW, lim.H);
         }
 
         return new SizeInt32((int)Math.Round(dipW * scale), (int)Math.Round(dipH * scale));
     }
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     /// <summary>
-    /// 竖条展开后**实际需要多高**（dip）—— 2026-10-11 Nick 报「模块选得少的时候下面空一大块」。
-    ///
-    /// 病因：老算法是 <c>max(PanelLengthDip(450), 200+55×个数) + 底排</c>，而 <see cref="ExpandedLimits"/>
-    /// 的 <c>H</c> 又拿「屏幕的 85%」当下限 ⇒ 本机算出来恒是 707，模块一少就白空三百多 dip。
-    ///
-    /// 现在**让内容自己报高度**：把整个展开面板按「面板宽度 × 不限高」量一遍，取它的 DesiredSize
-    /// （工具区是 ScrollViewer，<see cref="ApplyScrollLimit"/> 已经给它设了 MaxHeight ⇒ 内容超限时
-    /// 它报的就是那个上限，正好是我们要的"封顶后滚动"）。量不出来再退回按内容估算的公式。
+    /// 横条模式的高度：工具行 + 快捷应用行 + 分隔线 + 操作按钮行，量出来为准。
+    /// 从前是按固定厚度给的，软件栏挪成独立一行后就量不准了（2026-11-22）。
     /// </summary>
+    private double FlatPlannedHeight(int dipW, double limitH)
+    {
+        try
+        {
+            ExpandedView.Measure(new Windows.Foundation.Size(dipW, double.PositiveInfinity));
+            var want = ExpandedView.DesiredSize.Height;
+            if (want > 1) return Math.Min(Math.Ceiling(want) + 2, limitH);
+        }
+        catch (Exception ex)
+        {
+            Log("量横条高度失败: " + ex.Message);
+        }
+
+        var h = 11 + (CompactBody ? 42 : 48);
+        if (HasPinnedApps) h += 3 + (CompactBody ? 40 : 44);
+        if (VisibleFooterCount() > 0) h += 9 + (CompactBody ? 28 : 32);
+        return Math.Min(h, limitH);
+    }
+
     private int ExpandedHeight(int dipW, double limitH)
     {
-        // 锁定高度（「自适应高度」关掉）：滑块值就是面板高度，内容少也照撑满 —— 下面留白是预期的。
-        // ⚠️ 只对单列（紧凑模式）生效：每行三个时上限是**整个工作区**，锁死会撑成一大块空面板。
+        
+        
         if (!HeightAuto && Columns <= 1) return (int)Math.Round(limitH);
 
         try
         {
             ExpandedView.Measure(new Windows.Foundation.Size(dipW, double.PositiveInfinity));
             var want = ExpandedView.DesiredSize.Height;
-            if (want > 1) return (int)Math.Min(Math.Ceiling(want) + 2, limitH);   // +2 给边框留余量
+            if (want > 1) return (int)Math.Min(Math.Ceiling(want) + 2, limitH);   
         }
         catch (Exception ex)
         {
             Log("量展开面板高度失败: " + ex.Message);
         }
 
-        // 兜底：不 Measure 了，按行列数估算（跟按钮实际高度走，⛔别写死数字）
+        
         var cols = Math.Max(1, Columns);
         var rows = Math.Max(1, (int)Math.Ceiling(Math.Max(1, _toolButtons.Count) / (double)cols));
         var fn = VisibleFooterCount();
-        // 底排也折行（见 LayFooter），所以按**行数**算高度，不是按颗数
+        
         var fcols = Math.Max(1, Math.Min(cols, fn));
         var frows = fn > 0 ? (int)Math.Ceiling(fn / (double)fcols) : 0;
-        var body = 34 + rows * (ToolButtonH + ToolGap) + (frows > 0 ? 10 + frows * (FooterButtonH + 2) : 0) + 14;
+        var above = !IsFlat && PinnedAbove && HasPinnedApps ? 2 * (ToolButtonH + ToolGap) + 3 : 0;
+        var body = 34 + above + rows * (ToolButtonH + ToolGap) + (frows > 0 ? 10 + frows * (FooterButtonH + 2) : 0) + 14;
         return (int)Math.Min(body, limitH);
     }
 
-    /// <summary>
-    /// 展开面板最多占多大（dip）。模块再多也不让它长满整屏 —— 超出的部分交给工具区滚动（ToolsScroll）。
-    /// </summary>
+    
+    
+    
     private (double W, double H) ExpandedLimits()
     {
         var scale = Scale();
         var work = DisplayArea.Primary.WorkArea;
-        var workW = work.Width / scale - 32;          // 离屏幕两边留点空
+        var workW = work.Width / scale - 32;          
         var workH = work.Height / scale - 32;
-        var footerCount = VisibleFooterCount();
 
         if (IsFlat)
-            return (Math.Min(workW, Math.Max(FlatMinLength, workW * 0.92)),
-                    footerCount > 0 ? FlatThickness : FlatBareThickness);
+        {
+            // 长度仍是整屏的九成；高度不再写死，按内容量（工具 + 快捷应用 + 操作按钮）。
+            var wantLen = Math.Max(FlatMinLength, workW * 0.92);
+            return (Math.Min(workW, wantLen), Math.Min(workH, FlatMaxThicknessDip));
+        }
 
-        // ⚠️ 竖条的高度上限＝**工作区能给多少**，⛔别再拿"屏幕的 85%"当下限 ——
-        //    那正是「模块少还空一大块」的根源（见 ExpandedHeight）。
-        // ⚠️ 单列再压一道：不限的话模块一多就顶到工作区下沿，成"长长的一长条"。
+        
+        
+        
         var cols = Columns;
-        var wantW = cols > 1 ? cols * CellWidth + (cols - 1) * ToolGap + 12 : BarWidth;
+        var wantW = (cols > 1 ? cols * CellWidth + (cols - 1) * ToolGap + 12 : BarWidth) + SoftwareBarWidth;
         var maxH = cols > 1 ? workH : workH * SingleColumnMaxHeightRatio;
         return (Math.Min(workW, wantW), maxH);
     }
 
-    /// <summary>工具区最多能占多高/多宽（面板高度 - 标题/分隔线/底排按钮）。</summary>
+    
     private void ApplyScrollLimit()
     {
         try
@@ -2832,26 +3359,32 @@ public sealed partial class ToolSidebarWindow : Window
 
             if (IsFlat)
             {
-                var chrome = 12 + 24;                                    // 面板 padding + 间距余量
+                var chrome = 12 + 24;                                    
                 ToolsScroll.MaxWidth = Math.Max(120, work.Width / scale - 32 - chrome);
                 ToolsScroll.MaxHeight = double.PositiveInfinity;
-                ToolsScroll.MinHeight = 0;                               // 横条厚度固定，不吃自适应这套
+                ToolsScroll.MinHeight = 0;                               
             }
             else
             {
                 var title = TitleRow.Visibility == Visibility.Visible ? 26 : 0;
-                // 底排：可见 n 颗摆成几行就是几行高（三列时 5 颗 = 3+2 两行，见 LayFooter）；
-                // 一颗都不显示时这段是 0（工具区能多吃掉这份高度）
+                
+                
                 var fn = VisibleFooterCount();
                 var fcols = Math.Max(1, Math.Min(Columns, fn));
                 var frows = fn > 0 ? (int)Math.Ceiling(fn / (double)fcols) : 0;
                 var footer = frows > 0 ? frows * FooterButtonH + (frows - 1) * 2 : 0;
-                var chrome = title + 7 + footer + 17 + 9;                // + 分隔线 + 面板 padding + 几个间距
+
+                // 快捷应用摆在工具上方时，上面那条要单独留出高度（最多两行）。
+                var above = !IsFlat && PinnedAbove && HasPinnedApps
+                    ? 2 * (ToolButtonH + ToolGap) + 3
+                    : 0;
+
+                var chrome = title + 7 + footer + 17 + 9 + above;
                 var max = Math.Max(120, ExpandedLimits().H - chrome);
                 ToolsScroll.MaxHeight = max;
-                // 锁定高度时把工具区撑到上限：底排按钮贴住面板下沿，空白留在工具与底排之间会很难看
-                // （自适应时 MinHeight 归零，让内容自己决定多高 —— 2026-10-18）
-                // ⚠️ 只有单列才锁：三列的上限是整个工作区，撑满会变成一大块空面板。
+                
+                
+                
                 ToolsScroll.MinHeight = !HeightAuto && Columns <= 1 ? max : 0;
                 ToolsScroll.MaxWidth = double.PositiveInfinity;
             }
@@ -2871,7 +3404,7 @@ public sealed partial class ToolSidebarWindow : Window
             ApplyScrollLimit();
             var size = PlannedSize();
             _appWindow.Resize(size);
-            ApplyRoundRegion(size);                        // 尺寸变了，Win10 的圆角区域得跟着重裁
+            ApplyRoundRegion(size);                        
         }
         catch (Exception ex)
         {
@@ -2879,29 +3412,29 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 收起态小条自己裁圆角 + 把 **DWM 的窗口圆角偏好关掉**；展开态反过来交回给 DWM。
-    ///
-    /// ⛔⛔ 为什么 Win11 上也要自己裁（2026-10-12 逐像素查出来的）：
-    ///   收起态那条只有 12dip 宽，而 Win11 的"圆角窗口"投影是按 8dip 圆角模板画的 ——
-    ///   在这个尺寸下 **DWM 画出来的投影比窗口本身还宽、而且整体右偏约 6px**：
-    ///   紧贴条**右侧**的那 6px 没有投影（跟远处桌面一个亮度），再往外才是那圈暗影。
-    ///   于是条右边看着像"又套了一圈边框"（Nick 连报两次，截图里那条浅色月牙就是它）。
-    ///   实测把 `DWMWA_WINDOW_CORNER_PREFERENCE` 设成 DONOTROUND 后 → 那一圈**彻底消失**
-    ///   （同一位置逐像素扫，窗口两侧从 16px 到 44px 全是同一个值，再也扫不出暗环）。
-    ///   ⇒ 收起态：DWM 直角（不出投影）+ 我们用 GDI 裁圆角（外观跟以前一样是圆头小条）。
-    ///     展开态：还是 DWM 圆角 + 投影（那是个"卡片"，投影本来就该有）。
-    ///
-    ///   代价：收起态小条**没有系统投影**了（贴桌面，就是一枚"贴纸"）。
-    ///   ⚠️ 别把它扩展到展开态 —— 展开面板宽，那圈错位在宽面板上根本看不出来，
-    ///     反倒是投影没了会让卡片显得"贴"在页面上。
-    ///
-    /// Win10 本来就全靠自己裁（DWM 不认那个属性），照旧。
-    ///
-    /// ⚠️ 参数是**目标尺寸**（物理像素），⛔ 别读 <c>_appWindow.Size</c>：
-    ///    Resize / MoveAndResize 刚调完它还没更新，读它会拿旧尺寸裁出一个错的区域
-    ///    （跟 <see cref="MoveToEdge"/> 里那个坑同源）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private void ApplyRoundRegion(SizeInt32 size)
     {
         if (_appWindow is null) return;
@@ -2912,16 +3445,16 @@ public sealed partial class ToolSidebarWindow : Window
 
             if (Core.SystemInfo.IsWin11 && !collapsed)
             {
-                // 展开态：交回 DWM —— 圆角和投影都让它画（先把我们自己的区域撤掉）
+                
                 Core.WindowChrome.ClearRoundRegion(hwnd);
                 Core.WindowChrome.SetRounded(hwnd, rounded: true);
                 return;
             }
 
-            // 收起态（两个系统）都自己裁；Win11 还要顺手把 DWM 圆角关掉，否则那圈错位投影还在
+            
             if (Core.SystemInfo.IsWin11) Core.WindowChrome.SetRounded(hwnd, rounded: false);
 
-            var radius = (int)Math.Round(8 * Scale());     // 跟 XAML 里 Panel 的 CornerRadius=8 对齐
+            var radius = (int)Math.Round(8 * Scale());     
             Core.WindowChrome.SetRoundRegion(hwnd, size.Width, size.Height, radius);
         }
         catch (Exception ex)
@@ -2930,26 +3463,26 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    /// <summary>
-    /// 按**当前收起/展开状态**把窗口形状（圆角偏好 + 自己裁的区域）重刷一遍。
-    ///
-    /// 什么时候需要它：<see cref="Core.WindowChrome.RemoveBorder"/> 里写死了
-    /// <c>DWMWA_WINDOW_CORNER_PREFERENCE</c>，调用方一不小心就把收起态改好的"直角"又刷成"圆角"，
-    /// 那圈错位投影立刻回来（见 <see cref="ApplyRoundRegion"/> 注释）。凡是本类里调过
-    /// RemoveBorder 的地方，后面都跟一句这个。
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
+    
     private void RefreshWindowShape()
     {
         try { ApplyRoundRegion(_expanded ? PlannedSize() : CollapsedSize()); }
         catch (Exception ex) { Log("刷新窗口形状失败: " + ex.Message); }
     }
 
-    /// <summary>
-    /// 收起态的**窗口**尺寸（跟 PlannedSize 的收起分支同一套算法，抽出来给动画算落位用）。
-    ///
-    /// ⚠️ 窗口尺寸 **＝ 看得见的那片小条的尺寸**，一个值，别再造第二套
-    /// （曾经为了"判定区大一圈"把它拆成两套，那圈会带一道阴影，2026-10-11 已废）。
-    /// </summary>
+    
+    
+    
+    
+    
+    
     private SizeInt32 CollapsedSize()
     {
         var scale = Scale();
@@ -2960,7 +3493,7 @@ public sealed partial class ToolSidebarWindow : Window
         return new SizeInt32((int)Math.Round(dipW * scale), (int)Math.Round(dipH * scale));
     }
 
-    /// <summary>按当前贴的边算"贴边位置"（**纯计算，不动窗口**）。参数是窗口按哪套尺寸算。</summary>
+    
     private PointInt32 EdgePosition(int width, int height)
     {
         var work = DisplayArea.Primary.WorkArea;
@@ -2972,14 +3505,14 @@ public sealed partial class ToolSidebarWindow : Window
         var myLen = flat ? width : height;
         var free = Math.Max(0, alongLen - myLen);
 
-        // ⛔ 位置记忆已移除（2026-10-19，Nick）：它和「开机最小化」相互打架，而且拖完记住的位置
-        //    常常不再合适，手动调反而更顺手。启动/重建时一律沿边**居中**；
-        //    拖动过程中对面靠 <see cref="_liveRatio"/> 跟随，但那只是内存状态，不落盘。
+        
+        
+        
         var offset = _liveRatio < 0 ? free / 2.0 : Math.Clamp(_liveRatio * free, 0, free);
 
-        // 收起态往屏幕**内侧**让出几个像素（Nick 2026-10-11：不贴死看着更灵动、也更好点）。
-        // ⚠️ 只收起态让 —— 展开态的面板悬空一条缝很难看。
-        // ⚠️ 连带 ConfirmPlacement 的"这条边"判定阈值也放宽了（见那里）。
+        
+        
+        
         var gap = _expanded ? 0 : (int)Math.Round(CollapsedGapDip * Scale());
 
         return edge switch
@@ -2991,10 +3524,10 @@ public sealed partial class ToolSidebarWindow : Window
         };
     }
 
-    /// <summary>
-    /// 把位置往"屏幕外"方向推开 dist 像素（贴右往右推、贴左往左推，上/下同理）。
-    /// 纯计算，不动窗口；距离由调用方按用途给（滑入起步用半块、滑出收尾用整个厚度）。
-    /// </summary>
+    
+    
+    
+    
     private PointInt32 OutwardOffset(PointInt32 p, int dist)
     {
         if (dist < 1) dist = 1;
@@ -3008,17 +3541,17 @@ public sealed partial class ToolSidebarWindow : Window
         };
     }
 
-    /// <summary>贴到设置里那条边；沿边的位置按 SidebarPosRatio（&lt;0 = 居中）。</summary>
-    /// <param name="verify">
-    /// false = 只挪一次，**不读回位置做纠偏**。纠偏最多会连挪 4 次窗口，放在动画前会把头几帧挤掉，
-    /// 所以动画路径上用它（落位精度由动画自己的最后一帧保证）。
-    /// </param>
+    
+    
+    
+    
+    
     private void MoveToEdge(bool verify = true)
     {
         if (_appWindow is null) return;
         try
         {
-            // ⚠️ 用自己的目标尺寸算，别读 _appWindow.Size —— Resize 刚调完它还没更新，会按老尺寸贴边
+            
             var size = PlannedSize();
             var pos = EdgePosition(size.Width, size.Height);
             var x = pos.X;
@@ -3030,7 +3563,7 @@ public sealed partial class ToolSidebarWindow : Window
                 return;
             }
 
-            // 移动有时不精确，量一下再纠偏几次
+            
             var target = new PointInt32(x, y);
             for (var i = 0; i < 4; i++)
             {
@@ -3048,7 +3581,7 @@ public sealed partial class ToolSidebarWindow : Window
         }
     }
 
-    // ── P/Invoke ─────────────────────────────────────────────
+    
 
     private const int GwlExStyle = -20;
     private const int WsExToolWindow = 0x00000080;
@@ -3076,7 +3609,7 @@ public sealed partial class ToolSidebarWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 
-    /// <summary>Win32 POINTER_INFO（字段顺序/对齐照 WinUser.h 来，不能少不能换）——只用得到 ptPixelLocation。</summary>
+    
     [StructLayout(LayoutKind.Sequential)]
     private struct POINTER_INFO
     {
@@ -3122,7 +3655,7 @@ public sealed partial class ToolSidebarWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
-    // ── 滑动动画用的窗口移动（比 AppWindow.Move 轻，见 TweenWindow）──
+    
     private const uint SwpNoSizeFlag = 0x0001;
     private const uint SwpNoMoveFlag = 0x0002;
     private const uint SwpNoZOrderFlag = 0x0004;

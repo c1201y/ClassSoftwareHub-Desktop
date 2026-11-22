@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ClassSoftwareHub.Desktop.Views.AboutAmbientWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid x:Name="Root" Background="#03050C"
+          PointerWheelChanged="Root_PointerWheelChanged"
+          PointerPressed="Root_PointerPressed"
+          PointerMoved="Root_PointerMoved"
+          PointerReleased="Root_PointerReleased"
+          PointerCaptureLost="Root_PointerReleased">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBarHost" Grid.Row="0" Padding="18,0,132,0"
+              Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE774;" FontSize="13" Foreground="#8FB4FF" />
+                <TextBlock Text="ClassSoftwareHub · 星海" FontSize="12"
+                           Foreground="#B8C8EA" VerticalAlignment="Center" />
+            </StackPanel>
+            <Button x:Name="CloseButton" Content="关闭" FontSize="12" Padding="12,4"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Background="#12FFFFFF" BorderBrush="#30FFFFFF"
+                    Foreground="#DCE6FF" Click="Close_Click" />
+        </Grid>
+
+        <Grid x:Name="SceneHost" Grid.Row="1" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="SceneShift" />
+            </Grid.RenderTransform>
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#081A38" Offset="0" />
+                    <GradientStop Color="#040813" Offset="0.52" />
+                    <GradientStop Color="#010207" Offset="1" />
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <Canvas x:Name="StarCanvas" IsHitTestVisible="False" />
+            <Canvas x:Name="MeteorCanvas" IsHitTestVisible="False" />
+
+            <Grid x:Name="PlanetHost" Width="280" Height="280"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Ellipse Width="258" Height="258" Fill="#1E58C8" Opacity="0.12" />
+                <Ellipse Width="226" Height="226" Fill="#2E78FF" Opacity="0.16" />
+                <Ellipse Width="206" Height="206" Opacity="0.94">
+                    <Ellipse.Fill>
+                        <LinearGradientBrush StartPoint="0.15,0.1" EndPoint="0.85,0.9">
+                            <GradientStop Color="#7FB2FF" Offset="0" />
+                            <GradientStop Color="#3C79E6" Offset="0.28" />
+                            <GradientStop Color="#173C88" Offset="0.62" />
+                            <GradientStop Color="#071732" Offset="1" />
+                        </LinearGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <Ellipse Width="126" Height="74" Opacity="0.44"
+                         HorizontalAlignment="Left" VerticalAlignment="Top"
+                         Margin="26,34,0,0">
+                    <Ellipse.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#F1F7FF" Offset="0" />
+                            <GradientStop Color="#9FC8FF" Offset="0.52" />
+                            <GradientStop Color="#4E85E8" Offset="1" />
+                        </LinearGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <Ellipse Width="48" Height="34" Fill="#FFFFFF" Opacity="0.16"
+                         HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                         Margin="38,0,0,48" />
+                <Ellipse Width="300" Height="104" Stroke="#7BA9FF" StrokeThickness="1.4"
+                         Opacity="0.46" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <RotateTransform Angle="-16" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse Width="330" Height="128" Stroke="#4B77D8" StrokeThickness="1"
+                         Opacity="0.26" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <RotateTransform Angle="-16" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse Width="372" Height="152" StrokeThickness="1.2"
+                         Opacity="0.2" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.Stroke>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#9C7CFF" Offset="0" />
+                            <GradientStop Color="#4B77D8" Offset="0.5" />
+                            <GradientStop Color="#9C7CFF" Offset="1" />
+                        </LinearGradientBrush>
+                    </Ellipse.Stroke>
+                    <Ellipse.RenderTransform>
+                        <RotateTransform Angle="-16" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse Width="20" Height="20" Fill="#E8F2FF" Opacity="0.82"
+                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                         Margin="0,0,26,54" />
+                <Ellipse x:Name="PlanetHit" Width="206" Height="206" Fill="Transparent"
+                         PointerPressed="Planet_Pressed" />
+            </Grid>
+
+            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Margin="24,18,0,0" Spacing="3" IsHitTestVisible="False">
+                <TextBlock Text="CLASS SOFTWARE HUB" FontSize="10" CharacterSpacing="130"
+                           Foreground="#6E8BC4" />
+                <TextBlock Text="星海观测点" FontSize="22" FontWeight="SemiBold"
+                           Foreground="#D9E6FF" />
+            </StackPanel>
+
+            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                    Margin="0,0,0,22" Padding="14,8" CornerRadius="8"
+                    Background="#16000000" BorderBrush="#24FFFFFF" BorderThickness="1"
+                    IsHitTestVisible="False">
+                <TextBlock Text="滚轮缩放 · 拖拽旋转 · 点击星球查看版本"
+                           FontSize="12" Foreground="#9FB4D8" />
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
