@@ -50,7 +50,7 @@
                     <TextBlock Text="应用信息" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,8" />
                     <StackPanel Spacing="4">
 
-                        <controls:SettingsCard Header="ClassSoftwareHub" Description="班级电教委员的装机与课堂工具集">
+                        <controls:SettingsCard x:Name="AppInfoCard" Header="ClassSoftwareHub" Description="班级电教委员的装机与课堂工具集">
                             <controls:SettingsCard.HeaderIcon>
                                 <ImageIcon x:Name="AppIcon" />
                             </controls:SettingsCard.HeaderIcon>
